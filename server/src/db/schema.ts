@@ -591,6 +591,9 @@ export const nodes = sqliteTable('nodes', {
   minCount: integer('min_count'), // COUNT only
   quantity: integer('quantity'), // SUM only — target total of children's approved-claim quantities
   itemName: text('item_name'), // ITEM only — the single accepted name
+  // ITEM only (CONTEXT.md "Counts as"): inside a SUM, a claim of quantity q on this leaf adds q × countsAs to the
+  // SUM's total, e.g. a Pyromancer garb counting as 25 burnt pages. Whole, from 1; 1 on every other kind.
+  countsAs: integer('counts_as').notNull().default(1),
   // Self-references. Plain text, no FK constraint declared (Drizzle can't
   // express a same-table FK cleanly and SQLite won't enforce it across a
   // deferred insert order anyway) — validity (same bingo, not a descendant)

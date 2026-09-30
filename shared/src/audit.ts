@@ -305,6 +305,8 @@ export interface TaskSnapshot {
   itemName: string | null;
   /** "Magus vestige ÷ 3"; absent when none, and in entries written before Valued as existed. */
   valuedAs?: string;
+  /** An Item's Counts as (CONTEXT.md); absent when 1, and in entries written before Counts as existed. */
+  countsAs?: number;
   children: TaskSnapshot[];
 }
 

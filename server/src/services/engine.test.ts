@@ -76,6 +76,40 @@ describe("evaluateGraph — SUM", () => {
   });
 });
 
+describe("evaluateGraph — Counts as", () => {
+  // Wintertodt's "200 burnt pages": a page counts as 1, a Pyromancer garb as 25.
+  const nodes = [composite("pages", "SUM", { quantity: 200 }), item("page"), item("garb", { countsAs: 25 })];
+  const childrenOf = new Map([["pages", ["page", "garb"]]]);
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+
+  it("completes a SUM of 200 on 8 items that each count as 25, and not on 7", () => {
+    const seven = Array.from({ length: 7 }, (_, i) => claim("garb", { reviewedAt: day(i + 1) }));
+    expect(evaluateGraph(nodes, childrenOf, seven).get("pages")).toEqual({ complete: false, completedAt: null, value: 175 });
+    const eight = [...seven, claim("garb", { reviewedAt: day(8) })];
+    expect(evaluateGraph(nodes, childrenOf, eight).get("pages")).toEqual({ complete: true, completedAt: day(8), value: 200 });
+  });
+
+  it("weighs each claim's quantity, and completes at the claim that tipped the weighted total over", () => {
+    const claims = [
+      claim("page", { quantity: 120, reviewedAt: day(1) }),
+      claim("garb", { quantity: 3, reviewedAt: day(2) }), // 120 + 75 = 195
+      claim("page", { quantity: 5, reviewedAt: day(3) }), // 200: this one tips it
+      claim("garb", { quantity: 1, reviewedAt: day(4) }),
+    ];
+    const result = evaluateGraph(nodes, childrenOf, claims);
+    expect(result.get("pages")).toEqual({ complete: true, completedAt: day(3), value: 225 });
+    // The Item itself keeps its real quantity.
+    expect(result.get("garb")!.value).toBe(4);
+  });
+
+  it("is ignored outside a SUM: an ITEM under a COUNT is complete at one", () => {
+    const count = [composite("count", "COUNT", { minCount: 2 }), item("a", { countsAs: 25 }), item("b")];
+    const result = evaluateGraph(count, new Map([["count", ["a", "b"]]]), [claim("a")]);
+    expect(result.get("a")).toMatchObject({ complete: true, value: 1 });
+    expect(result.get("count")!.complete).toBe(false);
+  });
+});
+
 describe("evaluateGraph — COUNT replaces distinctItems", () => {
   it("'N distinct uniques' is COUNT(N) over one single-name leaf per unique — a second claim on an already-complete leaf doesn't add a second distinct count", () => {
     const nodes = [composite("root", "COUNT", { minCount: 2 }), item("a", { itemName: "A" }), item("b", { itemName: "B" }), item("c", { itemName: "C" })];

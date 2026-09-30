@@ -34,6 +34,7 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
     minCount: row.minCount,
     quantity: row.quantity,
     itemName: row.itemName,
+    countsAs: row.countsAs,
     pointsGateNodeId: row.pointsGateNodeId,
     submitGateNodeId: row.submitGateNodeId,
     allowsPreLoad: row.allowsPreLoad,
@@ -97,6 +98,7 @@ export function getFullGraph(db: Queryable, bingoId: string): { engineNodes: Eng
     minCount: r.minCount,
     quantity: r.quantity,
     itemName: r.itemName,
+    countsAs: r.countsAs,
     points: r.points,
     pointsGateNodeId: r.pointsGateNodeId,
   }));
@@ -205,6 +207,7 @@ function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id">
     minCount: input.minCount ?? null,
     quantity: input.quantity ?? null,
     itemName: input.itemName ?? null,
+    countsAs: countsAsOf(input),
     pointsGateNodeId: input.pointsGateNodeId ?? null,
     submitGateNodeId: input.submitGateNodeId ?? null,
     allowsPreLoad: input.allowsPreLoad ?? false,
@@ -222,6 +225,14 @@ function proofFields(input: GraphNodeInput): Pick<NodeRow, "requiresProof" | "pr
   const proofNote = input.proofNote?.trim() || null;
   if (proofNote && proofNote.length > PROOF_NOTE_MAX) throw new ServiceError(400, `The Proof screenshot note must be at most ${PROOF_NOTE_MAX} characters`);
   return { requiresProof: true, proofNote };
+}
+
+// Counts as (CONTEXT.md): only an ITEM leaf carries one, a whole number from 1; anything else stores 1. It only
+// changes anything inside a SUM, but it is kept on any ITEM so moving the Item into a SUM later doesn't lose it.
+function countsAsOf(input: GraphNodeInput): number {
+  if (input.kind !== "ITEM" || input.countsAs === undefined || input.countsAs === null) return 1;
+  if (!Number.isInteger(input.countsAs) || input.countsAs < 1) throw new ServiceError(400, "Counts as must be a whole number of at least 1");
+  return input.countsAs;
 }
 
 // Only an ITEM leaf can be Valued as something; anything else drops it.

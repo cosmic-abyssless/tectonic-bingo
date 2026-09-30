@@ -1,6 +1,7 @@
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
+import { sumQuantityHint } from "../../../core/board/labels";
 import { useComic } from "../ui/useComic";
 import { submitterHint } from "../../../headless/submitterHint";
 import { ComicField } from "./ComicField";
@@ -49,7 +50,7 @@ export function RequirementPicker({ requirement, quantity }: { requirement: Subm
       )}
 
       {quantity.visible && (
-        <ComicField label="Quantity" hint={`${quantity.needed} needed in total`}>
+        <ComicField label="Quantity" hint={sumQuantityHint(quantity)}>
           <Input type="number" min={1} max={quantity.max} value={quantity.value} onChange={(e) => quantity.set(parseInt(e.target.value) || 1)} className="num" />
         </ComicField>
       )}

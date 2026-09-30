@@ -18,21 +18,28 @@ type Claim = NonNullable<HistoricalBundleSubmission["claims"]>[number];
 type Keyed = { key: string };
 const keyOf = (n: ExportNode) => `n${n.localId}`;
 
-/** A board node as a bundle node, or null when it can't be one (a reused node, an ITEM without its item, an empty group). */
-function toNode(n: ExportNode): (HistoricalBundleNode & Keyed) | null {
-  if (n.reuse) return null;
+/** The leaves written so far, by key: what a stub (`reuse`) puts in a second place. */
+type Written = Map<string, HistoricalBundleNode & Keyed>;
+
+/**
+ * A board node as a bundle node, or null when it can't be one (an ITEM without its item, an empty group, a reused group,
+ * or a reused leaf that wasn't written). A leaf the board shares between Tasks stays shared: a stub after the first.
+ */
+function toNode(n: ExportNode, written: Written): (HistoricalBundleNode & Keyed) | null {
+  if (n.reuse) return (n.kind === "ITEM" || n.kind === "MANUAL") && written.has(keyOf(n)) ? { kind: n.kind, key: keyOf(n), reuse: true } : null;
   const base = { key: keyOf(n), label: n.label, points: n.points };
+  const leaf = (node: HistoricalBundleNode & Keyed) => (written.set(node.key, node), node);
   switch (n.kind) {
     case "ITEM":
-      return n.itemName ? { ...base, kind: "ITEM", item: n.itemName } : null;
+      return n.itemName ? leaf({ ...base, kind: "ITEM", item: n.itemName, ...(n.valuedAs ? { valuedAs: n.valuedAs } : {}), ...(n.countsAs && n.countsAs !== 1 ? { countsAs: n.countsAs } : {}) }) : null;
     case "MANUAL":
-      return { ...base, kind: "MANUAL" };
+      return leaf({ ...base, kind: "MANUAL" });
     case "SUM": {
-      const children = n.children.map(toNode).filter((c): c is HistoricalBundleNode & Keyed => c?.kind === "ITEM");
+      const children = n.children.map((c) => toNode(c, written)).filter((c): c is HistoricalBundleNode & Keyed => c?.kind === "ITEM");
       return children.length > 0 ? { ...base, kind: "SUM", quantity: Math.max(1, n.quantity ?? 1), children } : null;
     }
     default: {
-      const children = n.children.map(toNode).filter((c) => c !== null);
+      const children = n.children.map((c) => toNode(c, written)).filter((c) => c !== null);
       if (children.length === 0) return null;
       if (n.kind === "COUNT") return { ...base, kind: "COUNT", min: Math.min(Math.max(1, n.minCount ?? 1), children.length), children };
       return { ...base, kind: n.kind, children };
@@ -41,27 +48,77 @@ function toNode(n: ExportNode): (HistoricalBundleNode & Keyed) | null {
 }
 
 /** The Claims that would complete a node, picked at random where it offers a choice. */
-function satisfy(n: HistoricalBundleNode & Partial<Keyed>, rng: Rng): Claim[] {
+function satisfy(n: HistoricalBundleNode & Partial<Keyed>, rng: Rng, written: Written): Claim[] {
+  if ("reuse" in n) return satisfy(written.get(n.key)!, rng, written);
   switch (n.kind) {
     case "ITEM":
       return [{ leaf: n.key!, item: n.item, quantity: 1 }];
     case "MANUAL":
       return [{ leaf: n.key!, item: null, quantity: 1 }];
     case "ANY":
-      return satisfy(rng.pick(n.children), rng);
+      return satisfy(rng.pick(n.children), rng, written);
     case "COUNT":
-      return rng.shuffle(n.children).slice(0, n.min).flatMap((c) => satisfy(c, rng));
+      return rng.shuffle(n.children).slice(0, n.min).flatMap((c) => satisfy(c, rng, written));
     case "SUM": {
-      // The quantity, spread over its items.
+      // The quantity, spread over its items, one drop at a time: an item that counts as N adds N (CONTEXT.md "Counts
+      // as"), so it takes fewer drops.
       const counts = new Map<HistoricalBundleNode, number>();
-      for (let i = 0; i < n.quantity; i++) {
+      for (let remaining = n.quantity; remaining > 0; ) {
         const c = rng.pick(n.children);
         counts.set(c, (counts.get(c) ?? 0) + 1);
+        remaining -= countsAs(c, written);
       }
-      return [...counts].map(([c, quantity]) => ({ ...satisfy(c, rng)[0]!, quantity }));
+      return [...counts].map(([c, quantity]) => ({ ...satisfy(c, rng, written)[0]!, quantity }));
     }
     default:
-      return n.children.flatMap((c) => satisfy(c, rng));
+      return n.children.flatMap((c) => satisfy(c, rng, written));
+  }
+}
+
+/** What one drop of a SUM's item adds to its total (a stub's, from the leaf written earlier). */
+function countsAs(n: HistoricalBundleNode, written: Written): number {
+  const leaf = "reuse" in n ? written.get(n.key) : n;
+  return leaf && leaf.kind === "ITEM" && !("reuse" in leaf) ? (leaf.countsAs ?? 1) : 1;
+}
+
+/**
+ * An item that counts as more than one (CONTEXT.md "Counts as"), as an old site's "N in total" sometimes had: unless the
+ * board already has one, the last item of the first SUM over two or more items with a total of at least 3 counts as a
+ * quarter of that total (from 2, at most 25), as the live generator does (board.ts's itemToWeigh).
+ */
+function weighAnItem(tiles: HistoricalBundle["tiles"]): void {
+  const walk = (n: HistoricalBundleNode): HistoricalBundleNode[] => [n, ...("children" in n ? n.children.flatMap(walk) : [])];
+  const nodes = tiles.flatMap((t) => (t.tasks ?? []).flatMap(walk));
+  if (nodes.some((n) => n.kind === "ITEM" && !("reuse" in n) && (n.countsAs ?? 1) !== 1)) return;
+  for (const n of nodes) {
+    if (n.kind !== "SUM" || "reuse" in n || n.quantity < 3) continue;
+    const items = n.children.filter((c) => c.kind === "ITEM" && !("reuse" in c));
+    const last = items[items.length - 1];
+    if (items.length < 2 || !last || last.kind !== "ITEM" || "reuse" in last) continue;
+    last.countsAs = Math.min(25, Math.max(2, Math.floor(n.quantity / 4)));
+    return;
+  }
+}
+
+const isStub = (n: HistoricalBundleNode): boolean => "reuse" in n;
+const hasStub = (n: HistoricalBundleNode): boolean => isStub(n) || ("children" in n && n.children.some(hasStub));
+const firstItem = (n: HistoricalBundleNode): (HistoricalBundleNode & Keyed) | null =>
+  n.kind === "ITEM" && !isStub(n) ? (n as HistoricalBundleNode & Keyed) : "children" in n ? n.children.map(firstItem).find((c) => c) ?? null : null;
+
+/**
+ * A drop that counts toward two Tasks, as an old site's did: unless the board already shares a leaf between Tasks, the
+ * first Tile whose second Task is a group (other than ALL, which it would add a requirement to) also offers an item of
+ * its first Task.
+ */
+function shareALeaf(tiles: HistoricalBundle["tiles"]): void {
+  if (tiles.some((t) => t.tasks?.some(hasStub))) return;
+  for (const t of tiles) {
+    const [a, b] = t.tasks ?? [];
+    const item = a && firstItem(a);
+    if (!item || !b || !(b.kind === "ANY" || b.kind === "COUNT" || b.kind === "SUM") || isStub(b)) continue;
+    if (b.children.some((c) => c.key === item.key)) continue;
+    b.children.push({ kind: "ITEM", key: item.key, reuse: true });
+    return;
   }
 }
 
@@ -83,12 +140,13 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
   // Tasks, from the board's.
   const taskRoots = new Map<string, HistoricalBundleTask & Keyed>(); // by key
   const tileOfTask = new Map<string, HistoricalBundle["tiles"][number]>();
+  const written: Written = new Map();
   for (const t of document.tiles) {
     const tile = bundle.tiles.find((b) => b.boardRow === t.boardRow && b.boardCol === t.boardCol)!;
     const tasks: (HistoricalBundleTask & Keyed)[] = [];
     let previous: ExportNode | null = null;
     for (const n of t.tasks) {
-      const node = toNode(n);
+      const node = toNode(n, written);
       if (!node) continue;
       const task = {
         ...node,
@@ -112,6 +170,8 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
       proofNote: t.requiresProof ? (t.proofNote ?? null) : null,
     });
   }
+  shareALeaf(bundle.tiles);
+  weighAnItem(bundle.tiles);
   bundle.lines = document.lines.map((l) => ({ type: l.lineType, index: l.lineIndex, points: l.points }));
 
   // The Draft: the Captains (and some co-captains) lead, everyone else is picked in snake order, which makes the Teams.
@@ -148,6 +208,15 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
 
   // Submissions: each Team completes some Tasks (some only in part), a drop or two rejected on the way.
   const playRng = rng.fork("play");
+  // Drop values as the old site's time priced them, made up: each item one price, on about two drops in three. The rest
+  // are priced at today's prices when imported.
+  const valueRng = rng.fork("values");
+  const unitPrice = new Map<string, number>();
+  const valued = (claim: Claim): Claim => {
+    if (!claim.item || !valueRng.chance(2 / 3)) return claim;
+    if (!unitPrice.has(claim.item)) unitPrice.set(claim.item, valueRng.int(1_000, 20_000_000));
+    return { ...claim, value: unitPrice.get(claim.item)! * claim.quantity };
+  };
   const submissions: HistoricalBundleSubmission[] = [];
   const at = (from: number) => new Date(from + playRng.float() * (start + span - 3 * HOUR - from));
   const submit = (team: HistoricalBundle["teams"][number], when: Date, status: "approved" | "rejected", rest: Partial<HistoricalBundleSubmission>) => {
@@ -166,7 +235,7 @@ export function addRichSections(bundle: HistoricalBundle, { document, rng, start
         if (done) (task.completions ??= []).push({ team: team.name, at: at(start).toISOString() });
         continue;
       }
-      const claims = satisfy(task, playRng);
+      const claims = satisfy(task, playRng, written).map(valued);
       const made = done ? claims : claims.slice(0, playRng.chance(0.4) ? 1 : 0);
       let last = start;
       for (const claim of made) {

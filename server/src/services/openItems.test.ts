@@ -48,6 +48,13 @@ describe("openItems", () => {
     expect(names(openItems(g.nodes, g.childrenOf, [claim("a", 1, 2), claim("b", 2)], at(2)).get("sum"))).toEqual([]);
   });
 
+  it("closes a SUM once its weighted total is met, when an Item counts as more than one", () => {
+    const g = graph([{ id: "sum", kind: "SUM", quantity: 200, children: ["page", "garb"] }, item("page"), { ...item("garb"), countsAs: 25 }]);
+    const seven = Array.from({ length: 7 }, (_, i) => claim("garb", i + 1));
+    expect(names(openItems(g.nodes, g.childrenOf, seven, at(7)).get("sum"))).toEqual(["garb", "page"]);
+    expect(names(openItems(g.nodes, g.childrenOf, [...seven, claim("garb", 8)], at(8)).get("sum"))).toEqual([]);
+  });
+
   it("rolls open Items up through nested conditions to the Tile", () => {
     const g = graph([
       { id: "tile", kind: "ALL", children: ["part1", "part2"] },

@@ -44,6 +44,7 @@ export function TaskEditor({
   existingConditions,
   sharedNodeIds,
   tileRequiresProof,
+  locked,
   onDelete,
 }: {
   slug: string;
@@ -57,6 +58,8 @@ export function TaskEditor({
   existingLeaves?: ExistingLeaf[];
   existingConditions?: ExistingCondition[];
   sharedNodeIds: Set<string>;
+  /** The board is locked: the task still opens, to be looked through, but nothing in it can be changed. */
+  locked: boolean;
   onDelete: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -117,93 +120,100 @@ export function TaskEditor({
 
       {expanded && (
         <div className="space-y-4 border-t border-outline px-3 py-3" onClick={(e) => e.stopPropagation()}>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Label">
-              <Input defaultValue={task.label ?? ""} onBlur={(e) => patch({ label: e.target.value })} />
-            </Field>
-            <Field label="Points">
-              <Input type="number" className="num" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} />
-            </Field>
-          </div>
-
-          <Field label="Description">
-            <Textarea defaultValue={task.description ?? ""} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="resize-none" />
-          </Field>
-
-          <Field label="Scoring mode" as="div">
-            <div className="flex w-fit overflow-hidden rounded-md border border-outline-strong">
-              {(
-                [
-                  ["Automatic", false],
-                  ["Manual (mod judges)", true],
-                ] as const
-              ).map(([label, manual], i) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => patch({ kind: manual ? "MANUAL" : "ALL", children: [] })}
-                  className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
-                    isManual === manual ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Locked, the editing controls are disabled in fieldsets, leaving "Preview for Players" between them open. */}
+          <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-60">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Label">
+                <Input defaultValue={task.label ?? ""} onBlur={(e) => patch({ label: e.target.value })} />
+              </Field>
+              <Field label="Points">
+                <Input type="number" className="num" defaultValue={task.points} onBlur={(e) => patch({ points: Number(e.target.value) || 0 })} />
+              </Field>
             </div>
-          </Field>
 
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-on-surface-muted">
-              <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-              Requires previous task
-            </label>
-            <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-on-surface-muted">
-              <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-              Withhold points until previous
-            </label>
-            <label title="Players may prepare it before the bingo is live, e.g. pre-load a chest" className="flex items-center gap-2 text-xs text-on-surface-muted">
-              <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
-              Allows pre-load
-            </label>
-            {!tileRequiresProof && (
-              <label title="Each player posts a screenshot of the starting state before their drops on this task count" className="flex items-center gap-2 text-xs text-on-surface-muted">
-                <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
-                Needs a Proof screenshot
-              </label>
-            )}
-          </div>
-
-          {!tileRequiresProof && task.requiresProof && (
-            <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty pool before your drops count.">
-              <Input key={`proof-note-${task.id}`} defaultValue={task.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+            <Field label="Description">
+              <Textarea defaultValue={task.description ?? ""} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="resize-none" />
             </Field>
-          )}
+
+            <Field label="Scoring mode" as="div">
+              <div className="flex w-fit overflow-hidden rounded-md border border-outline-strong">
+                {(
+                  [
+                    ["Automatic", false],
+                    ["Manual (mod judges)", true],
+                  ] as const
+                ).map(([label, manual], i) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => patch({ kind: manual ? "MANUAL" : "ALL", children: [] })}
+                    className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
+                      isManual === manual ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-on-surface-muted">
+                <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
+                Requires previous task
+              </label>
+              <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-on-surface-muted">
+                <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
+                Withhold points until previous
+              </label>
+              <label title="Players may prepare it before the bingo is live, e.g. pre-load a chest" className="flex items-center gap-2 text-xs text-on-surface-muted">
+                <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
+                Allows pre-load
+              </label>
+              {!tileRequiresProof && (
+                <label title="Each player posts a screenshot of the starting state before their drops on this task count" className="flex items-center gap-2 text-xs text-on-surface-muted">
+                  <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
+                  Needs a Proof screenshot
+                </label>
+              )}
+            </div>
+
+            {!tileRequiresProof && task.requiresProof && (
+              <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty pool before your drops count.">
+                <Input key={`proof-note-${task.id}`} defaultValue={task.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
+              </Field>
+            )}
+          </fieldset>
 
           {!isManual && (
             <Field label="Requirement" as="div">
-              <RequirementTreeEditor
-                slug={slug}
-                root={toInput(task)}
-                itemGroups={itemGroups}
-                onChange={(updated) => patch(updated)}
-                onSaveAsGroup={saveAsGroup}
-                existingLeaves={existingLeaves}
-                existingConditions={existingConditions}
-                sharedNodeIds={sharedNodeIds}
-              />
+              <fieldset disabled={locked} className="min-w-0 disabled:opacity-60">
+                <RequirementTreeEditor
+                  slug={slug}
+                  root={toInput(task)}
+                  itemGroups={itemGroups}
+                  onChange={(updated) => patch(updated)}
+                  onSaveAsGroup={saveAsGroup}
+                  existingLeaves={existingLeaves}
+                  existingConditions={existingConditions}
+                  sharedNodeIds={sharedNodeIds}
+                />
+              </fieldset>
               <PlayerPreview task={task} themeKey={themeKey} />
             </Field>
           )}
 
-          <Field label="Notes (shown to players)">
-            <Input defaultValue={task.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
-          </Field>
+          <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-60">
+            <Field label="Notes (shown to players)">
+              <Input defaultValue={task.notes ?? ""} onBlur={(e) => patch({ notes: e.target.value || null })} />
+            </Field>
 
-          {error && <Notice tone="danger">{error}</Notice>}
+            {error && <Notice tone="danger">{error}</Notice>}
 
-          <Button variant="danger" size="sm" onPress={onDelete}>
-            Delete task
-          </Button>
+            <Button variant="danger" size="sm" onPress={onDelete}>
+              Delete task
+            </Button>
+          </fieldset>
         </div>
       )}
     </div>

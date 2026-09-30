@@ -81,9 +81,19 @@ export interface HistoricalBundleTile {
  * A node of a Task's requirement tree (CONTEXT.md "Requirement Tree"): ITEM leaves under COUNT (at least `min`
  * different ones complete) or SUM (`quantity` in total, over ITEM leaves only), ALL and ANY; or a MANUAL leaf a
  * Moderator marks done. `key`: unique in the bundle, for the Claims (and Proof screenshots) that point at it.
+ *
+ * A leaf can count toward two Tasks (a drop the old site counted for both): it is written in full once, and anywhere
+ * later as a stub with its `key` and `reuse: true`, which puts that same leaf there too, so one Claim on it counts
+ * toward each. A Task itself is never a stub.
+ *
+ * An ITEM's `valuedAs` (CONTEXT.md "Valued as"): its Claims' Drop value is that item's price ÷ divisor instead of their
+ * own, as the leaf is set up here, e.g. a DT2 boss's Gold ring as that boss's vestige ÷ 3. Its `countsAs` (CONTEXT.md
+ "Counts as", a whole number from 1, absent = 1): inside a SUM, a Claim of quantity q on it adds q × countsAs to the
+ SUM's total, e.g. a Pyromancer garb counting as 25 burnt pages.
  */
 export type HistoricalBundleNode =
-  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number }
+  | { kind: "ITEM" | "MANUAL"; key: string; reuse: true }
+  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number; valuedAs?: { itemName: string; divisor: number; source?: string | null } | null; countsAs?: number }
   | { kind: "MANUAL"; key?: string; label?: string | null; points?: number }
   | { kind: "COUNT"; key?: string; min: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
   | { kind: "SUM"; key?: string; quantity: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
@@ -125,8 +135,12 @@ export interface HistoricalBundleSubmission {
   status: "approved" | "rejected";
   /** Its screenshot's key, uploaded afterwards (pending until then); null when there was none. Unique in the bundle. */
   screenshot: string | null;
-  /** A drop only: what it counts toward, each on an ITEM (with that leaf's item) or MANUAL (no item) leaf by `key`. */
-  claims?: { leaf: string; item: string | null; quantity: number }[];
+  /**
+   * A drop only: what it counts toward, each on an ITEM (with that leaf's item) or MANUAL (no item) leaf by `key`.
+   * `value`: an ITEM Claim's Drop value in GP (CONTEXT.md) at the time, kept as it is; without one, it's priced at
+   * today's prices like any Claim that has none.
+   */
+  claims?: { leaf: string; item: string | null; quantity: number; value?: number }[];
   /** A Proof screenshot only: the Tile, and the Task when the requirement is the Task's own. */
   proof?: { boardRow: number; boardCol: number; task: string | null };
 }
@@ -223,6 +237,9 @@ function isText(v: unknown): v is string {
 function isDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(new Date(v).getTime());
 }
+/** A Valued as source's longest, as the board editor takes it (graphService). */
+const VALUED_AS_SOURCE_MAX = 40;
+
 function isWhole(v: unknown, min: number, max = Number.MAX_SAFE_INTEGER): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 }
@@ -425,12 +442,28 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
   function checkNode(n: unknown, where: string, depth: number): void {
     if (!isRecord(n)) return add(`${where}: must be an object`);
     if (depth > 8) return add(`${where}: nested too deep`);
+    if (n.reuse !== undefined) {
+      // A stub: a leaf written in full earlier, put here too.
+      if (n.reuse !== true) return add(`${where}: reuse must be true`);
+      if (depth === 0) return add(`${where}: a Task can't be a reused leaf`);
+      if (!isText(n.key)) return add(`${where}: a reused leaf needs the key it was written under`);
+      const leaf = leaves.get(n.key);
+      if (!leaf) return add(`${where}: "${n.key}" isn't a leaf written earlier in the bundle`);
+      if (n.kind !== leaf.kind) add(`${where}: "${n.key}" is ${leaf.kind === "ITEM" ? "an ITEM" : "a MANUAL"}, not ${JSON.stringify(n.kind)}`);
+      return;
+    }
     claimKey(n.key, where);
     if (n.points !== undefined && !isWhole(n.points, 0)) add(`${where}: points must be a whole number`);
     if (!optionalText(n.label)) add(`${where}: label must be text`);
     const children = Array.isArray(n.children) ? n.children : null;
     switch (n.kind) {
       case "ITEM":
+        if (n.valuedAs !== undefined && n.valuedAs !== null) {
+          const v = n.valuedAs;
+          if (!isRecord(v) || !isText(v.itemName) || !isWhole(v.divisor, 1)) add(`${where}: valuedAs must be { itemName, divisor } with a divisor from 1`);
+          else if (!optionalText(v.source) || (isText(v.source) && v.source.trim().length > VALUED_AS_SOURCE_MAX)) add(`${where}: valuedAs.source must be text of at most ${VALUED_AS_SOURCE_MAX} characters`);
+        }
+        if (n.countsAs !== undefined && !isWhole(n.countsAs, 1)) add(`${where}: countsAs must be a whole number from 1`);
         if (!isText(n.item)) add(`${where}: an ITEM needs its item`);
         else if (isText(n.key)) leaves.set(n.key, { kind: "ITEM", item: n.item.trim() });
         return;
@@ -452,7 +485,13 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
         return add(`${where}: kind must be ITEM, MANUAL, COUNT, SUM, ALL or ANY`);
     }
     if (!children || children.length === 0) return add(`${where}: a ${String(n.kind)} needs children`);
-    children.forEach((c: unknown, i) => checkNode(c, `${where}.children[${i}]`, depth + 1));
+    const childKeys = new Set<string>();
+    children.forEach((c: unknown, i) => {
+      checkNode(c, `${where}.children[${i}]`, depth + 1);
+      if (!isRecord(c) || !isText(c.key)) return;
+      if (childKeys.has(c.key)) add(`${where}.children[${i}]: "${c.key}" is already one of its children`);
+      childKeys.add(c.key);
+    });
   }
 
   // Tiles: Tasks, Freeze and Proof screenshots.
@@ -571,6 +610,10 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
               const leaf = isText(c.leaf) ? leaves.get(c.leaf) : undefined;
               if (!leaf) return add(`${cw}: ${JSON.stringify(c.leaf)} isn't the key of an ITEM or MANUAL leaf`);
               if (leaf.kind === "MANUAL" && c.item !== null && c.item !== undefined) add(`${cw}: a MANUAL leaf takes no item`);
+              if (c.value !== undefined) {
+                if (leaf.kind === "MANUAL") add(`${cw}: a MANUAL leaf has no Drop value`);
+                else if (!isWhole(c.value, 0)) add(`${cw}: value must be a whole number of GP`);
+              }
               if (leaf.kind === "ITEM" && (!isText(c.item) || c.item.trim().toLowerCase() !== leaf.item!.toLowerCase())) {
                 add(`${cw}: its leaf "${String(c.leaf)}" accepts ${leaf.item}, not ${JSON.stringify(c.item)}`);
               }
