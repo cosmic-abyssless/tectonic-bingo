@@ -13,8 +13,15 @@ export interface EngineNode {
   minCount: number | null; // COUNT only
   quantity: number | null; // SUM only — target total of children's claimed quantities
   itemName: string | null; // ITEM only — the single accepted name
+  /** ITEM only (CONTEXT.md "Counts as"): what one of it adds to an enclosing SUM's total. 1 when absent. */
+  countsAs?: number;
   points: number;
   pointsGateNodeId: string | null;
+}
+
+/** What one of a SUM child's Item adds to the SUM's total (CONTEXT.md "Counts as"). */
+export function countsAsOf(node: Pick<EngineNode, "countsAs"> | undefined): number {
+  return node?.countsAs ?? 1;
 }
 
 export interface ApprovedClaim {
@@ -27,7 +34,10 @@ export interface ApprovedClaim {
 export interface NodeResult {
   complete: boolean;
   completedAt: Date | null;
-  /** Total approved-claim quantity for this node — only ITEM and SUM produce one; a SUM reads it from its ITEM children. */
+  /**
+   * Total approved-claim quantity for this node — only ITEM and SUM produce one; a SUM reads it from its ITEM children,
+   * each claim's quantity times its Item's Counts as. An ITEM's own value is its real quantity.
+   */
   value?: number;
 }
 
@@ -75,19 +85,19 @@ export function evaluateGraph(
         // Children are always ITEM leaves (enforced on write) — pull their
         // raw claims directly and merge chronologically, so completedAt is
         // the claim that tipped the running total over node.quantity,
-        // regardless of which leaf it landed on.
+        // regardless of which leaf it landed on. Each claim adds its
+        // quantity times its Item's Counts as.
         const mine = (childrenOf.get(nodeId) ?? [])
-          .flatMap((id) => claimsByNode.get(id) ?? [])
-          .slice()
+          .flatMap((id) => (claimsByNode.get(id) ?? []).map((c) => ({ reviewedAt: c.reviewedAt, units: c.quantity * countsAsOf(byId.get(id)) })))
           .sort((a, b) => a.reviewedAt.getTime() - b.reviewedAt.getTime());
         const target = node.quantity ?? 1;
-        const value = mine.reduce((sum, c) => sum + c.quantity, 0);
+        const value = mine.reduce((sum, c) => sum + c.units, 0);
         const complete = value >= target;
         let completedAt: Date | null = null;
         if (complete) {
           let tally = 0;
           for (const c of mine) {
-            tally += c.quantity;
+            tally += c.units;
             if (tally >= target) { completedAt = c.reviewedAt; break; }
           }
         }

@@ -7,6 +7,7 @@ import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
 import { PhoneLogin } from "./pages/PhoneLogin";
 import { BingoList } from "./pages/BingoList";
+import { LatestBingoRedirect } from "./pages/LatestBingoRedirect";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
 import { DraftPage } from "./pages/DraftPage";
@@ -47,8 +48,17 @@ export default function App() {
             {/* Public: linked from the Discord application settings and the login page. */}
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
+            {/* The front door goes to the latest Bingo; the list of every Bingo is /bingos. */}
             <Route
               path="/"
+              element={
+                <ProtectedRoute>
+                  <LatestBingoRedirect />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bingos"
               element={
                 <ProtectedRoute>
                   <BingoList />

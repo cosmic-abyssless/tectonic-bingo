@@ -1,6 +1,7 @@
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { Field, Input } from "../../../core/ui/Field";
 import { SearchableSelect } from "../../../core/ui/SearchableSelect";
+import { sumQuantityHint } from "../../../core/board/labels";
 
 export function RequirementPicker({
   requirement,
@@ -35,7 +36,7 @@ export function RequirementPicker({
       )}
 
       {quantity.visible && (
-        <Field label="How many are you submitting?" hint={`${quantity.needed} needed in total`}>
+        <Field label="How many are you submitting?" hint={sumQuantityHint(quantity)}>
           <Input
             type="number"
             min={1}

@@ -248,6 +248,8 @@ export function planSubmissions(node: GraphNode, rng: Rng): Claim[][] {
       return bundle(chosen.flatMap((c) => planSubmissions(c, rng)), rng);
     }
     case "SUM": {
+      // Counted in the SUM's own units: an Item that counts as N (CONTEXT.md "Counts as") is N of them per drop, so
+      // it takes fewer drops; the claim still says how many items were really dropped.
       const target = node.quantity ?? 1;
       const items = node.children.filter((c) => c.kind === "ITEM");
       if (items.length === 0) return [];
@@ -255,14 +257,33 @@ export function planSubmissions(node: GraphNode, rng: Rng): Claim[][] {
       let remaining = target;
       while (remaining > 0) {
         const item = rng.pick(items);
+        const weight = Math.max(1, item.countsAs ?? 1);
+        const stillNeeded = Math.ceil(remaining / weight);
         // Stackables come in bunches now and then.
-        const quantity = remaining >= 2 && rng.chance(0.15) ? Math.min(remaining, rng.int(2, 3)) : 1;
+        const quantity = stillNeeded >= 2 && rng.chance(0.15) ? Math.min(stillNeeded, rng.int(2, 3)) : 1;
         units.push([{ nodeId: item.id, itemName: item.itemName ?? undefined, quantity }]);
-        remaining -= quantity;
+        remaining -= quantity * weight;
       }
       return bundle(units, rng);
     }
   }
+}
+
+/**
+ * An Item to give a Counts as (CONTEXT.md), so a generated Bingo shows one even when its board has none: the last Item
+ * of the first SUM over two or more Items with a total of at least 3, counting as a quarter of that total (from 2, at
+ * most 25). Null when the board already has one, or has no such SUM. `tasks`: every Task on the board, in board order.
+ */
+export function itemToWeigh(tasks: GraphNode[]): { task: GraphNode; item: GraphNode; countsAs: number } | null {
+  const walk = (n: GraphNode): GraphNode[] => [n, ...n.children.flatMap(walk)];
+  const nodes = tasks.flatMap((task) => walk(task).map((node) => ({ task, node })));
+  if (nodes.some(({ node }) => node.kind === "ITEM" && (node.countsAs ?? 1) !== 1)) return null;
+  for (const { task, node } of nodes) {
+    const items = node.children.filter((c) => c.kind === "ITEM");
+    if (node.kind !== "SUM" || items.length < 2 || (node.quantity ?? 1) < 3) continue;
+    return { task, item: items[items.length - 1]!, countsAs: Math.min(25, Math.max(2, Math.floor((node.quantity ?? 1) / 4))) };
+  }
+  return null;
 }
 
 /** Sometimes two drops land in one screenshot: merges neighbours on different items into one submission. */

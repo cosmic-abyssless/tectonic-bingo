@@ -4,6 +4,7 @@ import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { WikiItemLink } from "../../../core/ui/WikiItemLink";
 import { itemNameOf } from "../../../headless/requirementItems";
+import { countsAsLabel } from "../../../core/board/labels";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import type { ComicColors } from "./colors";
@@ -34,6 +35,16 @@ function LockedTag({ text, colors }: { text: string; colors: ComicColors }) {
   );
 }
 
+/** "· counts as 25" after an item that adds more than one to its SUM's total (CONTEXT.md "Counts as"); nothing at 1. */
+function CountsAs({ countsAs, colors }: { countsAs: number | undefined; colors: ComicColors }) {
+  const label = countsAsLabel(countsAs);
+  return label ? (
+    <span className="ml-1.5 text-xs" style={{ color: colors.INK_SUBTLE }}>
+      · {label}
+    </span>
+  ) : null;
+}
+
 /** An ITEM, or a SUM over a single item (whose quantity and x/N progress sit on the row). */
 function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
@@ -47,6 +58,7 @@ function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicCo
         <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
           <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
           {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
+          {node.kind === "SUM" && <CountsAs countsAs={node.items[0]?.countsAs} colors={colors} />}
           {node.quantity && (
             <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT }}>
               ×{node.quantity}
@@ -79,6 +91,7 @@ function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: Com
     <li key={item.name} className="text-sm leading-snug" style={{ color: node.dim || item.lockedBy ? colors.INK_SUBTLE : colors.INK_BODY }}>
       <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
       <WikiItemLink name={item.name} />
+      <CountsAs countsAs={item.countsAs} colors={colors} />
       <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
         ×{item.count}
       </span>

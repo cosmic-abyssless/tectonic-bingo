@@ -78,8 +78,8 @@ export interface RequirementNodeModel {
   kind: NodeKind;
   /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 in total from"). */
   label: string;
-  /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
-  items: { name: string; iconUrl: string | null; count: number; lockedBy: string | null }[];
+  /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count, real items), what one of it adds to the total (`countsAs`, CONTEXT.md "Counts as": 1 unless the Item counts as more, shown as "counts as 25" when it isn't 1), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
+  items: { name: string; iconUrl: string | null; count: number; countsAs: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
   /** ITEM leaves only: set when the team has used this item somewhere else and a rule says it counts in one place only, e.g. "Used on DT2 ISSUE 1". Not `dim`: it isn't done, it is unavailable. */
@@ -93,7 +93,7 @@ export interface RequirementNodeModel {
   notNeeded: boolean;
   /** complete || notNeeded — the "no longer needs attention" display flag. */
   dim: boolean;
-  /** SUM: items received / the total needed. COUNT: options complete / N. Drawn beside a group's heading ("Complete at least 3 of · 1/3"), or at the end of a single-item SUM's row. Null for ITEM, ALL and ANY (ALL shows progress through its ticked boxes; ANY is done or not). */
+  /** SUM: items received (each times what it counts as) / the total needed. COUNT: options complete / N. Drawn beside a group's heading ("Complete at least 3 of · 1/3"), or at the end of a single-item SUM's row. Null for ITEM, ALL and ANY (ALL shows progress through its ticked boxes; ANY is done or not). */
   progress: { current: number; target: number } | null;
   /** A single-item SUM's quantity when it's more than 1, drawn after the name ("Twisted ancestral colour kit ×2"). Null otherwise. */
   quantity: number | null;
@@ -484,7 +484,11 @@ export interface SubmissionFlowModel {
     /** `${tileId}-${taskId}` — the SearchableSelect remount key. */
     pickerKey: string;
   };
-  quantity: { visible: boolean; value: number; max: number; needed: number; set(n: number): void };
+  /**
+   * How many of the picked item (a SUM's) are being submitted: the real number of items. `needed` is the SUM's total,
+   * `countsAs` what one of this item adds to it (CONTEXT.md "Counts as"), and `max` the most items the total could take.
+   */
+  quantity: { visible: boolean; value: number; max: number; needed: number; countsAs: number; set(n: number): void };
   /**
    * Drop or Proof screenshot (CONTEXT.md). "proof" is offered only where the picked Tile (or Task, when the requirement
    * is per-Task) needs one; choosing it hides the item picking, since a proof has no claims.

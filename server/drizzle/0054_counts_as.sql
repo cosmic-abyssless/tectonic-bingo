@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `counts_as` integer DEFAULT 1 NOT NULL;

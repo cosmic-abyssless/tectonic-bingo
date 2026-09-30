@@ -19,6 +19,8 @@ import { canMove, moveNode, type Path } from "./requirementMoves";
 export interface ExistingLeaf {
   id: string;
   itemName: string;
+  /** Its Counts as (CONTEXT.md), sent along when it's linked in so the shared Item keeps it. */
+  countsAs: number;
   taskLabel: string;
 }
 
@@ -360,6 +362,8 @@ interface NodeProps {
   remove: (path: Path) => void;
   add: (path: Path, child: GraphNodeInput) => void;
   addMany: (path: Path, children: GraphNodeInput[]) => void;
+  /** The kind of the condition this row sits in (none for the task's own root): an item in a SUM gets a Counts as. */
+  parentKind?: NodeKind;
 }
 
 function GroupNode(props: NodeProps) {
@@ -453,7 +457,7 @@ function GroupNode(props: NodeProps) {
             <Fragment key={child.id ?? `new-${i}-${children.length}`}>
               <DropGap parent={path} index={i} label={`Before ${rowName(child, conditionLabels)}`} or={node.kind === "ANY" && i > 0} onTreeLine />
               <div role="listitem" className={`${TREE_BRANCH} ${i === children.length - 1 ? TREE_BRANCH_LAST : TREE_BRANCH_THROUGH}`}>
-                {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} /> : <GroupNode {...props} node={child} path={[...path, i]} />}
+                {child.kind === "ITEM" ? <ItemLeafRow {...props} node={child} path={[...path, i]} parentKind={node.kind} /> : <GroupNode {...props} node={child} path={[...path, i]} parentKind={node.kind} />}
               </div>
             </Fragment>
           ))}
@@ -519,7 +523,7 @@ function GroupNode(props: NodeProps) {
             placeholder="Search items elsewhere on this tile…"
             onChange={(id) => {
               const leaf = pickableLeaves.find((l) => l.id === id);
-              if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName });
+              if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName, countsAs: leaf.countsAs });
               setPickingExisting(false);
             }}
           />
@@ -627,7 +631,7 @@ function RemoveButton({ shared, label, what, onPress, className }: { shared: boo
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedNodeIds }: NodeProps) {
+function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedNodeIds, parentKind }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
   // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
@@ -685,6 +689,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
             exclusive
           </span>
         )}
+        {parentKind === "SUM" && <CountsAsInput name={name} countsAs={node.countsAs ?? 1} onSave={(countsAs) => update(path, (n) => ({ ...n, countsAs }))} />}
         <button
           type="button"
           onClick={() => setEditingValue((open) => !open)}
@@ -725,6 +730,35 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         </div>
       </Dialog>
     </div>
+  );
+}
+
+// Counts as (CONTEXT.md), on an item in a total ("N in total from"): what one of it adds to the total, a whole number
+// from 1. Saved on blur like the total itself, and only when it changed.
+function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: number; onSave: (countsAs: number) => void }) {
+  return (
+    <label
+      className="flex shrink-0 items-center gap-1 text-[11px] text-on-surface-muted"
+      title={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}
+    >
+      counts as
+      <span className="w-14">
+        <input
+          aria-label={`${name} counts as`}
+          type="number"
+          min={1}
+          step={1}
+          defaultValue={countsAs}
+          onBlur={(e) => {
+            const next = Math.max(1, Math.round(Number(e.target.value)) || 1);
+            e.target.value = String(next);
+            if (next !== countsAs) onSave(next);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          className={`${controlClass("sm")} num`}
+        />
+      </span>
+    </label>
   );
 }
 
