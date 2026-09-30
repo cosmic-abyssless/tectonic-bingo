@@ -96,7 +96,7 @@ A signup left out of the Draft so that every Team comes out the same shape. Pair
   - **Pairs + singles** (`even`; "Even teams" in a solo Bingo) — pairs and singles are each split evenly; the remainder of each is cut.
   - **Pairs only** (`pairs_only`, duo Bingos only) — only pairs are drafted, split evenly; every single is cut. Mods can pair singles up by hand to keep them in.
   - **No cuts** (`none`) — everyone is drafted, in any order; Teams may end up different sizes.
-- **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". Captains pick in any order, but a Team that has its share of pairs can't take another pair (likewise singles).
+- **Share:** What every Team drafts under the setting, e.g. "1 pair and 1 single". A Team that has its share of pairs can't take another pair (likewise singles). In a duo Bingo the pairs come first (see Draft).
 - **Avoidable cut:** A Player who is cut as things stand but wouldn't be if the changes a Cut review proposes were made.
 - **Unavoidable cut:** A Player who would still be cut after every change a Cut review can propose. The cut warnings count only these; while any cut is avoidable they say "Some cuts can be avoided" and point to the Cut review.
 
@@ -109,6 +109,7 @@ A plan for cutting as few Players as possible before the Draft, which an admin l
 ### Draft
 The structured selection process during the `draft` stage where Captains take turns selecting Players (or Duos) onto their Teams.
 - **Mechanics:** Snake draft or linear, divided into rounds.
+- **Pairs first:** In a duo Bingo, a Team can't draft a single while there's still a pair it may take: once every pair is drafted (or the Team has its share of pairs), singles open. Every Team gets one pick a round, so with pairs first they all reach their share together. It holds for Admins picking for a Team too.
 
 - **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
