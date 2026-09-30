@@ -359,8 +359,11 @@ function lineCells(l: NonNullable<HistoricalBundle["lines"]>[number], rows: numb
  */
 function writeSignups(tx: Tx, bingoId: string, bundle: HistoricalBundle, userOf: (discordId: string) => string, startsAt: Date): void {
   const rsnOf = new Map(bundle.players.map((p) => [p.discordId, p.rsn.trim()]));
+  // The Wise Old Man account they played on, kept as text like a live signup's, for the leaderboard to find them by.
+  const womIdOf = (p: HistoricalBundle["players"][number]) => (p.womId ? String(p.womId) : null);
+  const womIdOfDiscord = new Map(bundle.players.map((p) => [p.discordId, womIdOf(p)]));
   if (!bundle.signups) {
-    for (const p of bundle.players) tx.insert(signups).values({ bingoId, userId: userOf(p.discordId), rsn: p.rsn.trim(), createdAt: startsAt }).run();
+    for (const p of bundle.players) tx.insert(signups).values({ bingoId, userId: userOf(p.discordId), rsn: p.rsn.trim(), womId: womIdOf(p), createdAt: startsAt }).run();
     return;
   }
   const questionId = new Map<string, string>();
@@ -371,7 +374,7 @@ function writeSignups(tx: Tx, bingoId: string, bundle: HistoricalBundle, userOf:
   for (const e of bundle.signups.entries) {
     const signup = tx
       .insert(signups)
-      .values({ bingoId, userId: userOf(e.discordId), rsn: e.cut ? e.rsn!.trim() : rsnOf.get(e.discordId)!, timezone: e.timezone, createdAt: new Date(e.signedUpAt) })
+      .values({ bingoId, userId: userOf(e.discordId), rsn: e.cut ? e.rsn!.trim() : rsnOf.get(e.discordId)!, womId: e.cut ? null : (womIdOfDiscord.get(e.discordId) ?? null), timezone: e.timezone, createdAt: new Date(e.signedUpAt) })
       .returning({ id: signups.id })
       .get();
     for (const [key, value] of Object.entries(e.answers)) {
