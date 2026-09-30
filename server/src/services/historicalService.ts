@@ -59,15 +59,15 @@ function normalize(name: string): string {
 }
 
 interface RawParticipation {
-  player?: { username?: unknown; displayName?: unknown };
+  player?: { id?: unknown; username?: unknown; displayName?: unknown };
   teamName?: unknown;
   progress?: { gained?: unknown };
 }
 
 /**
  * The Bingo's Wise Old Man gains leaderboard, per Team and per Player, from the competition stored for it
- * (wom_past_competitions.bingoId). A participant maps to a Player by the RSN of their Signup in the Bingo, and so to
- * that Player's Team; one who maps to nobody (an `unknown` Player) keeps the team WOM gave them and shows by RSN only.
+ * (wom_past_competitions.bingoId). A participant maps to a Player by the Wise Old Man account on their Signup (which
+ * holds even if the account's been renamed since), else by their Signup's RSN, and so to that Player's Team; one who maps to nobody (an `unknown` Player) keeps the team WOM gave them and shows by RSN only.
  */
 export function getWomLeaderboard(db: Db, bingoId: string): WomLeaderboard | null {
   const row = db.select().from(womPastCompetitions).where(eq(womPastCompetitions.bingoId, bingoId)).get();
@@ -84,12 +84,13 @@ export function getWomLeaderboard(db: Db, bingoId: string): WomLeaderboard | nul
   const teamByName = new Map(teamRows.map((t) => [normalize(t.name), t]));
   const teamById = new Map(teamRows.map((t) => [t.id, t]));
   const signupRows = db
-    .select({ rsn: signups.rsn, user: PUBLIC_USER_COLS })
+    .select({ rsn: signups.rsn, womId: signups.womId, user: PUBLIC_USER_COLS })
     .from(signups)
     .innerJoin(users, eq(signups.userId, users.id))
     .where(eq(signups.bingoId, bingoId))
     .all();
   const signupByRsn = new Map(signupRows.map((s) => [normalize(s.rsn), s]));
+  const signupByWomId = new Map(signupRows.filter((s) => s.womId).map((s) => [s.womId!, s]));
   const teamOfUser = new Map(
     db
       .select({ userId: teamMembers.userId, teamId: teamMembers.teamId })
@@ -105,7 +106,8 @@ export function getWomLeaderboard(db: Db, bingoId: string): WomLeaderboard | nul
     if (!username) continue;
     const displayName = typeof p.player?.displayName === "string" && p.player.displayName ? p.player.displayName : username;
     const gained = typeof p.progress?.gained === "number" ? p.progress.gained : 0;
-    const signup = signupByRsn.get(normalize(username)) ?? signupByRsn.get(normalize(displayName));
+    const womId = typeof p.player?.id === "number" ? String(p.player.id) : null;
+    const signup = (womId ? signupByWomId.get(womId) : undefined) ?? signupByRsn.get(normalize(username)) ?? signupByRsn.get(normalize(displayName));
     const womTeamName = typeof p.teamName === "string" && p.teamName ? p.teamName : null;
     const team = (signup && teamById.get(teamOfUser.get(signup.user.id) ?? "")) || (womTeamName ? teamByName.get(normalize(womTeamName)) : undefined);
     players.push({

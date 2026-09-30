@@ -33,7 +33,7 @@ function normalizeRsn(rsn: string): string {
 }
 
 interface RawParticipation {
-  player?: { username?: unknown; displayName?: unknown };
+  player?: { id?: unknown; username?: unknown; displayName?: unknown };
   teamName?: unknown;
 }
 
@@ -99,11 +99,17 @@ export async function buildBundle(folder: string, sources: BundleSources, source
     report.errors.push(`Tectonic API: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Each Player's Wise Old Man account, so the leaderboard still finds them if it's renamed later.
+  const womIdByRsn = new Map<string, number>();
+  for (const p of ((competition as { participations?: unknown } | null)?.participations ?? []) as RawParticipation[]) {
+    if (typeof p.player?.id !== "number") continue;
+    for (const n of [p.player.username, p.player.displayName]) if (typeof n === "string") womIdByRsn.set(normalizeRsn(n), p.player.id);
+  }
   const players: HistoricalBundlePlayer[] = known.map((p) => {
     const member = members.get(p.discordId);
     const name = member ? clanName(member, p.rsn) : null;
     report.mapped.push({ rsn: p.rsn, team: p.team, discordId: p.discordId, clanName: name });
-    return { discordId: p.discordId, rsn: p.rsn, clan: name ? { name } : null };
+    return { discordId: p.discordId, rsn: p.rsn, clan: name ? { name } : null, womId: womIdByRsn.get(normalizeRsn(p.rsn)) ?? null };
   });
   for (const t of source.teams) for (const p of t.players) if (p.discordId === null) report.unknown.push({ rsn: p.rsn, team: t.name });
 

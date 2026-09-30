@@ -166,7 +166,9 @@ through the real Site admin → Import historical Bingo endpoint:
 - `--teams` Teams of `--team-size` made-up Players, about one in ten of whom has "left the clan", each
   Team with a Captain and sometimes a co-captain; `--me` goes on the first Team;
 - standings (points known about two runs in three), a Wise Old Man competition with every Player's gains,
-  and one to three `unknown` Players who show only there;
+  and one to three `unknown` Players who show only there. Every Player carries their account's Wise Old Man
+  id, and the first one's account has been renamed since ("<name> Now" in the competition), so the
+  leaderboard shows it connecting by id, under the name they played as;
 - dates some weeks to a year ago, `--days` long.
 
 The server accepts the made-up Discord ids only in dev mode. `--progress` and `--mods` don't apply.

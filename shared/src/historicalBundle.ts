@@ -170,6 +170,11 @@ export interface HistoricalBundlePlayer {
    * null when they've left, and a new user is then named by `rsn` and locked out like any non-member.
    */
   clan: { name: string } | null;
+  /**
+   * The Wise Old Man player id of the account they played on, when `wom` has one: the leaderboard finds them by it, so
+   * an account renamed since (its current name in the competition isn't `rsn`) is still theirs.
+   */
+  womId?: number | null;
 }
 
 export interface HistoricalBundleTeam {
@@ -293,6 +298,7 @@ export function validateHistoricalBundle(input: unknown, opts: { devDiscordIds?:
 
   // Players
   const players = new Map<string, string>(); // discordId → rsn
+  const womIds = new Map<number, string>(); // Wise Old Man player id → rsn
   if (!Array.isArray(input.players)) add("players: missing");
   else {
     input.players.forEach((p: unknown, i) => {
@@ -305,6 +311,11 @@ export function validateHistoricalBundle(input: unknown, opts: { devDiscordIds?:
       else if (players.has(p.discordId)) add(`${label}: Discord id ${p.discordId} is listed twice`);
       else players.set(p.discordId, isText(p.rsn) ? p.rsn : "");
       if (p.clan !== null && !(isRecord(p.clan) && isText(p.clan.name))) add(`${label}: clan must be { name } or null`);
+      if (p.womId !== undefined && p.womId !== null) {
+        if (!Number.isInteger(p.womId) || (p.womId as number) <= 0) add(`${label}: womId must be a Wise Old Man player id`);
+        else if (womIds.has(p.womId as number)) add(`${label}: Wise Old Man player ${p.womId} is ${womIds.get(p.womId as number)}'s already`);
+        else womIds.set(p.womId as number, isText(p.rsn) ? p.rsn : String(p.womId));
+      }
     });
   }
   const unknown = Array.isArray(input.unknownPlayers) ? input.unknownPlayers : null;
