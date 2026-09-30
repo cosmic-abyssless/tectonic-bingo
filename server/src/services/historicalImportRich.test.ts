@@ -84,6 +84,18 @@ describe("checking a rich bundle", () => {
     ]);
   });
 
+  it("checks Valued as: an item and a divisor from 1, with a short source", () => {
+    const b = rich();
+    const [any] = tasksOf(b, 0, 0) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(any.children[0]!, { valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } });
+    Object.assign(any.children[1]!, { valuedAs: { itemName: "Magus vestige", divisor: 0 } });
+    Object.assign(tasksOf(b, 0, 2)[0]!, { valuedAs: { itemName: "Ahrim's staff", divisor: 1, source: "x".repeat(41) } });
+    expect(problemsOf(b)).toEqual([
+      'tiles[0] "Vorkath" tasks[0].children[1]: valuedAs must be { itemName, divisor } with a divisor from 1',
+      'tiles[2] "Barrows" tasks[0]: valuedAs.source must be text of at most 40 characters',
+    ]);
+  });
+
   it("checks Drop values: whole GP, and none on a MANUAL leaf", () => {
     const b = rich();
     const [s0, s1] = b.submissions!;
@@ -206,6 +218,17 @@ describe("importing a rich bundle", () => {
     const [sum, call] = children(zulrah.nodeId);
     expect(sum).toMatchObject({ kind: "SUM", quantity: 3, points: 15 });
     expect(call).toMatchObject({ kind: "MANUAL", description: "Kill Zulrah on a clan call", requiresProof: true, proofNote: "The whole team in one screenshot" });
+  });
+
+  it("sets up an item's Valued as", async () => {
+    const b = rich();
+    const [sum] = tasksOf(b, 0, 1) as [HistoricalBundleTask & { children: HistoricalBundleNode[] }];
+    Object.assign(sum.children[1]!, { valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } });
+    const { bingo } = await importIt(b);
+    const magic = db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, "Magic fang"))).get()!;
+    expect(magic).toMatchObject({ valuedAsItemName: "Magus vestige", valuedAsDivisor: 3, valuedAsSource: "Duke Sucellus" });
+    const fang = db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, bingo.id), eq(schema.nodes.itemName, "Tanzanite fang"))).get()!;
+    expect(fang).toMatchObject({ valuedAsItemName: null, valuedAsDivisor: null });
   });
 
   it("keeps the Drop values the bundle brings, leaving the others to today's prices", async () => {

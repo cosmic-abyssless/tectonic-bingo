@@ -115,7 +115,7 @@ const richDocument = {
         ? {
             ...t,
             tasks: [
-              node(111, "SUM", { label: "Five fangs", points: 15, quantity: 5, children: [task(112, "Tanzanite fang", 0), task(113, "Magic fang", 0)] }),
+              node(111, "SUM", { label: "Five fangs", points: 15, quantity: 5, children: [task(112, "Tanzanite fang", 0), { ...task(113, "Magic fang", 0), valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } }] }),
               node(114, "COUNT", { label: "Two of three", points: 10, minCount: 2, children: [task(115, "Ahrim's hood", 0), task(116, "Dharok's axe", 0), node(117, "MANUAL", { label: "A clue" })] }),
               node(118, "MANUAL", { label: "Clan call", points: 5, requiresProof: true, proofNote: "Everyone in shot" }),
             ],
@@ -144,6 +144,8 @@ describe("a generated rich historical bundle", () => {
     expect(first).toMatchObject({ points: 5, freezeMinutes: 30, requiresProof: true, proofNote: "Kill count" });
     expect(first.tasks!.map((t) => [t.kind, t.label, t.points, t.withholdUntilPrevious])).toEqual([["ANY", "Any unique", 10, false], ["ITEM", "Necklace", 20, true]]);
     expect(bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks!.map((t) => t.kind)).toEqual(["SUM", "COUNT", "MANUAL"]);
+    // The board's Valued as comes along.
+    expect((bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks![0] as { children: unknown[] }).children).toContainEqual(expect.objectContaining({ item: "Magic fang", valuedAs: { itemName: "Magus vestige", divisor: 3, source: "Duke Sucellus" } }));
     // An item of the first Task also counts toward the second, as an old site's drop could.
     expect((bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks![1] as { children: unknown[] }).children).toContainEqual({ kind: "ITEM", key: "n112", reuse: true });
     expect(bundle.lines).toEqual([{ type: "row", index: 0, points: 50 }, { type: "diagonal", index: 0, points: 40 }]);

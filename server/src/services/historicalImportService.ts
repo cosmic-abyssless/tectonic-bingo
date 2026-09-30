@@ -335,7 +335,7 @@ function insertBundleNode(tx: Tx, bingoId: string, n: HistoricalBundleNode, idBy
   const base = { ...settings, label: n.label?.trim() || null, points: n.points ?? 0 };
   const input: GraphNodeInput =
     n.kind === "ITEM"
-      ? { ...base, kind: "ITEM", itemName: n.item.trim() }
+      ? { ...base, kind: "ITEM", itemName: n.item.trim(), valuedAs: n.valuedAs ? { itemName: n.valuedAs.itemName.trim(), divisor: n.valuedAs.divisor, source: n.valuedAs.source?.trim() || null } : null }
       : n.kind === "MANUAL"
         ? { ...base, kind: "MANUAL" }
         : n.kind === "COUNT"

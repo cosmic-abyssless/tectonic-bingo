@@ -177,7 +177,8 @@ The server accepts the made-up Discord ids only in dev mode. `--progress` and `-
 
 The same, with the sections a rich bundle adds (`historicalRich.ts`), as the converter would read them off an old
 site that recorded its drops:
-- each Tile's Tasks with their requirement trees (a reused group is left out; a reused item or MANUAL stays shared),
+- each Tile's Tasks with their requirement trees (a reused group is left out; a reused item or MANUAL stays shared;
+  an item's Valued as comes along),
   Freeze and Proof screenshot settings, the board's Lines, and "Withhold points until previous" where a Task's points
   wait on the one before;
 - an item that counts toward two Tasks, as an old site's drop could: unless the board already shares one, the first

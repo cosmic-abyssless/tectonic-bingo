@@ -85,10 +85,13 @@ export interface HistoricalBundleTile {
  * A leaf can count toward two Tasks (a drop the old site counted for both): it is written in full once, and anywhere
  * later as a stub with its `key` and `reuse: true`, which puts that same leaf there too, so one Claim on it counts
  * toward each. A Task itself is never a stub.
+ *
+ * An ITEM's `valuedAs` (CONTEXT.md "Valued as"): its Claims' Drop value is that item's price ÷ divisor instead of their
+ * own, as the leaf is set up here, e.g. a DT2 boss's Gold ring as that boss's vestige ÷ 3.
  */
 export type HistoricalBundleNode =
   | { kind: "ITEM" | "MANUAL"; key: string; reuse: true }
-  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number }
+  | { kind: "ITEM"; key?: string; item: string; label?: string | null; points?: number; valuedAs?: { itemName: string; divisor: number; source?: string | null } | null }
   | { kind: "MANUAL"; key?: string; label?: string | null; points?: number }
   | { kind: "COUNT"; key?: string; min: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
   | { kind: "SUM"; key?: string; quantity: number; label?: string | null; points?: number; children: HistoricalBundleNode[] }
@@ -232,6 +235,9 @@ function isText(v: unknown): v is string {
 function isDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(new Date(v).getTime());
 }
+/** A Valued as source's longest, as the board editor takes it (graphService). */
+const VALUED_AS_SOURCE_MAX = 40;
+
 function isWhole(v: unknown, min: number, max = Number.MAX_SAFE_INTEGER): v is number {
   return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
 }
@@ -450,6 +456,11 @@ function checkRich(input: Record<string, unknown>, add: (p: string) => void, ctx
     const children = Array.isArray(n.children) ? n.children : null;
     switch (n.kind) {
       case "ITEM":
+        if (n.valuedAs !== undefined && n.valuedAs !== null) {
+          const v = n.valuedAs;
+          if (!isRecord(v) || !isText(v.itemName) || !isWhole(v.divisor, 1)) add(`${where}: valuedAs must be { itemName, divisor } with a divisor from 1`);
+          else if (!optionalText(v.source) || (isText(v.source) && v.source.trim().length > VALUED_AS_SOURCE_MAX)) add(`${where}: valuedAs.source must be text of at most ${VALUED_AS_SOURCE_MAX} characters`);
+        }
         if (!isText(n.item)) add(`${where}: an ITEM needs its item`);
         else if (isText(n.key)) leaves.set(n.key, { kind: "ITEM", item: n.item.trim() });
         return;

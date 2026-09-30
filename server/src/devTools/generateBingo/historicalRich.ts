@@ -31,7 +31,7 @@ function toNode(n: ExportNode, written: Written): (HistoricalBundleNode & Keyed)
   const leaf = (node: HistoricalBundleNode & Keyed) => (written.set(node.key, node), node);
   switch (n.kind) {
     case "ITEM":
-      return n.itemName ? leaf({ ...base, kind: "ITEM", item: n.itemName }) : null;
+      return n.itemName ? leaf({ ...base, kind: "ITEM", item: n.itemName, ...(n.valuedAs ? { valuedAs: n.valuedAs } : {}) }) : null;
     case "MANUAL":
       return leaf({ ...base, kind: "MANUAL" });
     case "SUM": {
