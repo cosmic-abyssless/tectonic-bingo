@@ -11,6 +11,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import * as devTestDataService from "../services/devTestDataService";
+import { removeUploads } from "../services/uploadFiles";
 import { mockPastCompetition } from "../services/pastWomCompetitionService";
 import { OptionsError, normalizeOptions, type RawOptions } from "../devTools/generateBingo/options";
 import { fillFakeWomSnapshots } from "../devTools/generateBingo/womSnapshots";
@@ -130,7 +131,7 @@ router.delete(
     // Not while a run is building this one: it would go on writing into a bingo that's gone.
     if (isGenerateJobRunning() && getGenerateJob()?.slug === req.params.slug) throw new ServiceError(409, "This bingo is still being generated");
     const result = devTestDataService.teardownTestBingo(db, req.params.slug as string);
-    const files = devTestDataService.removeUploads(UPLOADS_DIR, result.urls);
+    const files = removeUploads(UPLOADS_DIR, result.urls);
     console.info(`[dev] tore down ${req.params.slug}: ${result.usersDeleted} test users, ${files} files`);
     res.json({ deleted: { users: result.usersDeleted, files } });
   }),

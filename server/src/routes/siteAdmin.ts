@@ -15,6 +15,7 @@ import * as pastWomCompetitionService from "../services/pastWomCompetitionServic
 import * as userService from "../services/userService";
 import * as mcpConnections from "../mcp/connections";
 import { ServiceError } from "../services/errors";
+import { removeUploads } from "../services/uploadFiles";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, BingoExportDocument } from "@bingo/shared";
 
@@ -78,7 +79,9 @@ router.post(
 router.delete(
   "/bingos/:id",
   asyncHandler(async (req, res) => {
-    bingoService.deleteBingo(db, req.params.id as string);
+    // Its files go once the rows have: the pictures and screenshots only it used.
+    const { files } = bingoService.deleteBingo(db, req.params.id as string);
+    removeUploads(UPLOADS_DIR, files);
     res.status(204).end();
   }),
 );
