@@ -61,7 +61,7 @@ export function AppHeader({
   const bingoSlug = useMatch("/b/:slug/*")?.params.slug;
   const { data: shell } = useBingo(bingoSlug);
   const myRsn = user ? shell?.teams.flatMap((t) => t.members).find((m) => m.user.id === user.id)?.user.rsn : null;
-  const onBingoList = !!useMatch("/");
+  const onBingoList = !!useMatch("/bingos");
   const onSiteAdmin = !!useMatch("/admin");
   const [bugReportOpen, setBugReportOpen] = useState(false);
   // "Log in on your phone" (a QR code): offered on a computer, where it's the way onto the phone.
@@ -95,8 +95,8 @@ export function AppHeader({
       id: "site",
       label: "Site",
       items: [
-        // The same people who get the board's All bingos arrow: "/" bounces everyone else to the latest bingo.
-        ...(user?.isAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/") }] : []),
+        // Admins and dev login, who have several Bingos to move between; everyone else plays the latest ("/").
+        ...(user?.isAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/bingos") }] : []),
         ...(user?.isAdmin
           ? [
               {

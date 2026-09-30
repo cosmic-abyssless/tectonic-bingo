@@ -29,9 +29,8 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
 
   return (
     <AppHeader
-      // "/" only shows the bingo list to admins and dev-login (everyone else
-      // gets bounced to the latest bingo — see BingoList.tsx), so the back
-      // link would just be a dead loop for anyone else.
+      // No back link: "/" goes to the latest bingo, and the list of all of
+      // them (/bingos) is in the ☰ for the admins who have several.
       title={page.bingo.name}
       subtitle={
         page.showEndCountdown && page.bingo.endsAt ? (

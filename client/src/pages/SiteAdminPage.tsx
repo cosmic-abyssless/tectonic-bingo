@@ -330,7 +330,7 @@ export function SiteAdminPage() {
     return (
       <div className="flex min-h-dvh items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
         Site admin access required.
-        <Link to="/" className="text-on-surface underline underline-offset-2">
+        <Link to="/bingos" className="text-on-surface underline underline-offset-2">
           Back to bingos
         </Link>
       </div>
