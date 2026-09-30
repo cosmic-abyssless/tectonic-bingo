@@ -1,15 +1,21 @@
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useBingoHeader, useBingoMenuEntries, useBoardModel, useRewindModel } from "../../../headless";
-import type { TileModel } from "../../../headless/types";
+import type { RewindPopupModel, TileModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
 import { UsersIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
+import { REWIND_POPUP_GAP } from "../../rewindPopupPointer";
 import { ModPanelButton } from "../page/ModPanelButton";
+import { placePopup, type Bounds, type Placement } from "./popupPlacement";
+
+// Kept this far from the header, the timeline and the screen's edges.
+const EDGE_PX = 8;
 
 /**
  * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score and the log of Submissions so
  * far beside it (under it on a phone), and the timeline with its controls pinned to the bottom. Popups rise over the Board while playing or
- * stepping, and the closing card with the final Titles once the moment reaches the end. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
+ * stepping, beside the Tile they landed on, and the closing card with the final Titles once the moment reaches the end. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
  * Tile titles every Team's progress on it and opening one lists it.
  */
 export function RewindPageLayout() {
@@ -18,6 +24,19 @@ export function RewindPageLayout() {
   const reduceMotion = useReducedMotion();
   const header = useBingoHeader(rewind.slug);
   const menuEntries = useBingoMenuEntries(rewind.slug, header);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  // Where a popup may go: under the (sticky) header and over the timeline, read afresh each frame.
+  const bounds = useCallback((): Bounds => {
+    const headerBottom = rootRef.current?.querySelector(":scope > header")?.getBoundingClientRect().bottom ?? 0;
+    const timelineTop = timelineRef.current?.getBoundingClientRect().top ?? window.innerHeight;
+    return {
+      left: EDGE_PX,
+      top: headerBottom + EDGE_PX,
+      right: document.documentElement.clientWidth - EDGE_PX,
+      bottom: timelineTop - EDGE_PX,
+    };
+  }, []);
 
   const TeamSelector = useSlot("TeamSelector");
   const BoardGrid = useSlot("BoardGrid");
@@ -26,7 +45,6 @@ export function RewindPageLayout() {
   const RewindControls = useSlot("RewindControls");
   const RewindScoreboard = useSlot("RewindScoreboard");
   const RewindLog = useSlot("RewindLog");
-  const RewindPopup = useSlot("RewindPopup");
   const RewindClosing = useSlot("RewindClosing");
   const RewindTileMarkers = useSlot("RewindTileMarkers");
   const RewindTileTeams = useSlot("RewindTileTeams");
@@ -48,13 +66,8 @@ export function RewindPageLayout() {
     : undefined;
 
   return (
-    <div className="min-h-dvh bg-background text-on-surface">
-      <AppHeader
-        title="Rewind"
-        subtitle={rewind.bingoName}
-        menuEntries={menuEntries}
-        controls={rewind.teamSelector.teams.length > 0 && <TeamSelector selector={rewind.teamSelector} />}
-      >
+    <div ref={rootRef} className="min-h-dvh bg-background text-on-surface">
+      <AppHeader title="Rewind" subtitle={rewind.bingoName} menuEntries={menuEntries} controls={rewind.teamSelector.teams.length > 0 && <TeamSelector selector={rewind.teamSelector} />}>
         {header?.isMod && <ModPanelButton slug={rewind.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
 
@@ -70,7 +83,10 @@ export function RewindPageLayout() {
             </div>
           )}
           {rewind.team && (
-            <div className="mb-3 flex h-10 items-center justify-between gap-3 rounded-md border border-outline bg-surface px-3" style={rewind.team.color ? { borderColor: `${rewind.team.color}99` } : undefined}>
+            <div
+              className="mb-3 flex h-10 items-center justify-between gap-3 rounded-md border border-outline bg-surface px-3"
+              style={rewind.team.color ? { borderColor: `${rewind.team.color}99` } : undefined}
+            >
               <span className="flex min-w-0 items-center gap-2 text-sm">
                 {rewind.team.color && <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: rewind.team.color }} />}
                 <span className="truncate font-semibold">{rewind.team.name}</span>
@@ -93,7 +109,7 @@ export function RewindPageLayout() {
         </aside>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-outline bg-background/95 backdrop-blur">
+      <div ref={timelineRef} className="fixed inset-x-0 bottom-0 z-30 border-t border-outline bg-background/95 backdrop-blur">
         <div className="mx-auto max-w-6xl space-y-2 px-3 py-3 sm:px-6">
           <RewindTimeline timeline={rewind.timeline} />
           <RewindControls controls={rewind.controls} />
@@ -101,24 +117,13 @@ export function RewindPageLayout() {
       </div>
 
       {/* Over the Board, clear of the header and the timeline; only the card itself takes clicks. */}
-      <div className="pointer-events-none fixed inset-x-0 top-20 z-40 flex justify-center px-4">
+      <div className="pointer-events-none fixed inset-0 z-40">
         <AnimatePresence mode="wait">
-          {popup && (
-            <motion.div
-              key={popup.submission.id}
-              className="pointer-events-auto"
-              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: popup.size === "big" ? 0.9 : 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
-              transition={popup.size === "big" && !reduceMotion ? { type: "spring", stiffness: 380, damping: 24 } : { duration: 0.16 }}
-            >
-              <RewindPopup popup={popup} />
-            </motion.div>
-          )}
+          {popup && <PlacedPopup key={popup.submission.id} popup={popup} bounds={bounds} />}
           {!popup && closing && (
             <motion.div
               key="closing"
-              className="pointer-events-auto"
+              className="pointer-events-auto absolute inset-x-4 top-20 mx-auto w-fit"
               initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
@@ -133,5 +138,50 @@ export function RewindPageLayout() {
       <TileModal tile={rewind.openTile.tile} isOpen={rewind.openTile.tile !== null} onClose={rewind.openTile.close} />
       <RewindTileTeams tile={rewind.openTile.teams} isOpen={rewind.openTile.teams !== null} onClose={rewind.openTile.close} />
     </div>
+  );
+}
+
+/**
+ * A popup's card, placed beside its Tile's cell (BoardGrid marks each with data-tile-id) and following it every frame
+ * as the page scrolls or resizes. Hidden until first placed.
+ */
+function PlacedPopup({ popup, bounds }: { popup: RewindPopupModel; bounds: () => Bounds }) {
+  const RewindPopup = useSlot("RewindPopup");
+  const reduceMotion = useReducedMotion();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<Placement | null>(null);
+  const tileId = popup.submission.tileId;
+
+  useLayoutEffect(() => {
+    let frame = 0;
+    const track = () => {
+      const card = cardRef.current;
+      if (card) {
+        const el = tileId ? document.querySelector(`[data-tile-id="${CSS.escape(tileId)}"]`) : null;
+        const next = placePopup(el?.getBoundingClientRect() ?? null, { width: card.offsetWidth, height: card.offsetHeight }, bounds(), REWIND_POPUP_GAP);
+        setPlacement((prev) => (prev && prev.left === next.left && prev.top === next.top && prev.pointer?.edge === next.pointer?.edge && prev.pointer?.offset === next.pointer?.offset ? prev : next));
+      }
+      frame = requestAnimationFrame(track);
+    };
+    track();
+    return () => cancelAnimationFrame(frame);
+  }, [tileId, bounds]);
+
+  return (
+    <motion.div
+      ref={cardRef}
+      className="pointer-events-auto absolute"
+      style={{
+        left: placement?.left ?? 0,
+        top: placement?.top ?? 0,
+        visibility: placement ? undefined : "hidden",
+      }}
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: popup.size === "big" ? 0.9 : 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
+      transition={popup.size === "big" && !reduceMotion ? { type: "spring", stiffness: 380, damping: 24 } : { duration: 0.16 }}
+    >
+      <RewindPopup popup={popup} pointer={placement?.pointer ?? null} />
+    </motion.div>
   );
 }

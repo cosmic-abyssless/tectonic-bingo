@@ -39,6 +39,7 @@ import type {
   WrappedTeamModel,
   WrappedYouModel,
 } from "../headless/types";
+import type { RewindPopupPointer } from "./rewindPopupPointer";
 
 export interface OnTheClockProps {
   teamName: string;
@@ -198,7 +199,8 @@ export interface ThemeSlots {
   // whichever tile the search dropdown currently has highlighted, if any,
   // so a theme can visually tie the two together.
   // tileOverlay (Rewind's All Teams view) draws something over a Tile's cell, above TileCell, in the same box; a
-  // BoardGrid must render it when it's given.
+  // BoardGrid must render it when it's given. Each Tile's box carries data-tile-id={tile.id}: Rewind finds a Tile's cell
+  // by it to place popups beside it.
   BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null; tileOverlay?: (tile: TileModel) => ReactNode }>;
   RowLabel: ComponentType<{ category: CategoryModel | null }>;
   EmptyCell: ComponentType<{ row: number; col: number }>;
@@ -245,8 +247,11 @@ export interface ThemeSlots {
   // One Submission's popup: the Player it's credited to, their Team, its items with Drop value (and Luck when known),
   // a thumbnail of its main screenshot, its Reactions and what it completed. size "big" (a huge Submission) or
   // "small" (a notable one). A rejected one is greyed out and stamped "Rejected". The theme draws only the card (its
-  // own width, no positioning); the page places it and plays it in and out.
-  RewindPopup: ComponentType<{ popup: RewindPopupModel }>;
+  // own width, no positioning); the page places it beside its Tile, clear of the header and the timeline, and plays it
+  // in and out. pointer says which of the card's edges faces the Tile and where along it (null when there's no Tile to
+  // point at), for a theme that draws a tail to it. The page leaves REWIND_POPUP_GAP px between the card and the Tile
+  // for one; rewindPopupPointer.ts has a helper to anchor it.
+  RewindPopup: ComponentType<{ popup: RewindPopupModel; pointer: RewindPopupPointer | null }>;
   // The closing card at the very end: every final Title with its holder and the value behind it, for the viewed Team
   // (closing.team) or the whole Bingo. Built like the Stats page's Titles (core/stats TitlesSection draws them the same
   // way). Like RewindPopup, only the card: the page places it, over the Board, and it scrolls within its own height.

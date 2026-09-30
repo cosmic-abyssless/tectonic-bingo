@@ -32,12 +32,10 @@ export function BoardGrid({
                 {Array.from({ length: board.cols }, (_, col) => {
                   const tile = board.grid[row]?.[col];
                   if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
-                  const cell = <TileCell key={tile.id} tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />;
-                  if (!tileOverlay) return cell;
                   return (
-                    <div key={tile.id} className="relative">
-                      {cell}
-                      {tileOverlay(tile)}
+                    <div key={tile.id} data-tile-id={tile.id} className="relative">
+                      <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
+                      {tileOverlay?.(tile)}
                     </div>
                   );
                 })}
