@@ -7,8 +7,8 @@ import { useSlot } from "../../context";
 import { ModPanelButton } from "../page/ModPanelButton";
 
 /**
- * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score beside it (under it on a
- * phone), and the timeline with its controls pinned to the bottom. Popups rise over the Board while playing or
+ * Rewind's page: the viewed Team's Board at the moment being viewed, every Team's score and the log of Submissions so
+ * far beside it (under it on a phone), and the timeline with its controls pinned to the bottom. Popups rise over the Board while playing or
  * stepping, and the closing card with the final Titles once the moment reaches the end. In the All Teams view the Board is the shared layout with each Tile's Team markers over it; hovering a
  * Tile titles every Team's progress on it and opening one lists it.
  */
@@ -25,6 +25,7 @@ export function RewindPageLayout() {
   const RewindTimeline = useSlot("RewindTimeline");
   const RewindControls = useSlot("RewindControls");
   const RewindScoreboard = useSlot("RewindScoreboard");
+  const RewindLog = useSlot("RewindLog");
   const RewindPopup = useSlot("RewindPopup");
   const RewindClosing = useSlot("RewindClosing");
   const RewindTileMarkers = useSlot("RewindTileMarkers");
@@ -81,8 +82,14 @@ export function RewindPageLayout() {
           )}
           <BoardGrid board={board} onOpenTile={rewind.openTile.open} highlightedTileId={rewind.highlightedTileId} tileOverlay={tileOverlay} />
         </div>
-        <aside className="min-w-0">
-          <RewindScoreboard scoreboard={rewind.scoreboard} />
+        {/* On a wide screen the column stays in view between the header and the timeline, and the log takes what the scoreboard leaves. */}
+        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-15rem)] lg:self-start">
+          <div className="shrink-0">
+            <RewindScoreboard scoreboard={rewind.scoreboard} />
+          </div>
+          <div className="flex min-h-0 flex-col">
+            <RewindLog log={rewind.log} />
+          </div>
         </aside>
       </main>
 

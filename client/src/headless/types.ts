@@ -619,6 +619,36 @@ export interface RewindScoreboardModel {
   select(teamId: string): void;
 }
 
+/** One Submission in the log: a compact line, with the detail left to its popup. */
+export interface RewindLogEntryModel {
+  id: string;
+  tier: SignificanceTier;
+  rejected: boolean;
+  playerName: string | null;
+  /** "Tanzanite fang +2 more". */
+  itemsLabel: string;
+  tileName: string | null;
+  /** Its total Drop value, or null when no item has one. */
+  gpLabel: string | null;
+  /** "D2 +5h12m" into the Bingo, and the clock time. */
+  sinceStartLabel: string;
+  timeLabel: string;
+  /** Its Team, in the All Teams view (where entries are marked by Team); null otherwise. */
+  team: { name: string; color: string | null } | null;
+}
+
+/**
+ * Every Submission up to the moment being viewed, newest first, minor ones included: it grows as Play reaches them
+ * (at a fast speed too, where Play skips minor ones) and shrinks on a scrub back, so it never shows what's ahead.
+ */
+export interface RewindLogModel {
+  entries: RewindLogEntryModel[];
+  /** The Submission in focus (Play or a step), for highlighting its entry. */
+  currentId: string | null;
+  /** Jump to a Submission and show its popup, whatever its tier. */
+  jumpTo(id: string): void;
+}
+
 export interface RewindPopupModel {
   submission: RewindSubmissionModel;
   /** notable: a small popup; huge: a big one that holds longer. */
@@ -675,11 +705,12 @@ export interface RewindModel {
   timeline: RewindTimelineModel;
   controls: RewindControlsModel;
   scoreboard: RewindScoreboardModel;
+  log: RewindLogModel;
   /** The Submission in focus (Play or a step): its Tile is highlighted. Null after a scrub. */
   current: RewindSubmissionModel | null;
   /** The Tile to highlight: the one the current Submission landed on. */
   highlightedTileId: string | null;
-  /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only. */
+  /** The popup to show: during Play and when stepping, for notable-or-bigger Submissions only; from the log, for any. */
   popup: RewindPopupModel | null;
   /** The closing card: shown once the moment reaches the Bingo's end (Play running out, a scrub or a step there). */
   closing: RewindClosingModel | null;

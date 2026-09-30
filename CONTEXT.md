@@ -346,12 +346,13 @@ Playback of a Finished Bingo on its own Board: a timeline of its Submissions tha
 - **Rules:** Only approved Submissions move the Board and the scoreboard. Rejected ones can be shown, off by default, stamped "Rejected", and never change anything. Point Adjustments count from when they were made.
 - **All Teams:** A Rewind view of every Team at once: the shared Board, each Tile marked with every Team that has completed it by then, and every Team's Submissions on the timeline (coloured by Team) and in the popups.
 - **Speed:** Play runs at 1x, 2x, 4x or 8x, remembered per viewer across Bingos. From 4x it skips minor Submissions (they still count on the Board and the timeline); notable and huge ones always play. Stepping and scrubbing ignore it.
+- **Log:** Every Submission up to the moment being viewed, newest first, minor ones included (even those a fast speed skips), so none goes unseen. Opening one jumps there and shows its popup, whatever its tier.
 - **Closing card:** At the very end (Play running out, or a scrub or step there), the final Titles with their holders, as the Stats page shows them for the viewed Team, or for the whole Bingo in the All Teams view. Titles aren't replayed along the way.
 - **Not:** The Stats timeline, which lists scoring events by approval time.
 
 ### Significance
 How much a Submission stands out in Rewind, from its Luck, Drop value, Reactions, and what it completed (a Tile, a Line, a first to complete). Missing signals are left out, not counted as zero, so a very lucky pet with no Drop value can still stand out.
-- **Tiers:** minor (its Tile only flashes), notable (a small popup) and huge (a big popup that holds longer).
+- **Tiers:** minor (its Tile only flashes during Play), notable (a small popup) and huge (a big popup that holds longer). Every tier is listed in Rewind's log.
 
 ### Wrapped
 A scrolling story of a Finished Bingo, told from one Player's point of view: You, then your Duo and your Team, then the Bingo as a whole. It ends in shareable cards to compare with others.

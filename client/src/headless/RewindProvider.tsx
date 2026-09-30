@@ -11,9 +11,9 @@ import { formatGp } from "../core/ui/gp";
 import { displayName } from "../core/ui/user";
 import { BoardModelProvider, BoardProvider, useBoardModel } from "./BoardProvider";
 import { useBingoPage, useBingoPageRaw } from "./BingoPageProvider";
-import { adjustmentsAt, ALL_TEAMS, closingRows, END_SNAP_MS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, standoutOf, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
+import { adjustmentsAt, ALL_TEAMS, closingRows, END_SNAP_MS, layoutOnly, boardStateAt, countUpTo, formatOneIn, isNotable, itemsLine, standoutOf, playbackHolds, PLAYBACK, PLAYBACK_SPEEDS, playsAt, prepareRewind, stepNext, stepPrev, teamPointsAt, tileTeamsAt, visibleItems, type RewindItem } from "./rewindModel";
 import { readRewindSpeed, writeRewindSpeed } from "./rewindSpeedStore";
-import type { RewindModel, RewindSubmissionModel, RewindTileTeamsModel, TeamModel } from "./types";
+import type { RewindLogEntryModel, RewindModel, RewindSubmissionModel, RewindTileTeamsModel, TeamModel } from "./types";
 
 const RewindContext = createContext<RewindModel | null>(null);
 
@@ -139,13 +139,14 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     return () => clearTimeout(timer);
   }, [atState, teamState, viewId, setParams]);
 
+  // A popup of "any" shows even a minor Submission's (a log entry opened); "notable" only a notable-or-bigger one's.
   const show = useCallback(
-    (index: number, withPopup: boolean) => {
+    (index: number, popup: "notable" | "any" | null) => {
       const item = items[index];
       if (!item) return;
       setAtState(item.at);
       setFocusId(item.sub.id);
-      setPopupId(withPopup && isNotable(item.sub.significance.tier) ? item.sub.id : null);
+      setPopupId(popup === "any" || (popup === "notable" && isNotable(item.sub.significance.tier)) ? item.sub.id : null);
     },
     [items],
   );
@@ -165,7 +166,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     if (focusIndex < 0) {
       const first = stepNext(items, atRef.current, -1, playable);
       if (first < 0) setPlaying(false);
-      else show(first, true);
+      else show(first, "notable");
       return;
     }
     const now = performance.now();
@@ -176,7 +177,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
     const timer = setTimeout(() => {
       holdStartRef.current = deadline;
       const next = stepNext(items, atRef.current, focusIndex, playable);
-      if (next >= 0) show(next, true);
+      if (next >= 0) show(next, "notable");
       else {
         // The end: the Finished Board, with anything made after the last drop (a late Point Adjustment) counted too.
         setPlaying(false);
@@ -224,6 +225,29 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const adjustments = useMemo(() => adjustmentsAt(team, raw.bingo.id, at), [team, raw.bingo.id, adjustmentCount]); // eslint-disable-line react-hooks/exhaustive-deps
   const teamPoints = allTeams ? 0 : teamPointsAt(team, at);
 
+  // The log: every entry built once per timeline, then only cut to the moment (and reversed, newest first) as it moves.
+  const logEntries = useMemo(() => {
+    const teamById = new Map(page.teams.map((t) => [t.id, t]));
+    const tileById = new Map(raw.tiles.map((t) => [t.id, t.name]));
+    return items.map((i): RewindLogEntryModel => {
+      const t = teamById.get(i.sub.teamId);
+      return {
+        id: i.sub.id,
+        tier: i.sub.significance.tier,
+        rejected: i.sub.status === "rejected",
+        playerName: i.sub.player ? displayName(i.sub.player) : null,
+        itemsLabel: itemsLine(i.sub.claims),
+        tileName: i.sub.tileId ? (tileById.get(i.sub.tileId) ?? null) : null,
+        gpLabel: i.sub.gpValue !== null ? formatGp(i.sub.gpValue) : null,
+        sinceStartLabel: sinceStart(new Date(i.at), new Date(start)),
+        timeLabel: clock(i.at),
+        team: allTeams ? { name: t?.name ?? "", color: t?.color ?? null } : null,
+      };
+    });
+  }, [items, page.teams, raw.tiles, start, allTeams]);
+  const logCount = countUpTo(items, at);
+  const logUpToNow = useMemo(() => logEntries.slice(0, logCount).reverse(), [logEntries, logCount]);
+
   if (!user) return null;
   if (page.bingo.stage !== "complete") return renderError("Rewind is only available once the bingo is finished");
   if (error) return renderError(error instanceof Error ? error.message : "Couldn't load Rewind");
@@ -237,10 +261,10 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const notable = (i: RewindItem) => isNotable(i.sub.significance.tier);
 
   const pause = () => setPlaying(false);
-  const step = (index: number) => {
+  const step = (index: number, popup: "notable" | "any" = "notable") => {
     if (index < 0) return;
     pause();
-    show(index, true);
+    show(index, popup);
   };
   const seek = (ms: number) => {
     pause();
@@ -331,6 +355,11 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       positionLabel: `${focusIndex >= 0 ? focusIndex + 1 : countUpTo(items, at)} / ${items.length}`,
     },
     scoreboard: { teams: ranked, select: selectTeam },
+    log: {
+      entries: logUpToNow,
+      currentId: current?.sub.id ?? null,
+      jumpTo: (id) => step(items.findIndex((i) => i.sub.id === id), "any"),
+    },
     current: current ? toSubmissionModel(current.sub, current.at, start, teamById.get(current.sub.teamId), tileName(current.sub.tileId)) : null,
     highlightedTileId: current?.sub.tileId ?? null,
     popup: popupItem
