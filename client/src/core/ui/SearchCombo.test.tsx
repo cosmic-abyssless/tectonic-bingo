@@ -107,6 +107,27 @@ describe("SearchableSelect", () => {
     expect(onChange).toHaveBeenCalledWith("c");
   });
 
+  it("replaces the chosen option's text with what's typed, first letter and all", async () => {
+    const user = userEvent.setup();
+    render(<SearchableSelect value="a" options={options} placeholder="Pick a fruit" onChange={() => {}} />);
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    await user.keyboard("{ArrowDown}{ArrowUp}Ban");
+    expect(input.value).toBe("Ban");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Banana"]);
+  });
+
+  it("puts the chosen option back when the list is closed with Escape", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<SearchableSelect value="a" options={options} placeholder="Pick a fruit" onChange={onChange} />);
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    await user.keyboard("che{Escape}");
+    expect(input.value).toBe("Apple");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("can't be opened or changed while read-only", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
