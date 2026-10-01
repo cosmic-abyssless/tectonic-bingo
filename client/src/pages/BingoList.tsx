@@ -6,6 +6,11 @@ import { Badge, EmptyState } from "../core/ui/Card";
 import { HistoricalBadge } from "../core/historical/HistoricalBadge";
 import { ChevronRightIcon, GridIcon } from "../core/ui/icons";
 
+/** When a Bingo ran, as its start's month and year ("October 2024"), in the viewer's own locale. */
+function startMonth(startsAt: string): string {
+  return new Date(startsAt).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
 export function BingoList() {
   const { data, isLoading, error } = useBingos();
 
@@ -27,7 +32,10 @@ export function BingoList() {
             <li key={bingo.id}>
               <Link to={`/b/${bingo.slug}`} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-surface-hover">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-on-surface">{bingo.name}</p>
+                  <p className="truncate text-sm font-medium text-on-surface">
+                    {bingo.name}
+                    {bingo.startsAt && <span className="ml-2 font-normal text-on-surface-subtle">{startMonth(bingo.startsAt)}</span>}
+                  </p>
                   {bingo.description && <p className="mt-0.5 truncate text-sm text-on-surface-muted">{bingo.description}</p>}
                 </div>
                 {bingo.historical && <HistoricalBadge />}
