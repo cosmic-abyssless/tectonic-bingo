@@ -56,11 +56,13 @@ export function compareWithWom(source: Source, competition: unknown): string[] {
   const ours = new Set<string>();
   for (const team of source.teams) {
     for (const p of team.players) {
-      const key = normalizeRsn(p.rsn);
+      // A Player is found in the competition by their `wom` name when they have one (renamed since, or an alt played).
+      const key = normalizeRsn(p.wom ?? p.rsn);
+      const who = p.wom ? `${p.rsn} (as ${p.wom})` : p.rsn;
       ours.add(key);
       const there = wom.get(key);
-      if (!there) out.push(`${p.rsn} (${team.name}) isn't in the Wise Old Man competition`);
-      else if (there.team && there.team.toLowerCase() !== team.name.toLowerCase()) out.push(`${p.rsn} is on "${team.name}" in bingo.yaml but on "${there.team}" in Wise Old Man`);
+      if (!there) out.push(`${who} (${team.name}) isn't in the Wise Old Man competition`);
+      else if (there.team && there.team.toLowerCase() !== team.name.toLowerCase()) out.push(`${who} is on "${team.name}" in bingo.yaml but on "${there.team}" in Wise Old Man`);
     }
   }
   for (const [key, p] of wom) if (!ours.has(key)) out.push(`${p.name}${p.team ? ` (${p.team})` : ""} is in the Wise Old Man competition but not in bingo.yaml`);
@@ -109,7 +111,7 @@ export async function buildBundle(folder: string, sources: BundleSources, source
     const member = members.get(p.discordId);
     const name = member ? clanName(member, p.rsn) : null;
     report.mapped.push({ rsn: p.rsn, team: p.team, discordId: p.discordId, clanName: name });
-    return { discordId: p.discordId, rsn: p.rsn, clan: name ? { name } : null, womId: womIdByRsn.get(normalizeRsn(p.rsn)) ?? null };
+    return { discordId: p.discordId, rsn: p.rsn, clan: name ? { name } : null, womId: womIdByRsn.get(normalizeRsn(p.wom ?? p.rsn)) ?? null };
   });
   for (const t of source.teams) for (const p of t.players) if (p.discordId === null) report.unknown.push({ rsn: p.rsn, team: t.name });
 

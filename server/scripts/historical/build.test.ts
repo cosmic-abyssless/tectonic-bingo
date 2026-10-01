@@ -39,7 +39,8 @@ afterEach(() => {
   fs.rmSync(folder, { recursive: true, force: true });
 });
 
-const yaml = () => fs.readFileSync(path.join(folder, "bingo.yaml"), "utf8");
+// As written, whatever line endings the checkout gave the fixture (Windows: CRLF), so edits can match whole lines.
+const yaml = () => fs.readFileSync(path.join(folder, "bingo.yaml"), "utf8").replace(/\r\n/g, "\n");
 const writeYaml = (text: string) => fs.writeFileSync(path.join(folder, "bingo.yaml"), text);
 const edit = (from: string, to: string) => {
   expect(yaml()).toContain(from);
@@ -160,6 +161,15 @@ describe("checking against Wise Old Man", () => {
       "Stray Cat (Sea Snakes) is in the Wise Old Man competition but not in bingo.yaml",
     ]);
     expect(formatReport(report)).toContain("Wise Old Man mismatches (5)");
+  });
+
+  it("finds a Player under their wom name when it isn't the RSN they played under, account and all", async () => {
+    const competition = structuredClone(COMPETITION) as { participations: { player: { id?: number; username: string; displayName: string } }[] };
+    competition.participations.find((p) => p.player.displayName === "Cinder")!.player.id = 77;
+    edit("{ rsn: Cinder,", "{ rsn: Iron Cinder, wom: Cinder,");
+    const { bundle, report } = await buildBundle(folder, sources(competition), "x");
+    expect(report.womMismatches).toEqual([]);
+    expect(bundle!.players.find((p) => p.rsn === "Iron Cinder")).toMatchObject({ womId: 77 });
   });
 
   it("matches RSNs the way Wise Old Man writes them", async () => {
