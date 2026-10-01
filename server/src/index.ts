@@ -32,6 +32,7 @@ import { auditContext } from "./audit/middleware";
 import { authorizeWithSession, closeWebSocketServer, initWebSocketServer } from "./ws";
 import { DB_PATH, db, sqlite } from "./db";
 import { refreshPricesAndFill } from "./services/gpValueService";
+import { fillAuditSearchText } from "./audit/searchText";
 import { startWomReads } from "./services/womReadService";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
@@ -232,6 +233,13 @@ server.listen(PORT, () => {
   if (shouldWarmOcr()) void warmOcr();
   // Loads the GE price table and prices any claims still missing a Drop value (including ones made before Drop values existed).
   void refreshPricesAndFill(db);
+  // Makes audit entries written before search_text existed (or cleared after a rewording) searchable.
+  try {
+    const filled = fillAuditSearchText(db);
+    if (filled) log.info("audit search text filled", { rows: filled });
+  } catch (err) {
+    log.error("audit search text fill failed", { err });
+  }
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);
   // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
