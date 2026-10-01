@@ -190,6 +190,46 @@
   p {
     text-wrap: pretty;
   }
+  /* Every enabled clickable control shows a pointer (Tailwind's reset gives buttons the arrow); disabled ones show
+     not-allowed. Text-like inputs keep the text cursor. A cursor-* utility still wins where a control needs its own. */
+  :where(
+    button,
+    a[href],
+    summary,
+    select,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    input:is([type="checkbox"], [type="radio"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+    label:has(input:is([type="checkbox"], [type="radio"]))
+  ) {
+    cursor: pointer;
+  }
+  :where(
+    button,
+    select,
+    input,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"]
+  ):is(:disabled, [aria-disabled="true"], [data-disabled]),
+  :where(label:has(input:is([type="checkbox"], [type="radio"]):disabled), label[data-disabled]) {
+    cursor: not-allowed;
+  }
   /* Visible keyboard focus everywhere; pointer focus stays quiet. */
   :where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible,
   [data-focus-visible] {

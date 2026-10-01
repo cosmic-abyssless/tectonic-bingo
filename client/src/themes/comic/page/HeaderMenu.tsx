@@ -53,7 +53,7 @@ export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenu
                       isDisabled={item.current}
                       onAction={item.onAction}
                       data-tutorial={item.tutorial}
-                      className={`${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-default focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
+                      className={`${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-not-allowed focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
                       // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
                       // ink is light, and would sit on the yellow unreadably).
                       style={{ borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}

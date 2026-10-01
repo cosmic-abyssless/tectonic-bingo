@@ -1657,7 +1657,7 @@ function NavButton({
       aria-label={label}
       onPress={onPress}
       isDisabled={disabled}
-      className="flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-default disabled:opacity-35 disabled:hover:translate-y-0"
+      className="flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] transition-transform duration-100 pressed:scale-95 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:translate-y-0"
       style={{ backgroundColor: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
     >
       {children}

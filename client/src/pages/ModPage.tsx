@@ -8,7 +8,8 @@ import { useBingo } from "../api/queries";
 import { useCan, usePageAccess } from "../headless/permissions";
 import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
-import { ReviewQueue } from "../core/mod/ReviewQueue";
+import { AUDIT_FILTER_PARAMS } from "../core/mod/auditFilters";
+import { ReviewQueue, SUBMISSION_FILTER_PARAMS } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
 import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
@@ -29,7 +30,7 @@ import { InfoIcon } from "../core/ui/icons";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
-import { useUrlParam } from "../core/ui/useUrlParam";
+import { useSetUrlParams, useUrlParam } from "../core/ui/useUrlParam";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
 // mod who may not administer the bingo. The server enforces the same split on the
@@ -87,7 +88,8 @@ export function ModPage() {
   // Losing moderate_bingo while here (removed as a Moderator) sends them back to the bingo, with a toast.
   const mayModerate = usePageAccess(slug, (can) => can("moderate_bingo").allowed, "moderate_bingo", shell?.bingo.name);
   const stage = shell?.bingo.stage;
-  const [urlTab, setUrlTab] = useUrlParam("tab");
+  const [urlTab] = useUrlParam("tab");
+  const setUrl = useSetUrlParams();
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
   // The same "This Bingo" entries as every other page of the bingo, then the panel's own setting.
   const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
@@ -115,7 +117,10 @@ export function ModPage() {
     if (visibleTabs.length === 0 || visibleTabs.some((t) => t.key === preferred)) return preferred;
     return visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0]!.key;
   }, [urlTab, visibleTabs, stage, canAdminister]);
-  const setTab = (key: string) => setUrlTab(key);
+  // One tab's filters (in the URL too) don't carry over to the next.
+  const setTab = (key: string) => {
+    if (key !== tab) setUrl({ tab: key, ...Object.fromEntries([...SUBMISSION_FILTER_PARAMS, ...AUDIT_FILTER_PARAMS].map((p) => [p, null])) });
+  };
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
     () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),

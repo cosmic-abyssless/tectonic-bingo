@@ -467,6 +467,22 @@ describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
     expect(row!.team).toEqual(expect.objectContaining({ id: teamId, name: "Team A" }));
     expect(row!.screenshots).toHaveLength(1);
   });
+
+  it("names the reviewer on the Mod panel's rows only: null while pending or with nobody recorded", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });
+    const post = () => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: [{ nodeId: task.leafId, itemName: "x" }], ...base });
+    const [pending, reviewed, imported] = [post(), post(), post()];
+    const modUser = db.select().from(schema.users).where(eq(schema.users.discordUsername, "mod")).get()!;
+    db.update(schema.submissions).set({ status: "approved", reviewedByUserId: modUser.id }).where(eq(schema.submissions.id, reviewed.id)).run();
+    db.update(schema.submissions).set({ status: "approved" }).where(eq(schema.submissions.id, imported.id)).run();
+
+    const reviewerOf = new Map(getAllSubmissionsForBingo(db, bingo.id).map((r) => [r.submission.id, r.reviewedByUser]));
+    expect(reviewerOf.get(reviewed.id)).toEqual(expect.objectContaining({ id: modUser.id, discordUsername: "mod" }));
+    expect(reviewerOf.get(pending.id)).toBeNull();
+    expect(reviewerOf.get(imported.id)).toBeNull();
+    expect(getTeamSubmissions(db, teamId)[0]).not.toHaveProperty("reviewedByUser");
+  });
 });
 
 describe("setSubmissionReaction", () => {

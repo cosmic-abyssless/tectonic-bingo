@@ -4,7 +4,7 @@ import passport from "passport";
 import { eq, notLike } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../db/schema";
-import { devPageAccess } from "../services/devPageAccessService";
+import { devPageAccess, devRankOffBingo } from "../services/devPageAccessService";
 import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
 import { closeSocketsForSession } from "../ws";
@@ -116,7 +116,7 @@ if (isDevModeActive()) {
     const rows = listed.map((u) => (u.id === req.user?.id ? req.user : u));
     const path = typeof req.query.path === "string" ? req.query.path : null;
     if (!path) {
-      res.json({ users: rows });
+      res.json({ users: rows.map((u) => ({ ...u, rank: devRankOffBingo(u) })) });
       return;
     }
     const access = devPageAccess(db, path, rows);

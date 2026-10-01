@@ -359,15 +359,21 @@ export interface SubmissionDetails {
 
 // Attaches screenshots, claims, and the submitter's (minimal) user row to a
 // set of submissions — every submission list the client renders needs all
-// three to be reviewable/displayable.
-function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): SubmissionDetails[] {
+// three to be reviewable/displayable. The Mod panel also asks for the reviewer.
+function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): SubmissionDetails[];
+function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[], withReviewer: true): (SubmissionDetails & { reviewedByUser: MinimalUser | null })[];
+function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[], withReviewer = false): SubmissionDetails[] {
   if (subs.length === 0) return [];
   const submissionIds = subs.map((s) => s.id);
   const screenshots = db.select().from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all();
   const claimRows = db.select().from(claims).where(inArray(claims.submissionId, submissionIds)).all();
   const reactionRows = db.select().from(submissionReactions).where(inArray(submissionReactions.submissionId, submissionIds)).orderBy(submissionReactions.createdAt).all();
   const userIds = [
-    ...new Set([...subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])), ...reactionRows.map((r) => r.userId)]),
+    ...new Set([
+      ...subs.flatMap((s) => (s.postedByUserId ? [s.submittedByUserId, s.postedByUserId] : [s.submittedByUserId])),
+      ...reactionRows.map((r) => r.userId),
+      ...(withReviewer ? subs.flatMap((s) => (s.reviewedByUserId ? [s.reviewedByUserId] : [])) : []),
+    ]),
   ];
   const userRows = db
     .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick })
@@ -390,6 +396,7 @@ function attachDetails(db: Db, subs: (typeof submissions.$inferSelect)[]): Submi
     submittedByUser: userFor(s, s.submittedByUserId),
     postedByUser: userFor(s, s.postedByUserId),
     reactions: groupReactions(reactionRows.filter((r) => r.submissionId === s.id).map((r) => ({ emoji: r.emoji, user: userFor(s, r.userId) }))),
+    ...(withReviewer ? { reviewedByUser: userFor(s, s.reviewedByUserId) } : {}),
   }));
 }
 
@@ -492,6 +499,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   proofTaskLabel: string | null;
   /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
   proofChecks: ProofCheck[];
+  /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
+  reviewedByUser: MinimalUser | null;
 }
 
 // Every node id under a Task, itself included.
@@ -536,7 +545,7 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typ
     .where(status ? and(eq(teams.bingoId, bingoId), eq(submissions.status, status)) : eq(teams.bingoId, bingoId))
     .all();
 
-  const details = attachDetails(db, rows.map((r) => r.submission));
+  const details = attachDetails(db, rows.map((r) => r.submission), true);
   const leafIds = [...new Set(details.flatMap((d) => d.claims.map((c) => c.nodeId)))];
   const leafRows = leafIds.length ? db.select().from(nodes).where(inArray(nodes.id, leafIds)).all() : [];
   const leafById = new Map(leafRows.map((l): [string, ClaimedLeaf] => [l.id, { id: l.id, kind: l.kind, label: l.label, valuedAs: valuedAsOf(l) }]));
