@@ -16,7 +16,7 @@ import { TitleSettingsPanel } from "../core/admin/TitleSettingsPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
-import { SiteAuditLog } from "../core/admin/SiteAuditLog";
+import { SITE_AUDIT_FILTER_PARAMS, SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { McpConnectionsList } from "../core/admin/McpConnectionsList";
 import { ImportHistoricalBingoPanel } from "../core/admin/ImportHistoricalBingoPanel";
 import { displayName } from "../core/ui/user";
@@ -321,7 +321,7 @@ export function SiteAdminPage() {
   const mayAdminister = useSitePageAccess("administer_site");
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
   const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin", "claude"] : []), ...(devMode ? ["test-data"] : [])];
-  const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
+  const [tab, setTab] = useUrlTab("tab", tabs, "bugs", SITE_AUDIT_FILTER_PARAMS);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
   const { data: bugReportsData } = useBugReports();

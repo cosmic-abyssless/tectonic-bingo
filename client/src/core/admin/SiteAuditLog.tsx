@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { AuditCategory } from "@bingo/shared";
 import { useSiteAuditLog } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
-import { useDebouncedValue } from "../../headless/useDebouncedValue";
+import { AUDIT_FILTER_PARAMS, actorFilter, useAuditFilters } from "../mod/auditFilters";
+import { useUrlParam } from "../ui/useUrlParam";
 import { CATEGORIES, DetailsView, actorOptionsFrom, buildCsv, useActorCatalog } from "../mod/AuditLog";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { displayName } from "../ui/user";
@@ -14,20 +15,25 @@ import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
 import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
-import { isRangeSet, type TimeRange } from "../ui/timeRange";
+import { isRangeSet } from "../ui/timeRange";
 import { TableSearchInput } from "../ui/tableSearch";
 
 type BingoScope = string | null | "all";
 
+/** Every param the Site audit log's filters use, to drop together when Site admin moves to another tab. */
+export const SITE_AUDIT_FILTER_PARAMS = [...AUDIT_FILTER_PARAMS, "bingo"] as const;
+const BINGO_PARAM = "bingo";
+
 // Site admin's counterpart to core/mod/AuditLog.tsx — every bingo (or just
 // site-level entries, or one bingo), not one bingo's own log.
 export function SiteAuditLog() {
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => new Set());
-  const [selectedActors, setSelectedActors] = useState<Set<string>>(() => new Set());
-  const [bingoScope, setBingoScope] = useState<BingoScope>("all");
-  const [range, setRange] = useState<TimeRange>({});
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 300).trim();
+  // The filters are in the URL, so a link opens the log filtered the same way; the Bingo as ?bingo=<id>, or
+  // ?bingo=site for site-wide entries only.
+  const { filters, update, search, setSearch } = useAuditFilters();
+  const { range, q: debouncedSearch } = filters;
+  const [bingoParam, setBingoParam] = useUrlParam(BINGO_PARAM);
+  const bingoScope: BingoScope = bingoParam === null ? "all" : bingoParam === "site" ? null : bingoParam;
+  const setBingoScope = (scope: BingoScope) => setBingoParam(scope === "all" ? null : scope === null ? "site" : scope);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -36,11 +42,11 @@ export function SiteAuditLog() {
   const bingoById = useMemo(() => new Map(bingos.map((b) => [b.id, b])), [bingos]);
   const bingoScopeOptions = useMemo(() => [{ key: "all", label: "All bingos" }, { key: "null", label: "Site-wide only" }, ...bingos.map((b) => ({ key: b.id, label: b.name }))], [bingos]);
   const [actorNames, rememberActors] = useActorCatalog("site");
-  const categories = inclusionFilter(selectedCategories, CATEGORIES);
+  const categories = inclusionFilter(filters.categories, CATEGORIES);
   // Alphabetical, matching actorOptionsFrom's sort below — see the same line in core/mod/AuditLog.tsx for why an
   // order mismatch between `selected` and the rendered options confuses the picker dropdown's initial focus/scroll.
   const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
-  const actors = inclusionFilter(selectedActors, actorKeys.map((key) => ({ key })));
+  const actors = actorFilter(filters.actors, actorKeys);
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useSiteAuditLog(bingoScope, {
     category: categories.query as AuditCategory[] | undefined,
@@ -55,7 +61,8 @@ export function SiteAuditLog() {
   useEffect(() => {
     rememberActors(entries);
   }, [entries, rememberActors]);
-  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
+  // The picks are listed too, seen or not, so a User filter from a link shows and can be cleared.
+  const actorOptions = actors.withPicked(useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]));
 
   async function copyCsv() {
     await navigator.clipboard.writeText(buildCsv(entries));
@@ -70,14 +77,16 @@ export function SiteAuditLog() {
           label="Category"
           options={CATEGORIES}
           selected={categories.checked}
-          onChange={(visible) => setSelectedCategories(new Set(visible))}
+          onChange={(visible) => update({ categories: new Set(visible) })}
         />
         {actorOptions.length > 0 && (
           <MultiSelect
             label="User"
             options={actorOptions}
             selected={actors.checked}
-            onChange={(visible) => setSelectedActors(new Set(visible))}
+            // Only the users seen so far are listed, so picking all of them isn't everyone.
+            exhaustive={false}
+            onChange={(visible) => update({ actors: actors.pick(visible) })}
           />
         )}
         <SingleSelect
@@ -86,7 +95,7 @@ export function SiteAuditLog() {
           selected={bingoScope === "all" ? "all" : (bingoScope ?? "null")}
           onChange={(key) => setBingoScope(key === "all" ? "all" : key === "null" ? null : key)}
         />
-        <DateTimeRangeFilter value={range} onChange={setRange} />
+        <DateTimeRangeFilter value={range} onChange={(next) => update({ range: next })} />
         <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>

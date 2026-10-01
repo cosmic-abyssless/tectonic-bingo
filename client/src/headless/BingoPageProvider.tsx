@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
-import { useUrlParam } from "../core/ui/useUrlParam";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useSetUrlParams } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
-import { useBingo, useBoard, useDraftState, usePendingCount, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
+import { useBingo, useBoard, useDraftState, usePendingCount, usePermissions, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
-import { useViewingTeam } from "./useViewingTeam";
+import { OPEN_PARAM, TEAM_PARAM, TILE_PARAM, resolveBoardUrl, type BoardDialog } from "./boardUrlState";
 import { useBingoCan, useCloseOnLoss } from "./permissions";
 import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
@@ -80,12 +80,60 @@ export function BingoPageProvider({
     [boardData, bingoId],
   );
 
-  const { viewingTeamId, setViewingTeamId } = useViewingTeam(shell?.myTeam ?? null);
+  const can = useBingoCan(slug);
+  const { data: permissions, dataUpdatedAt: permissionsAt } = usePermissions(slug);
+
+  // The open Tile, the viewed Team and the open dialog live in the URL (#389), so a link reopens them. What the viewer
+  // can't see, or what doesn't exist, isn't opened, and its param is dropped quietly once that's known.
+  const [searchParams] = useSearchParams();
+  const setUrl = useSetUrlParams();
+  const location = useLocation();
+  const myTeamId = shell?.myTeam?.id ?? null;
+  // Whoever sees other teams can look at any team's board: mods, and once the bingo is Finished everyone (read-only).
+  const canPickTeam = !!shell && can("view_other_teams").allowed && (!shell.historical || shell.historical.tasks);
+  const tileIds = useMemo(() => (shell && !canSee ? new Set<string>() : boardData ? new Set(tiles.map((t) => t.id)) : null), [shell, canSee, boardData, tiles]);
+  const url = resolveBoardUrl(
+    { tile: searchParams.get(TILE_PARAM), team: searchParams.get(TEAM_PARAM), open: searchParams.get(OPEN_PARAM) },
+    {
+      tileIds,
+      sealed,
+      // A copy of the permissions from storage (dataUpdatedAt 0) may be out of date, so nothing is dropped on it.
+      ready: !!shell && !!permissions && permissionsAt > 0,
+      teamIds: shell?.teams.map((t) => t.id) ?? [],
+      myTeamId,
+      canPickTeam,
+      hasRules: !!shell && (!!shell.bingo.rulesMarkdown || (!can("view_hidden_board").allowed && areRulesHidden(shell.bingo))),
+    },
+  );
+  const { openTileId, viewingTeamId, dialog } = url;
+  const dropKey = url.drop.join(",");
+  useEffect(() => {
+    if (dropKey) setUrl(Object.fromEntries(dropKey.split(",").map((name) => [name, null])));
+  }, [dropKey, setUrl]);
+  // Opening pushes a history entry, marked as this open's, so Back closes it; closing one opened here goes Back to
+  // the entry before it, and otherwise (a link that arrived open) just removes the param. Switching what's open
+  // replaces it, so one Back still closes it.
+  const openedHere = (location.state as { opened?: string } | null)?.opened;
+  const openParam = (name: string, value: string) => {
+    if (searchParams.get(name) === value) return;
+    if (searchParams.get(name) !== null) setUrl({ [name]: value });
+    else setUrl({ [name]: value }, { push: true, state: { opened: name } });
+  };
+  const closeParam = (name: string) => {
+    if (searchParams.get(name) === null) return;
+    if (openedHere === name) navigate(-1);
+    else setUrl({ [name]: null });
+  };
+  const showDialog = (which: BoardDialog) => openParam(OPEN_PARAM, which);
+  const hideDialog = (which: BoardDialog) => {
+    if (dialog === which) closeParam(OPEN_PARAM);
+  };
+  const setViewingTeamId = (id: string) => setUrl({ [TEAM_PARAM]: id === myTeamId ? null : id });
+
   const { data: progressData } = useTeamProgress(canSee ? slug : undefined, viewingTeamId ?? undefined);
   const setTileInterest = useSetTileInterest(slug);
   const setReaction = useSetSubmissionReaction(slug);
   const { data: submissionsData } = useTeamSubmissions(canSee ? slug : undefined, viewingTeamId ?? undefined);
-  const can = useBingoCan(slug);
   const canModerate = can("moderate_bingo").allowed;
   const { data: pendingData } = usePendingCount(slug, canModerate);
   // Only fetches while actually on the draft stage — same net effect as the
@@ -97,11 +145,6 @@ export function BingoPageProvider({
   // Mirrors the server's submission gate: nothing can be submitted before startsAt.
   const hasStarted = useHasPassed(shell?.bingo.effectiveStartsAt);
 
-  const [openTileId, setOpenTileId] = useState<string | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [teamInfoOpen, setTeamInfoOpen] = useState(false);
-  const [pointBreakdownOpen, setPointBreakdownOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitInitialTileId, setSubmitInitialTileId] = useState<string | undefined>(undefined);
   const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
@@ -112,41 +155,30 @@ export function BingoPageProvider({
 
   // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
   // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
-  // point sending the request. Wraps both places a tile's details open (the search box included).
+  // point sending the request. Sent whenever a Tile or the Rules come open, however they were opened (a click, the
+  // search box, a link).
   const recordOpened = useRecordAchievementOpened(slug);
   const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
+  const rulesOpen = dialog === "rules";
+  useEffect(() => {
+    if (openTileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId: openTileId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTileId, eligibleForOpens]);
+  useEffect(() => {
+    if (rulesOpen && eligibleForOpens) recordOpened.mutate({ kind: "rules" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rulesOpen, eligibleForOpens]);
   const openTileTracked = (tileId: string | null) => {
+    if (!tileId) return closeParam(TILE_PARAM);
     // A sealed tile doesn't open: the note says when it will.
-    if (tileId && sealed) return showSealedNote();
-    setOpenTileId(tileId);
-    if (tileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId });
+    if (sealed) return showSealedNote();
+    openParam(TILE_PARAM, tileId);
   };
 
   const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
   const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
   const search = useTileSearch(tiles, matchTile, openTileTracked);
   const exclusivityRules = shell?.bingo.exclusivityRules;
-  // The ☰ menu on the pages around the board opens the board's own dialogs by coming here with ?open= (see
-  // useBingoMenuEntries). Submissions and Team overview wait for the viewer's team to be picked; the param is dropped
-  // once it has done its job.
-  const [openOnArrival, setOpenOnArrival] = useUrlParam("open");
-  useEffect(() => {
-    if (!openOnArrival || !shell) return;
-    if (openOnArrival === "rules") {
-      setRulesOpen(true);
-      if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
-    } else if (openOnArrival === "tutorial") {
-      // TutorialProvider's to start (and drop), once the viewer's Team Board is showing.
-      return;
-    } else if (openOnArrival === "submissions" || openOnArrival === "team") {
-      if (!viewingTeamId) return;
-      if (openOnArrival === "submissions") setDrawerOpen(true);
-      else setTeamInfoOpen(true);
-    }
-    setOpenOnArrival(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openOnArrival, shell, viewingTeamId]);
-
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
   if (!user) return null;
@@ -160,8 +192,6 @@ export function BingoPageProvider({
 
   // A Historical Bingo (CONTEXT.md): what it recorded decides what's shown. With no Tasks there are no Team boards.
   const historical = shell.historical;
-  // Whoever sees other teams can look at any team's board: mods, and once the bingo is Finished everyone (read-only).
-  const canPickTeam = can("view_other_teams").allowed && (!historical || historical.tasks);
   const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const submitWindow = bingo.stage === "live" && hasStarted && !!viewingTeamId;
@@ -213,7 +243,7 @@ export function BingoPageProvider({
     setSubmitInitialTaskId(tileId ? taskId : undefined);
     setSubmitInitialFile(file);
     setSubmitInitialKind(undefined);
-    setDrawerOpen(false);
+    hideDialog("submissions");
     setSubmitOpen(true);
   };
   const openProof = (tileId: string, taskId?: string) => {
@@ -267,19 +297,12 @@ export function BingoPageProvider({
     submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
     search,
-    openTile: { id: openTileId, open: openTileTracked, close: () => setOpenTileId(null) },
+    openTile: { id: openTileId, open: openTileTracked, close: () => closeParam(TILE_PARAM) },
     sealed: { forMe: sealed, forPlayers: areTilesSealed(bingo) },
-    rules: {
-      open: rulesOpen,
-      show: () => {
-        setRulesOpen(true);
-        if (eligibleForOpens) recordOpened.mutate({ kind: "rules" });
-      },
-      hide: () => setRulesOpen(false),
-    },
-    teamInfo: { open: teamInfoOpen, show: () => setTeamInfoOpen(true), hide: () => setTeamInfoOpen(false) },
-    pointBreakdown: { open: pointBreakdownOpen, show: () => setPointBreakdownOpen(true), hide: () => setPointBreakdownOpen(false) },
-    drawer: { open: drawerOpen, show: () => setDrawerOpen(true), hide: () => setDrawerOpen(false) },
+    rules: { open: rulesOpen, show: () => showDialog("rules"), hide: () => hideDialog("rules") },
+    teamInfo: { open: dialog === "team", show: () => showDialog("team"), hide: () => hideDialog("team") },
+    pointBreakdown: { open: dialog === "points", show: () => showDialog("points"), hide: () => hideDialog("points") },
+    drawer: { open: dialog === "submissions", show: () => showDialog("submissions"), hide: () => hideDialog("submissions") },
     submit: {
       open: submitOpen,
       initialTileId: submitInitialTileId,
