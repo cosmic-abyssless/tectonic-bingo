@@ -111,6 +111,13 @@ export class Session {
     return this.send<T>("POST", urlPath, form, {}, opts);
   }
 
+  /** One file as multipart, under `field` (an Admin's Wrapped art upload). */
+  upload<T>(urlPath: string, field: string, bytes: Buffer, fileName: string, opts: CallOptions = {}): Promise<T> {
+    const form = new FormData();
+    form.append(field, new Blob([new Uint8Array(bytes)], { type: "image/png" }), fileName);
+    return this.send<T>("POST", urlPath, form, {}, opts);
+  }
+
   /** The placeholder screenshot on its own, as multipart (a Historical Bingo's screenshot uploads). */
   uploadScreenshot<T>(urlPath: string, opts: CallOptions = {}): Promise<T> {
     const form = new FormData();
