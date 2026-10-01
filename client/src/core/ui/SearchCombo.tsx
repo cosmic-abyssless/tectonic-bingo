@@ -229,7 +229,9 @@ export function SearchCombo<T>({
                 id={r.id}
                 textValue={itemText(r.item)}
                 onPressStart={(e) => (pickedByPointer.current = e.pointerType !== "keyboard" && e.pointerType !== "virtual")}
-                className="flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm text-on-surface outline-none hovered:bg-surface-hover data-[focused]:bg-accent data-[focused]:text-on-accent"
+                // Only the highlight, no hover look of its own: pointing at a row highlights it, and a hover background
+                // beat the highlight's while its text took the highlight's colour (dark on dark in dark mode).
+                className="flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm text-on-surface outline-none data-[focused]:bg-accent data-[focused]:text-on-accent"
               >
                 {({ isFocused }) => (renderItem ? renderItem(r.item, { isFocused }) : <span className="truncate">{itemText(r.item)}</span>)}
               </ListBoxItem>
