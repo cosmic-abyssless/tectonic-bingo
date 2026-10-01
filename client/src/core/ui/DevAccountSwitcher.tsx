@@ -136,7 +136,7 @@ function Switcher({ currentUserId, adminPowers }: { currentUserId: string; admin
                       textValue={`${displayName(u)} ${u.discordUsername} ${u.role ?? ""}`}
                       isDisabled={!!switching}
                       style={{ height: ROW_HEIGHT }}
-                      className={`mx-1 flex cursor-default items-center gap-2.5 rounded-sm px-2 text-sm outline-none hover:bg-surface-hover focus:bg-surface-hover ${
+                      className={`mx-1 flex items-center gap-2.5 rounded-sm px-2 text-sm outline-none hover:bg-surface-hover focus:bg-surface-hover ${
                         u.access === false ? "opacity-40" : ""
                       }`}
                     >
