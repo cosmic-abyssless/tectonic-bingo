@@ -208,7 +208,7 @@ export interface AuditDetailsMap {
   "wrapped.published": { players: number };
   "wrapped.republished": { players: number };
   // Wrapped art (#262): an Admin adding or replacing, re-cutting, removing or reordering a cut-out. section: its group
-  // (a section's Category images, or "side"). keyed: it was a solid-background screenshot, keyed out.
+  // (a section's Category images, "side" or "playerCard"). keyed: it was a solid-background screenshot, keyed out.
   "wrapped.art_set": { section: string; keyed: boolean; replaced: boolean };
   "wrapped.art_recut": { section: string; tolerance: number; softness: number };
   "wrapped.art_removed": { section: string };
