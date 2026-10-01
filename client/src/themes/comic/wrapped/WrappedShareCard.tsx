@@ -55,9 +55,10 @@ const STICKER_SHADOW = "drop-shadow(0 6px 8px rgb(0 0 0 / 0.35))";
 const STAR_TILT = [-4, 3, -2];
 
 /**
- * The cover star: the card's art in the corner beside the content, behind it. Several (a Team's) overlap side by side
- * like stickers, by half, the middle of three a little larger and in front, each tipped a little; they stand on
- * `floor` (px above the foot), so a row of captions along the foot stays clear of them.
+ * The cover star: the card's art in the corner beside the content, behind it. Several (a Team's) stand side by side
+ * like stickers, each as tall as the space allows and as wide as it is, overlapping its neighbour a little; the middle
+ * of three is taller and in front, and each is tipped a little. They stand on `floor` (px above the foot), so a row of
+ * captions along the foot stays clear of them, and rise no higher than a third of the way down, below the title.
  */
 function CoverStars({ urls, floor }: { urls: string[]; floor: number }) {
   if (urls.length === 1) {
@@ -67,22 +68,19 @@ function CoverStars({ urls, floor }: { urls: string[]; floor: number }) {
       </div>
     );
   }
-  // Each sticker gets an equal slot, overlapping its neighbours by half.
-  const width = 100 / (1 + (urls.length - 1) / 2);
   return (
-    // Isolated, so the stickers' own stacking order never lifts them over the content.
-    <div className="absolute isolate" style={{ right: 4, bottom: floor, top: 30, width: "64%" }}>
+    // Isolated, so the stickers' own stacking order never lifts them over the content. A size container, so the
+    // overlap can follow the stickers' height (cqh) rather than the row's width.
+    <div className="absolute isolate flex items-end justify-center" style={{ right: 4, bottom: floor, top: "34%", width: "62%", containerType: "size" }}>
       {urls.map((url, i) => {
-        // The middle of three is a little larger, centred on its slot.
-        const scale = urls.length === 3 && i === 1 ? 1.15 : 1;
-        const left = (i * width) / 2 - (width * (scale - 1)) / 2;
+        const middle = urls.length === 3 && i === 1;
         return (
           <div
             key={`${i}:${url}`}
-            className="absolute"
-            style={{ left: `${left}%`, bottom: 0, width: `${width * scale}%`, height: `${85 * scale}%`, zIndex: scale > 1 ? 2 : 1, transform: `rotate(${STAR_TILT[i % STAR_TILT.length]}deg)` }}
+            className="flex min-w-0 items-end"
+            style={{ flex: "0 1 auto", height: middle ? "100%" : "86%", marginLeft: i === 0 ? 0 : "-9cqh", zIndex: middle ? 2 : 1, transform: `rotate(${STAR_TILT[i % STAR_TILT.length]}deg)` }}
           >
-            <CardImage src={url} className="size-full object-contain" style={{ objectPosition: "bottom", filter: STICKER_SHADOW }} />
+            <CardImage src={url} className="object-contain" style={{ height: "100%", width: "auto", maxWidth: "100%", objectPosition: "bottom", filter: STICKER_SHADOW }} />
           </div>
         );
       })}
