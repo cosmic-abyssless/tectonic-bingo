@@ -57,10 +57,26 @@ A trusted clan member whose elevated permissions are scoped to a single specific
 - **Not:** Change the Bingo's stage or run the draft's pick order; those are for Admins. The stage read-out shows, without the buttons.
 - **Rules:** A Moderator **can** also be a Player in the same Bingo, and **is permitted** to approve their own team's submissions, as they are trusted clan members.
 
+### Staff
+A member of the clan's leadership who handles a Bingo's Buy-ins, granted per Bingo like a Moderator.
+- **Capabilities:** See and mark Buy-ins as received.
+- **Not:** A Moderator. Staff see none of a Moderator's information, such as signup answers, other Teams or the audit log, beyond what they need for Buy-ins.
+- **Avoid:** "Leadership" or "Leader" for the role. A Duo *leads* a Team.
+
 ### Captain
 A designated player who leads a Team during a Bingo.
 - **Capabilities:** Participates in the Draft to pick players/duos for their team; represents the team in disputes.
+- **Team name:** A Captain (or co-captain) names their Team once the Draft has set it, while the Board is revealed. Live locks it, and from then on only Moderators and Admins can rename a Team, until Finished.
 - **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team. In a duo Bingo a Team is led by a Duo: the Captain and their partner as co-captain, so an unpaired player is paired up before they can captain. The Draft can't begin while a Team isn't. A Duo that leads a Team stays one, and its players can't unpair or withdraw themselves; an Admin has to change the Team.
+
+### Action
+One named thing a user may do or see in a Bingo, such as marking Buy-ins, renaming a Team or reviewing Submissions. A role grants Actions, for some or all stages. A Restriction takes one away from one user.
+- **Rules:** Rules that hold for everyone, Admins included (a Finished Bingo is locked), aren't Actions. They apply whatever a user is granted.
+
+### Restriction
+One Action taken away from one user in one Bingo, even when a role they hold grants it. It comes with a reason, lasts until lifted, and the user sees that the Action is restricted and why.
+- **Rules:** Only Actions that do something (submitting, reacting, renaming a Team) can be restricted, never what a user can see, and never a Captain's Draft pick: a Captain who can't pick is replaced instead. Admins and Moderators apply them, a Moderator only to Captains and Players, and Admins can't be restricted. The restricted user and the Bingo's Moderators and Admins see a Restriction, and nobody else does.
+- **Avoid:** "ban" for a Restriction. Removing someone from the Bingo is **Remove from Team**.
 
 ### Player
 A clan member who is part of a Bingo as a competitor: until Board revealed, anyone with an active Signup, except Cut signups once the Draft stage begins; from Board revealed on, anyone on a Team. A withdrawn signup is never a Player.
