@@ -1,3 +1,4 @@
+import type { Request } from "express";
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
 import { DiscordAPIError, REST } from "@discordjs/rest";
@@ -8,6 +9,7 @@ import { db } from "../db";
 import { users } from "../db/schema";
 import * as schema from "../db/schema";
 import { isAdminDiscordId } from "../config";
+import { devAdminOff } from "../devMode";
 import type { SessionUser } from "../types";
 import { audit } from "../audit/record";
 import { userLabel } from "../audit/describe";
@@ -110,10 +112,12 @@ export function configurePassport(): void {
     done(null, (user as SessionUser).id);
   });
 
-  passport.deserializeUser(async (id: string, done) => {
+  passport.deserializeUser(async (req: Request, id: string, done: (err: Error | null, user?: Express.User | false) => void) => {
     try {
       const [dbUser] = await db.select().from(users).where(eq(users.id, id));
-      done(null, dbUser ?? false);
+      if (!dbUser) return done(null, false);
+      // Dev: an admin who switched their admin powers off (devMode.ts) is loaded as one without.
+      done(null, dbUser.isAdmin && devAdminOff(req.session) ? { ...dbUser, isAdmin: false } : dbUser);
     } catch (err) {
       done(err as Error);
     }

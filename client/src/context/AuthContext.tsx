@@ -11,6 +11,8 @@ interface AuthState {
   devMode: boolean;
   /** Only admins listed in the server's ADMIN_DISCORD_IDS may grant site admin. */
   canGrantAdmin: boolean;
+  /** Dev only: the viewer is an admin who switched their admin powers off (the account switcher), so `user.isAdmin` is false. */
+  devAdminOff: boolean;
   logout: () => Promise<void>;
   /** Replaces the viewer's record with a fresher one the server sent back (e.g. after marking the Tutorial seen). */
   updateUser: (user: User) => void;
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(cached?.user ?? null);
   const [devMode, setDevMode] = useState(cached?.devMode ?? false);
   const [canGrantAdmin, setCanGrantAdmin] = useState(cached?.canGrantAdmin ?? false);
+  const [devAdminOff, setDevAdminOff] = useState(cached?.devAdminOff ?? false);
   const [loading, setLoading] = useState(!cached);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -38,7 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(next);
         setDevMode(data?.devMode ?? false);
         setCanGrantAdmin(data?.canGrantAdmin ?? false);
-        if (next) writeAuthCache(__BUILD_ID__, { user: next, devMode: data?.devMode ?? false, canGrantAdmin: data?.canGrantAdmin ?? false });
+        setDevAdminOff(data?.devAdminOff ?? false);
+        if (next)
+          writeAuthCache(__BUILD_ID__, {
+            user: next,
+            devMode: data?.devMode ?? false,
+            canGrantAdmin: data?.canGrantAdmin ?? false,
+            devAdminOff: data?.devAdminOff ?? false,
+          });
         else clearAuthCache();
       })
       // Couldn't ask (offline, server restarting): keep going as the cached user
@@ -71,10 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = (next: User) => {
     setUser(next);
-    writeAuthCache(__BUILD_ID__, { user: next, devMode, canGrantAdmin });
+    writeAuthCache(__BUILD_ID__, { user: next, devMode, canGrantAdmin, devAdminOff });
   };
 
-  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, logout, updateUser, refresh }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, devAdminOff, logout, updateUser, refresh }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

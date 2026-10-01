@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { devSkipsIntegrations, devSkipsOcr, isDevModeActive } from "./devMode";
+import type { Session, SessionData } from "express-session";
+import { devAdminOff, devSkipsIntegrations, devSkipsOcr, isDevModeActive } from "./devMode";
 
 const saved = { NODE_ENV: process.env.NODE_ENV, DEV_LOGIN_ENABLED: process.env.DEV_LOGIN_ENABLED };
 afterEach(() => {
@@ -39,5 +40,19 @@ describe("devSkipsIntegrations", () => {
     expect(devSkipsIntegrations("yes")).toBe(false);
     process.env.NODE_ENV = "production";
     expect(devSkipsIntegrations("1")).toBe(false);
+  });
+});
+
+describe("devAdminOff", () => {
+  const session = (flag?: boolean) => ({ devAdminOff: flag }) as Session & Partial<SessionData>;
+
+  it("is the session's switch, and only in dev mode", () => {
+    process.env.DEV_LOGIN_ENABLED = "true";
+    expect(devAdminOff(session(true))).toBe(true);
+    expect(devAdminOff(session(false))).toBe(false);
+    expect(devAdminOff(session())).toBe(false);
+    expect(devAdminOff(undefined)).toBe(false);
+    process.env.NODE_ENV = "production";
+    expect(devAdminOff(session(true))).toBe(false);
   });
 });

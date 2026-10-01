@@ -18,3 +18,21 @@ export async function devLoginAs(who: { discordId: string } | { userId: string }
   clearAuthCache();
   window.location.reload();
 }
+
+/**
+ * Dev mode only: switch your own admin powers off or back on (POST /auth/dev-admin), and reload the page you're on
+ * without them or with them. For the header's account switcher.
+ */
+export async function devSetAdmin(enabled: boolean): Promise<void> {
+  const res = await fetch("/auth/dev-admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // The cached board and identity were loaded with the old powers.
+  clearBoardCache();
+  clearAuthCache();
+  window.location.reload();
+}

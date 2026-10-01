@@ -16,9 +16,10 @@ import {
 import type { User } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "./Button";
-import { devLoginAs } from "./devLogin";
+import { devLoginAs, devSetAdmin } from "./devLogin";
 import { controlClass } from "./Field";
 import { CheckIcon, SwapIcon } from "./icons";
+import { Switch } from "./Switch";
 import { avatarUrl, displayName } from "./user";
 
 // Every row the same height, so the list can be virtualized: hundreds of accounts (every generated test bingo's
@@ -32,14 +33,15 @@ type DevUser = User & { access?: boolean; role?: string | null };
  * Dev mode only: the header's account switcher. A searchable list of every account (search by name, Discord name or
  * role: "captain", a team name…); picking one logs in as them and reloads the page you're on, rather than going
  * through the login page. Accounts that couldn't open this page are dimmed (still pickable, to see what they'd get).
+ * An admin can also switch their own admin powers off, to try the page as their other roles while staying themselves.
  */
 export function DevAccountSwitcher() {
-  const { user, devMode } = useAuth();
+  const { user, devMode, devAdminOff } = useAuth();
   if (!devMode || !user) return null;
-  return <Switcher currentUserId={user.id} />;
+  return <Switcher currentUserId={user.id} adminPowers={devAdminOff ? "off" : user.isAdmin ? "on" : null} />;
 }
 
-function Switcher({ currentUserId }: { currentUserId: string }) {
+function Switcher({ currentUserId, adminPowers }: { currentUserId: string; adminPowers: "on" | "off" | null }) {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<DevUser[] | null>(null);
@@ -70,6 +72,16 @@ function Switcher({ currentUserId }: { currentUserId: string }) {
     [users],
   );
 
+  async function setAdmin(enabled: boolean) {
+    setSwitching("admin");
+    try {
+      await devSetAdmin(enabled);
+    } catch {
+      setError("Couldn't switch admin powers.");
+      setSwitching(null);
+    }
+  }
+
   async function switchTo(discordId: string) {
     setSwitching(discordId);
     try {
@@ -82,12 +94,23 @@ function Switcher({ currentUserId }: { currentUserId: string }) {
 
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
-      <Button variant="ghost" size="sm" aria-label="Switch account (dev)" className="text-warn">
+      <Button variant="ghost" size="sm" aria-label={adminPowers === "off" ? "Switch account (dev, admin off)" : "Switch account (dev)"} className="text-warn">
         <SwapIcon size={16} />
+        {adminPowers === "off" && <span className="text-xs font-medium">Admin off</span>}
       </Button>
       <Popover placement="bottom end" offset={6} className="overlay-panel flex w-80 flex-col rounded-md border border-outline bg-surface-raised shadow-pop outline-none">
         <Dialog aria-label="Switch account" className="flex min-h-0 flex-col outline-none">
           <p className="px-3 pt-2.5 text-[11px] font-medium uppercase tracking-widest text-warn">Dev: switch account</p>
+          {adminPowers && (
+            <Switch
+              isSelected={adminPowers === "on"}
+              isDisabled={!!switching}
+              onChange={(on) => void setAdmin(on)}
+              className="mx-3 mt-2 flex-row-reverse justify-between rounded-sm border border-outline px-2.5 py-1.5"
+            >
+              {switching === "admin" ? "Switching…" : "My admin powers"}
+            </Switch>
+          )}
           <Autocomplete filter={contains}>
             <SearchField aria-label="Search accounts" autoFocus className="p-2">
               <Input placeholder="Name, Discord or role…" className={controlClass("sm")} />
