@@ -1,7 +1,7 @@
 import { SCREENSHOT_NOT_UPLOADED } from "@bingo/shared";
 import { ImageIcon } from "../ui/icons";
 import { thumbUrl } from "../../api/imageVariants";
-import { TextTooltip } from "../ui/Tooltip";
+import { TextTooltip, Tooltip } from "../ui/Tooltip";
 
 const SIZE = { sm: "size-12", md: "size-14" } as const;
 
@@ -12,12 +12,14 @@ const SIZE = { sm: "size-12", md: "size-14" } as const;
 export function ScreenshotThumb({ url, size = "md", pending = false }: { url?: string; size?: keyof typeof SIZE; pending?: boolean }) {
   if (!url || pending) {
     return (
-      <div
-        className={`${SIZE[size]} flex shrink-0 items-center justify-center rounded-md border border-outline bg-background text-on-surface-subtle ${pending ? "border-dashed" : ""}`}
-        {...(pending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED, title: SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
-      >
-        <ImageIcon size={14} />
-      </div>
+      <Tooltip content={pending ? SCREENSHOT_NOT_UPLOADED : null}>
+        <div
+          className={`${SIZE[size]} flex shrink-0 items-center justify-center rounded-md border border-outline bg-background text-on-surface-subtle ${pending ? "border-dashed" : ""}`}
+          {...(pending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
+        >
+          <ImageIcon size={14} />
+        </div>
+      </Tooltip>
     );
   }
   return (

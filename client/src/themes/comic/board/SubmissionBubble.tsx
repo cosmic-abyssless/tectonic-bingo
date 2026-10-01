@@ -10,7 +10,7 @@ import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { displayName } from "../../../core/ui/user";
 import { LinkedClaimsSummary } from "../../../core/submissions/LinkedClaimsSummary";
-import { TextTooltip } from "../../../core/ui/Tooltip";
+import { TextTooltip, Tooltip } from "../../../core/ui/Tooltip";
 
 /**
  * A submission rendered as a postcard-ish paper card
@@ -38,13 +38,15 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
             </a>
           </TextTooltip>
         ) : (
-          <div
-            className={`flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px] ${submission.screenshotPending ? "border-dashed" : ""}`}
-            style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }}
-            {...(submission.screenshotPending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED, title: SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
-          >
-            <ImageIcon size={16} />
-          </div>
+          <Tooltip content={submission.screenshotPending ? SCREENSHOT_NOT_UPLOADED : null}>
+            <div
+              className={`flex size-14 shrink-0 -rotate-3 items-center justify-center border-[3px] ${submission.screenshotPending ? "border-dashed" : ""}`}
+              style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE, background: colors.PAPER }}
+              {...(submission.screenshotPending ? { role: "img", "aria-label": SCREENSHOT_NOT_UPLOADED } : { "aria-hidden": true })}
+            >
+              <ImageIcon size={16} />
+            </div>
+          </Tooltip>
         )}
 
         <div className="min-w-0 flex-1 pr-10">
