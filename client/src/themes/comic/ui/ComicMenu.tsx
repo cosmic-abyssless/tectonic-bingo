@@ -29,7 +29,7 @@ export function ComicMenuItem({ children, className, variant = "option", ...prop
   return (
     <AriaMenuItem
       {...props}
-      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 outline-none disabled:opacity-40 ${action ? "text-xs font-semibold" : "text-sm font-semibold"} ${className ?? ""}`}
+      className={`flex items-center gap-2 rounded-sm px-2.5 py-1.5 outline-none disabled:opacity-40 ${action ? "text-xs font-semibold" : "text-sm font-semibold"} ${className ?? ""}`}
       style={({ isFocused }) => ({
         background: isFocused ? colors.YELLOW : undefined,
         color: isFocused ? colors.ON_YELLOW : action ? colors.INK_SUBTLE : colors.INK,

@@ -2,6 +2,8 @@ import type { RewindPopupModel } from "../../../headless/types";
 import { pointerAnchorStyle, type RewindPopupPointer } from "../../rewindPopupPointer";
 import { ReactionBar } from "../../../core/submissions/ReactionBar";
 import { XIcon } from "../../../core/ui/icons";
+import { IconButton } from "../../../core/ui/Button";
+import { ScreenshotLink } from "../../../core/submissions/ScreenshotThumb";
 
 const noop = () => {};
 
@@ -37,9 +39,9 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
           </div>
 
           {s.thumbnailUrl && (
-            <a href={s.screenshotUrl ?? s.thumbnailUrl} target="_blank" rel="noreferrer" className="block bg-background">
+            <ScreenshotLink href={s.screenshotUrl ?? s.thumbnailUrl} className="block bg-background">
               <img src={s.thumbnailUrl} alt="Screenshot" className={`w-full object-contain ${big ? "max-h-56" : "max-h-32"}`} />
-            </a>
+            </ScreenshotLink>
           )}
 
           <ul className="space-y-0.5 px-3 pt-2 text-sm">
@@ -82,9 +84,9 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
           </div>
         )}
 
-        <button type="button" aria-label="Close" onClick={popup.close} className="absolute right-1 top-1 rounded p-1 text-on-surface-subtle hover:bg-surface-hover hover:text-on-surface">
+        <IconButton size="sm" label="Close" onPress={popup.close} className="absolute right-1 top-1">
           <XIcon size={14} />
-        </button>
+        </IconButton>
       </div>
       {/* Outside the card, which clips its contents; its base tucks 1px over the card's border. */}
       {pointer && (

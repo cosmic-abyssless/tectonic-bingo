@@ -16,15 +16,12 @@ export function CellButton({
   onClick,
   disabled,
   className = "",
-  title,
   children,
 }: {
   className?: string;
   variant: keyof typeof CELL_BUTTON_VARIANT;
   onClick: () => void;
   disabled?: boolean;
-  /** A native tooltip, e.g. why it's disabled. */
-  title?: string;
   children: ReactNode;
 }) {
   return (
@@ -32,7 +29,6 @@ export function CellButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={title}
       // A hook for a surface's CSS to dress the button (the comic theme's panels give it an ink border).
       data-cell-button={variant}
       className={`inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-40 ${CELL_BUTTON_VARIANT[variant]} ${className}`}
@@ -47,7 +43,6 @@ export function CellIconButton({ label, onClick, disabled, children }: { label: 
     <button
       type="button"
       aria-label={label}
-      title={label}
       onClick={onClick}
       disabled={disabled}
       className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-on-surface-muted transition-colors duration-100 hover:bg-surface-hover hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40"

@@ -4,6 +4,7 @@ import { useReducedMotion } from "motion/react";
 import { useThemeTokens } from "../../context";
 import { tokensToCssVars } from "../../tokens";
 import { XIcon } from "../../../core/ui/icons";
+import { FIXED_HEIGHT } from "../../../core/ui/Dialog";
 import { COMIC_FONT } from "../font";
 import { halftoneLayerStyle, useScreenHalftone } from "../fx/Halftone";
 import { ComicBurstRays } from "./ComicBurst";
@@ -70,6 +71,7 @@ export function ComicDialog({
   size = "md",
   isDismissable = true,
   className,
+  fixedHeight = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -77,6 +79,8 @@ export function ComicDialog({
   size?: keyof typeof MAX_WIDTH;
   isDismissable?: boolean;
   className?: string;
+  /** One height whatever the content (as core's Dialog), so switching a filter inside doesn't make it jump. */
+  fixedHeight?: boolean;
 }) {
   const portalVars = useThemeVarsInPortal();
   const { colors } = useComic();
@@ -91,7 +95,7 @@ export function ComicDialog({
       <ComicBackdrop />
       <AriaModal className={`comic-panel-pop relative w-full ${MAX_WIDTH[size]} ${className ?? ""}`}>
         <div
-          className="relative max-h-[90vh] overflow-y-auto border-[3px]"
+          className={`relative max-h-[90vh] overflow-y-auto border-[3px] ${fixedHeight ? FIXED_HEIGHT : ""}`}
           style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `8px 8px 0 ${colors.SHADOW}, 8px 8px 0 3px ${colors.YELLOW}` }}
         >
           <AriaDialog className="outline-none">{children}</AriaDialog>
@@ -144,7 +148,7 @@ export function ComicDialogHeader({
         </div>
         <div className="relative flex shrink-0 items-center gap-2">
           {action}
-          <ComicIconButton label="Close" onPress={onClose} className="size-9">
+          <ComicIconButton label="Close" onPress={onClose}>
             <XIcon />
           </ComicIconButton>
         </div>

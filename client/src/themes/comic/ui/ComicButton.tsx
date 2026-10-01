@@ -91,6 +91,13 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
   );
 }
 
+// The default size and border, unless `className` brings its own: Tailwind orders `size-10` after `size-7`, so the
+// default would otherwise always win.
+function ownSize(className: string | undefined) {
+  const classes = className?.split(/\s+/) ?? [];
+  return `${classes.some((c) => c.startsWith("size-")) ? "" : "size-10"} ${classes.some((c) => /^border-(\d|\[)/.test(c)) ? "" : "border-[3px]"}`;
+}
+
 /** Round close/icon button in the same idiom. */
 export function ComicIconButton({ label, sfx, className, style, onPress, ...props }: AriaButtonProps & { label: string; sfx?: string | { text?: string; size?: number; fill?: string } | false; style?: CSSProperties }) {
   const { colors } = useComic();
@@ -109,7 +116,7 @@ export function ComicIconButton({ label, sfx, className, style, onPress, ...prop
       {...props}
       onPress={handlePress}
       style={{ background: colors.PAPER_RAISED, color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW, ...style }}
-      className={`comic-press comic-lift inline-flex size-10 cursor-pointer items-center justify-center rounded-full border-[3px] disabled:cursor-not-allowed disabled:opacity-40 ${className ?? ""}`}
+      className={`comic-press comic-lift inline-flex cursor-pointer items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-40 ${ownSize(typeof className === "string" ? className : undefined)} ${className ?? ""}`}
     />
   );
 }

@@ -8,6 +8,7 @@ import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Input } from "../ui/Field";
+import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { MAX_MEMBER_PICKS, MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
@@ -41,20 +42,22 @@ const VISIBILITIES: { value: QuestionVisibility; label: string }[] = [
 
 function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: QuestionVisibility) => void; "aria-label": string }) {
   return (
-    <label className="flex shrink-0 items-center gap-1.5 text-xs text-on-surface-muted" title="Who can see players' answers (besides the player): this role and up">
-      Visible to
-      <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
-    </label>
+    <div className="shrink-0">
+      <label className="flex items-center gap-1.5 text-xs text-on-surface-muted">
+        Visible to
+        <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
+      </label>
+      <p className="mt-0.5 text-xs text-on-surface-subtle">This role and up, and the player</p>
+    </div>
   );
 }
 
 // Choice questions only: an extra Other choice where players write their own answer.
 function AllowOtherCheckbox(props: { checked: boolean; onChange: (on: boolean) => void; "aria-label": string }) {
   return (
-    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted" title="Adds an Other choice with a short text box for players' own answer">
-      <input type="checkbox" aria-label={props["aria-label"]} checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} className="size-4 accent-accent" />
+    <Checkbox size="xs" muted aria-label={props["aria-label"]} checked={props.checked} onChange={props.onChange} hint="Players can write their own answer" className="max-w-40 shrink-0 pt-2">
       Allow Other
-    </label>
+    </Checkbox>
   );
 }
 
@@ -214,15 +217,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 </div>
                 <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="min-w-0 flex-1" />
                 <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
-                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
+                <Checkbox size="xs" muted checked={q.required} onChange={(required) => patch(q.id, { required })} className="h-8 shrink-0">
                   Required
-                </label>
+                </Checkbox>
                 <IconButton label="Delete question" size="sm" onPress={() => requestRemove(q)} className="hover:text-danger">
                   <XIcon size={12} />
                 </IconButton>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
                 <Input
                   aria-label="Helper text"
                   defaultValue={q.helperText ?? ""}
@@ -235,7 +237,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
               </div>
               {isChoice(q.type) && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <Input
                     aria-label="Choice options"
                     defaultValue={parseOptions(q.optionsJson)}
@@ -264,15 +266,14 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
-          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
-            <input type="checkbox" aria-label="New question required" checked={newRequired} onChange={(e) => setNewRequired(e.target.checked)} className="size-4 accent-accent" />
+          <Checkbox size="xs" muted aria-label="New question required" checked={newRequired} onChange={setNewRequired} className="h-8 shrink-0">
             Required
-          </label>
+          </Checkbox>
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
             Add
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
           <Input
             aria-label="New question helper text"
             value={newHelper}
@@ -285,7 +286,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
           <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
         </div>
         {isChoice(newType) && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <Input
               aria-label="Choice options"
               value={newOptions}

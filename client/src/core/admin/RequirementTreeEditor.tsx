@@ -5,11 +5,12 @@ import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type G
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
-import { controlClass } from "../ui/Field";
+import { Input } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, GripIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { Dialog, DialogHeader } from "../ui/Dialog";
+import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
 import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
@@ -56,9 +57,9 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
 function SharedMark({ tasks }: { tasks: string[] }) {
   const title = `Shared with ${tasks.length > 0 ? tasks.join(", ") : "another task"} — removing it here only unlinks it from this task`;
   return (
-    <span title={title} role="img" aria-label={title} className="shrink-0 text-info">
+    <TooltipSpan text={title} label={title} className="shrink-0 text-info">
       <LinkIcon size={14} />
-    </span>
+    </TooltipSpan>
   );
 }
 
@@ -95,13 +96,13 @@ function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: st
 // SUM needs a summed quantity across ITEM children. One dropdown, one set of
 // children (items or nested composites) — no separate "item row" shape.
 // Worded so a condition's heading reads as its rule, with the number typed in
-// where it's read ("at least [2] of", "[3] in total from", see RuleControls):
+// where it's read ("at least [2] of", "[3] of any (dupes count)", see RuleControls):
 // the list shows each kind whole, the closed dropdown only its own words.
 const GROUP_KINDS: { kind: NodeKind; label: string; selectedLabel?: string }[] = [
   { kind: "ALL", label: "all of" },
   { kind: "ANY", label: "any one of" },
   { kind: "COUNT", label: "at least … of", selectedLabel: "at least" },
-  { kind: "SUM", label: "… in total from", selectedLabel: "in total from" },
+  { kind: "SUM", label: "… of any (dupes count)", selectedLabel: "of any (dupes count)" },
 ];
 
 function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {
@@ -172,14 +173,15 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
   const { buttonProps } = useButton({ ...dragButtonProps, elementType: "div", "aria-label": `Move ${label}` }, ref);
   return (
     <>
-      <div
-        ref={ref}
-        {...mergeProps(dragProps, buttonProps)}
-        title="Drag to move"
-        className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-on-surface-subtle outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-accent active:cursor-grabbing"
-      >
-        <GripIcon size={12} />
-      </div>
+      <TextTooltip text="Drag to move">
+        <div
+          ref={ref}
+          {...mergeProps(dragProps, buttonProps)}
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-on-surface-subtle outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-accent active:cursor-grabbing"
+        >
+          <GripIcon size={12} />
+        </div>
+      </TextTooltip>
       <DragPreview ref={preview}>
         {() => <div className="rounded-md border border-accent bg-surface px-2 py-1 text-xs text-on-surface">{label}</div>}
       </DragPreview>
@@ -192,11 +194,13 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
 // so it doesn't take pixel-perfect aim. With `children` (an empty condition's "no requirements yet"), that's the spot.
 // With `or` (between an ANY's options), the gap holds the player checklist's "OR" divider and is still a drop spot.
 // Focusable (though never in the tab order): a keyboard drag moves focus from spot to spot, and `label` says where each is.
-// The tree line (see GroupNode): it runs 6px in from the heading's start, children sit 20px right of it, and each branch
-// meets its child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop
-// spot between children, so it stops at the last child's branch rather than running on past it.
-const TREE_LINE_OFFSET = "ml-1.5";
-const TREE_INDENT = "ml-1.5 pl-5";
+// The tree line (see GroupNode): it runs 36px in from the heading's start, under the condition's number, and children
+// sit 20px right of it, at the same 56px as the heading's own controls (the gutter and its gap). Each branch meets its
+// child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop spot
+// between children, so it stops at the last child's branch rather than running on past it.
+const TREE_GUTTER = "w-12";
+const TREE_LINE_OFFSET = "ml-9";
+const TREE_INDENT = "ml-9 pl-5";
 const TREE_BRANCH =
   "relative pl-5 before:absolute before:left-0 before:top-0 before:w-0 before:border-l-2 before:border-outline after:absolute after:left-0 after:top-[15px] after:w-4 after:border-t-2 after:border-outline";
 const TREE_BRANCH_THROUGH = "before:bottom-0";
@@ -416,23 +420,30 @@ function GroupNode(props: NodeProps) {
     await onSaveAsGroup!(names);
   }
 
-  // A total ("N in total from") only adds up Items, so it offers no conditions to add (the server refuses them too).
+  // A total ("N of any (dupes count)") only adds up Items, so it offers no conditions to add (the server refuses them too).
   const holdsConditions = node.kind !== "SUM";
 
   // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
   // the last), then the add row, indented with the children: the same order at every level, the task's own included.
+  // The drag handle and the number sit in a gutter, so the rule's controls start where the item rows under it do. A
+  // number too long for it (four levels deep) spills left, over the branch, rather than into the controls.
   return (
     <div className={dragging ? "opacity-40" : undefined}>
       <div className="flex min-h-8 flex-wrap items-center gap-2">
-        {!isRoot && <DragHandle path={path} label={conditionName} />}
-        {ownLabel && (
-          <span className="num shrink-0 text-xs text-on-surface-subtle" title={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}>
-            <span className="sr-only">Condition </span>
-            {ownLabel}
-          </span>
-        )}
-        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        <div className={`flex h-8 shrink-0 items-center justify-end gap-0.5 ${TREE_GUTTER}`}>
+          {!isRoot && <DragHandle path={path} label={conditionName} />}
+          {ownLabel && (
+            <TooltipSpan
+              text={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}
+              label={`Condition ${ownLabel}`}
+              className="num ml-auto text-xs whitespace-nowrap text-on-surface-subtle"
+            >
+              {ownLabel}
+            </TooltipSpan>
+          )}
+        </div>
         <RuleControls node={node} path={path} update={update} />
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${conditionName}` : `Remove ${conditionName}`} what="condition" onPress={() => remove(path)} className="ml-auto" />}
       </div>
       {children.length === 0 ? (
@@ -541,7 +552,7 @@ function GroupNode(props: NodeProps) {
   );
 }
 
-// A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] in total from". The
+// A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] of any (dupes count)". The
 // dropdown changes the kind; the number is typed in where it's read.
 function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | "update">) {
   const kind = (
@@ -590,16 +601,17 @@ function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | 
 // Saves on blur (or Enter), at least 1.
 function NumberInput({ label, value, onSave }: { label: string; value?: number | null; onSave: (value: number) => void }) {
   return (
-    // controlClass is w-full, so the wrapper sets the width.
+    // Input is w-full, so the wrapper sets the width.
     <div className="w-14 shrink-0">
-      <input
+      <Input
+        size="sm"
         aria-label={label}
         type="number"
         min={1}
         defaultValue={value ?? 1}
         onBlur={(e) => onSave(Math.max(1, Number(e.target.value) || 1))}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className={`${controlClass("sm")} num`}
+        className="num"
       />
     </div>
   );
@@ -608,11 +620,12 @@ function NumberInput({ label, value, onSave }: { label: string; value?: number |
 // "✕" for a plain row, "unlink" for a shared one — the latter is only removed
 // from this task, not deleted (see sharedNodeIds).
 function RemoveButton({ shared, label, what, onPress, className }: { shared: boolean; label: string; what: string; onPress: () => void; className?: string }) {
-  const title = shared ? `Unlink from this task — the ${what} itself is only deleted if this was its last use` : undefined;
   return shared ? (
-    <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-on-surface-subtle hover:text-danger ${className ?? ""}`}>
-      <span title={title}>unlink</span>
-    </Button>
+    <TextTooltip text={`Unlink from this task — the ${what} itself is only deleted if this was its last use`}>
+      <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-on-surface-subtle hover:text-danger ${className ?? ""}`}>
+        unlink
+      </Button>
+    </TextTooltip>
   ) : (
     <IconButton size="sm" label={label} onPress={onPress} className={`hover:text-danger ${className ?? ""}`}>
       <XIcon size={12} />
@@ -676,27 +689,31 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         <ChipIcon name={name} className="size-4" />
         <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
         {exclusiveRules.length > 0 && (
-          <span
-            title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+          <TooltipSpan
+            text={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            label="Exclusive"
             className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
           >
             exclusive
-          </span>
+          </TooltipSpan>
         )}
         {parentKind === "SUM" && <CountsAsInput name={name} countsAs={node.countsAs ?? 1} onSave={(countsAs) => update(path, (n) => ({ ...n, countsAs }))} />}
-        <button
-          type="button"
-          onClick={() => setEditingValue((open) => !open)}
-          title={
+        <TextTooltip
+          text={
             valuedAs
               ? `Claims here get their drop value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
               : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
           }
-          // Outlined either way, so the way to add one reads as a button before any Valued as exists.
-          className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] leading-4 transition-colors hover:bg-surface-hover hover:text-on-surface ${valuedAs ? "border-outline text-on-surface-muted" : "border-dashed border-outline-strong text-on-surface-muted"}`}
         >
-          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "+ Valued as"}
-        </button>
+          <button
+            type="button"
+            onClick={() => setEditingValue((open) => !open)}
+            // Outlined either way, so the way to add one reads as a button before any Valued as exists.
+            className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] leading-4 transition-colors hover:bg-surface-hover hover:text-on-surface ${valuedAs ? "border-outline text-on-surface-muted" : "border-dashed border-outline-strong text-on-surface-muted"}`}
+          >
+            {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "+ Valued as"}
+          </button>
+        </TextTooltip>
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
       </div>
       {editingValue && <ValuedAsEditor itemName={name} valuedAs={valuedAs} onSave={(next) => void saveValuedAs(next)} onCancel={() => setEditingValue(false)} />}
@@ -727,30 +744,30 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
   );
 }
 
-// Counts as (CONTEXT.md), on an item in a total ("N in total from"): what one of it adds to the total, a whole number
+// Counts as (CONTEXT.md), on an item in a total ("N of any (dupes count)"): what one of it adds to the total, a whole number
 // from 1. Saved on blur like the total itself, and only when it changed.
 function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: number; onSave: (countsAs: number) => void }) {
   return (
-    <label
-      className="flex shrink-0 items-center gap-1 text-[11px] text-on-surface-muted"
-      title={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}
-    >
+    <label className="flex shrink-0 items-center gap-1 text-[11px] text-on-surface-muted">
       counts as
       <span className="w-14">
-        <input
-          aria-label={`${name} counts as`}
-          type="number"
-          min={1}
-          step={1}
-          defaultValue={countsAs}
-          onBlur={(e) => {
-            const next = Math.max(1, Math.round(Number(e.target.value)) || 1);
-            e.target.value = String(next);
-            if (next !== countsAs) onSave(next);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          className={`${controlClass("sm")} num`}
-        />
+        <TextTooltip text={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}>
+          <Input
+            size="sm"
+            aria-label={`${name} counts as`}
+            type="number"
+            min={1}
+            step={1}
+            defaultValue={countsAs}
+            onBlur={(e) => {
+              const next = Math.max(1, Math.round(Number(e.target.value)) || 1);
+              e.target.value = String(next);
+              if (next !== countsAs) onSave(next);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            className="num"
+          />
+        </TextTooltip>
       </span>
     </label>
   );
@@ -771,18 +788,18 @@ function ValuedAsEditor({ itemName, valuedAs, onSave, onCancel }: { itemName: st
       <div className="flex items-center gap-2">
         <ItemSearchInput ariaLabel="Valued as item" placeholder="e.g. Magus vestige" containerClassName="min-w-0 flex-1" value={item} onChange={setItem} onPickItem={setItem} />
         <span className="text-xs text-on-surface-muted">÷</span>
-        {/* controlClass is w-full, so the wrapper sets the width. */}
+        {/* Input is w-full, so the wrapper sets the width. */}
         <div className="w-16 shrink-0">
-          <input aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} className={controlClass("sm")} />
+          <Input size="sm" aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} />
         </div>
       </div>
-      <input
+      <Input
+        size="sm"
         aria-label="Source"
         placeholder="Source, shown next to the item (optional, e.g. Vardorvis)"
         maxLength={40}
         value={source}
         onChange={(e) => setSource(e.target.value)}
-        className={controlClass("sm")}
       />
       <div className="flex gap-2">
         <Button size="sm" variant="primary" isDisabled={!valid} onPress={() => onSave({ itemName: item.trim(), divisor: n, source: source.trim() || null })}>

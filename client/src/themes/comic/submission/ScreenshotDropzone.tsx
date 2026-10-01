@@ -1,6 +1,7 @@
 import { MAX_UPLOAD_MB } from "@bingo/shared";
 import type { SubmissionFlowModel } from "../../../headless/types";
 import { ImageIcon } from "../../../core/ui/icons";
+import { FileDropButton } from "../../../core/ui/FileDropButton";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import { Stamp } from "../ui/Stamp";
@@ -15,9 +16,9 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
   const has = !!screenshot.previewUrl;
   return (
     <ComicField label="Screenshot" as="div" tutorial="submit-screenshot">
-      <button
-        type="button"
-        onClick={screenshot.openFilePicker}
+      <FileDropButton
+        bare
+        input={screenshot.inputProps}
         className={`comic-press relative block w-full border-[3px] transition-[transform,background-color] ${has ? "h-56" : "h-40"}`}
         style={{
           borderColor: colors.LINE,
@@ -53,8 +54,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
             {screenshot.error}
           </Stamp>
         )}
-      </button>
-      <input {...screenshot.inputProps} className="hidden" />
+      </FileDropButton>
     </ComicField>
   );
 }

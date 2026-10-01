@@ -1,13 +1,15 @@
 import { useRef } from "react";
 import { useSignupForm, type SignupQuestionModel } from "../../headless/useSignupForm";
 import { PartnerPanel } from "./PartnerPanel";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { EmptyState, HEADING_FONT, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
+import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../ui/icons";
+import { TextButton } from "../ui/TextButton";
 
 /** A group of radio buttons or checkboxes under one label, for the choice questions. */
 function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
@@ -19,33 +21,25 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
       <legend className="mb-1.5 block text-xs font-medium text-on-surface-muted">{label}</legend>
       <div className="space-y-2">
         {question.choices.map((choice) => (
-          <label key={choice.label} className="flex cursor-pointer select-none items-center gap-2.5">
-            <input
-              type={multiple ? "checkbox" : "radio"}
-              name={multiple ? undefined : `question-${question.id}`}
-              checked={choice.checked}
-              onChange={(e) => choice.set(e.target.checked)}
-              className="size-4 cursor-pointer accent-accent"
-            />
-            <span className="text-sm text-on-surface">{choice.label}</span>
-          </label>
+          <Checkbox key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set} className="select-none">
+            {choice.label}
+          </Checkbox>
         ))}
         {other && (
           <div className="flex min-h-8 items-center gap-2.5">
-            <label className="flex shrink-0 cursor-pointer select-none items-center gap-2.5">
-              <input
-                type={multiple ? "checkbox" : "radio"}
-                name={multiple ? undefined : `question-${question.id}`}
-                checked={other.checked}
-                onChange={(e) => {
-                  other.set(e.target.checked);
-                  // Picking Other is for writing in it: go straight to the box.
-                  if (e.target.checked) requestAnimationFrame(() => otherInput.current?.focus());
-                }}
-                className="size-4 cursor-pointer accent-accent"
-              />
-              <span className="text-sm text-on-surface">Other</span>
-            </label>
+            <Checkbox
+              type={multiple ? "checkbox" : "radio"}
+              name={multiple ? undefined : `question-${question.id}`}
+              checked={other.checked}
+              onChange={(on) => {
+                other.set(on);
+                // Picking Other is for writing in it: go straight to the box.
+                if (on) requestAnimationFrame(() => otherInput.current?.focus());
+              }}
+              className="shrink-0 select-none"
+            >
+              Other
+            </Checkbox>
             {other.checked && (
               <Input
                 ref={otherInput}
@@ -64,9 +58,9 @@ function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label
       </div>
       {other?.missingText && <p className="mt-1.5 text-xs text-danger">Write your answer for Other, or untick it.</p>}
       {question.clear && (
-        <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
+        <TextButton onPress={question.clear} className="mt-1.5 text-xs text-on-surface-subtle">
           Clear
-        </button>
+        </TextButton>
       )}
       {question.hint && <p className="mt-1.5 text-xs text-on-surface-subtle">{question.hint}</p>}
     </fieldset>
@@ -96,17 +90,17 @@ function MemberPickField({ question, label }: { question: SignupQuestionModel; l
           {members.picked.map((p) => (
             <li key={p.id} className="flex items-center gap-1 rounded-full border border-outline bg-surface-raised py-0.5 pr-1 pl-2.5 text-sm text-on-surface">
               {p.name}
-              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-full p-0.5 text-on-surface-subtle hover:text-danger">
+              <IconButton size="xs" label={`Remove ${p.name}`} onPress={p.remove} className="rounded-full hover:text-danger">
                 <XIcon size={12} />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>
       )}
       {question.clear && (
-        <button type="button" onClick={question.clear} className="mt-1.5 text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface">
+        <TextButton onPress={question.clear} className="mt-1.5 text-xs text-on-surface-subtle">
           Clear
-        </button>
+        </TextButton>
       )}
     </Field>
   );
@@ -126,13 +120,9 @@ function QuestionField({ question }: { question: SignupQuestionModel }) {
 
   if (question.type === "boolean") {
     return (
-      <div>
-        <label className="flex cursor-pointer select-none items-center gap-2.5">
-          <input type="checkbox" checked={question.value === "true"} onChange={(e) => question.set(e.target.checked ? "true" : "false")} className="size-4 cursor-pointer accent-accent" />
-          <span className="text-sm text-on-surface-muted">{label}</span>
-        </label>
-        {question.hint && <p className="mt-1 pl-[1.625rem] text-xs text-on-surface-subtle">{question.hint}</p>}
-      </div>
+      <Checkbox muted checked={question.value === "true"} onChange={(on) => question.set(on ? "true" : "false")} hint={question.hint} className="select-none">
+        {label}
+      </Checkbox>
     );
   }
   if (question.type === "textarea") {

@@ -5,7 +5,7 @@ import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useLines } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
-import { Field, Input, controlClass } from "../ui/Field";
+import { Field, Input } from "../ui/Field";
 import { XIcon } from "../ui/icons";
 
 export function LineEditor({ slug }: { slug: string }) {
@@ -69,11 +69,13 @@ export function LineEditor({ slug }: { slug: string }) {
                   {line.lineType} {line.lineIndex + 1}
                 </td>
                 <td className="py-1.5">
-                  <input
+                  <Input
+                    size="sm"
                     type="number"
+                    aria-label={`${line.lineType} ${line.lineIndex + 1} points`}
                     defaultValue={line.node.points}
                     onBlur={(e) => updatePoints(line.id, Number(e.target.value) || 0)}
-                    className={`${controlClass("sm")} num w-20`}
+                    className="num w-20"
                   />
                 </td>
                 <td className="py-1.5">

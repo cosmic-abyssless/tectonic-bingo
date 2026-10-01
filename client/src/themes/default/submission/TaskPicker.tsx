@@ -2,26 +2,14 @@ import type { SubmissionFlowModel } from "../../../headless/types";
 import { Field } from "../../../core/ui/Field";
 import { Notice } from "../../../core/ui/Card";
 import { CheckIcon } from "../../../core/ui/icons";
+import { SegmentedControl } from "../../../core/ui/SegmentedControl";
 
 export function TaskPicker({ task }: { task: SubmissionFlowModel["task"] }) {
   return (
     <>
       {task.options.length > 1 && (
         <Field label="Task" as="div" tutorial="submit-tile">
-          <div className="flex overflow-hidden rounded-md border border-outline-strong">
-            {task.options.map((option, i) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => task.select(option.id)}
-                className={`h-10 flex-1 text-sm font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
-                  task.selectedId === option.id ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl fill aria-label="Task" options={task.options} value={task.selectedId} onChange={task.select} />
         </Field>
       )}
 

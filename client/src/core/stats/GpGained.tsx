@@ -16,6 +16,7 @@ import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { RepriceGpButton } from "../mod/RepriceGpButton";
+import { NoTooltips, TooltipSpan } from "../ui/Tooltip";
 
 type Row = GpDrop & { team: Team | null };
 
@@ -35,6 +36,14 @@ function TeamDot({ color }: { color: string | null | undefined }) {
 const valuedAsNote = (valuedAs: ValuedAs) => valuedAs.source || describeValuedAs(valuedAs);
 const dropLabel = (drop: GpDrop) => `${drop.quantity > 1 ? `${drop.quantity}× ` : ""}${drop.itemName}${drop.valuedAs ? ` (${valuedAsNote(drop.valuedAs)})` : ""}`;
 
+function dropTooltip(p: TooltipCallbackParams<Row>): string {
+  if (!p.data) return "";
+  const label = dropLabel(p.data);
+  if (!p.data.valuedAs) return usefulTooltip(p, label);
+  const valued = `Valued as ${describeValuedAs(p.data.valuedAs)}`;
+  return usefulTooltip(p, `${label}. ${valued}`, [label, valued]);
+}
+
 function ItemCell({ data }: CustomCellRendererProps<Row>) {
   if (!data) return null;
   return (
@@ -43,12 +52,9 @@ function ItemCell({ data }: CustomCellRendererProps<Row>) {
       <span className="truncate text-on-surface">
         {data.quantity > 1 && <span className="num">{data.quantity}× </span>}
         <WikiItemLink name={data.itemName} />
-        {/* Why an ordinary item (a DT2 boss's gold ring) is worth this much: its source, with the valuation on hover. */}
-        {data.valuedAs && (
-          <span className="ml-1 text-xs text-on-surface-subtle" title={`Valued as ${describeValuedAs(data.valuedAs)}`}>
-            ({valuedAsNote(data.valuedAs)})
-          </span>
-        )}
+        {/* Why an ordinary item (a DT2 boss's gold ring) is worth this much: its source, with the valuation on hover (the
+            column's tooltip, dropTooltip). */}
+        {data.valuedAs && <span className="ml-1 text-xs text-on-surface-subtle">({valuedAsNote(data.valuedAs)})</span>}
       </span>
     </span>
   );
@@ -121,7 +127,7 @@ export function GpGained({
       { colId: "rank", headerName: "#", pinned: "left", suppressMovable: true, width: 56, minWidth: 56, sortable: false, valueGetter: (p) => (p.node?.rowIndex ?? 0) + 1, cellClass: "num text-on-surface-subtle" },
       // The value includes the Valued as note: AG Grid only redraws a cell whose value changed, so a note that
       // arrives later (a Task given a Valued as, or a Source) would otherwise not show until a reload.
-      { colId: "item", headerName: "Drop", pinned: "left", suppressMovable: true, initialWidth: 240, valueGetter: (p) => (p.data ? dropLabel(p.data) : ""), cellRenderer: ItemCell },
+      { colId: "item", headerName: "Drop", pinned: "left", suppressMovable: true, initialWidth: 240, valueGetter: (p) => (p.data ? dropLabel(p.data) : ""), cellRenderer: ItemCell, tooltip: dropTooltip },
       { colId: "player", headerName: "Player", flex: 2, minWidth: 120, valueGetter: (p) => (p.data ? displayName(p.data.user) : ""), cellRenderer: PlayerCell },
       { colId: "team", headerName: "Team", flex: 2, minWidth: 120, valueGetter: (p) => p.data?.team?.name ?? "", cellRenderer: TeamCell },
       {
@@ -175,9 +181,9 @@ export function GpGained({
           <li key={t.teamId} className="flex items-center gap-1.5 text-sm">
             <TeamDot color={teamById.get(t.teamId)?.color} />
             <span className="text-on-surface-muted">{teamById.get(t.teamId)?.name ?? "A team"}</span>
-            <span className="num font-semibold text-on-surface" title={formatGpExact(t.gpGained)}>
+            <TooltipSpan text={formatGpExact(t.gpGained)} label={formatGp(t.gpGained)} className="num font-semibold text-on-surface">
               {formatGp(t.gpGained)}
-            </span>
+            </TooltipSpan>
           </li>
         ))}
       </ul>
@@ -192,22 +198,24 @@ export function GpGained({
         <p className="text-sm text-on-surface-subtle">{drops.length === 0 ? "No approved drops with a drop value yet." : "No drops match your search."}</p>
       ) : (
         <div style={{ height }}>
-          <AgGridReact<Row>
-            theme={gridTheme}
-            rowData={rows}
-            getRowId={(p) => p.data.claimId}
-            {...gridProps}
-            columnDefs={columnDefs}
-            defaultColDef={DEFAULT_COL_DEF}
-            rowHeight={ROW_HEIGHT}
-            animateRows={false}
-            tooltipShowDelay={200}
-            tooltipHideDelay={4000}
-            enableCellTextSelection
-            accentedSort
-            // The rank is the row's position, so it has to be redrawn whenever the order changes.
-            onSortChanged={() => apiRef.current?.refreshCells({ columns: ["rank"], force: true })}
-          />
+          <NoTooltips>
+            <AgGridReact<Row>
+              theme={gridTheme}
+              rowData={rows}
+              getRowId={(p) => p.data.claimId}
+              {...gridProps}
+              columnDefs={columnDefs}
+              defaultColDef={DEFAULT_COL_DEF}
+              rowHeight={ROW_HEIGHT}
+              animateRows={false}
+              tooltipShowDelay={200}
+              tooltipHideDelay={4000}
+              enableCellTextSelection
+              accentedSort
+              // The rank is the row's position, so it has to be redrawn whenever the order changes.
+              onSortChanged={() => apiRef.current?.refreshCells({ columns: ["rank"], force: true })}
+            />
+          </NoTooltips>
         </div>
       )}
     </div>

@@ -1,6 +1,8 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SignificanceTier } from "@bingo/shared";
 import type { RewindLogEntryModel, RewindLogModel } from "../../../headless/types";
+import { TextTooltip } from "../../../core/ui/Tooltip";
+import { Button } from "../../../core/ui/Button";
 
 // How many entries a phone shows before "Show all" (a wide screen scrolls the whole log instead).
 const PHONE_ENTRIES = 5;
@@ -15,6 +17,7 @@ const DOT_SIZE: Record<SignificanceTier, string> = { minor: "size-1.5", notable:
 export function RewindLog({ log }: { log: RewindLogModel }) {
   const [expanded, setExpanded] = useState(false);
   const listRef = useRef<HTMLOListElement>(null);
+  const listId = useId();
   const hidden = log.entries.length - PHONE_ENTRIES;
   // A stable handler for the memoised rows: log.jumpTo is a new function every render.
   const jumpRef = useRef(log.jumpTo);
@@ -35,16 +38,18 @@ export function RewindLog({ log }: { log: RewindLogModel }) {
       {log.entries.length === 0 ? (
         <p className="px-3 py-3 text-xs text-on-surface-subtle">Nothing submitted yet.</p>
       ) : (
-        <ol ref={listRef} className="divide-y divide-outline min-h-0 lg:overflow-y-auto">
+        <ol id={listId} ref={listRef} className="divide-y divide-outline min-h-0 lg:overflow-y-auto">
           {log.entries.map((entry, i) => (
             <LogRow key={entry.id} entry={entry} current={entry.id === log.currentId} phoneHidden={!expanded && i >= PHONE_ENTRIES} onJump={onJump} />
           ))}
         </ol>
       )}
       {hidden > 0 && (
-        <button type="button" onClick={() => setExpanded((e) => !e)} className="w-full border-t border-outline px-3 py-2 text-xs font-medium text-on-surface-muted hover:bg-surface-hover lg:hidden">
-          {expanded ? "Show fewer" : `Show all (${log.entries.length.toLocaleString()})`}
-        </button>
+        <div className="border-t border-outline lg:hidden">
+          <Button variant="ghost" size="sm" aria-expanded={expanded} aria-controls={listId} onPress={() => setExpanded((e) => !e)} className="w-full rounded-none">
+            {expanded ? "Show fewer" : `Show all (${log.entries.length.toLocaleString()})`}
+          </Button>
+        </div>
       )}
     </section>
   );
@@ -55,37 +60,38 @@ const LogRow = memo(function LogRow({ entry, current, phoneHidden, onJump }: { e
   const accent = entry.tier === "minor" ? "bg-on-surface-subtle" : "bg-accent";
   return (
     <li className={phoneHidden ? "hidden lg:block" : undefined}>
-      <button
-        type="button"
-        onClick={() => onJump(entry.id)}
-        aria-current={current ? "true" : undefined}
-        title={`${entry.timeLabel}${entry.team ? ` · ${entry.team.name}` : ""}`}
-        className={`relative flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover ${current ? "bg-accent/10" : ""} ${entry.rejected ? "opacity-60" : ""}`}
-      >
-        <span className="flex h-4 w-2.5 shrink-0 items-center justify-center">
-          <span
-            className={`rounded-full ${DOT_SIZE[entry.tier]} ${entry.team?.color && !entry.rejected ? "" : entry.rejected ? "bg-on-surface-subtle/40" : accent}`}
-            style={entry.team?.color && !entry.rejected ? { backgroundColor: entry.team.color } : undefined}
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-baseline gap-2">
-            <span className={`min-w-0 flex-1 truncate text-sm ${entry.tier === "minor" ? "text-on-surface-muted" : "font-medium text-on-surface"}`}>{entry.playerName ?? "Unknown player"}</span>
-            <span className="num shrink-0 text-[11px] text-on-surface-subtle">{entry.sinceStartLabel}</span>
+      <TextTooltip text={`${entry.timeLabel}${entry.team ? ` · ${entry.team.name}` : ""}`} placement="left">
+        <button
+          type="button"
+          onClick={() => onJump(entry.id)}
+          aria-current={current ? "true" : undefined}
+          className={`relative flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover ${current ? "bg-accent/10" : ""} ${entry.rejected ? "opacity-60" : ""}`}
+        >
+          <span className="flex h-4 w-2.5 shrink-0 items-center justify-center">
+            <span
+              className={`rounded-full ${DOT_SIZE[entry.tier]} ${entry.team?.color && !entry.rejected ? "" : entry.rejected ? "bg-on-surface-subtle/40" : accent}`}
+              style={entry.team?.color && !entry.rejected ? { backgroundColor: entry.team.color } : undefined}
+            />
           </span>
-          <span className="flex items-baseline gap-2 text-xs text-on-surface-subtle">
-            <span className={`min-w-0 flex-1 truncate ${entry.rejected ? "line-through" : ""}`}>
-              {entry.itemsLabel}
-              {entry.tileName && <> · {entry.tileName}</>}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-2">
+              <span className={`min-w-0 flex-1 truncate text-sm ${entry.tier === "minor" ? "text-on-surface-muted" : "font-medium text-on-surface"}`}>{entry.playerName ?? "Unknown player"}</span>
+              <span className="num shrink-0 text-[11px] text-on-surface-subtle">{entry.sinceStartLabel}</span>
             </span>
-            {entry.rejected ? (
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-danger">Rejected</span>
-            ) : (
-              entry.gpLabel && <span className="num shrink-0 font-medium text-on-surface-muted">{entry.gpLabel}</span>
-            )}
+            <span className="flex items-baseline gap-2 text-xs text-on-surface-subtle">
+              <span className={`min-w-0 flex-1 truncate ${entry.rejected ? "line-through" : ""}`}>
+                {entry.itemsLabel}
+                {entry.tileName && <> · {entry.tileName}</>}
+              </span>
+              {entry.rejected ? (
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-danger">Rejected</span>
+              ) : (
+                entry.gpLabel && <span className="num shrink-0 font-medium text-on-surface-muted">{entry.gpLabel}</span>
+              )}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </TextTooltip>
     </li>
   );
 });

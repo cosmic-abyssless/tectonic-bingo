@@ -59,7 +59,7 @@ export function MilestoneCountdown({ milestone, className }: { milestone: StageM
         )}
       </span>
       {upcoming && (
-        <time dateTime={at.toISOString()} className="num hidden text-xs text-on-surface-subtle sm:inline" title={at.toLocaleString()}>
+        <time dateTime={at.toISOString()} className="num hidden text-xs text-on-surface-subtle sm:inline">
           {at.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
         </time>
       )}

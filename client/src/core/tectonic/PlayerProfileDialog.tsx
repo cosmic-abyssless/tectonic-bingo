@@ -7,7 +7,6 @@ import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
 import { SpinnerIcon } from "../ui/icons";
 import { AccountTypeIcon } from "../ui/AccountTypeIcon";
-import { INTERACTIVE_TEXT } from "../ui/interactiveText";
 import { discordName } from "../ui/user";
 import { usePreference } from "../ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
@@ -22,6 +21,8 @@ import { devLoginAs } from "../ui/devLogin";
 import { PointsShareBreakdown } from "../stats/PointsShareBreakdown";
 import { usePlayerContribution } from "../stats/usePlayerContribution";
 import { useUrlParam } from "../ui/useUrlParam";
+import { TextButton } from "../ui/TextButton";
+import { ExternalLink } from "../ui/ExternalLink";
 
 /** The URL parameter holding the open profile's tab (PlayerName.tsx keeps the open profile in ?player=). */
 export const PROFILE_TAB_PARAM = "profileTab";
@@ -147,18 +148,8 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           player.rsn ? (
             <>
               Discord: {name} ·{" "}
-              <a className="underline hover:opacity-70" href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`} target="_blank" rel="noreferrer noopener">
-                Wise Old Man
-              </a>{" "}
-              ·{" "}
-              <a
-                className="underline hover:opacity-70"
-                href={`https://secure.runescape.com/m=hiscore_oldschool/hiscorepersonal?user1=${encodeURIComponent(player.rsn)}`}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                OSRS hiscores
-              </a>
+              <ExternalLink href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`}>Wise Old Man</ExternalLink> ·{" "}
+              <ExternalLink href={`https://secure.runescape.com/m=hiscore_oldschool/hiscorepersonal?user1=${encodeURIComponent(player.rsn)}`}>OSRS hiscores</ExternalLink>
             </>
           ) : (
             "Not signed up for this bingo"
@@ -397,14 +388,9 @@ function PastBingos({ stats }: { stats: PlayerProfile["pastBingoStats"] }) {
 function PastBingoTitle({ stat, className = "" }: { stat: PlayerProfile["pastBingoStats"][number]; className?: string }) {
   if (stat.womId <= 0) return <span className={`text-on-surface ${className}`}>{stat.title}</span>;
   return (
-    <a
-      href={`https://wiseoldman.net/competitions/${stat.womId}`}
-      target="_blank"
-      rel="noreferrer"
-      className={`text-on-surface underline underline-offset-2 hover:text-on-surface ${className}`}
-    >
+    <ExternalLink href={`https://wiseoldman.net/competitions/${stat.womId}`} className={`text-on-surface ${className}`}>
       {stat.title}
-    </a>
+    </ExternalLink>
   );
 }
 
@@ -419,9 +405,9 @@ function AchievementsCount({ count, isOwnCard }: { count: AchievementCount; isOw
   const label = `Achievements ${count.earned} / ${count.total}`;
   if (isOwnCard && open) {
     return (
-      <button type="button" onClick={open} className={`text-sm font-medium text-on-surface ${INTERACTIVE_TEXT}`}>
+      <TextButton onPress={open} className="text-sm font-medium text-on-surface">
         {label}
-      </button>
+      </TextButton>
     );
   }
   return <p className="text-sm font-medium text-on-surface">{label}</p>;

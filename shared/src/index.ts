@@ -517,6 +517,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   proofTaskLabel: string | null;
   /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
   proofChecks: ProofCheck[];
+  /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
+  reviewedByUser: MinimalUser | null;
 }
 
 // Derived cache: one row per node currently COMPLETE for a team (see

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -7,6 +7,7 @@ import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Field, Input } from "../ui/Field";
+import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
 import { TaskEditor, optimisticTasks } from "./TaskEditor";
@@ -14,6 +15,7 @@ import type { ExistingCondition } from "./RequirementTreeEditor";
 import { existingLeavesExcluding } from "./existingLeaves";
 import { collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
 import { thumbUrl } from "../../api/imageVariants";
+import { FileDropButton } from "../ui/FileDropButton";
 
 // Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
 // root), labeled by which task it's under and a dot-notation index within it
@@ -61,7 +63,6 @@ export function TileEditorPanel({
 
 function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slug: string; themeKey: string; tile: Tile; categories: TileCategory[]; locked: string | null; onClose: () => void }) {
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,15 +151,15 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
             each still opens to be looked through, disabling its own controls (TaskEditor). */}
         <fieldset disabled={!!locked} className="min-w-0 disabled:opacity-60">
           <div className="flex items-start gap-4">
-            <button
-              type="button"
+            <FileDropButton
+              bare
               aria-label="Upload tile image"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-not-allowed"
+              accept="image/*"
+              onFiles={([file]) => uploadImage(file)}
+              className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-outline-strong bg-background text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted"
             >
               {tile.imageUrl ? <img src={thumbUrl(tile.imageUrl)} alt="" className="size-full object-contain" /> : uploading ? <span className="text-xs">…</span> : <ImageIcon size={20} />}
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
+            </FileDropButton>
 
             <div className="grid flex-1 grid-cols-2 gap-3">
               <Field label="Name" className="col-span-2">
@@ -174,36 +175,31 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                   options={[{ value: "", label: "None" }, ...categories.map((c) => ({ value: c.id, label: c.label }))]}
                 />
               </Field>
-              <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
-                <input type="checkbox" defaultChecked={tile.hasFreezePeriod} onChange={(e) => patch({ hasFreezePeriod: e.target.checked })} className="size-4 accent-accent" />
+              <Checkbox muted defaultChecked={tile.hasFreezePeriod} onChange={(hasFreezePeriod) => patch({ hasFreezePeriod })} className="mt-6 h-10">
                 Freeze period
-              </label>
+              </Checkbox>
               {tile.hasFreezePeriod && (
                 <Field label="Freeze duration (minutes)" className="col-span-2">
                   <Input type="number" className="num w-32" defaultValue={tile.freezeDurationMinutes} onBlur={(e) => patch({ freezeDurationMinutes: Number(e.target.value) || 0 })} />
                 </Field>
               )}
-              <label className="mt-6 flex h-10 items-center gap-2 text-sm text-on-surface-muted">
-                <input
-                  type="checkbox"
-                  checked={bonusEnabled}
-                  onChange={(e) => updateBonusPoints(e.target.checked ? bonusDraft : 0)}
-                  className="size-4 accent-accent"
-                />
+              <Checkbox muted checked={bonusEnabled} onChange={(on) => updateBonusPoints(on ? bonusDraft : 0)} className="mt-6 h-10">
                 Bonus for full completion
-              </label>
+              </Checkbox>
               {bonusEnabled && (
                 <Field label="Bonus points">
                   <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
                 </Field>
               )}
-              <label
-                title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
-                className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
+              <Checkbox
+                muted
+                checked={proofTileWide}
+                onChange={updateProofTileWide}
+                hint="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
+                className="col-span-2 pt-2.5"
               >
-                <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
                 Proof screenshot for the whole tile
-              </label>
+              </Checkbox>
               {proofTileWide && (
                 <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
                   <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />

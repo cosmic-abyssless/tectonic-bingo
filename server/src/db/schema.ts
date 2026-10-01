@@ -263,6 +263,9 @@ export const auditLog = sqliteTable('audit_log', {
   entityLabel: text('entity_label'),
   teamId: text('team_id'),
   details: text('details').notNull().default('{}'),
+  // Lower-cased text the row shows (title, rendered sentence, Team), for the log's search. Null until filled: audit()
+  // fills it on write, fillAuditSearchText backfills older rows on startup (and refills any cleared after a rewording).
+  searchText: text('search_text'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => [
   index('audit_log_bingo_idx').on(t.bingoId, t.id),

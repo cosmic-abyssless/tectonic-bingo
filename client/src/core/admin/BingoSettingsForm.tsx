@@ -9,11 +9,13 @@ import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
+import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { Switch } from "../ui/Switch";
-import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
+import { TextButton } from "../ui/TextButton";
+import { ExternalLink } from "../ui/ExternalLink";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -198,10 +200,9 @@ export function BingoSettingsForm({
           />
         </Field>
         {form.cutMode !== "none" && (
-          <label className="flex items-center gap-2 text-sm text-on-surface">
-            <input type="checkbox" checked={form.warnLeftovers} onChange={(e) => setForm({ ...form, warnLeftovers: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+          <Checkbox checked={form.warnLeftovers} onChange={(warnLeftovers) => setForm({ ...form, warnLeftovers })}>
             Warn signups at risk of being cut, on their signup page
-          </label>
+          </Checkbox>
         )}
       </Section>
 
@@ -253,9 +254,7 @@ export function BingoSettingsForm({
         {bingo.womCompetitionId && (
           <Notice tone="ok">
             Competition created —{" "}
-            <a href={`https://wiseoldman.net/competitions/${bingo.womCompetitionId}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-              view on Wise Old Man
-            </a>
+            <ExternalLink href={`https://wiseoldman.net/competitions/${bingo.womCompetitionId}`}>view on Wise Old Man</ExternalLink>
             .
           </Notice>
         )}
@@ -268,10 +267,9 @@ export function BingoSettingsForm({
         <Section title={STAGE_LABEL.reveal}>
           <p className="text-sm text-on-surface-muted">Only while the bingo is in {STAGE_LABEL.reveal}: both end by themselves when it goes {STAGE_LABEL.live}.</p>
           <div className="space-y-1">
-            <label className="flex items-center gap-2 text-sm text-on-surface">
-              <input type="checkbox" checked={form.sealedTiles} onChange={(e) => setForm({ ...form, sealedTiles: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+            <Checkbox checked={form.sealedTiles} onChange={(sealedTiles) => setForm({ ...form, sealedTiles })}>
               Seal the Tiles
-            </label>
+            </Checkbox>
             <p className="text-sm text-on-surface-muted">
               Players and Captains see each Tile's art, name and Category, but can't open it, see its points or mark interest. Moderators can still open
               everything.
@@ -279,10 +277,9 @@ export function BingoSettingsForm({
             </p>
           </div>
           <div className="space-y-1">
-            <label className="flex items-center gap-2 text-sm text-on-surface">
-              <input type="checkbox" checked={form.hideRules} onChange={(e) => setForm({ ...form, hideRules: e.target.checked })} className="size-4 cursor-pointer accent-accent" />
+            <Checkbox checked={form.hideRules} onChange={(hideRules) => setForm({ ...form, hideRules })}>
               Hide the rules
-            </label>
+            </Checkbox>
             <p className="text-sm text-on-surface-muted">Players and Captains are told the rules come later.</p>
           </div>
         </Section>
@@ -294,9 +291,9 @@ export function BingoSettingsForm({
           label={
             <span className="flex items-center justify-between">
               Rules (Markdown)
-              <button type="button" onClick={() => setShowPreview((p) => !p)} className="text-xs text-on-surface-muted underline-offset-2 hover:text-on-surface hover:underline">
+              <TextButton onPress={() => setShowPreview((p) => !p)} className="text-xs text-on-surface-muted">
                 {showPreview ? "Edit" : "Preview"}
-              </button>
+              </TextButton>
             </span>
           }
         >
@@ -314,25 +311,13 @@ export function BingoSettingsForm({
         <p className="text-sm text-on-surface-muted">
           Once the bingo is finished, every clan member can read it: the board, stats, final teams, and every team's submissions.
         </p>
-        <label className="flex items-center gap-2 text-sm text-on-surface">
-          <input
-            type="checkbox"
-            checked={form.showScreenshotsWhenFinished}
-            onChange={(e) => setForm({ ...form, showScreenshotsWhenFinished: e.target.checked })}
-            className="size-4 cursor-pointer accent-accent"
-          />
+        <Checkbox checked={form.showScreenshotsWhenFinished} onChange={(showScreenshotsWhenFinished) => setForm({ ...form, showScreenshotsWhenFinished })}>
           Show screenshots once Finished
-        </label>
+        </Checkbox>
         <p className="text-sm text-on-surface-muted">Off, other teams' screenshots are hidden from everyone but the mods. Players still see their own team's.</p>
-        <label className="flex items-center gap-2 text-sm text-on-surface">
-          <input
-            type="checkbox"
-            checked={form.publishWrappedOnFinish}
-            onChange={(e) => setForm({ ...form, publishWrappedOnFinish: e.target.checked })}
-            className="size-4 cursor-pointer accent-accent"
-          />
+        <Checkbox checked={form.publishWrappedOnFinish} onChange={(publishWrappedOnFinish) => setForm({ ...form, publishWrappedOnFinish })}>
           Publish Wrapped when the bingo finishes
-        </label>
+        </Checkbox>
         <p className="text-sm text-on-surface-muted">
           On, Wrapped publishes itself once the bingo is finished and no submission is pending (as the last one is reviewed). Off, it stays hidden until a mod publishes it from the mod panel.
         </p>
@@ -425,15 +410,13 @@ function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggl
   useEffect(() => setExpanded(enabled), [enabled]);
 
   return (
-    <div className="rounded-lg border border-outline bg-surface">
-      <div className="flex h-12 w-full items-center gap-3 px-4">
-        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex flex-1 items-center gap-3 text-left text-sm font-semibold text-on-surface">
-          Wise Old Man
-          <span className="text-on-surface-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-        </button>
-        <Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />
-      </div>
-      {expanded && <div className="space-y-4 border-t border-outline p-4">{children}</div>}
-    </div>
+    <Disclosure
+      title={<span className="flex-1 text-sm font-semibold text-on-surface">Wise Old Man</span>}
+      isExpanded={expanded}
+      onExpandedChange={setExpanded}
+      action={<Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />}
+    >
+      <div className="space-y-4">{children}</div>
+    </Disclosure>
   );
 }

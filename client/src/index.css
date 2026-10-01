@@ -64,6 +64,11 @@
   --color-achievement-title: #ffb830;
   --color-achievement-body: #ece3cf;
 
+  /* Discord's brand colour, for the "Log in with Discord" button — same in both schemes, not overridden below. */
+  --color-discord: #5865f2;
+  --color-discord-hover: #4752c4;
+  --color-on-discord: #ffffff;
+
   /* A QR code: dark on light, whatever the scheme, since not every camera reads one the other way round. */
   --color-qr: #09090b;
   --color-qr-backdrop: #ffffff;
@@ -190,6 +195,46 @@
   p {
     text-wrap: pretty;
   }
+  /* Every enabled clickable control shows a pointer (Tailwind's reset gives buttons the arrow); disabled ones show
+     not-allowed. Text-like inputs keep the text cursor. A cursor-* utility still wins where a control needs its own. */
+  :where(
+    button,
+    a[href],
+    summary,
+    select,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    input:is([type="checkbox"], [type="radio"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="reset"]),
+    label:has(input:is([type="checkbox"], [type="radio"]))
+  ) {
+    cursor: pointer;
+  }
+  :where(
+    button,
+    select,
+    input,
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="option"],
+    [role="menuitem"],
+    [role="menuitemradio"],
+    [role="menuitemcheckbox"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"]
+  ):is(:disabled, [aria-disabled="true"], [data-disabled]),
+  :where(label:has(input:is([type="checkbox"], [type="radio"]):disabled), label[data-disabled]) {
+    cursor: not-allowed;
+  }
   /* Visible keyboard focus everywhere; pointer focus stays quiet. */
   :where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible,
   [data-focus-visible] {
@@ -204,8 +249,9 @@
   .num {
     @apply tabular-nums;
   }
-  /* Extend a small control's hit area to 40px without changing its layout. */
-  .hit-40 {
+  /* Extend a small control's hit area to 40px without changing its layout. Zero specificity on the `relative`, so a
+     control placed with `absolute` (a clear or close button in a corner) keeps that. */
+  :where(.hit-40) {
     position: relative;
   }
   .hit-40::before {

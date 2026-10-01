@@ -2,7 +2,7 @@
 // chrome, submission modal). Slots receive ONLY these shapes + callbacks —
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { ChangeEvent, RefObject } from "react";
 import type { CanResult } from "./permissionCheck";
 import type {
   AuditCategory,
@@ -78,7 +78,7 @@ export interface UserModel {
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 in total from"). */
+  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 of any (dupes count)"). */
   label: string;
   /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count, real items), what one of it adds to the total (`countsAs`, CONTEXT.md "Counts as": 1 unless the Item counts as more, shown as "counts as 25" when it isn't 1), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
   items: { name: string; iconUrl: string | null; count: number; countsAs: number; lockedBy: string | null }[];
@@ -309,15 +309,15 @@ export interface TileSearchModel {
   query: string;
   setQuery(q: string): void;
   clear(): void;
+  /** The search box has focus (the comic box lights up). */
   focused: boolean;
   setFocused(f: boolean): void;
-  /** Owns the 150ms blur-close timeout. */
-  blur(): void;
+  /** The first few Tiles matching the query. */
   results: { id: string; name: string }[];
   overflowCount: number;
-  showDropdown: boolean;
-  highlightedIndex: number;
-  onKeyDown(e: KeyboardEvent<HTMLInputElement>): void;
+  /** The result the open list is on, by keyboard or pointer (the comic board points it out); null with the list closed. */
+  highlightedId: string | null;
+  setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
 }

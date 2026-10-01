@@ -3,7 +3,9 @@ import type { WrappedArtFrames } from "@bingo/shared";
 import type { WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
 import { OsrsCaption } from "./OsrsCaption";
+import { ScreenshotLink } from "../submissions/ScreenshotThumb";
 import { StickerArt } from "./StickerArt";
+import { TooltipSpan } from "../ui/Tooltip";
 
 // Small shared pieces of Wrapped's default sections, for any theme to reuse.
 
@@ -36,9 +38,9 @@ export function WrappedDropCard({ drop, showPlayer = false, showTeam = showPlaye
   return (
     <div className={`flex w-full items-center gap-3 rounded-xl border border-outline bg-surface p-3 text-left ${className}`}>
       {drop.thumbnailUrl && drop.screenshotUrl ? (
-        <a href={drop.screenshotUrl} target="_blank" rel="noreferrer" className="shrink-0" title="View screenshot">
+        <ScreenshotLink href={drop.screenshotUrl} className="shrink-0">
           <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="size-16 rounded-lg border border-outline object-cover sm:size-20" />
-        </a>
+        </ScreenshotLink>
       ) : (
         <div aria-hidden className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-outline bg-surface-raised sm:size-20">
           <WikiIcon name={drop.itemName} className="size-8 [image-rendering:pixelated]" />
@@ -52,7 +54,11 @@ export function WrappedDropCard({ drop, showPlayer = false, showTeam = showPlaye
         </div>
         <div className="mt-0.5 flex flex-wrap gap-x-3 text-sm">
           {drop.gpLabel && <span className="num font-semibold">{drop.gpLabel}</span>}
-          {drop.luck && <span className="num text-on-surface-muted" title={drop.luck.sentence}>{drop.luck.shortLabel}</span>}
+          {drop.luck && (
+            <TooltipSpan text={drop.luck.sentence} label={drop.luck.shortLabel} className="num text-on-surface-muted">
+              {drop.luck.shortLabel}
+            </TooltipSpan>
+          )}
         </div>
         <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-on-surface-subtle">
           {showPlayer && drop.player && <WrappedPerson person={drop.player} size="sm" />}

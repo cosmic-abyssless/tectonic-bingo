@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Key } from "react-aria-components";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,7 +16,7 @@ import { TitleSettingsPanel } from "../core/admin/TitleSettingsPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
-import { SiteAuditLog } from "../core/admin/SiteAuditLog";
+import { SITE_AUDIT_FILTER_PARAMS, SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { McpConnectionsList } from "../core/admin/McpConnectionsList";
 import { ImportHistoricalBingoPanel } from "../core/admin/ImportHistoricalBingoPanel";
 import { displayName } from "../core/ui/user";
@@ -28,6 +28,7 @@ import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlTab } from "../core/ui/useUrlParam";
+import { FileDropButton } from "../core/ui/FileDropButton";
 
 function slugify(s: string): string {
   return s
@@ -100,7 +101,6 @@ function CreateBingoForm() {
 function ImportBingoPanel() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedDoc, setParsedDoc] = useState<BingoExportDocument | null>(null);
   const [fileName, setFileName] = useState("");
   const [name, setName] = useState("");
@@ -140,14 +140,9 @@ function ImportBingoPanel() {
   return (
     <div className="max-w-md space-y-4">
       <p className="text-sm text-on-surface-muted">Create a new bingo from a previously exported board and settings file.</p>
-      <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-md border border-dashed border-outline-strong px-3 py-4 text-center text-sm text-on-surface-muted transition-colors hover:border-on-surface/60 hover:text-on-surface"
-        >
-          {fileName || "Choose an export file…"}
-        </button>
-        <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && onFileChange(e.target.files[0])} />
+      <FileDropButton accept=".json,application/json" onFiles={([file]) => onFileChange(file)} className="w-full px-3 py-4 text-center text-sm">
+        {fileName || "Choose an export file…"}
+      </FileDropButton>
 
         {parsedDoc && (
           <>
@@ -321,7 +316,7 @@ export function SiteAdminPage() {
   const mayAdminister = useSitePageAccess("administer_site");
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
   const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin", "claude"] : []), ...(devMode ? ["test-data"] : [])];
-  const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
+  const [tab, setTab] = useUrlTab("tab", tabs, "bugs", SITE_AUDIT_FILTER_PARAMS);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
   const { data: bugReportsData } = useBugReports();
