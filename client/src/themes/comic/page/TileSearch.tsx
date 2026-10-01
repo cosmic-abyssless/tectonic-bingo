@@ -38,6 +38,8 @@ function BubbleTail({ outline, fill }: { outline: string; fill: string }) {
 export function TileSearch({ search }: { search: TileSearchModel }) {
   const { colors } = useComic();
   const rootRef = useRef<HTMLDivElement>(null);
+  // The speech bubble, which the list lines up under (not the bare text box inside it).
+  const bubbleRef = useRef<HTMLDivElement>(null);
   const line = search.focused ? colors.YELLOW : colors.LINE;
   const shadow = search.focused ? colors.YELLOW : colors.SHADOW;
   const lift = search.focused ? 5 : 3;
@@ -56,6 +58,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
     >
       <ComboFocusedKey onChange={search.setHighlightedId} />
       <div
+        ref={bubbleRef}
         className="relative flex h-10 items-center gap-2 rounded-md border-[3px] px-3 transition-[box-shadow,border-color] duration-150"
         style={{ borderColor: line, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `${lift}px ${lift}px 0 ${shadow}` }}
       >
@@ -86,7 +89,10 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
 
       <ComboPopover
         anchorRef={rootRef}
-        className="flex w-[var(--trigger-width)] flex-col overflow-hidden rounded-md border-[3px] outline-none"
+        triggerRef={bubbleRef}
+        // Clear of the bubble's tail.
+        offset={20}
+        className="flex flex-col overflow-hidden rounded-md border-[3px] outline-none"
         style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
       >
         <ListBox items={search.results} className="outline-none">
