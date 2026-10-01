@@ -14,6 +14,7 @@ import { ensureCategories, planVotes } from "./superlatives";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
+import { uploadWrappedArt } from "./wrappedArt";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
 export type BoardSource = { kind: "bingo"; slug: string } | { kind: "document"; document: BingoExportDocument };
@@ -92,6 +93,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     const document = await boardDocument(input);
     const me = options.me ? await findMe(api, options.me, options.teams * options.teamSize - 1) : null;
     await runHistorical({ api, adminDiscordId, options, document, rng, me, now, log });
+    await uploadWrappedArt({ api, adminDiscordId, slug, at: now, log });
     return result;
   }
 
@@ -127,6 +129,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
 
   await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
+  await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   await setStage(ctx, "signup", tl.signupOpensAt);
   const staff = await grantStaff(ctx);
   await runSignups(ctx, players, pairs);

@@ -40,12 +40,7 @@ function Cover({ card, issue, accent, bodyRef, strip, children }: { card: Wrappe
         <Ground accent={accent} />
         <Masthead bingoName={card.bingoName} issue={issue} />
         <div className="relative flex flex-1 flex-col gap-3 px-4 pt-3 pb-4">
-          {card.artUrl && (
-            <div className="absolute flex items-end justify-end" style={{ right: 0, bottom: 0, top: 30, width: "46%" }}>
-              {/* The sticker's own torn paper edge, shadowed like the Wrapped page's. */}
-              <CardImage src={card.artUrl} className="object-contain" style={{ maxHeight: "100%", maxWidth: "100%", filter: "drop-shadow(0 6px 8px rgb(0 0 0 / 0.35))" }} />
-            </div>
-          )}
+          {card.artUrls.length > 0 && <CoverStars urls={card.artUrls} />}
           {children}
         </div>
         {strip}
@@ -54,8 +49,47 @@ function Cover({ card, issue, accent, bodyRef, strip, children }: { card: Wrappe
   );
 }
 
+/** The sticker's own torn paper edge, shadowed like the Wrapped page's. */
+const STICKER_SHADOW = "drop-shadow(0 6px 8px rgb(0 0 0 / 0.35))";
+/** Each of several cover stars is tipped a little, like stickers slapped on, alternating ways. */
+const STAR_TILT = [-4, 3, -2];
+
+/**
+ * The cover star: the card's art in the corner beside the content. Several (a Team's) overlap side by side like
+ * stickers along the foot, the middle one larger and on top, each tipped a little.
+ */
+function CoverStars({ urls }: { urls: string[] }) {
+  if (urls.length === 1) {
+    return (
+      <div className="absolute flex items-end justify-end" style={{ right: 0, bottom: 0, top: 30, width: "46%" }}>
+        <CardImage src={urls[0]!} className="object-contain" style={{ maxHeight: "100%", maxWidth: "100%", filter: STICKER_SHADOW }} />
+      </div>
+    );
+  }
+  // Each sticker gets an equal slot, overlapping its neighbours by a third.
+  const width = 100 / (1 + (urls.length - 1) * (2 / 3));
+  return (
+    <div className="absolute" style={{ right: 4, bottom: 0, top: 30, width: "58%" }}>
+      {urls.map((url, i) => {
+        // The middle of three is a fifth larger, centred on its slot.
+        const scale = urls.length === 3 && i === 1 ? 1.2 : 1;
+        const left = i * width * (2 / 3) - (width * (scale - 1)) / 2;
+        return (
+          <div
+            key={`${i}:${url}`}
+            className="absolute"
+            style={{ left: `${left}%`, bottom: 0, width: `${width * scale}%`, height: `${66 * scale}%`, zIndex: scale > 1 ? 2 : 1, transform: `rotate(${STAR_TILT[i % STAR_TILT.length]}deg)` }}
+          >
+            <CardImage src={url} className="size-full object-contain" style={{ objectPosition: "bottom", filter: STICKER_SHADOW }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How far the content keeps clear of the cover star, when there is one. */
-const beside = (card: WrappedShareCardModel): CSSProperties => ({ maxWidth: card.artUrl ? "66%" : "100%" });
+const beside = (card: WrappedShareCardModel): CSSProperties => ({ maxWidth: card.artUrls.length > 0 ? "66%" : "100%" });
 
 function Masthead({ bingoName, issue }: { bingoName: string; issue: string }) {
   return (

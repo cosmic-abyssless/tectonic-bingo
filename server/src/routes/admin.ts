@@ -320,9 +320,9 @@ router.post(
 );
 
 // ---------------------------------------------------------------------------
-// Wrapped art (#262): cut-outs in groups (a section's Category images, or the side pool), each a transparent PNG or a
-// screenshot on one solid colour (keyed out on the server), drawn as a sticker. Not tied to the stage: it's only
-// shown once the Bingo is Finished.
+// Wrapped art (#262): cut-outs in groups (a section's Category images, the side pool or the Player card art), each a
+// transparent PNG or a screenshot on one solid colour (keyed out on the server), drawn as a sticker. Not tied to the
+// stage: it's only shown once the Bingo is Finished.
 // ---------------------------------------------------------------------------
 
 const wrappedArtUpload = imageUpload();
