@@ -1,7 +1,8 @@
-import { forwardRef, useContext, useEffect, useRef, type ComponentProps, type ReactNode, type Ref } from "react";
+import { forwardRef, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react";
 import { UNSAFE_PortalProvider } from "react-aria";
 import {
   Button as AriaButton,
+  Collection,
   ComboBox,
   ComboBoxStateContext,
   Header,
@@ -101,32 +102,62 @@ export function SearchCombo<T>({
   // Picked with a tap or click rather than the keyboard: choosing, that puts the box away after, so a phone's keyboard
   // closes (see dismissInput).
   const pickedByPointer = useRef(false);
+  // A pick closes the list, and react-aria's close can report the selection again: that one isn't a pick.
+  const picking = useRef(false);
   const choosing = selectedKey !== undefined;
   const byKey = new Map(items.map((item) => [toKey(itemKey(item)), item]));
 
+  // Choosing: the box's text is ours, the chosen item's text until typed over, and the list is filtered on it once
+  // typed in (react-aria's own filtering is left off: it trips React's dev tooling, and searching filters for itself).
+  const chosen = choosing && selectedKey !== null ? byKey.get(toKey(selectedKey)) : undefined;
+  const chosenText = chosen ? itemText(chosen) : "";
+  const [text, setText] = useState(chosenText);
+  const [filtering, setFiltering] = useState(false);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(chosenText);
+  }, [chosenText]);
+
+  const query = choosing ? text : (inputValue ?? "");
+  const q = query.trim().toLowerCase();
+  const shown = choosing && filtering && q ? items.filter((item) => itemText(item).toLowerCase().includes(q)) : items;
+
   // Put the input away: focus goes to the enclosing dialog (or, with none, nowhere). Not to <body>: a modal's focus
-  // trap would just hand focus back to the first field.
-  const dismissInput = () => {
-    const host = rootRef.current?.closest<HTMLElement>('[role="dialog"]');
-    if (host) host.focus({ preventScroll: true });
-    else rootRef.current?.querySelector("input")?.blur();
-  };
+  // trap would just hand focus back to the first field. A frame later: react-aria puts focus back on the box after a pick.
+  const dismissInput = () =>
+    requestAnimationFrame(() => {
+      const host = rootRef.current?.closest<HTMLElement>('[role="dialog"]');
+      if (host) host.focus({ preventScroll: true });
+      else rootRef.current?.querySelector("input")?.blur();
+    });
 
   const pick = (key: Key | null) => {
+    if (picking.current) return;
     const byPointer = pickedByPointer.current;
     pickedByPointer.current = false;
     const item = key === null ? undefined : byKey.get(key);
-    // A null key is the text being cleared, which isn't a pick: closing puts the chosen item's text back.
-    if (!item) return;
-    onPick(item);
-    if (clearOnPick) onInputChange?.("");
-    // The selection stays where the caller holds it (none, searching), so react-aria wouldn't close the list itself.
-    stateRef.current?.close();
-    if (choosing && byPointer) dismissInput();
+    picking.current = true;
+    try {
+      if (choosing) {
+        // Also how react-aria puts the box back (a null key, or the chosen one, on blur or Escape): show what's chosen.
+        if (item && item !== chosen) onPick(item);
+        setText(item ? itemText(item) : chosenText);
+        setFiltering(false);
+        stateRef.current?.close();
+        if (item && byPointer) dismissInput();
+        return;
+      }
+      if (!item) return;
+      onPick(item);
+      if (clearOnPick) onInputChange?.("");
+      // Nothing stays selected (a pick is an action), so react-aria wouldn't close the list itself.
+      stateRef.current?.close();
+    } finally {
+      picking.current = false;
+    }
   };
 
-  const query = inputValue ?? "";
-  const hasNote = !!loading || (!!emptyText && (choosing || query.trim() !== ""));
+  const hasNote = !!loading || (!!emptyText && (choosing || q !== ""));
 
   return (
     <ComboBox
@@ -134,11 +165,28 @@ export function SearchCombo<T>({
       className={`relative ${className ?? ""}`}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : (labelledBy ?? undefined)}
-      // Choosing: react-aria filters the list on the text and shows the chosen item's text. Searching: the caller
-      // owns both, the text never reverts, and nothing stays selected (a pick is an action).
-      {...(choosing ? { selectedKey: selectedKey === null ? null : toKey(selectedKey) } : { selectedKey: null, inputValue: query, onInputChange, allowsCustomValue: true })}
+      items={entries(shown, itemKey, itemSection)}
+      selectedKey={choosing && selectedKey !== null && chosen ? toKey(selectedKey) : null}
+      inputValue={query}
+      onInputChange={(v) => {
+        if (!choosing) return onInputChange?.(v);
+        setText(v);
+        setFiltering(true);
+        if (stateRef.current && !stateRef.current.isOpen) stateRef.current.open(null, "input");
+      }}
+      onOpenChange={(open, trigger) => {
+        // Opened by focus, a click or the arrows, rather than by typing: the whole list, and typing replaces what's
+        // chosen rather than adding to its text.
+        if (choosing && open && trigger !== "input") {
+          setFiltering(false);
+          rootRef.current?.querySelector("input")?.select();
+        }
+      }}
+      // Searching, the text is free and stays; choosing, it goes back to what's chosen.
+      allowsCustomValue={!choosing}
       onSelectionChange={pick}
-      menuTrigger={choosing ? "focus" : "input"}
+      // Choosing, the list opens on focus and on typing (below), but not when a pick puts the chosen text in the box.
+      menuTrigger={choosing ? "manual" : "input"}
       allowsEmptyCollection={hasNote}
       isReadOnly={readOnly}
     >
@@ -149,11 +197,16 @@ export function SearchCombo<T>({
         clearsOnEscape={!choosing}
         opensOnClick={choosing && !readOnly}
         onFocus={(e) => {
+          focused.current = true;
           // Choosing: typing replaces what's chosen, rather than adding to its text.
           if (choosing) e.currentTarget.select();
+          if (choosing && !readOnly) stateRef.current?.open(null, "focus");
           onFocus?.();
         }}
-        onBlur={onBlur}
+        onBlur={() => {
+          focused.current = false;
+          onBlur?.();
+        }}
         className={`${inputClassName ?? controlClass()} ${choosing ? (readOnly ? "cursor-default select-none text-on-surface-muted" : "pr-9") : ""}`}
       />
       {choosing && !readOnly && (
@@ -162,32 +215,31 @@ export function SearchCombo<T>({
         </AriaButton>
       )}
       {children}
-      <ComboPopover anchorRef={rootRef} style={minListWidth ? { minWidth: `max(var(--trigger-width), ${minListWidth}px)` } : undefined}>
-        <ListBox
+      <ComboPopover anchorRef={rootRef} triggerRef={rootRef} style={minListWidth ? { minWidth: `max(var(--trigger-width), ${minListWidth}px)` } : undefined}>
+        <ListBox<Entry<T>>
           className="max-h-64 min-h-0 overflow-y-auto p-1 outline-none"
           renderEmptyState={() => <div className="px-2.5 py-1.5 text-sm text-on-surface-subtle">{loading ? "Searching…" : emptyText}</div>}
         >
-          {sectionRuns(items, itemSection).map(({ section, items: run }) => {
-            const rows = run.map((item) => (
+          {(entry) => {
+            const row = (r: Row<T>) => (
               <ListBoxItem
-                key={itemKey(item)}
-                id={toKey(itemKey(item))}
-                textValue={itemText(item)}
+                id={r.id}
+                textValue={itemText(r.item)}
                 onPressStart={(e) => (pickedByPointer.current = e.pointerType !== "keyboard" && e.pointerType !== "virtual")}
                 className="flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm text-on-surface outline-none hovered:bg-surface-hover data-[focused]:bg-accent data-[focused]:text-on-accent"
               >
-                {({ isFocused }) => (renderItem ? renderItem(item, { isFocused }) : <span className="truncate">{itemText(item)}</span>)}
+                {({ isFocused }) => (renderItem ? renderItem(r.item, { isFocused }) : <span className="truncate">{itemText(r.item)}</span>)}
               </ListBoxItem>
-            ));
-            return section === undefined ? (
-              rows
-            ) : (
-              <ListBoxSection key={section} id={`section:${section}`}>
-                <Header className="sticky top-0 z-10 -mx-1 border-b border-outline bg-surface-raised px-3.5 py-1 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">{section}</Header>
-                {rows}
-              </ListBoxSection>
             );
-          })}
+            return "section" in entry ? (
+              <ListBoxSection id={entry.id}>
+                <Header className="sticky top-0 z-10 -mx-1 border-b border-outline bg-surface-raised px-3.5 py-1 text-xs font-semibold uppercase tracking-wide text-on-surface-subtle">{entry.section}</Header>
+                <Collection items={entry.rows}>{row}</Collection>
+              </ListBoxSection>
+            ) : (
+              row(entry)
+            );
+          }}
         </ListBox>
       </ComboPopover>
     </ComboBox>
@@ -202,17 +254,20 @@ function StateRef({ stateRef }: { stateRef: React.MutableRefObject<ComboState | 
   return null;
 }
 
-/** Rows without a section first, then each section's, in the order the sections first appear. */
-function sectionRuns<T>(items: T[], sectionOf?: (item: T) => string | undefined): { section: string | undefined; items: T[] }[] {
-  if (!sectionOf) return [{ section: undefined, items }];
-  const unsectioned: T[] = [];
-  const sections = new Map<string, T[]>();
+type Row<T> = { id: Key; item: T };
+type Entry<T> = Row<T> | { id: Key; section: string; rows: Row<T>[] };
+
+/** The list's entries: rows without a section first, then each section's, in the order the sections first appear. */
+function entries<T>(items: T[], keyOf: (item: T) => string, sectionOf?: (item: T) => string | undefined): Entry<T>[] {
+  const unsectioned: Row<T>[] = [];
+  const sections = new Map<string, Row<T>[]>();
   for (const item of items) {
-    const section = sectionOf(item);
-    if (section === undefined) unsectioned.push(item);
-    else sections.set(section, [...(sections.get(section) ?? []), item]);
+    const row = { id: toKey(keyOf(item)), item };
+    const section = sectionOf?.(item);
+    if (section === undefined) unsectioned.push(row);
+    else sections.set(section, [...(sections.get(section) ?? []), row]);
   }
-  return [{ section: undefined, items: unsectioned }, ...[...sections].map(([section, run]) => ({ section, items: run }))];
+  return [...unsectioned, ...[...sections].map(([section, rows]) => ({ id: `\u0000section:${section}`, section, rows }))];
 }
 
 /**
@@ -220,9 +275,12 @@ function sectionRuns<T>(items: T[], sectionOf?: (item: T) => string | undefined)
  * with the list closed, a second Escape clears the text (`clearsOnEscape`), and only an empty box lets Escape through.
  */
 export const ComboInput = forwardRef<HTMLInputElement, ComponentProps<typeof AriaInput> & { clearsOnEscape?: boolean; opensOnClick?: boolean }>(function ComboInput(
-  { clearsOnEscape = true, opensOnClick, onKeyDown, onClick, ...props },
+  { clearsOnEscape = true, opensOnClick, onKeyDown, onClick, onFocus, onBlur, ...props },
   ref,
 ) {
+  // react-aria fires a blur and then a focus at the box as the keyboard moves on and off the list's rows, while the box
+  // keeps focus throughout: those aren't the box losing or getting focus, so they don't reach onFocus/onBlur.
+  const hasFocus = useRef(false);
   // As of this render, i.e. before the key: react-aria has already closed the list by the time this handler runs.
   const state = useContext(ComboBoxStateContext);
   const wasOpen = state?.isOpen ?? false;
@@ -230,6 +288,16 @@ export const ComboInput = forwardRef<HTMLInputElement, ComponentProps<typeof Ari
     <AriaInput
       ref={ref}
       {...props}
+      onFocus={(e) => {
+        if (hasFocus.current) return;
+        hasFocus.current = true;
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        if (document.activeElement === e.currentTarget) return;
+        hasFocus.current = false;
+        onBlur?.(e);
+      }}
       onKeyDown={(e) => {
         onKeyDown?.(e);
         if (e.key !== "Escape" || !state || e.currentTarget.readOnly) return;
@@ -252,14 +320,32 @@ export const ComboInput = forwardRef<HTMLInputElement, ComponentProps<typeof Ari
  * A ComboBox's list, mounted inside whatever styles the field (see portalScope) so it takes the field's theme. Takes the
  * box's width; className replaces the plain raised surface (a theme drawing its own).
  */
-export function ComboPopover({ anchorRef, className, style, children }: { anchorRef: React.RefObject<HTMLElement | null>; className?: string; style?: PopoverProps["style"]; children: ReactNode }) {
+export function ComboPopover({
+  anchorRef,
+  triggerRef,
+  offset = 4,
+  className,
+  style,
+  children,
+}: {
+  anchorRef: React.RefObject<HTMLElement | null>;
+  /** What the list lines up under and takes the width of, when that's not the text box itself (a theme's frame around it). */
+  triggerRef?: React.RefObject<HTMLElement | null>;
+  /** The gap between the box and the list. */
+  offset?: number;
+  className?: string;
+  style?: PopoverProps["style"];
+  children: ReactNode;
+}) {
   return (
     <UNSAFE_PortalProvider getContainer={() => portalScope(anchorRef.current)}>
       <Popover
-        offset={4}
+        offset={offset}
+        {...(triggerRef ? { triggerRef } : {})}
         // A hook for a theme's CSS to dress the list (the comic signup stage gives it an ink border).
         data-select-list=""
-        style={style}
+        // react-aria sizes the list to the text box; with a frame to line up under, it takes the frame's width.
+        style={triggerRef?.current ? { ...style, width: triggerRef.current.offsetWidth } : style}
         className={className ?? "flex w-[var(--trigger-width)] flex-col rounded-md border border-outline bg-surface-raised shadow-pop outline-none"}
       >
         {children}
