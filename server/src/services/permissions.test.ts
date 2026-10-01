@@ -167,7 +167,7 @@ describe("Restrictions", () => {
   const restricted = (action: string, reason = "Spamming the channel") => [{ action: action as RestrictionTarget, reason }];
 
   it("lists what can be restricted: Actions that do something, never a view, a Draft pick, or what only Admins hold", () => {
-    expect([...RESTRICTABLE_ACTIONS].sort()).toEqual(["rate_picks", "react", "rename_team", "submit", "submit_for_any_team"]);
+    expect([...RESTRICTABLE_ACTIONS].sort()).toEqual(["mark_buyins", "rate_picks", "react", "rename_team", "submit", "submit_for_any_team"]);
     for (const action of ACTIONS) {
       if (action.startsWith("view_") || action === "make_draft_pick") expect(isRestrictionTarget(action), action).toBe(false);
     }
@@ -234,6 +234,9 @@ describe("Restrictions", () => {
     expect(mayRestrict(["moderator"], ["moderator"])).toBe(false);
     expect(mayRestrict(["moderator"], ["moderator", "player"])).toBe(false);
     expect(mayRestrict(["moderator"], ["admin"])).toBe(false);
+    expect(mayRestrict(["moderator"], ["staff"])).toBe(false);
+    expect(mayRestrict(["moderator"], ["staff", "player"])).toBe(false);
+    expect(mayRestrict(["admin"], ["staff"])).toBe(true);
     // A role a Moderator isn't listed as restricting is refused, whatever it is (Staff, once it exists).
     expect(mayRestrict(["moderator"], ["player", "someone_else" as Role])).toBe(false);
     expect(mayRestrict(["captain", "player"], ["player"])).toBe(false);

@@ -73,7 +73,7 @@ export type Action = (typeof ACTIONS)[number];
  * is replaced instead), not moderate_bingo (all of the mod panel: taking it is removing the Moderator), and not what
  * only Admins hold, since Admins can't be restricted. A new Action isn't restrictable until it's listed here.
  */
-export const RESTRICTABLE_ACTIONS = ["submit", "submit_for_any_team", "react", "rate_picks", "rename_team"] as const satisfies readonly Action[];
+export const RESTRICTABLE_ACTIONS = ["submit", "submit_for_any_team", "react", "rate_picks", "rename_team", "mark_buyins"] as const satisfies readonly Action[];
 export type RestrictableAction = (typeof RESTRICTABLE_ACTIONS)[number];
 
 /**
@@ -122,6 +122,7 @@ const RESTRICTABLE_ACTION_WORDS: Record<RestrictableAction, string> = {
   react: "reacting",
   rate_picks: "rating picks",
   rename_team: "renaming their Team",
+  mark_buyins: "marking Buy-ins",
 };
 
 /** What a Restriction on `target` takes, in words: "submitting and submitting for other Teams", "everything". */

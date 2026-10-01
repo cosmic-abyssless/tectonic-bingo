@@ -26,7 +26,7 @@ import { getTectonicClient, TectonicUnavailableError } from "../services/tectoni
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncSignupRsn } from "../services/rsnSyncService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
-import { bingoRoles } from "../services/permissions";
+import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { markAuditedNoop } from "../audit/record";
@@ -365,6 +365,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { received, collectedByUserId } = req.body as { received?: boolean; collectedByUserId?: string | null };
     if (typeof received !== "boolean") throw new ServiceError(400, "received must be a boolean");
+    assertUserCan(db, req.bingo!, req.user!, "mark_buyins", { role: new ServiceError(403, "Moderator access required for this bingo") });
     const signup = signupService.markBuyin(db, req.bingo!, req.params.id as string, {
       received,
       collectedByUserId,

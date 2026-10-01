@@ -9,7 +9,7 @@ import { requireBingo } from "../middleware/requireBingo";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as signupService from "../services/signupService";
-import { assertCan, bingoRoles } from "../services/permissions";
+import { assertCan, bingoRoles, restrictionsOf } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 
@@ -19,7 +19,7 @@ const router = Router({ mergeParams: true });
 function requireBuyinAction(action: Action) {
   return (req: Request, _res: Response, next: NextFunction) => {
     const roles = bingoRoles(db, req.bingo!, req.user!);
-    assertCan(roles, req.bingo!, action, { role: new ServiceError(403, "Staff access required for this bingo") });
+    assertCan(roles, req.bingo!, action, { role: new ServiceError(403, "Staff access required for this bingo") }, restrictionsOf(db, req.bingo!.id, req.user!.id));
     if (req.audit) req.audit.actorRole = roles.includes("admin") ? "admin" : roles.includes("moderator") ? "mod" : "staff";
     next();
   };

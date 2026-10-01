@@ -41,6 +41,7 @@ beforeAll(async () => {
   broadcast = (await import("../ws")).broadcast as unknown as ReturnType<typeof vi.fn>;
   const { default: bingosRouter } = await import("./bingos");
   const { default: modRouter } = await import("./mod");
+  const { default: buyinsRouter } = await import("./buyins");
   const { auditContext } = await import("../audit/middleware");
   const { errorHandler } = await import("../middleware/errorHandler");
   const app = express();
@@ -53,6 +54,7 @@ beforeAll(async () => {
   });
   app.use(auditContext);
   app.use("/api/bingos/:slug/mod", modRouter);
+  app.use("/api/bingos/:slug/buyins", buyinsRouter);
   app.use("/api/bingos", bingosRouter);
   app.use(errorHandler);
   server = app.listen(0);
@@ -198,6 +200,25 @@ describe("applying a Restriction", () => {
     expect((await restrict(mod, otherMod.id, "react")).status).toBe(403);
     expect((await restrict(mod, captain.id, "rate_picks")).status).toBe(201);
     expect((await restrict(mod, player.id, "submit")).status).toBe(201);
+  });
+
+  it("by a Moderator is refused on Staff; an Admin's takes their Buy-in marking", async () => {
+    const staff = db.insert(schema.users).values({ discordId: "staff", discordUsername: "staff" }).returning().get();
+    db.insert(schema.bingoStaff).values({ bingoId: bingo.id, userId: staff.id }).run();
+    const signup = db.select().from(schema.signups).where(eq(schema.signups.userId, player.id)).get()!;
+    expect((await restrict(mod, staff.id, "mark_buyins")).status).toBe(403);
+    expect((await call(staff, "PATCH", `/buyins/${signup.id}`, { received: true })).status).toBe(204);
+    expect((await restrict(admin, staff.id, "mark_buyins", "Marked Buy-ins nobody paid")).status).toBe(201);
+    expect(await call(staff, "PATCH", `/buyins/${signup.id}`, { received: false })).toEqual({ status: 403, body: { error: "Restricted: Marked Buy-ins nobody paid" } });
+    // They still see the page.
+    expect((await call(staff, "GET", "/buyins")).status).toBe(200);
+  });
+
+  it("by an Admin on a Moderator's Buy-in marking holds in the mod panel too", async () => {
+    const signup = db.select().from(schema.signups).where(eq(schema.signups.userId, player.id)).get()!;
+    await restrict(admin, otherMod.id, "mark_buyins", "Marked Buy-ins nobody paid");
+    expect(await call(otherMod, "PATCH", `/mod/signups/${signup.id}/buyin`, { received: true })).toEqual({ status: 403, body: { error: "Restricted: Marked Buy-ins nobody paid" } });
+    expect((await call(mod, "PATCH", `/mod/signups/${signup.id}/buyin`, { received: true })).status).toBe(200);
   });
 
   it("by an Admin is allowed on a Moderator", async () => {
