@@ -44,6 +44,7 @@ teams:
       - { rsn: Ember Lord, discordId: "123456789012345678" }
       - { rsn: Pyre Fly, discordId: "234567890123456789" }
       - { rsn: Mystery Man, discordId: unknown }
+      - { rsn: Iron Pyre, wom: Pyre Main, discordId: "345678901234567890" }   # wom: see below
 
 standings:
   - { team: Fire Giants, place: 1, points: 212 }   # points are optional
@@ -58,6 +59,9 @@ The rules for Players:
 - Every Player has a real Discord id, quoted so YAML keeps every digit, or `unknown`. Never make one up.
 - An `unknown` Player is left off their Team and shows only on the Wise Old Man leaderboard.
 - Every Team names its Captain, who needs a Discord id. Don't guess.
+- `rsn` is the name they played under then, which the Bingo shows. When their account is in the Wise Old Man
+  competition under another name (renamed since, or a main whose ironman played), give that name as `wom:`, so the
+  leaderboard still connects them.
 - A Tile left out of `tiles:` is named after its position (`Tile r2c3`), and the report lists it.
 
 A complete example is in [`fixture/`](fixture/). Its Discord ids and Wise Old Man competition are made up.
