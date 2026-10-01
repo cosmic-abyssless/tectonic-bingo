@@ -5,6 +5,7 @@ import {
   MAX_WRAPPED_CREDIT_LENGTH,
   WRAPPED_ART_KEYING_DEFAULTS,
   WRAPPED_ART_SECTIONS,
+  isWrappedArtSection,
   maxWrappedArt,
   type WrappedArtGroup,
   type WrappedArtImage,
@@ -34,10 +35,11 @@ const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
 };
 
 /**
- * The mod panel's Wrapped art tab (admins only, #262), in two parts. Category images: any number per section, shown
+ * The mod panel's Wrapped art tab (admins only, #262), in three parts. Category images: any number per section, shown
  * side by side above its heading. Side images: one pool, shown large beside the story's sections in turn (wide screens
- * only). Each image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin
- * adds, reorders, replaces, re-cuts or removes, watching its two sticker frames boil.
+ * only). Player card art (#396): a ranked pool for the Player share card, best first, never shown in the story. Each
+ * image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin adds,
+ * reorders, replaces, re-cuts or removes, watching its two sticker frames boil.
  * Credits (CONTEXT.md) are edited here too: a Category image can credit someone (their name captioned on it), and each
  * category can hold additional credits with no image, listed under its images.
  */
@@ -57,6 +59,7 @@ export function WrappedArtManager({ slug }: { slug: string }) {
           <TabList>
             <Tab id="category">Category images</Tab>
             <Tab id="side">Side images</Tab>
+            <Tab id="playerCard">Player card</Tab>
           </TabList>
           <TabPanel id="category">
             <p className="mb-4 text-sm text-on-surface-muted">
@@ -83,6 +86,15 @@ export function WrappedArtManager({ slug }: { slug: string }) {
             </p>
             <Card className="p-4">
               <ArtGroup slug={slug} group="side" images={inGroup("side")} loading={isLoading} large />
+            </Card>
+          </TabPanel>
+          <TabPanel id="playerCard">
+            <p className="mb-4 text-sm text-on-surface-muted">
+              Shown on the Player card a Player can share at the end of Wrapped, picked by how they placed. The order is the ranking, <strong>best first</strong>: Players are split by their
+              Points share rank in the bingo into as many equal groups as there are images, and the top group gets the first. With none here, the card uses the You section's first image.
+            </p>
+            <Card className="p-4">
+              <ArtGroup slug={slug} group="playerCard" images={inGroup("playerCard")} loading={isLoading} large />
             </Card>
           </TabPanel>
         </Tabs>
@@ -207,7 +219,7 @@ function ImageDetails({ slug, image, busy, run }: { slug: string; image: Wrapped
 
   return (
     <div className="space-y-2 rounded-md bg-surface-raised p-3 text-xs text-on-surface-muted">
-      {image.group !== "side" && <ImageCredit slug={slug} image={image} busy={busy} run={run} />}
+      {isWrappedArtSection(image.group) && <ImageCredit slug={slug} image={image} busy={busy} run={run} />}
       {image.keying ? (
         <>
           <p className="flex items-center gap-1.5">
