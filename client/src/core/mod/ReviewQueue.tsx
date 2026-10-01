@@ -19,6 +19,7 @@ import { formatGp } from "../ui/gp";
 import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
 import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
+import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -304,10 +305,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       <LinkedClaimsSummary claims={row.claims} isProof={isProof} />
                       {row.claims.some((c) => c.itemName !== null) && (
                         <>
-                          <span className="num" title={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}>
-                            {" · "}
+                          {" · "}
+                          <TooltipSpan
+                            text={claimsGpBreakdown(row.claims, formatGp, new Map(row.leaves.flatMap((l) => (l.valuedAs ? [[l.id, l.valuedAs] as const] : []))))}
+                            label={claimsGpValue(row.claims) === null ? "No drop value" : `${formatGp(claimsGpValue(row.claims))} GP`}
+                            className="num"
+                          >
                             {claimsGpValue(row.claims) === null ? "— drop value" : `${formatGp(claimsGpValue(row.claims))} GP`}
-                          </span>{" "}
+                          </TooltipSpan>{" "}
                           <RepriceGpButton slug={slug} submissionId={row.submission.id} />
                         </>
                       )}
@@ -381,16 +386,18 @@ export function ReviewQueue({ slug }: { slug: string }) {
                   <div className="space-y-3 border-t border-outline bg-background px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {row.screenshots.map((ss, i) => (
                       <div key={ss.id} id={i === 0 ? `review-shots-${row.submission.id}` : undefined}>
-                        <a href={ss.storageUrl} target="_blank" rel="noreferrer" title="Open full size in new tab" className="block">
-                          <img
-                            src={fullUrl(ss.storageUrl)}
-                            alt={ss.screenshotType}
-                            // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
-                            style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
-                            onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
-                            className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
-                          />
-                        </a>
+                        <TextTooltip text="Open full size in new tab">
+                          <a href={ss.storageUrl} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={fullUrl(ss.storageUrl)}
+                              alt={ss.screenshotType}
+                              // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
+                              style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
+                              onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
+                              className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
+                            />
+                          </a>
+                        </TextTooltip>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <ScreenshotAnalysisBadges screenshot={ss} />
                         </div>

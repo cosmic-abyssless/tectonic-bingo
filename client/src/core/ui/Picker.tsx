@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "./Button";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Menu, MenuItem, MenuTrigger } from "./Menu";
+import { TooltipSpan } from "./Tooltip";
 
 export interface PickerOption {
   key: string;
@@ -15,9 +16,8 @@ export interface PickerOption {
 /** A small yellow "look here" dot, e.g. on a filter (and its option) with signups the admin should check. */
 export function AttentionDot({ label, className }: { label: string; className?: string }) {
   return (
-    <span title={label} className={`inline-block size-2 shrink-0 rounded-full bg-attention ${className ?? ""}`}>
-      <span className="sr-only">{label}</span>
-    </span>
+    // Hover only: it sits inside a filter's button or one of its options.
+    <TooltipSpan text={label} label={label} hoverOnly className={`inline-block size-2 shrink-0 rounded-full bg-attention ${className ?? ""}`} />
   );
 }
 
@@ -82,9 +82,7 @@ export function Picker({
               {({ isSelected }) => (
                 <>
                   <span className="flex size-3.5 shrink-0 items-center justify-center">{isSelected && <CheckIcon size={14} />}</span>
-                  <span className="min-w-0 flex-1 truncate" title={option.label}>
-                    {option.label}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
                   {option.attention && <AttentionDot label={option.attention} />}
                   {option.count != null && option.count > 0 && <span className="num text-on-surface-subtle">{option.count}</span>}
                 </>

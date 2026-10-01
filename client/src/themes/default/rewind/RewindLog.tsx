@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { SignificanceTier } from "@bingo/shared";
 import type { RewindLogEntryModel, RewindLogModel } from "../../../headless/types";
+import { TextTooltip } from "../../../core/ui/Tooltip";
 
 // How many entries a phone shows before "Show all" (a wide screen scrolls the whole log instead).
 const PHONE_ENTRIES = 5;
@@ -55,37 +56,38 @@ const LogRow = memo(function LogRow({ entry, current, phoneHidden, onJump }: { e
   const accent = entry.tier === "minor" ? "bg-on-surface-subtle" : "bg-accent";
   return (
     <li className={phoneHidden ? "hidden lg:block" : undefined}>
-      <button
-        type="button"
-        onClick={() => onJump(entry.id)}
-        aria-current={current ? "true" : undefined}
-        title={`${entry.timeLabel}${entry.team ? ` · ${entry.team.name}` : ""}`}
-        className={`relative flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover ${current ? "bg-accent/10" : ""} ${entry.rejected ? "opacity-60" : ""}`}
-      >
-        <span className="flex h-4 w-2.5 shrink-0 items-center justify-center">
-          <span
-            className={`rounded-full ${DOT_SIZE[entry.tier]} ${entry.team?.color && !entry.rejected ? "" : entry.rejected ? "bg-on-surface-subtle/40" : accent}`}
-            style={entry.team?.color && !entry.rejected ? { backgroundColor: entry.team.color } : undefined}
-          />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-baseline gap-2">
-            <span className={`min-w-0 flex-1 truncate text-sm ${entry.tier === "minor" ? "text-on-surface-muted" : "font-medium text-on-surface"}`}>{entry.playerName ?? "Unknown player"}</span>
-            <span className="num shrink-0 text-[11px] text-on-surface-subtle">{entry.sinceStartLabel}</span>
+      <TextTooltip text={`${entry.timeLabel}${entry.team ? ` · ${entry.team.name}` : ""}`} placement="left">
+        <button
+          type="button"
+          onClick={() => onJump(entry.id)}
+          aria-current={current ? "true" : undefined}
+          className={`relative flex w-full items-start gap-2 px-3 py-1.5 text-left transition-colors hover:bg-surface-hover ${current ? "bg-accent/10" : ""} ${entry.rejected ? "opacity-60" : ""}`}
+        >
+          <span className="flex h-4 w-2.5 shrink-0 items-center justify-center">
+            <span
+              className={`rounded-full ${DOT_SIZE[entry.tier]} ${entry.team?.color && !entry.rejected ? "" : entry.rejected ? "bg-on-surface-subtle/40" : accent}`}
+              style={entry.team?.color && !entry.rejected ? { backgroundColor: entry.team.color } : undefined}
+            />
           </span>
-          <span className="flex items-baseline gap-2 text-xs text-on-surface-subtle">
-            <span className={`min-w-0 flex-1 truncate ${entry.rejected ? "line-through" : ""}`}>
-              {entry.itemsLabel}
-              {entry.tileName && <> · {entry.tileName}</>}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-2">
+              <span className={`min-w-0 flex-1 truncate text-sm ${entry.tier === "minor" ? "text-on-surface-muted" : "font-medium text-on-surface"}`}>{entry.playerName ?? "Unknown player"}</span>
+              <span className="num shrink-0 text-[11px] text-on-surface-subtle">{entry.sinceStartLabel}</span>
             </span>
-            {entry.rejected ? (
-              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-danger">Rejected</span>
-            ) : (
-              entry.gpLabel && <span className="num shrink-0 font-medium text-on-surface-muted">{entry.gpLabel}</span>
-            )}
+            <span className="flex items-baseline gap-2 text-xs text-on-surface-subtle">
+              <span className={`min-w-0 flex-1 truncate ${entry.rejected ? "line-through" : ""}`}>
+                {entry.itemsLabel}
+                {entry.tileName && <> · {entry.tileName}</>}
+              </span>
+              {entry.rejected ? (
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-danger">Rejected</span>
+              ) : (
+                entry.gpLabel && <span className="num shrink-0 font-medium text-on-surface-muted">{entry.gpLabel}</span>
+              )}
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </TextTooltip>
     </li>
   );
 });

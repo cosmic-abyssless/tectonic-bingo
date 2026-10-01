@@ -8,7 +8,7 @@
 //   <Tooltip content="The full text">
 //     <span className="truncate">shortened…</span>
 //   </Tooltip>
-import type { ComponentProps, ReactNode } from "react";
+import { createContext, useContext, type ComponentProps, type CSSProperties, type ReactNode } from "react";
 import { Focusable, Tooltip as AriaTooltip, TooltipTrigger, type Placement } from "react-aria-components";
 
 // react-aria's default is 1.5s before showing (tuned for "don't spam a
@@ -18,18 +18,41 @@ const DELAY_MS = 200;
 
 type FocusableChild = ComponentProps<typeof Focusable>["children"];
 
-export function Tooltip({ children, content, placement = "top" }: { children: FocusableChild; content: ReactNode; placement?: Placement }) {
-  if (!content) return children;
+const TooltipsOff = createContext(false);
+
+/**
+ * Inside an AG grid, tooltips are AG's own (a column's `tooltip`, see gridTooltips.ts): ours would stack on top of
+ * them, and a trigger per row is what made the grids slow to mount. Shared pieces drawn in a cell (a player's name, an
+ * item link) render without theirs under this, so the column's tooltip has to carry what they said.
+ */
+export function NoTooltips({ children }: { children: ReactNode }) {
+  return <TooltipsOff.Provider value={true}>{children}</TooltipsOff.Provider>;
+}
+
+export function Tooltip({
+  children,
+  content,
+  placement = "top",
+  excludeFromTabOrder,
+}: {
+  children: FocusableChild;
+  content: ReactNode;
+  placement?: Placement;
+  /** For a trigger that repeats something a keyboard already reaches (an overlay on a Tile): hover only. */
+  excludeFromTabOrder?: boolean;
+}) {
+  const off = useContext(TooltipsOff);
+  if (!content || off) return children;
   return (
     <TooltipTrigger delay={DELAY_MS} closeDelay={0}>
       {/* TooltipTrigger only provides context with the hover/focus wiring — react-aria-components' own
           <Button>/<Link> know to read it, but a plain element (our <span>) doesn't unless wrapped in
           <Focusable>, which applies it via cloneElement regardless of the child's type. */}
-      <Focusable>{children}</Focusable>
+      <Focusable excludeFromTabOrder={excludeFromTabOrder}>{children}</Focusable>
       <AriaTooltip
         placement={placement}
         offset={6}
-        className="overlay-panel max-w-xs rounded-md border border-outline bg-surface-raised px-2.5 py-1.5 text-xs text-on-surface shadow-pop outline-none"
+        className="overlay-panel max-w-xs whitespace-pre-line rounded-md border border-outline bg-surface-raised px-2.5 py-1.5 text-xs text-on-surface shadow-pop outline-none"
       >
         {content}
       </AriaTooltip>
@@ -42,6 +65,38 @@ export function TextTooltip({ children, text, placement }: { children: Focusable
   return (
     <Tooltip content={text} placement={placement}>
       {children}
+    </Tooltip>
+  );
+}
+
+/**
+ * Plain content with a tooltip: a number, a time, a chip, an icon. <Focusable> makes the span keyboard-reachable, and
+ * wants a role it can describe with the tooltip, so the span reads as an image of `label` (what it shows, in words).
+ * Inside a button or link, put the tooltip on that instead, or make it hoverOnly.
+ */
+export function TooltipSpan({
+  text,
+  label,
+  className,
+  style,
+  placement,
+  hoverOnly,
+  children,
+}: {
+  text: string;
+  label: string;
+  className?: string;
+  style?: CSSProperties;
+  placement?: Placement;
+  /** Out of the tab order: for a mark inside a button or menu item, whose screen-reader text is the label. */
+  hoverOnly?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <Tooltip content={text} placement={placement} excludeFromTabOrder={hoverOnly}>
+      <span role="img" aria-label={label} className={className} style={style}>
+        {children}
+      </span>
     </Tooltip>
   );
 }

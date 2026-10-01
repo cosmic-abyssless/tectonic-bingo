@@ -41,20 +41,26 @@ const VISIBILITIES: { value: QuestionVisibility; label: string }[] = [
 
 function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: QuestionVisibility) => void; "aria-label": string }) {
   return (
-    <label className="flex shrink-0 items-center gap-1.5 text-xs text-on-surface-muted" title="Who can see players' answers (besides the player): this role and up">
-      Visible to
-      <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
-    </label>
+    <div className="shrink-0">
+      <label className="flex items-center gap-1.5 text-xs text-on-surface-muted">
+        Visible to
+        <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
+      </label>
+      <p className="mt-0.5 text-xs text-on-surface-subtle">This role and up, and the player</p>
+    </div>
   );
 }
 
 // Choice questions only: an extra Other choice where players write their own answer.
 function AllowOtherCheckbox(props: { checked: boolean; onChange: (on: boolean) => void; "aria-label": string }) {
   return (
-    <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted" title="Adds an Other choice with a short text box for players' own answer">
-      <input type="checkbox" aria-label={props["aria-label"]} checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} className="size-4 accent-accent" />
-      Allow Other
-    </label>
+    <div className="max-w-40 shrink-0">
+      <label className="flex h-8 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
+        <input type="checkbox" aria-label={props["aria-label"]} checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} className="size-4 accent-accent" />
+        Allow Other
+      </label>
+      <p className="text-xs text-on-surface-subtle">Players can write their own answer</p>
+    </div>
   );
 }
 
@@ -222,7 +228,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   <XIcon size={12} />
                 </IconButton>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-start gap-2">
                 <Input
                   aria-label="Helper text"
                   defaultValue={q.helperText ?? ""}
@@ -235,7 +241,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
               </div>
               {isChoice(q.type) && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <Input
                     aria-label="Choice options"
                     defaultValue={parseOptions(q.optionsJson)}
@@ -272,7 +278,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             Add
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
           <Input
             aria-label="New question helper text"
             value={newHelper}
@@ -285,7 +291,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
           <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
         </div>
         {isChoice(newType) && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <Input
               aria-label="Choice options"
               value={newOptions}

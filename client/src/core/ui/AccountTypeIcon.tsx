@@ -5,6 +5,7 @@ import hardcoreBadge from "./icons/Hardcore_ironman_chat_badge.png";
 import groupBadge from "./icons/Group_ironman_chat_badge.png";
 import hardcoreGroupBadge from "./icons/Hardcore_group_ironman_chat_badge.png";
 import unrankedGroupBadge from "./icons/Unranked_group_ironman_chat_badge.png";
+import { TextTooltip } from "./Tooltip";
 
 export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   normal: "Main",
@@ -39,19 +40,23 @@ export function AccountTypeIcon({
   size,
   className = "",
   reserveSpace,
+  tooltip = true,
 }: {
   accountType: AccountType | null | undefined;
   size?: number;
   className?: string;
   /** Leave the icon's width empty for an account with no badge, so names in a column line up with those that have one. */
   reserveSpace?: boolean;
+  /** Off where a tooltip round it already says what it is (a player's name, whose own says the account type). */
+  tooltip?: boolean;
 }) {
   const badge = accountType && ACCOUNT_TYPE_BADGE[accountType];
   if (!badge) return reserveSpace ? <span aria-hidden className="inline-block w-[13px] shrink-0" /> : null;
   const label = ACCOUNT_TYPE_LABEL[accountType];
   const style = size ? { height: size, width: "auto", imageRendering: "pixelated" as const } : undefined;
   // shrink-0: in a flex row next to a truncating name the browser would otherwise squeeze the icon before the text.
-  const img = <img src={badge} alt={label} title={label} className={`inline-block shrink-0 align-[-2px] ${className}`} style={style} />;
+  let img = <img src={badge} alt={label} className={`inline-block shrink-0 align-[-2px] ${className}`} style={style} />;
+  if (tooltip) img = <TextTooltip text={label}>{img}</TextTooltip>;
   // The badges are 10px wide (13 for UIM): centre them in the same 13px slot the spacer holds.
   return reserveSpace ? <span className="inline-flex w-[13px] shrink-0 justify-center">{img}</span> : img;
 }

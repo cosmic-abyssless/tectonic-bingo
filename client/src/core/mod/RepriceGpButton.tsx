@@ -5,6 +5,7 @@ import { Dialog, DialogHeader } from "../ui/Dialog";
 import { formatGp } from "../ui/gp";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { usePreference } from "../ui/preferences";
+import { TextTooltip } from "../ui/Tooltip";
 
 // How long the tick or cross stays before the refresh icon comes back: the signup roster's stats refresh does the same.
 const RESULT_MS = 3000;
@@ -41,27 +42,28 @@ export function RepriceGpButton({ slug, submissionId }: { slug: string; submissi
   // opens and closes on click.
   return (
     <span onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        title={title}
-        aria-label={title}
-        disabled={reprice.isPending}
-        className="inline-flex size-5 items-center justify-center rounded align-middle hover:bg-surface-hover"
-        onClick={() => {
-          if (warning === "seen") void run();
-          else setConfirming(true);
-        }}
-      >
-        {result ? (
-          result.ok ? (
-            <CheckIcon size={13} className="text-ok" />
+      <TextTooltip text={title}>
+        <button
+          type="button"
+          aria-label={title}
+          disabled={reprice.isPending}
+          className="inline-flex size-5 items-center justify-center rounded align-middle hover:bg-surface-hover"
+          onClick={() => {
+            if (warning === "seen") void run();
+            else setConfirming(true);
+          }}
+        >
+          {result ? (
+            result.ok ? (
+              <CheckIcon size={13} className="text-ok" />
+            ) : (
+              <XIcon size={13} className="text-danger" />
+            )
           ) : (
-            <XIcon size={13} className="text-danger" />
-          )
-        ) : (
-          <RefreshIcon size={12} className={reprice.isPending ? "animate-spin text-on-surface-subtle" : "text-on-surface-muted"} />
-        )}
-      </button>
+            <RefreshIcon size={12} className={reprice.isPending ? "animate-spin text-on-surface-subtle" : "text-on-surface-muted"} />
+          )}
+        </button>
+      </TextTooltip>
 
       <Dialog isOpen={confirming} onClose={() => setConfirming(false)}>
         <DialogHeader title="Re-price this submission's drop value?" onClose={() => setConfirming(false)} />

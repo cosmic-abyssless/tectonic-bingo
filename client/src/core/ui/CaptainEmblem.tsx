@@ -1,4 +1,5 @@
 import { WikiIcon } from "./ItemIcon";
+import { TooltipSpan } from "./Tooltip";
 
 /**
  * Marks a team's captain or co-captain: the game's own moderator emblems from the wiki, the Jagex moderator's gold
@@ -8,11 +9,11 @@ import { WikiIcon } from "./ItemIcon";
 export function CaptainEmblem({ co = false, scale = 1, className = "" }: { co?: boolean; scale?: 1 | 2; className?: string }) {
   const label = co ? "Co-captain" : "Captain";
   return (
-    <span role="img" aria-label={label} title={label} className={`inline-flex shrink-0 ${className}`}>
+    <TooltipSpan text={label} label={label} className={`inline-flex shrink-0 ${className}`}>
       <WikiIcon
         name={co ? "Player moderator emblem" : "Jagex moderator emblem"}
         className={`${scale === 2 ? "h-[22px] w-[26px]" : "h-[11px] w-[13px]"} [image-rendering:pixelated]`}
       />
-    </span>
+    </TooltipSpan>
   );
 }

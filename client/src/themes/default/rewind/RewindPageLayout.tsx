@@ -8,6 +8,7 @@ import { useSlot } from "../../context";
 import { REWIND_POPUP_GAP } from "../../rewindPopupPointer";
 import { ModPanelButton } from "../page/ModPanelButton";
 import { placePopup, type Bounds, type Placement } from "./popupPlacement";
+import { Tooltip } from "../../../core/ui/Tooltip";
 
 // Kept this far from the header, the timeline and the screen's edges.
 const EDGE_PX = 8;
@@ -56,11 +57,14 @@ export function RewindPageLayout() {
     ? (tile: TileModel) => {
         const teams = tileTeams.get(tile.id);
         if (!teams) return null;
-        // Over the cell for the hover title; a click goes on to open the Tile, like the cell's own.
+        // Over the cell for the hover tooltip; a click goes on to open the Tile, like the cell's own. Out of the tab
+        // order: the cell under it is the one a keyboard opens.
         return (
-          <div title={`${teams.tileName}\n${teams.summary}`} className="absolute inset-0 z-20 cursor-pointer" onClick={() => rewind.openTile.open(tile.id)}>
-            <RewindTileMarkers tile={teams} />
-          </div>
+          <Tooltip content={`${teams.tileName}\n${teams.summary}`} excludeFromTabOrder>
+            <div role="img" aria-label={`${teams.tileName}. ${teams.summary}`} className="absolute inset-0 z-20 cursor-pointer" onClick={() => rewind.openTile.open(tile.id)}>
+              <RewindTileMarkers tile={teams} />
+            </div>
+          </Tooltip>
         );
       }
     : undefined;

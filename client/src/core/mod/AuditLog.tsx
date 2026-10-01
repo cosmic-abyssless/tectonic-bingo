@@ -15,6 +15,7 @@ import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
 import { toCsv } from "../ui/csv";
 import { TableSearchInput } from "../ui/tableSearch";
+import { TooltipSpan } from "../ui/Tooltip";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
 // reported from a bingo's own pages, so this filter is meaningful in both.
@@ -234,9 +235,9 @@ export function AuditLog({ slug }: { slug: string }) {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-on-surface-subtle">
+                    <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="text-xs text-on-surface-subtle">
                       {timeAgo(entry.at)}
-                    </span>
+                    </TooltipSpan>
                     <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
                   </div>
                 </div>

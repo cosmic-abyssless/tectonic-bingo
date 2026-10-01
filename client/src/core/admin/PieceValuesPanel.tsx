@@ -12,6 +12,7 @@ import { PlusIcon, XIcon } from "../ui/icons";
 import { WikiIcon } from "../ui/ItemIcon";
 import { WikiItemLink } from "../ui/WikiItemLink";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
+import { TooltipSpan } from "../ui/Tooltip";
 
 type OtherPiece = { itemName: string; quantity: number };
 type PieceValueInput = { pieceItemName: string; wholeItemName: string; wholeQuantity: number; divisor: number; otherPieces: OtherPiece[] };
@@ -193,8 +194,10 @@ function PieceValueRow({ pieceValue }: { pieceValue: PieceValue }) {
             {pieceValue.unitPrice === null ? (
               <p className="text-xs text-warn">No value right now: an item in it has no price, or it works out to zero or less. Claims of it get no drop value until it does.</p>
             ) : (
-              <p className="num text-xs text-on-surface-muted" title={formatGpExact(pieceValue.unitPrice)}>
-                {formatGp(pieceValue.unitPrice)} each
+              <p className="num text-xs text-on-surface-muted">
+                <TooltipSpan text={formatGpExact(pieceValue.unitPrice)} label={`${formatGp(pieceValue.unitPrice)} each`}>
+                  {formatGp(pieceValue.unitPrice)} each
+                </TooltipSpan>
               </p>
             )}
           </div>

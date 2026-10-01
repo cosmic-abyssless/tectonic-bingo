@@ -10,6 +10,7 @@ import { Panel } from "../ui/Panel";
 import { formatPoints } from "../ui/points";
 import { useDialogParts } from "../ui/useDialogParts";
 import { NotRecorded } from "./NotRecorded";
+import { TextTooltip } from "../ui/Tooltip";
 
 /**
  * A Historical Bingo (CONTEXT.md) that recorded no Tasks: the page under its header, in place of a Team's board. The
@@ -93,21 +94,21 @@ function PictureBoard({ board, onOpen }: { board: BoardModel; onOpen: (tileId: s
               if (!tile) return <div key={`empty-${row}-${col}`} className="aspect-square rounded-md border border-dashed border-outline" />;
               const points = knownPoints(tile);
               return (
-                <button
-                  key={tile.id}
-                  type="button"
-                  onClick={() => onOpen(tile.id)}
-                  title={tile.name}
-                  className="group flex cursor-pointer flex-col overflow-hidden rounded-md border-2 border-outline bg-surface text-left transition-colors hover:border-accent"
-                >
-                  <span className="relative aspect-square w-full">
-                    {tile.imageUrl ? (
-                      <img src={thumbUrl(tile.imageUrl)} alt="" className="absolute inset-0 h-full w-full object-contain p-1.5 transition-transform duration-150 group-hover:scale-105" />
-                    ) : null}
-                    {points !== null && <span className="num absolute bottom-1 left-1 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">{points}</span>}
-                  </span>
-                  <span className="truncate border-t border-outline px-1.5 py-1 text-center text-[11px] font-medium leading-tight text-on-surface">{tile.name}</span>
-                </button>
+                <TextTooltip key={tile.id} text={tile.name}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(tile.id)}
+                    className="group flex cursor-pointer flex-col overflow-hidden rounded-md border-2 border-outline bg-surface text-left transition-colors hover:border-accent"
+                  >
+                    <span className="relative aspect-square w-full">
+                      {tile.imageUrl ? (
+                        <img src={thumbUrl(tile.imageUrl)} alt="" className="absolute inset-0 h-full w-full object-contain p-1.5 transition-transform duration-150 group-hover:scale-105" />
+                      ) : null}
+                      {points !== null && <span className="num absolute bottom-1 left-1 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">{points}</span>}
+                    </span>
+                    <span className="truncate border-t border-outline px-1.5 py-1 text-center text-[11px] font-medium leading-tight text-on-surface">{tile.name}</span>
+                  </button>
+                </TextTooltip>
               );
             }),
           )}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Team, Tile, TileHeatmapCell, TileProgress } from "@bingo/shared";
 import { SingleSelect } from "../ui/SingleSelect";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
+import { TooltipSpan } from "../ui/Tooltip";
 
 const ALL = "all";
 // One hue, light to dark: 8% for nothing, ramping to ~85% for done.
@@ -81,14 +82,15 @@ export function TileCompletion({ heatmap, tiles, teams }: { heatmap: TileHeatmap
               const segments = segmentsOf(tile);
               const finished = view === ALL ? teamsDone(tile.id) === teams.length : isDone(cellFor(tile.id, view));
               return (
-                <div
+                <TooltipSpan
                   key={tile.id}
-                  title={[tile.name, ...segments.map(describe)].join("\n")}
+                  text={[tile.name, ...segments.map(describe)].join("\n")}
+                  label={[tile.name, ...segments.map(describe)].join(". ")}
                   className={`flex aspect-square flex-col items-center justify-between gap-1 overflow-hidden rounded-sm border bg-surface p-1 text-center leading-tight text-on-surface ${finished ? "border-on-surface" : "border-outline"}`}
                 >
                   <span className="line-clamp-2 flex flex-1 items-center text-[10px]">{tile.name}</span>
                   <ProgressBar segments={segments} color={color} />
-                </div>
+                </TooltipSpan>
               );
             }),
           )}

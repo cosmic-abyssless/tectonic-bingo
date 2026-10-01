@@ -48,7 +48,7 @@ export function ProofChecks({ checks, dropSubmittedAt }: { checks: ProofCheck[];
                   <ScreenshotThumb url={proof.screenshotUrl ?? undefined} size="sm" />
                   <div className="space-y-0.5">
                     <SubmissionStatusBadge status={proof.status} />
-                    <p className="text-xs text-on-surface-subtle" title={at(proof.submittedAt)}>
+                    <p className="text-xs text-on-surface-subtle">
                       {at(proof.submittedAt)} · {timeAgo(proof.submittedAt)}
                     </p>
                   </div>

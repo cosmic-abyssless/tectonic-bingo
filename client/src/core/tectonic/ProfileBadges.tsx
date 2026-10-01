@@ -1,16 +1,23 @@
 import type { TectonicProfile } from "@bingo/shared";
 import { formatTierName, tierIconUrl } from "./profile";
+import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
+
+/** A TierBadge's full standing, its tooltip: "Dragon · 1,234 pts · #5 in clan". */
+export function tierTitle(profile: TectonicProfile, showRank = true): string {
+  const tierName = profile.tier ? formatTierName(profile.tier.name) : "Unranked";
+  return `${tierName} · ${profile.points.toLocaleString()} pts${showRank ? ` · #${profile.rank} in clan` : ""}`;
+}
 
 /** Rank icon + clan points; the tooltip carries the full standing. */
 export function TierBadge({ profile, showRank = true }: { profile: TectonicProfile; showRank?: boolean }) {
   const icon = profile.tier ? tierIconUrl(profile.tier.icon) : null;
   const tierName = profile.tier ? formatTierName(profile.tier.name) : "Unranked";
-  const title = `${tierName} · ${profile.points.toLocaleString()} pts${showRank ? ` · #${profile.rank} in clan` : ""}`;
+  const title = tierTitle(profile, showRank);
   return (
-    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap" title={title}>
-      {icon ? <img src={icon} alt={tierName} className="size-4 shrink-0 self-center object-contain" /> : <span className="text-on-surface-subtle">{tierName}</span>}
+    <TooltipSpan text={title} label={title} className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+      {icon ? <img src={icon} alt="" className="size-4 shrink-0 self-center object-contain" /> : <span className="text-on-surface-subtle">{tierName}</span>}
       <span className="num">{profile.points.toLocaleString()}</span>
-    </span>
+    </TooltipSpan>
   );
 }
 
@@ -20,7 +27,9 @@ export function ClanHonourIcons({ profile, large = false }: { profile: TectonicP
   return (
     <span className={`inline-flex items-center ${large ? "gap-1.5" : "gap-1"}`}>
       {profile.achievements.map((a) => (
-        <img key={a.name} src={a.thumbnail} alt={a.name} title={a.name} className={`${large ? "size-7" : "size-4"} object-contain`} />
+        <TextTooltip key={a.name} text={a.name}>
+          <img src={a.thumbnail} alt={a.name} className={`${large ? "size-7" : "size-4"} object-contain`} />
+        </TextTooltip>
       ))}
     </span>
   );
@@ -35,9 +44,8 @@ const MEDAL_CLASS: Record<number, string> = {
 /** "#1" / "#2" / "#3" pill in medal colours; plainer past the podium. */
 export function Medal({ place, className = "" }: { place: number; className?: string }) {
   const tone = MEDAL_CLASS[place] ?? "border-outline text-on-surface-muted";
-  const ordinal = place === 1 ? "1st" : place === 2 ? "2nd" : place === 3 ? "3rd" : `${place}th`;
   return (
-    <span className={`num inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-xs font-semibold ${tone} ${className}`} title={ordinal}>
+    <span className={`num inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-xs font-semibold ${tone} ${className}`}>
       #{place}
     </span>
   );

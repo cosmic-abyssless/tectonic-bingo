@@ -16,6 +16,7 @@ import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet, type TimeRange } from "../ui/timeRange";
 import { TableSearchInput } from "../ui/tableSearch";
+import { TooltipSpan } from "../ui/Tooltip";
 
 type BingoScope = string | null | "all";
 
@@ -122,9 +123,9 @@ export function SiteAuditLog() {
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span title={new Date(entry.at).toLocaleString()} className="text-xs text-on-surface-subtle">
+                    <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="text-xs text-on-surface-subtle">
                       {timeAgo(entry.at)}
-                    </span>
+                    </TooltipSpan>
                     <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
                   </div>
                 </div>

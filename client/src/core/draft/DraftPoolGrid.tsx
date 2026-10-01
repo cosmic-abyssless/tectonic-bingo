@@ -53,13 +53,15 @@ import { compareSortValues } from "../ui/tableSort";
 import { TableSearchInput, matchesSearch, useTableSearch } from "../ui/tableSearch";
 import { useDocumentTop, useOffsetWithin } from "../ui/tableChrome";
 import { PlayerName } from "../tectonic/PlayerName";
-import { ClanHonourIcons, PlaceBreakdown, TierBadge } from "../tectonic/ProfileBadges";
+import { ClanHonourIcons, PlaceBreakdown, TierBadge, tierTitle } from "../tectonic/ProfileBadges";
 import { podiumSummary, podiumTitle, recordSummary, recordTitle } from "../tectonic/profile";
 import { RatingCell } from "./RatingCell";
 import { buildPoolCsv } from "./poolCsv";
 import { Button } from "../ui/Button";
 import { placeScore, poolSearchValues, takesBlock, unitSortValue, type PoolRatings, type PoolSortKey, type Takes } from "./poolData";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
+import { NoTooltips } from "../ui/Tooltip";
+import { ACCOUNT_TYPE_LABEL } from "../ui/AccountTypeIcon";
 
 type SortKey = PoolSortKey;
 type Ratings = PoolRatings;
@@ -113,10 +115,8 @@ function dimClass(dim: boolean): string | undefined {
   return dim ? "opacity-50" : undefined;
 }
 
-// No native title on these two — the column's own AG tooltip (stackedTooltip, below) covers it, same as the
-// signup roster. Tier/Records/Podiums keep their native title instead: TierBadge/PlaceBreakdown always set their
-// own (no way to suppress it short of forking those components), so those columns opt out of the AG tooltip
-// (tooltip: false) rather than show both at once.
+// No tooltips of their own in the cells: each column's AG tooltip (stackedTooltip, below) says it, same as the signup
+// roster, and the shared pieces (a player's name, a TierBadge) show none in here (NoTooltips).
 const rsnLine: LineRender = (entry, { dim, search }) => (
   <span className={`inline-flex max-w-full min-w-0 items-center ${dimClass(dim) ?? ""}`}>
     {/* The badge's slot is kept for a player with none, so the names in the column line up. */}
@@ -147,7 +147,7 @@ const tierLine: LineRender = (entry, { dim }) =>
 
 const recordsLine: LineRender = (entry, { dim }) =>
   entry.tectonicProfile ? (
-    <span className={`num text-on-surface-muted ${dimClass(dim) ?? ""}`} title={recordTitle(entry.tectonicProfile)}>
+    <span className={`num text-on-surface-muted ${dimClass(dim) ?? ""}`}>
       <PlaceBreakdown {...recordSummary(entry.tectonicProfile)} />
     </span>
   ) : (
@@ -158,7 +158,7 @@ const podiumsLine: LineRender = (entry, { dim }) => {
   if (!entry.tectonicProfile) return <span className="text-on-surface-subtle">—</span>;
   const podiums = podiumSummary(entry.tectonicProfile);
   return (
-    <span className={`num text-on-surface-muted ${dimClass(dim) ?? ""}`} title={podiumTitle(entry.tectonicProfile)}>
+    <span className={`num text-on-surface-muted ${dimClass(dim) ?? ""}`}>
       <PlaceBreakdown {...podiums} />
       {podiums.bingoWins > 0 && <span className="ml-1 text-xs text-on-surface-subtle">({podiums.bingoWins} bingo)</span>}
     </span>
@@ -178,7 +178,7 @@ function womLine(field: "ehb" | "ehp", statsRefreshing: ReadonlySet<string>): Li
 function caLine(field: "caCurrent" | "caPeak", statsRefreshing: ReadonlySet<string>): LineRender {
   return (entry, { dim }) => (
     <span className={`text-on-surface-muted ${dimClass(dim) ?? ""}`}>
-      <CaCell stats={entry[field]} loading={statsRefreshing.has(entry.signup.id)} nativeTitle={false} />
+      <CaCell stats={entry[field]} loading={statsRefreshing.has(entry.signup.id)} />
     </span>
   );
 }
@@ -293,8 +293,9 @@ const DraftButtonRenderer = ({ data, context }: CustomCellRendererProps<DraftUni
   const blocked = takesBlock(data, context.takes);
   return (
     // pr-4: the grid's vertical scrollbar overlays the last ~16px of this pinned-right column and would clip the button.
+    // A disabled button lets the hover through to the cell, whose tooltip says why.
     <div className="flex h-full items-center justify-center pr-4">
-      <CellButton variant="primary" className="w-24" onClick={() => context.onPick(data.entries[0]!.user.id)} disabled={context.picking || !!blocked} title={blocked ?? undefined}>
+      <CellButton variant="primary" className="w-24 disabled:pointer-events-none" onClick={() => context.onPick(data.entries[0]!.user.id)} disabled={context.picking || !!blocked}>
         {isPair ? "Draft pair" : "Draft"}
       </CellButton>
     </div>
@@ -515,7 +516,11 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("rsn", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: rsnLine },
-        tooltip: stackedTooltip((e) => e.signup.rsn),
+        // With their account type, which the badge before the name says only on hover outside a grid.
+        tooltip: (p: TooltipCallbackParams<DraftUnit>) => {
+          const names = (p.data?.entries ?? []).map((e) => (e.accountType ? `${e.signup.rsn} (${ACCOUNT_TYPE_LABEL[e.accountType]})` : e.signup.rsn));
+          return usefulTooltip(p, names.join("\n"), names);
+        },
         pinned: "left",
         lockPosition: "left",
         width: 210,
@@ -574,7 +579,7 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("tier", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: tierLine },
-        tooltip: false,
+        tooltip: stackedTooltip((e) => (e.tectonicProfile ? tierTitle(e.tectonicProfile) : "")),
         width: 120,
       },
       showProfiles && {
@@ -584,7 +589,7 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("records", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: recordsLine },
-        tooltip: false,
+        tooltip: stackedTooltip((e) => (e.tectonicProfile ? recordTitle(e.tectonicProfile) : "")),
         cellClass: "num",
         width: 100,
       },
@@ -595,11 +600,19 @@ export function DraftPoolGrid({
         comparator: makeUnitComparator("podiums", ratings ?? {}),
         cellRenderer: StackedCell,
         cellRendererParams: { render: podiumsLine },
-        tooltip: false,
+        tooltip: stackedTooltip((e) => (e.tectonicProfile ? podiumTitle(e.tectonicProfile) : "")),
         cellClass: "num",
         width: 110,
       },
-      showProfiles && { colId: "achievements", headerName: "Achievements", cellRenderer: StackedCell, cellRendererParams: { render: achievementsLine }, sortable: false, width: 120 },
+      showProfiles && {
+        colId: "achievements",
+        headerName: "Achievements",
+        cellRenderer: StackedCell,
+        cellRendererParams: { render: achievementsLine },
+        tooltip: stackedTooltip((e) => (e.tectonicProfile?.achievements ?? []).map((a) => a.name).join(", ")),
+        sortable: false,
+        width: 120,
+      },
       showWomStats && {
         colId: "ehb",
         headerName: "EHB",
@@ -646,6 +659,8 @@ export function DraftPoolGrid({
         colId: "draft",
         headerName: "",
         cellRenderer: DraftButtonRenderer,
+        // Why the button is off, when a take blocks the pick.
+        tooltip: (p: TooltipCallbackParams<DraftUnit, unknown, PoolGridContext>) => (p.data ? (takesBlock(p.data, p.context.takes) ?? "") : ""),
         pinned: "right",
         lockPosition: "right",
         suppressMovable: true,
@@ -806,27 +821,29 @@ export function DraftPoolGrid({
         <p className="text-sm text-on-surface-subtle">{search ? "No one matches this search." : "No one in the pool is in that region."}</p>
       ) : (
         <div ref={setTableWrapper} className="overflow-hidden" style={{ height: tableHeight, minHeight: MIN_TABLE_HEIGHT }}>
-          <AgGridReact<DraftUnit>
-            theme={gridTheme}
-            rowData={rows}
-            getRowId={getRowId}
-            getRowHeight={getRowHeight}
-            columnDefs={columnDefs}
-            defaultColDef={defaultColDef}
-            initialState={initialState}
-            maintainColumnOrder
-            onGridReady={onGridReady}
-            onStateUpdated={onStateUpdated}
-            context={context}
-            animateRows={false}
-            // A click anywhere outside the table ends a Note edit (saving it), not just a click on another cell.
-            stopEditingWhenCellsLoseFocus
-            tooltipShowDelay={200}
-            tooltipHideDelay={4000}
-            enableCellTextSelection
-            // Same as the signup roster: any text column without its own comparator sorts case-insensitively.
-            accentedSort
-          />
+          <NoTooltips>
+            <AgGridReact<DraftUnit>
+              theme={gridTheme}
+              rowData={rows}
+              getRowId={getRowId}
+              getRowHeight={getRowHeight}
+              columnDefs={columnDefs}
+              defaultColDef={defaultColDef}
+              initialState={initialState}
+              maintainColumnOrder
+              onGridReady={onGridReady}
+              onStateUpdated={onStateUpdated}
+              context={context}
+              animateRows={false}
+              // A click anywhere outside the table ends a Note edit (saving it), not just a click on another cell.
+              stopEditingWhenCellsLoseFocus
+              tooltipShowDelay={200}
+              tooltipHideDelay={4000}
+              enableCellTextSelection
+              // Same as the signup roster: any text column without its own comparator sorts case-insensitively.
+              accentedSort
+            />
+          </NoTooltips>
         </div>
       )}
     </div>

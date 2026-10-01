@@ -1,6 +1,7 @@
 import { SCREENSHOT_NOT_UPLOADED } from "@bingo/shared";
 import { ImageIcon } from "../ui/icons";
 import { thumbUrl } from "../../api/imageVariants";
+import { TextTooltip } from "../ui/Tooltip";
 
 const SIZE = { sm: "size-12", md: "size-14" } as const;
 
@@ -20,8 +21,10 @@ export function ScreenshotThumb({ url, size = "md", pending = false }: { url?: s
     );
   }
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="shrink-0" title="View screenshot">
-      <img src={thumbUrl(url)} alt="Submission screenshot" className={`${SIZE[size]} rounded-md border border-outline object-cover transition-colors hover:border-outline-strong`} />
-    </a>
+    <TextTooltip text="View screenshot">
+      <a href={url} target="_blank" rel="noreferrer" className="shrink-0">
+        <img src={thumbUrl(url)} alt="Submission screenshot" className={`${SIZE[size]} rounded-md border border-outline object-cover transition-colors hover:border-outline-strong`} />
+      </a>
+    </TextTooltip>
   );
 }

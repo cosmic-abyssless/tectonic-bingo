@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import type { TitleDefinition, TitleGroup } from "@bingo/shared";
 import { useOptionalSlot } from "../../themes/context";
 import { TITLE_GROUP_STYLE } from "./titles";
+import { TooltipSpan } from "../ui/Tooltip";
 
 export interface TitleGroupBoxProps {
   group: TitleGroup;
@@ -40,8 +41,8 @@ export function PlainTitleGroupBox({ group, children }: TitleGroupBoxProps) {
 
 export function PlainTitleChip({ title }: TitleChipProps) {
   return (
-    <span title={title.flavour} className={`shrink-0 rounded-sm border px-1 text-[10px] leading-4 font-semibold ${TITLE_GROUP_STYLE[title.group].chip}`}>
+    <TooltipSpan text={title.flavour} label={title.name} className={`shrink-0 rounded-sm border px-1 text-[10px] leading-4 font-semibold ${TITLE_GROUP_STYLE[title.group].chip}`}>
       {title.name}
-    </span>
+    </TooltipSpan>
   );
 }
