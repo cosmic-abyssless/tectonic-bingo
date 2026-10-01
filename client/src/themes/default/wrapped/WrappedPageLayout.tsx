@@ -70,7 +70,7 @@ export function WrappedPageLayout() {
         menuEntries={menuEntries}
         controls={wrapped.preview && <Badge tone="warn">Preview</Badge>}
       >
-        {header?.isMod && <ModPanelButton slug={wrapped.slug} pendingCount={header.pendingCount} />}
+        {header?.canModerate && <ModPanelButton slug={wrapped.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
       <motion.div aria-hidden className="fixed inset-x-0 top-0 z-50 h-1 origin-left bg-on-surface" style={{ scaleX: scrollYProgress }} />
 

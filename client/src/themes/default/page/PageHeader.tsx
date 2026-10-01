@@ -50,7 +50,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       titleAside={page.codeword ? <CodewordBanner codeword={page.codeword} /> : undefined}
       controls={page.canPickTeam && page.teams.length > 0 && <TeamSelector selector={page.teamSelector} />}
     >
-      {page.isMod && <ModPanelButton slug={page.slug} pendingCount={page.pendingCount} />}
+      {page.canModerate && <ModPanelButton slug={page.slug} pendingCount={page.pendingCount} />}
       {page.canSubmit && (
         <Button size="sm" variant="primary" onPress={() => page.submit.show()} data-tutorial="submit">
           Submit

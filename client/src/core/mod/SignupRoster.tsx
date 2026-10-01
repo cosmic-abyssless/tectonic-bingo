@@ -15,6 +15,7 @@ import {
   useSignupQuestions,
 } from "../../api/queries";
 import { useAuth } from "../../context/AuthContext";
+import { useCan, useCloseOnLoss } from "../../headless/permissions";
 import { useStatsRefreshingSignupIds, useStatsResults } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
 import { Button } from "../ui/Button";
@@ -187,6 +188,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   // 63 rows meant 63 separate subscriptions to (and re-renders off) the very same query.
   const { data: modsData } = useBingoMods(slug);
   const { user: me } = useAuth();
+  // Late signups and the Cut review are the Admin's (administer_bingo).
+  const canAdminister = useCan("administer_bingo", slug).allowed;
   const statsRefreshing = useStatsRefreshingSignupIds();
   const statsResults = useStatsResults();
   // Enter on a name in the table opens their profile (the mod panel provides the profile dialog).
@@ -203,7 +206,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   const canWithdraw = stage === "signup" || stage === "captains" || stage === "draft";
   const onTeam = useMemo(() => new Set((bingoData?.teams ?? []).flatMap((t) => t.members.map((m) => m.user.id))), [bingoData?.teams]);
   // A Late signup (CONTEXT.md "Signup"): Admins, from Signups closed until Finished.
-  const canAddLateSignup = !!me?.isAdmin && (stage === "captains" || stage === "draft" || stage === "reveal" || stage === "live");
+  const canAddLateSignup = canAdminister && (stage === "captains" || stage === "draft" || stage === "reveal" || stage === "live");
   const [addingLateSignup, setAddingLateSignup] = useState(false);
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
@@ -251,6 +254,9 @@ export function SignupRoster({ slug }: { slug: string }) {
   // kept by a review — is a dot on the Draft filter, which is where "Will be cut" is.
   const cutState = !cutsApply || cutCount === 0 || (reviewApplies && !cutReview) ? null : someAvoidable && !cutReview?.reviewed ? "avoidable" : "cut";
   const [reviewingCuts, setReviewingCuts] = useState(false);
+  // Losing administer_bingo while one of its dialogs is open closes it, saying why.
+  useCloseOnLoss("administer_bingo", reviewingCuts, () => setReviewingCuts(false), slug);
+  useCloseOnLoss("administer_bingo", addingLateSignup, () => setAddingLateSignup(false), slug);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
     [roster],
@@ -410,7 +416,7 @@ export function SignupRoster({ slug }: { slug: string }) {
               <strong>
                 <span className="num">{cutCount}</span> player{cutCount === 1 ? "" : "s"} {historical ? (cutCount === 1 ? "was" : "were") : "will be"} cut.{cutState === "avoidable" && " Some cuts can be avoided."}
               </strong>
-              {cutState === "avoidable" && me?.isAdmin && (
+              {cutState === "avoidable" && canAdminister && (
                 <Button size="sm" onPress={() => setReviewingCuts(true)}>
                   Review cuts
                 </Button>
@@ -418,7 +424,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             </span>
           </Notice>
         )}
-        {me?.isAdmin && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
+        {canAdminister && <CutReviewModal slug={slug} isOpen={reviewingCuts} onClose={() => setReviewingCuts(false)} />}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-on-surface-muted">
             <span className="num text-on-surface">{activeCount}</span> active signup{activeCount !== 1 ? "s" : ""}

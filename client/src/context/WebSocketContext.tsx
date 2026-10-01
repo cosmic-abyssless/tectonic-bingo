@@ -19,10 +19,10 @@ const WebSocketContext = createContext<{
 export type StatsResult = "ok" | "failed";
 const STATS_RESULT_MS = 3000;
 
-function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
+function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, viewerId: string | null) {
   // Only this event's bingo: a tab on another bingo would otherwise refetch its own board, progress and counts on
-  // every write anywhere (e.g. a test data run next to it).
-  const others = "bingoId" in event ? otherBingoSlugs(queryClient.getQueriesData({ queryKey: ["bingo"] }), event.bingoId) : new Set<string>();
+  // every write anywhere (e.g. a test data run next to it). An event for no bingo in particular is for every one.
+  const others = "bingoId" in event && event.bingoId ? otherBingoSlugs(queryClient.getQueriesData({ queryKey: ["bingo"] }), event.bingoId) : new Set<string>();
   const invalidate = (queryKey: readonly unknown[]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
   switch (event.type) {
     case "submission_created":
@@ -41,6 +41,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       break;
     case "stage_changed":
       invalidate(["bingo"]);
+      // Grants and rules go by the stage: everyone's Actions may have changed.
+      invalidate(["permissions"]);
       invalidate(["board"]);
       // Finishing can publish Wrapped (its "Publish when the Bingo finishes" setting).
       invalidate(["wrapped"]);
@@ -120,6 +122,12 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent) {
       invalidate(["adminBugReports"]);
       invalidate(["myBugReports"]);
       break;
+    case "access_changed":
+      // Only the users named: their roles changed, and with them maybe their Actions and what the shell shows them.
+      if (!viewerId || !event.payload.userIds.includes(viewerId)) break;
+      invalidate(["permissions"]);
+      invalidate(["bingo"]);
+      break;
   }
 }
 
@@ -186,7 +194,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, [markStatsResult]);
 
-  const { user } = useAuth();
+  const { user, refresh: refreshAuth } = useAuth();
+  // A ref, so a new identity each render doesn't reconnect the socket.
+  const refreshAuthRef = useRef(refreshAuth);
+  refreshAuthRef.current = refreshAuth;
   // The server only lets a logged-in clan member open the socket, so nobody else tries: it connects on login and is
   // closed for good on logout.
   const socketUserId = user && (user.inGuild || user.isAdmin) ? user.id : null;
@@ -212,7 +223,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         try {
           const msg = JSON.parse(event.data) as BroadcastEvent;
           applyStatsRefreshing(msg);
-          invalidateForEvent(queryClient, msg);
+          invalidateForEvent(queryClient, msg, socketUserId);
+          // Their Admin flag: the Site admin pages and every bingo go by it.
+          if (msg.type === "access_changed" && msg.bingoId === null && socketUserId && msg.payload.userIds.includes(socketUserId)) void refreshAuthRef.current();
           for (const listener of listenersRef.current) listener(msg);
         } catch {
           // ignore malformed messages

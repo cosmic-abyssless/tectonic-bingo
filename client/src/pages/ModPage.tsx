@@ -1,11 +1,11 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
-import { useAuth } from "../context/AuthContext";
+import { useCan, usePageAccess } from "../headless/permissions";
 import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
 import { ReviewQueue } from "../core/mod/ReviewQueue";
@@ -32,7 +32,7 @@ import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlParam } from "../core/ui/useUrlParam";
 
 // adminOnly tabs are hidden from — and their content never rendered for — a
-// mod who isn't a site admin. The server enforces the same split on the
+// mod who may not administer the bingo. The server enforces the same split on the
 // underlying routes (requireAdmin on admin.ts vs requireBingoMod on mod.ts),
 // so this is UX decluttering on top of a real boundary, not the boundary
 // itself.
@@ -71,20 +71,21 @@ function isOutOfStage(tab: TabDef, stage: Stage): boolean {
 // Signups while signups are open or just closed (who's in, who'll be cut, pairing people up), Captains during the
 // draft (admin only; a non-admin mod gets Signups), Settings for a still-being-set-up bingo (admin only — a non-admin
 // mod has no Settings tab to land on), Submissions otherwise.
-function defaultTabFor(stage: Stage | undefined, isAdmin: boolean): string {
+function defaultTabFor(stage: Stage | undefined, canAdminister: boolean): string {
   if (stage === "signup" || stage === "captains") return "signups";
-  if (stage === "draft") return isAdmin ? "teams" : "signups";
-  if (stage === "planning" && isAdmin) return "settings";
+  if (stage === "draft") return canAdminister ? "teams" : "signups";
+  if (stage === "planning" && canAdminister) return "settings";
   return "submissions";
 }
 
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
   const { data: shell } = useBingo(slug);
-  const { user } = useAuth();
-  const isAdmin = !!user?.isAdmin;
+  // The panel is for whoever may moderate the bingo; its admin-only tabs for whoever may administer it.
+  const canAdminister = useCan("administer_bingo", slug).allowed;
+  // Losing moderate_bingo while here (removed as a Moderator) sends them back to the bingo, with a toast.
+  const mayModerate = usePageAccess(slug, (can) => can("moderate_bingo").allowed, "moderate_bingo", shell?.bingo.name);
   const stage = shell?.bingo.stage;
   const [urlTab, setUrlTab] = useUrlParam("tab");
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
@@ -98,22 +99,22 @@ export function ModPage() {
     // Admins its Board where it recorded Tasks (locked, as a Finished Bingo's is), to check how the old rules came across.
     if (historical)
       return TABS.filter(
-        (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && isAdmin),
+        (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && canAdminister),
       ).map((t) => ({ ...t, dimmed: false }));
-    const allowed = TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
+    const allowed = TABS.filter((t) => !t.adminOnly || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
-  }, [stage, isAdmin, outOfStageTabs, historical]);
+  }, [stage, canAdminister, outOfStageTabs, historical]);
 
   // The tab is in the URL (?tab=...) so a link opens it. Without one, or with one this mod can't see (an admin-only
   // tab, or one the stage has moved past), it's the stage's natural landing tab; Settings is the fallback since it's
   // always in-stage for an admin.
   const tab = useMemo(() => {
     if (urlTab && visibleTabs.some((t) => t.key === urlTab)) return urlTab;
-    const preferred = defaultTabFor(stage, isAdmin);
+    const preferred = defaultTabFor(stage, canAdminister);
     if (visibleTabs.length === 0 || visibleTabs.some((t) => t.key === preferred)) return preferred;
     return visibleTabs.some((t) => t.key === "settings") ? "settings" : visibleTabs[0]!.key;
-  }, [urlTab, visibleTabs, stage, isAdmin]);
+  }, [urlTab, visibleTabs, stage, canAdminister]);
   const setTab = (key: string) => setUrlTab(key);
 
   const [showNotifPrompt, setShowNotifPrompt] = useState(
@@ -128,12 +129,7 @@ export function ModPage() {
     }
   });
 
-  useEffect(() => {
-    // isMod is per-bingo and only known once the shell loads — redirect once we know for sure.
-    if (shell && !shell.isMod) navigate(`/b/${slug}`, { replace: true });
-  }, [shell, navigate, slug]);
-
-  if (!shell || !shell.isMod || !slug) return null;
+  if (!shell || !mayModerate || !slug) return null;
 
   const dismissNotifPrompt = () => {
     localStorage.setItem("mod_notif_prompted", "true");
@@ -172,7 +168,7 @@ export function ModPage() {
             </div>
           ) : (
             <div className={NARROW}>
-              <StageControls slug={slug} bingo={shell.bingo} canChange={isAdmin} />
+              <StageControls slug={slug} bingo={shell.bingo} canChange={canAdminister} />
             </div>
           )}
           {shell.bingo.stage === "complete" && !historical && (
@@ -207,14 +203,14 @@ export function ModPage() {
                 </div>
               </TabPanel>
               {/* Offered on a Historical Bingo too, where it recorded Tasks (the tab list above decides), and locked there. */}
-              {isAdmin && (
+              {canAdminister && (
                 <TabPanel id="board">
                   <div className={NARROW}>
                     <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
                   </div>
                 </TabPanel>
               )}
-              {isAdmin && !historical && (
+              {canAdminister && !historical && (
                 <>
                   <TabPanel id="settings">
                     <div className={NARROW}>

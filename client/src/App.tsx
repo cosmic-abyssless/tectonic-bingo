@@ -18,6 +18,7 @@ import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
 import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
+import { useAccessWatch } from "./headless/permissions";
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -28,9 +29,14 @@ function AdminRedirect() {
   return <Navigate to={`/b/${slug}/mod`} replace />;
 }
 
-// Inside the router, auth and query providers the hook needs; renders nothing.
+// Inside the router, auth and query providers the hooks need; renders nothing.
 function BingoGoneRedirect() {
   useBingoGoneRedirect();
+  return null;
+}
+
+function AccessWatch() {
+  useAccessWatch();
   return null;
 }
 
@@ -125,6 +131,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <BingoGoneRedirect />
+          <AccessWatch />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>

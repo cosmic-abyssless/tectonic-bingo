@@ -14,6 +14,8 @@ interface AuthState {
   logout: () => Promise<void>;
   /** Replaces the viewer's record with a fresher one the server sent back (e.g. after marking the Tutorial seen). */
   updateUser: (user: User) => void;
+  /** Asks /api/me again, keeping the current record if it can't be asked. */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -28,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(!cached);
   const [confirmed, setConfirmed] = useState(false);
 
-  useEffect(() => {
+  const load = (keepOnFailure: boolean) =>
     fetch("/api/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -42,15 +44,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Couldn't ask (offline, server restarting): keep going as the cached user
       // rather than logging you out; the first API call that says otherwise will.
       .catch(() => {
-        if (!cached) setUser(null);
-      })
-      .finally(() => {
-        setLoading(false);
-        setConfirmed(true);
+        if (!keepOnFailure) setUser(null);
       });
+
+  useEffect(() => {
+    load(!!cached).finally(() => {
+      setLoading(false);
+      setConfirmed(true);
+    });
     // Runs once, on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Asked again when the viewer's Admin flag changes (access_changed) or the Site admin pages refuse them.
+  const refresh = async () => {
+    await load(true);
+  };
 
   const logout = async () => {
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
@@ -65,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeAuthCache(__BUILD_ID__, { user: next, devMode, canGrantAdmin });
   };
 
-  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, logout, updateUser }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, logout, updateUser, refresh }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {

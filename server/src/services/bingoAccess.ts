@@ -31,15 +31,28 @@ export function isPlayerOf(db: Db, bingo: Bingo, userId: string): boolean {
 }
 
 function playerStanding(db: Db, bingo: Bingo, userId: string): { isPlayer: boolean; isCut: boolean } {
-  if (getUserTeamForBingo(db, bingo.id, userId)) return { isPlayer: true, isCut: false };
-  if (!hasActiveSignup(db, bingo.id, userId)) return { isPlayer: false, isCut: false };
-  switch (bingo.stage) {
+  return playerStandingFrom(
+    bingo.stage,
+    !!getUserTeamForBingo(db, bingo.id, userId),
+    () => hasActiveSignup(db, bingo.id, userId),
+    () => getCutUserIds(db, bingo).has(userId),
+  );
+}
+
+/**
+ * isPlayerOf's rule, from what's known of the user: whether they're on a Team, have an active Signup, and (asked only in
+ * the Draft stage) whether it's Cut. For a caller that has those for everyone at once (permissions.bingoRolesOfEveryone).
+ */
+export function playerStandingFrom(stage: Bingo["stage"], onTeam: boolean, signedUp: boolean | (() => boolean), isCut: () => boolean): { isPlayer: boolean; isCut: boolean } {
+  if (onTeam) return { isPlayer: true, isCut: false };
+  if (!(typeof signedUp === "function" ? signedUp() : signedUp)) return { isPlayer: false, isCut: false };
+  switch (stage) {
     case "planning":
     case "signup":
     case "captains":
       return { isPlayer: true, isCut: false };
     case "draft": {
-      const cut = getCutUserIds(db, bingo).has(userId);
+      const cut = isCut();
       return { isPlayer: !cut, isCut: cut };
     }
     default:

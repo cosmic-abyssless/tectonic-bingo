@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useParams } from "react-router-dom";
 import { useBingo, useRecordAchievementOpened } from "../api/queries";
+import { usePageAccess } from "../headless/permissions";
+import { canViewStats } from "../headless/useBingoHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { PageLoading } from "../themes/default/page/PageStates";
@@ -19,6 +21,9 @@ export function StatsPage() {
 
   useRememberTheme(slug, shell?.bingo.theme);
   useRecordStatsOpened(slug, shell);
+  // Losing the stats while here (taken off their Team mid-Bingo, say) sends them back to the board.
+  // A Historical Bingo without Submissions stays, to say so.
+  usePageAccess(slug, (can) => (shell ? (shell.historical !== null && !shell.historical.submissions) || canViewStats(shell, can) : undefined), "view_team_stats", shell?.bingo.name);
 
   if (!shell) return null;
 

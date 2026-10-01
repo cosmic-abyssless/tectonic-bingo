@@ -2,8 +2,8 @@ import { devSkipsOcr } from "../devMode";
 import { privateRevalidate } from "../middleware/cacheControl";
 import { Router, type Request } from "express";
 import fs from "fs";
-import type { AccountTypesResponse, Action, AuditLogResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
-import { can, isAchievementKey, isBoardLocked, passesRules } from "@bingo/shared";
+import type { AccountTypesResponse, Action, AuditLogResponse, BingoPermissionsResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
+import { can, isAchievementKey, passesRules, resolvePermissions } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import * as achievementService from "../services/achievementService";
 import { UPLOADS_DIR } from "../config";
@@ -12,7 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoViewer } from "../middleware/requireBingoViewer";
 import { getBingoAccess, isPartOfBingo } from "../services/bingoAccess";
-import { assertCan, bingoRoles } from "../services/permissions";
+import { assertCan, bingoRoles, unavailable } from "../services/permissions";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -100,6 +100,20 @@ router.get(
       wrappedPublished: bingo.stage === "complete" && wrappedService.isPublished(db, bingo.id),
       historical: historicalService.recordedFor(db, bingo),
     });
+  }),
+);
+
+// The viewer's Actions in this bingo at its current stage, and why not for the ones a role of theirs grants but that
+// are closed right now (BingoPermissionsResponse): what the client shows and hides by. Asked by everyone who gets the
+// shell, whether or not they can see the bingo's content, and again whenever their roles or the stage change
+// (access_changed, stage_changed).
+router.get(
+  "/:slug/permissions",
+  requireAuth,
+  requireBingo,
+  asyncHandler(async (req, res) => {
+    const bingo = req.bingo!;
+    res.json(resolvePermissions(bingoRoles(db, bingo, req.user!), bingo) satisfies BingoPermissionsResponse);
   }),
 );
 
@@ -779,7 +793,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     // The lock comes before who's asking: everyone gets it once the bingo is live.
-    if (!passesRules(bingo, "rate_picks")) throw new ServiceError(400, "Ratings are locked once the bingo is live");
+    if (!passesRules(bingo, "rate_picks")) throw unavailable(bingo, "rate_picks");
     const onlyLeads = new ServiceError(403, "Only team leads can rate picks");
     assertCan(bingoRoles(db, bingo, req.user!), bingo, "rate_picks", { role: onlyLeads });
     // Ratings go to the Team the user leads; an Admin who leads none has nothing to rate for.
@@ -872,13 +886,8 @@ router.patch(
     // panel at any stage.
     const onlyCaptain = new ServiceError(403, "Only the captain can rename this team");
     if (teamService.getLedTeam(db, req.bingo!.id, req.user!.id)?.id !== team.id) throw onlyCaptain;
-    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", {
-      role: onlyCaptain,
-      stage: new ServiceError(
-        400,
-        isBoardLocked(req.bingo!.stage) ? "Team names are locked once the Bingo is Live" : "Team names can be changed once the Board is revealed",
-      ),
-    });
+    // Outside Board revealed, the shared reason says which side of it the Bingo is on.
+    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", { role: onlyCaptain });
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");

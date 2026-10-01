@@ -41,25 +41,26 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
         onClose={onClose}
       />
       <div className="space-y-5 p-5">
-        {team.canRename && (
+        {team.rename && (
           <form
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
+              if (team.rename?.allowed && dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
             }}
           >
             <ComicField label="Team name" className="flex-1">
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!team.rename.allowed} />
             </ComicField>
-            <ComicButton type="submit" variant="primary" isDisabled={!dirty || !trimmed || rename.isPending}>
+            <ComicButton type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || rename.isPending}>
               {rename.isPending ? "Saving…" : "Rename"}
             </ComicButton>
           </form>
         )}
-        {team.isLead && !team.canRename && (
+        {/* Closed for now (the stage): disabled above, and why. */}
+        {team.rename?.reason && (
           <p className="text-sm italic" style={{ color: colors.INK_SUBTLE }}>
-            Team names are locked once the bingo is live.
+            {team.rename.reason}.
           </p>
         )}
         {rename.error && (

@@ -1441,7 +1441,11 @@ export type BroadcastEvent =
   | { type: "achievements_changed"; bingoId: string; payload: { userId: string } }
   // A Superlative vote was cast, changed or cleared. Nothing else, not even the Team, per the unauthenticated-broadcast
   // rule above (votes are secret): Admins refetch the turnout, and Players their own Team's ballot counts.
-  | { type: "superlative_votes_changed"; bingoId: string; payload: Record<string, never> };
+  | { type: "superlative_votes_changed"; bingoId: string; payload: Record<string, never> }
+  // These users' roles in the Bingo changed (Moderator, Captain, a Team, a Signup), and with them maybe their Actions:
+  // each refetches their own permissions (BingoPermissionsResponse). bingoId null: their Admin flag changed, which
+  // counts in every Bingo and on the Site admin pages. IDs only, per the unauthenticated-broadcast rule above.
+  | { type: "access_changed"; bingoId: string | null; payload: { userIds: string[] } };
 
 export * from "./achievements.ts";
 export * from "./audit.ts";

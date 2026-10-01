@@ -11,7 +11,7 @@ export function StatsPageLayout({ slug, bingoName }: { slug: string; bingoName: 
   return (
     <ComicPage>
       <AppHeader title="Stats" subtitle={bingoName} menuEntries={menuEntries} {...comicHeaderProps()}>
-        {header?.isMod && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
+        {header?.canModerate && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
       </AppHeader>
       <StatsView slug={slug} />
     </ComicPage>

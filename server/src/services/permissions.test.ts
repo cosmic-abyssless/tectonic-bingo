@@ -2,7 +2,7 @@
 // why a refusal is refused. Written out by hand rather than read off GRANTS, so a change to the grants has to change
 // this table too.
 import { describe, expect, it } from "vitest";
-import { ACTIONS, can, OPEN_TO_EVERYONE, STAGE_ORDER, type Action, type PermissionDenial, type Role, type Stage } from "@bingo/shared";
+import { ACTIONS, can, OPEN_TO_EVERYONE, resolvePermissions, STAGE_ORDER, unavailableReason, type Action, type PermissionDenial, type Role, type Stage } from "@bingo/shared";
 
 // One character per stage, in STAGE_ORDER (planning, signup, captains, draft, reveal, live, complete):
 // "+" allowed, "r" refused for the role, "s" refused for the stage, "x" refused by a rule for everyone. The Bingo shows
@@ -116,5 +116,30 @@ describe("can()", () => {
     expect(can(["admin"], null, "administer_site")).toEqual({ ok: true });
     expect(can([], null, "administer_site")).toEqual({ ok: false, reason: "role" });
     expect(can(["captain"], null, "rename_team")).toEqual({ ok: false, reason: "stage" });
+  });
+});
+
+describe("why an Action is closed", () => {
+  const bingo = (stage: Stage) => ({ stage, showScreenshotsWhenFinished: true });
+
+  it("says so in words that can depend on the stage", () => {
+    expect(unavailableReason(bingo("draft"), "rename_team")).toBe("Team names can be changed once the Board is revealed");
+    expect(unavailableReason(bingo("live"), "rename_team")).toBe("Team names are locked once the Bingo is Live");
+    expect(unavailableReason(bingo("complete"), "rename_team")).toBe("Team names are locked once the Bingo is Live");
+    expect(unavailableReason(bingo("signup"), "view_draft_room")).toMatch(/captains and mods/);
+    expect(unavailableReason(bingo("live"), "view_bingo")).toBe("Not available at this stage of the bingo");
+  });
+
+  it("is given for every Action a role grants but the stage or a rule closes, and for none it doesn't grant", () => {
+    for (const stage of STAGE_ORDER) {
+      for (const roles of [["admin"], ["moderator"], ["captain", "player"], ["player"], []] as Role[][]) {
+        const { allowed, reasons } = resolvePermissions(roles, bingo(stage));
+        for (const action of ACTIONS) {
+          const permission = can(roles, bingo(stage), action);
+          expect(allowed.includes(action), `${roles} ${stage} ${action}`).toBe(permission.ok);
+          expect(reasons[action], `${roles} ${stage} ${action}`).toBe(permission.ok || permission.reason === "role" ? undefined : unavailableReason(bingo(stage), action));
+        }
+      }
+    }
   });
 });

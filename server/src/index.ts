@@ -26,6 +26,7 @@ import osrsItemsRouter from "./routes/osrsItems";
 import bugReportsRouter from "./routes/bugReports";
 import { errorHandler } from "./middleware/errorHandler";
 import { requireGuildMember } from "./middleware/requireGuildMember";
+import { broadcastAccessChanges } from "./middleware/broadcastAccessChanges";
 import { auditContext } from "./audit/middleware";
 import { authorizeWithSession, closeWebSocketServer, initWebSocketServer } from "./ws";
 import { DB_PATH, db, sqlite } from "./db";
@@ -188,6 +189,8 @@ try {
 }
 app.use("/api/me", meRouter);
 app.use("/api/admin", siteAdminRouter);
+// Ahead of every router under a bingo: a write that changes someone's roles there tells them (access_changed).
+app.use("/api/bingos/:slug", broadcastAccessChanges);
 app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
 // Ahead of the admin router: a Historical Bingo's screenshot uploads, the one write it takes.

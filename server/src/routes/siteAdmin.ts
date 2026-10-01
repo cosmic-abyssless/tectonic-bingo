@@ -17,6 +17,7 @@ import * as mcpConnections from "../mcp/connections";
 import { ServiceError } from "../services/errors";
 import { removeUploads } from "../services/uploadFiles";
 import { queryAuditLog } from "../audit/query";
+import { broadcast } from "../ws";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, BingoExportDocument } from "@bingo/shared";
 
 const router = Router();
@@ -95,6 +96,8 @@ router.patch(
     const { isAdmin } = req.body as { isAdmin?: boolean };
     if (typeof isAdmin !== "boolean") throw new ServiceError(400, "isAdmin must be a boolean");
     const user = userService.setUserAdmin(db, req.params.id as string, isAdmin);
+    // Admin counts in every bingo and on the Site admin pages: their client refetches all of it.
+    broadcast({ type: "access_changed", bingoId: null, payload: { userIds: [user.id] } });
     res.json({ user });
   }),
 );

@@ -3,6 +3,7 @@
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { CanResult } from "./permissionCheck";
 import type {
   AuditCategory,
   AuditTone,
@@ -60,10 +61,11 @@ export interface TeamModel {
   isMine: boolean;
   /** Captain first, then co-captain. */
   members: TeamMemberModel[];
-  /** The viewer is this team's captain or co-captain. */
-  isLead: boolean;
-  /** Leads only, and only until the bingo goes live (matches the rename endpoint). */
-  canRename: boolean;
+  /**
+   * Renaming the team from its dialog (rename_team), on the viewer's own team: allowed, or closed for now with the reason
+   * its disabled control shows. Null when it isn't theirs to rename at all (no control).
+   */
+  rename: CanResult | null;
   /** The team's Codeword (CONTEXT.md), for its own Players and for mods (who can submit for any team); null otherwise. */
   codeword: string | null;
 }
@@ -350,7 +352,10 @@ export interface BingoPageModel {
   historical: HistoricalRecorded | null;
   milestone: StageMilestone | null;
   user: UserModel;
-  isMod: boolean;
+  /** The viewer may open the mod panel (moderate_bingo). */
+  canModerate: boolean;
+  /** The viewer rates signups for their Team's scouting list (rate_picks): the scouting banner says so. */
+  canRatePicks: boolean;
   myTeam: TeamModel | null;
   teams: TeamModel[];
   categories: CategoryModel[];
@@ -361,7 +366,7 @@ export interface BingoPageModel {
   removedFromTeam: string | null;
   /** Mods, and everyone once the bingo is Finished, can switch between teams' boards. */
   canPickTeam: boolean;
-  /** Mods always; players on a team once live (own team only), everyone once complete (matches the stats endpoint). */
+  /** From Live on: whoever sees other teams (mods; everyone once complete), and players their own team while live (matches the stats endpoint). */
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only for a Finished Bingo, for everyone who can view it. */
   canRewind: boolean;
@@ -372,7 +377,7 @@ export interface BingoPageModel {
   wrapped: { canOpen: boolean; preview: boolean };
   /**
    * Scouting (CONTEXT.md): Team leads and mods may browse the draft room before the draft stage, and every Player may
-   * once Signups are closed. Only leads rate signups (myTeam.isLead).
+   * once Signups are closed. Only leads rate signups (canRatePicks).
    */
   canScout: boolean;
   /** For the draft-stage slot; DraftState is the shared draft response type. */

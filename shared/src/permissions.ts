@@ -67,6 +67,8 @@ export type PermissionBingo = Pick<Bingo, "stage" | "showScreenshotsWhenFinished
 
 // Before play starts: what Pick Ratings lock on (isBoardLocked).
 const BEFORE_LIVE: readonly Stage[] = ["planning", "signup", "captains", "draft", "reveal"];
+// Before Board revealed: while the Teams are still being made.
+const BEFORE_REVEAL: readonly Stage[] = ["planning", "signup", "captains", "draft"];
 // Past Planning, which is for Moderators and Admins only (CONTEXT.md "Stage").
 const AFTER_PLANNING: readonly Stage[] = ["signup", "captains", "draft", "reveal", "live", "complete"];
 // While Captains scout the signups and pick: their window on a player's signup answers.
@@ -132,6 +134,11 @@ export const OPEN_TO_EVERYONE: { readonly [A in Action]?: (bingo: PermissionBing
   view_other_teams_screenshots: (bingo) => bingo.stage === "complete" && bingo.showScreenshotsWhenFinished,
 };
 
+/** Roles outside any Bingo: a site admin's, on the Site admin pages. */
+export function siteRoles(user: { isAdmin: boolean }): Role[] {
+  return user.isAdmin ? ["admin"] : [];
+}
+
 export type PermissionDenial = "role" | "stage" | "rule";
 export type Permission = { ok: true } | { ok: false; reason: PermissionDenial };
 
@@ -165,4 +172,52 @@ export function can(roles: readonly Role[], bingo: PermissionBingo | null, actio
   if (!inStage) return { ok: false, reason: "stage" };
   if (bingo && !passesRules(bingo, action)) return { ok: false, reason: "rule" };
   return { ok: true };
+}
+
+/**
+ * What a user is told when a role of theirs grants an Action that's closed right now, for the stage or by a rule for
+ * everyone. The server's refusal says the same words (server/src/services/permissions.ts), and so does the client's
+ * disabled control. A function of the Bingo, since one Action can be closed for different reasons in different stages.
+ * Not for a refusal by role: a control no role of the user's grants isn't shown at all.
+ */
+export const UNAVAILABLE_REASONS: { readonly [A in Action]?: (bingo: PermissionBingo) => string } = {
+  make_draft_pick: () => "Picks can only be made during the draft stage",
+  run_draft: () => "Picks can only be undone during the draft stage",
+  rate_picks: () => "Ratings are locked once the bingo is live",
+  rename_team: (bingo) => (BEFORE_REVEAL.includes(bingo.stage) ? "Team names can be changed once the Board is revealed" : "Team names are locked once the Bingo is Live"),
+  view_team_stats: () => "Stats aren't visible until the bingo is complete",
+  view_draft_room: (bingo) =>
+    bingo.stage === "signup"
+      ? "Scouting is only visible to captains and mods"
+      : bingo.stage === "captains"
+        ? "Scouting is only visible to this bingo's players and mods"
+        : "The draft room is only visible to this bingo's players and mods",
+};
+
+/** Why `action` is closed in `bingo` right now: UNAVAILABLE_REASONS' words, or general ones for an Action without any. */
+export function unavailableReason(bingo: PermissionBingo, action: Action): string {
+  return UNAVAILABLE_REASONS[action]?.(bingo) ?? "Not available at this stage of the bingo";
+}
+
+/**
+ * A viewer's Actions in one Bingo at its current stage (GET /api/bingos/:slug/permissions): the ones they may take, and
+ * why not for each one a role of theirs grants but that's closed right now. An Action no role of theirs grants is in
+ * neither. `roles` are theirs in the Bingo, for saying which one they lost.
+ */
+export interface BingoPermissionsResponse {
+  roles: Role[];
+  allowed: Action[];
+  reasons: { [A in Action]?: string };
+}
+
+/** can() for every Action at once, for someone holding `roles` in `bingo`. */
+export function resolvePermissions(roles: readonly Role[], bingo: PermissionBingo): BingoPermissionsResponse {
+  const allowed: Action[] = [];
+  const reasons: BingoPermissionsResponse["reasons"] = {};
+  for (const action of ACTIONS) {
+    const permission = can(roles, bingo, action);
+    if (permission.ok) allowed.push(action);
+    else if (permission.reason !== "role") reasons[action] = unavailableReason(bingo, action);
+  }
+  return { roles: [...roles], allowed, reasons };
 }

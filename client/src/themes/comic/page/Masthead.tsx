@@ -64,7 +64,7 @@ export function Masthead({
       {...comicHeaderProps()}
     >
       {/* The Mod panel, then (on the board) Submit. */}
-      {header.isMod && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
+      {header.canModerate && <ModPanelLink slug={slug} pendingCount={header.pendingCount} />}
       {children}
     </AppHeader>
   );

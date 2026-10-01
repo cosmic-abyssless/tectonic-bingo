@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
+import { useSitePageAccess } from "../headless/permissions";
 import { queryKeys, useBingos } from "../api/queries";
 import { useBugReports } from "../api/adminQueries";
 import * as adminApi from "../api/adminApi";
@@ -315,7 +316,9 @@ function GrantAdminPanel() {
 const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
-  const { user, canGrantAdmin, devMode } = useAuth();
+  const { canGrantAdmin, devMode } = useAuth();
+  // Losing Admin while here sends them back to the list of Bingos.
+  const mayAdminister = useSitePageAccess("administer_site");
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
   const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin", "claude"] : []), ...(devMode ? ["test-data"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs");
@@ -326,7 +329,7 @@ export function SiteAdminPage() {
   useEffect(() => {
     if (tab === "bugs") markBugReportsSeen();
   }, [tab, bugReportsData, markBugReportsSeen]);
-  if (!user?.isAdmin) {
+  if (!mayAdminister) {
     return (
       <div className="flex min-h-dvh items-center justify-center gap-1 bg-background text-sm text-on-surface-muted">
         Site admin access required.
