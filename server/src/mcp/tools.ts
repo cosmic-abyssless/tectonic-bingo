@@ -6,7 +6,9 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { McpServer, type AuthInfo, type CallToolResult } from "@modelcontextprotocol/server";
 import * as schema from "../db/schema";
 import { oauthClients, users } from "../db/schema";
+import { can } from "@bingo/shared";
 import { audit } from "../audit/record";
+import { siteRoles } from "../services/permissions";
 import { McpToolError, type McpTool, type McpToolContext } from "./tool";
 import { bingoSummary } from "./tools/bingoSummary";
 import { describeSchema } from "./tools/describeSchema";
@@ -66,7 +68,7 @@ export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: Mc
       async (args: Record<string, unknown>): Promise<CallToolResult> => {
         // The /mcp route only lets verified tokens through; this guards a server built without one.
         const user = userId ? db.select().from(users).where(eq(users.id, userId)).get() : undefined;
-        if (!user?.isAdmin || !authInfo || !connectionId) return errorResult("Only site admins can use these tools.");
+        if (!user || !can(siteRoles(user), null, "administer_site").ok || !authInfo || !connectionId) return errorResult("Only site admins can use these tools.");
         const limit = takeRateLimit(connectionId);
         if (!limit.ok) return errorResult(`Too many tool calls: try again in ${limit.retryAfterSeconds} seconds.`);
 

@@ -8,8 +8,8 @@ import { claims, submissions } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { audit } from "../audit/record";
 import { userLabelById } from "../audit/describe";
-import { isBingoMod } from "./bingoService";
 import { ServiceError } from "./errors";
+import { assertCan, bingoRoles } from "./permissions";
 import { describeSubmissionTarget } from "./scoringService";
 import { getTeamById, getTeamMembers, getUserTeamForBingo } from "./teamService";
 
@@ -37,7 +37,7 @@ export function resolveSubmissionTeam(db: Db, bingo: Bingo, user: { id: string; 
   const myTeam = getUserTeamForBingo(db, bingo.id, user.id);
   let team: Team | null = myTeam;
   if (teamId && teamId !== myTeam?.id) {
-    if (!isBingoMod(db, bingo.id, user.id, user.isAdmin)) throw new ServiceError(403, "You can only submit for your own team");
+    assertCan(bingoRoles(db, bingo, user), bingo, "submit_for_any_team", { role: new ServiceError(403, "You can only submit for your own team") });
     const other = getTeamById(db, teamId);
     if (!other || other.bingoId !== bingo.id) throw new ServiceError(404, "Team not found");
     team = other;
