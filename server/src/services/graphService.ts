@@ -195,7 +195,7 @@ type NodeRow = typeof nodes.$inferInsert;
 function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id"> {
   if (input.kind === "SUM" && (input.children ?? []).some((c) => c.kind !== "ITEM")) {
     const name = input.label ? `"${input.label}"` : "A total";
-    throw new ServiceError(400, `${name} ("N in total from") can only be made of Items. Take the condition out of it first.`);
+    throw new ServiceError(400, `${name} ("N of any (dupes count)") can only be made of Items. Take the condition out of it first.`);
   }
   return {
     bingoId,
