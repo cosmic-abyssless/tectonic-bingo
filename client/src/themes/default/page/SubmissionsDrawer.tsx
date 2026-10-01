@@ -6,7 +6,7 @@ import { ReactionBar } from "../../../core/submissions/ReactionBar";
 import { Dialog, DialogHeader } from "../../../core/ui/Dialog";
 import { Button } from "../../../core/ui/Button";
 import { Badge, EmptyState, FilterChip } from "../../../core/ui/Card";
-import { Select } from "../../../core/ui/Select";
+import { MultiSelect } from "../../../core/ui/MultiSelect";
 import { ImageIcon } from "../../../core/ui/icons";
 import { SubmissionStatusBadge } from "../../../core/ui/StatusBadge";
 import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
@@ -35,16 +35,17 @@ export function SubmissionsDrawer({
 }) {
   const { reactions } = useBingoPage();
   const [filter, setFilter] = useState<Filter>("all");
-  // "" = everyone. Names come from the submissions themselves, so the list
-  // only ever offers people who actually submitted something.
-  const [submitter, setSubmitter] = useState("");
+  // None picked = everyone. Names come from the submissions themselves, so the list only ever offers people who
+  // actually submitted something.
+  const [picked, setPicked] = useState<string[]>([]);
   const submitters = [...new Set(submissions.flatMap((s) => (s.submittedBy ? [s.submittedBy] : [])))].sort();
-  const bySubmitter = submitter ? submissions.filter((s) => s.submittedBy === submitter) : submissions;
+  const submitterOptions = submitters.map((name) => ({ key: name, label: name, count: submissions.filter((s) => s.submittedBy === name).length }));
+  const bySubmitter = picked.length > 0 ? submissions.filter((s) => s.submittedBy != null && picked.includes(s.submittedBy)) : submissions;
   const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
   const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} size="lg">
+    <Dialog isOpen={isOpen} onClose={onClose} size="lg" fixedHeight>
       <DialogHeader
         title="Team submissions"
         subtitle={`${submissions.length} submission${submissions.length !== 1 ? "s" : ""}`}
@@ -59,70 +60,68 @@ export function SubmissionsDrawer({
       />
 
       {submissions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-outline px-5 py-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-outline px-5 py-3">
           {FILTERS.map(({ key, label }) => (
             <FilterChip key={key} active={filter === key} count={countFor(key)} onPress={() => setFilter(key)}>
               {label}
             </FilterChip>
           ))}
           {submitters.length > 1 && (
-            <Select
-              size="sm"
-              value={submitter}
-              onChange={setSubmitter}
-              aria-label="Submitted by"
-              className="ml-auto w-auto!"
-              options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
-            />
+            <div className="ml-auto">
+              <MultiSelect label="Player" options={submitterOptions} selected={picked} onChange={setPicked} />
+            </div>
           )}
         </div>
       )}
 
-      {submissions.length === 0 ? (
-        <div className="p-5">
-          <EmptyState icon={<ImageIcon />} title="No submissions yet">
-            {onSubmit ? "Submit a completion using the Submit button in the header." : "Nothing has been submitted for this team yet."}
-          </EmptyState>
-        </div>
-      ) : shown.length === 0 ? (
-        <p className="p-5 text-sm text-on-surface-subtle">
-          No {filter === "all" ? "" : `${filter} `}submissions{submitter && ` by ${submitter}`}.
-        </p>
-      ) : (
-        <ul className="divide-y divide-outline">
-          {shown.map((s) => (
-            <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
-              <ScreenshotThumb url={s.thumbnailUrl ?? undefined} pending={s.screenshotPending} />
+      {/* The one part that scrolls: the header and filters stay put, and an empty list keeps the dialog's height. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {submissions.length === 0 ? (
+          <div className="p-5">
+            <EmptyState icon={<ImageIcon />} title="No submissions yet">
+              {onSubmit ? "Submit a completion using the Submit button in the header." : "Nothing has been submitted for this team yet."}
+            </EmptyState>
+          </div>
+        ) : shown.length === 0 ? (
+          <p className="p-5 text-sm text-on-surface-subtle">
+            No {filter === "all" ? "" : `${filter} `}submissions{picked.length === 1 ? ` by ${picked[0]}` : picked.length > 1 && ` by those Players`}.
+          </p>
+        ) : (
+          <ul className="divide-y divide-outline">
+            {shown.map((s) => (
+              <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
+                <ScreenshotThumb url={s.thumbnailUrl ?? undefined} pending={s.screenshotPending} />
 
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="truncate text-sm font-medium text-on-surface">{s.tileName ?? "Unknown tile"}</span>
-                  {s.taskLabels.map((label) => (
-                    <Badge key={label}>{label}</Badge>
-                  ))}
-                </div>
-                <p className="truncate text-sm text-on-surface-muted">
-                  <LinkedClaimsSummary claims={s.detail.claims} isProof={s.isProof} />
-                </p>
-                {s.detail.submittedByUser && (
-                  <p className="mt-0.5 text-xs text-on-surface-subtle">
-                    by <PlayerName userId={s.detail.submittedByUser.id}>{s.submittedBy}</PlayerName>
-                    {s.detail.postedByUser && <> (posted by <PlayerName userId={s.detail.postedByUser.id}>{displayName(s.detail.postedByUser)}</PlayerName>)</>}
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="truncate text-sm font-medium text-on-surface">{s.tileName ?? "Unknown tile"}</span>
+                    {s.taskLabels.map((label) => (
+                      <Badge key={label}>{label}</Badge>
+                    ))}
+                  </div>
+                  <p className="truncate text-sm text-on-surface-muted">
+                    <LinkedClaimsSummary claims={s.detail.claims} isProof={s.isProof} />
                   </p>
-                )}
-                {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
-                {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
-                {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
-              </div>
+                  {s.detail.submittedByUser && (
+                    <p className="mt-0.5 text-xs text-on-surface-subtle">
+                      by <PlayerName userId={s.detail.submittedByUser.id}>{s.submittedBy}</PlayerName>
+                      {s.detail.postedByUser && <> (posted by <PlayerName userId={s.detail.postedByUser.id}>{displayName(s.detail.postedByUser)}</PlayerName>)</>}
+                    </p>
+                  )}
+                  {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
+                  {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
+                  {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
+                </div>
 
-              <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                <SubmissionStatusBadge status={s.status} />
-                <span className="text-xs text-on-surface-subtle">{s.timeAgo}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                  <SubmissionStatusBadge status={s.status} />
+                  <span className="text-xs text-on-surface-subtle">{s.timeAgo}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Dialog>
   );
 }

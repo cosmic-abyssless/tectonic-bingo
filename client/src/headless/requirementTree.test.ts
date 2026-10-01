@@ -153,10 +153,17 @@ describe("buildRequirementTree: nested condition layout", () => {
     expect(tree.divider).toBeNull();
   });
 
+  it("says a COUNT over Items only takes one of each, and keeps the plain wording once it holds a condition", () => {
+    const overItems = node({ id: "count", kind: "COUNT", minCount: 3, children: [item("a"), item("b"), item("c"), item("d")] });
+    expect(buildRequirementTree(overItems, buildLeafClaimMaps([]), new Map())!.label).toBe("3 of any (no dupes)");
+    const mixed = node({ id: "count", kind: "COUNT", minCount: 3, children: [item("a"), item("b"), node({ id: "all", kind: "ALL", children: [item("c")] })] });
+    expect(buildRequirementTree(mixed, buildLeafClaimMaps([]), new Map())!.label).toBe("Complete at least 3 of");
+  });
+
   it("makes a SUM over several items a group headed with its rule and progress", () => {
     const sum = node({ id: "sum", kind: "SUM", quantity: 5, children: [item("a", "Dragon claws"), item("b", "Dinh's bulwark")] });
     const tree = buildRequirementTree(sum, approved("b"), new Map())!;
-    expect(tree).toMatchObject({ isLeaf: false, showHeading: true, label: "5 in total from", progress: { current: 1, target: 5 }, quantity: null, divider: null, children: [] });
+    expect(tree).toMatchObject({ isLeaf: false, showHeading: true, label: "5 of any (dupes count)", progress: { current: 1, target: 5 }, quantity: null, divider: null, children: [] });
     expect(tree.items.map((i) => [i.name, i.count])).toEqual([["Dragon claws", 0], ["Dinh's bulwark", 1]]);
   });
 

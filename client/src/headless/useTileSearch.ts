@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Tile, TileCategory } from "@bingo/shared";
 import { sealedTileMatchesSearch, tileMatchesSearch } from "../core/board/requirementTree";
 import type { TileSearchModel } from "./types";
@@ -13,6 +13,22 @@ export function tileSearchMatcher(sealed: boolean, categories: TileCategory[]): 
   const labelById = new Map(categories.map((c) => [c.id, c.label]));
   return (tile, q) => sealedTileMatchesSearch(tile, tile.categoryId ? (labelById.get(tile.categoryId) ?? null) : null, q);
 }
+
+type ShortcutKey = Pick<globalThis.KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "defaultPrevented">;
+type FocusedElement = { tagName: string; isContentEditable?: boolean } | null;
+
+/**
+ * Whether a keydown on the board should jump to the Tile search (#385): a bare `/` (Shift is allowed, since some
+ * layouts need it for `/`), and not while typing in a field or while a dialog is open.
+ */
+export function slashFocusesSearch(e: ShortcutKey, focused: FocusedElement, dialogOpen: boolean): boolean {
+  if (e.key !== "/" || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (dialogOpen) return false;
+  if (focused && (focused.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(focused.tagName))) return false;
+  return true;
+}
+
+const OPEN_DIALOG = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog[open]';
 
 // Ports the old local TileSearch component's state machine (query, focus,
 // highlight, keyboard nav, the 150ms blur-close timeout) out of
@@ -71,6 +87,18 @@ export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (ti
       setFocusedState(false);
     }, 150);
   }
+
+  // "/" anywhere on the board focuses the search, unless the viewer is typing somewhere or a dialog is open.
+  useEffect(() => {
+    function onDocumentKeyDown(e: globalThis.KeyboardEvent) {
+      const input = inputRef.current;
+      if (!input || !slashFocusesSearch(e, document.activeElement as HTMLElement | null, !!document.querySelector(OPEN_DIALOG))) return;
+      e.preventDefault();
+      input.focus();
+    }
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => document.removeEventListener("keydown", onDocumentKeyDown);
+  }, []);
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!showDropdown) return;
