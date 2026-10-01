@@ -1,11 +1,12 @@
-// Wrapped art (#262): decorative cut-outs in groups (a section's Category images, or the side pool), uploaded by an
-// Admin one at a time as a transparent PNG or as a screenshot on one solid colour (keyed out here), and drawn as a
-// sticker on torn paper (stickerEffect.ts), once per upload. The upload is kept as it was, so it can be re-cut with
-// other keying settings without a new screenshot.
+// Wrapped art (#262): decorative cut-outs in groups (a section's Category images, the side pool, or the Player card
+// art, #396), uploaded by an Admin one at a time as a transparent PNG or as a screenshot on one solid colour (keyed
+// out here), and drawn as a sticker on torn paper (stickerEffect.ts), once per upload. The upload is kept as it was,
+// so it can be re-cut with other keying settings without a new screenshot.
 // A new Bingo starts with the previous Bingo's art: copied rows pointing at the same files, which is why replacing or
 // removing art never deletes a file (the same as tile images).
 // Credits (CONTEXT.md, #281) live here too: each Category image can credit someone (captioned on it), and each category
-// can hold additional credits with no image (bingos.wrapped_art_credits_json). Side images carry no credits.
+// can hold additional credits with no image (bingos.wrapped_art_credits_json). Only sections hold credits: side images
+// and Player card art carry none.
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
@@ -76,7 +77,7 @@ export function parseGroup(value: unknown): WrappedArtGroup {
   return value;
 }
 
-/** A section (never "side"): what credits belong to. */
+/** A section (never "side" or "playerCard"): what credits belong to. */
 export function parseSection(value: unknown): WrappedArtSection {
   if (!isWrappedArtSection(value)) throw new ServiceError(404, "No such Wrapped art category");
   return value;
@@ -141,7 +142,7 @@ function toImage(row: Row): WrappedArtImage {
 }
 
 function creditOf(row: Row): WrappedCredit | null {
-  return row.creditName && row.section !== "side" ? { name: row.creditName, role: row.creditRole || null } : null;
+  return row.creditName && isWrappedArtSection(row.section) ? { name: row.creditName, role: row.creditRole || null } : null;
 }
 
 /** A Bingo's images (optionally one group's), in story order: group by group, each in its own order. */
@@ -168,12 +169,16 @@ export function additionalCredits(db: Queryable, bingoId: string): WrappedArtCre
   return parseAdditionalCredits(row?.json);
 }
 
-/** What the story shows: each section's Category images with their credits, each category's additional credits, and the side pool. */
+/**
+ * What Wrapped shows: each section's Category images with their credits, each category's additional credits, the side
+ * pool, and the Player card art for the share cards.
+ */
 export function artSet(db: Queryable, bingoId: string): WrappedArtSet {
-  const set: WrappedArtSet = { sections: {}, additionalCredits: additionalCredits(db, bingoId), side: [] };
+  const set: WrappedArtSet = { sections: {}, additionalCredits: additionalCredits(db, bingoId), side: [], playerCard: [] };
   for (const r of rows(db, bingoId)) {
     const frames: [string, string] = [r.frame1Url, r.frame2Url];
     if (r.section === "side") set.side.push(frames);
+    else if (r.section === "playerCard") set.playerCard.push(frames);
     else if (isWrappedArtSection(r.section)) (set.sections[r.section] ??= []).push({ frames, credit: creditOf(r) });
   }
   return set;
@@ -360,12 +365,12 @@ export function reorderArt(db: Db, bingo: Bingo, group: WrappedArtGroup, ids: un
   });
 }
 
-/** Sets or clears one Category image's credit (never a side image's). */
+/** Sets or clears one Category image's credit (never a side image's or Player card art's). */
 export function setArtCredit(db: Db, bingo: Bingo, id: string, input: unknown): WrappedArtImage {
   const credit = normalizeCredit(input);
   return db.transaction((tx) => {
     const row = image(tx, bingo.id, id);
-    if (row.section === "side" && credit) throw new ServiceError(400, "Side images don't carry credits");
+    if (!isWrappedArtSection(row.section) && credit) throw new ServiceError(400, row.section === "side" ? "Side images don't carry credits" : "Player card art doesn't carry credits");
     const updated = tx.update(wrappedArt).set({ creditName: credit?.name ?? null, creditRole: credit?.role ?? null }).where(eq(wrappedArt.id, row.id)).returning().get();
     audit(tx, { action: "wrapped.art_credit_set", bingoId: bingo.id, entity: entity(bingo), details: { section: row.section, name: credit?.name ?? null } });
     return toImage(updated);
@@ -395,7 +400,7 @@ export function replaceGroups(tx: Queryable, bingoId: string, groups: ReadonlyMa
   const at = clockNow();
   for (const [group, images] of groups) {
     images.forEach((art, sortOrder) => {
-      const credit = group === "side" ? null : (art.credit ?? null);
+      const credit = isWrappedArtSection(group) ? (art.credit ?? null) : null;
       tx.insert(wrappedArt).values({ bingoId, section: group, sortOrder, ...values(art, at), creditName: credit?.name ?? null, creditRole: credit?.role ?? null }).run();
     });
   }

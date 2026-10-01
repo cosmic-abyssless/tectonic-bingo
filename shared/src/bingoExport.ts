@@ -103,8 +103,8 @@ export interface ExportTile {
 /**
  * One Wrapped art image (#262): its original upload (the frames are rendered again on import), and how a
  * solid-background screenshot was keyed (null for one uploaded already cut out; absent reads as the defaults).
- * `section` is its group (shared WRAPPED_ART_GROUPS: a section's Category images, or "side"); a group's images are
- * in the order the story shows them. `credit`: who it credits (CONTEXT.md "Credits"); absent in older files: none.
+ * `section` is its group (shared WRAPPED_ART_GROUPS: a section's Category images, "side" or "playerCard"); a group's
+ * images are in the order the story shows them. `credit`: who it credits (CONTEXT.md "Credits"); absent in older files: none.
  */
 export interface ExportWrappedArt {
   section: string;
