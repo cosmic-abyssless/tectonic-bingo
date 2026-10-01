@@ -14,15 +14,9 @@ import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
 import { canMove, moveNode, type Path } from "./requirementMoves";
+import { linkedLeafInput, type ExistingLeaf } from "./existingLeaves";
 
-/** An ITEM leaf that already exists elsewhere on the same tile — offered as a reference, not retyped. */
-export interface ExistingLeaf {
-  id: string;
-  itemName: string;
-  /** Its Counts as (CONTEXT.md), sent along when it's linked in so the shared Item keeps it. */
-  countsAs: number;
-  taskLabel: string;
-}
+export type { ExistingLeaf } from "./existingLeaves";
 
 /**
  * An ALL/ANY/COUNT/SUM block that already exists elsewhere on the same tile
@@ -523,7 +517,7 @@ function GroupNode(props: NodeProps) {
             placeholder="Search items elsewhere on this tile…"
             onChange={(id) => {
               const leaf = pickableLeaves.find((l) => l.id === id);
-              if (leaf) add(path, { id: leaf.id, kind: "ITEM", itemName: leaf.itemName, countsAs: leaf.countsAs });
+              if (leaf) add(path, linkedLeafInput(leaf));
               setPickingExisting(false);
             }}
           />

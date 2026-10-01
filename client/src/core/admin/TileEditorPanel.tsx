@@ -10,23 +10,10 @@ import { Field, Input } from "../ui/Field";
 import { Select } from "../ui/Select";
 import { ImageIcon, LockIcon, PlusIcon } from "../ui/icons";
 import { TaskEditor, optimisticTasks } from "./TaskEditor";
-import type { ExistingLeaf, ExistingCondition } from "./RequirementTreeEditor";
-import { collectLeaves, collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
+import type { ExistingCondition } from "./RequirementTreeEditor";
+import { existingLeavesExcluding } from "./existingLeaves";
+import { collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
 import { thumbUrl } from "../../api/imageVariants";
-
-// Every ITEM leaf on this tile, labeled by which task it's currently under —
-// offered to every OTHER task as a reference (see RequirementTreeEditor's
-// "+ existing item"), so two tasks can share the same requirement (a claim
-// then counts toward both) without retyping the name.
-function existingLeavesExcluding(tasks: GraphNode[], excludeTaskIndex: number): ExistingLeaf[] {
-  return tasks
-    .filter((_, i) => i !== excludeTaskIndex)
-    .flatMap((task) =>
-      collectLeaves(task)
-        .filter((leaf) => leaf.kind === "ITEM" && leaf.itemName)
-        .map((leaf) => ({ id: leaf.id, itemName: leaf.itemName!, countsAs: leaf.countsAs, taskLabel: task.label ?? "Task" })),
-    );
-}
 
 // Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
 // root), labeled by which task it's under and a dot-notation index within it
