@@ -9,7 +9,7 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
-import { useBingoCan } from "./permissions";
+import { useBingoCan, useCloseOnLoss } from "./permissions";
 import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
@@ -107,6 +107,8 @@ export function BingoPageProvider({
   const [submitInitialTaskId, setSubmitInitialTaskId] = useState<string | undefined>(undefined);
   const [submitInitialFile, setSubmitInitialFile] = useState<File | undefined>(undefined);
   const [submitInitialKind, setSubmitInitialKind] = useState<SubmissionKind | undefined>(undefined);
+  // A Restriction on submitting, applied while the submission dialog is open, closes it and says why.
+  useCloseOnLoss(viewingTeamId && viewingTeamId !== shell?.myTeam?.id ? "submit_for_any_team" : "submit", submitOpen, () => setSubmitOpen(false), slug);
 
   // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
   // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
@@ -162,13 +164,22 @@ export function BingoPageProvider({
   const canPickTeam = can("view_other_teams").allowed && (!historical || historical.tasks);
   const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
-  const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
+  const submitWindow = bingo.stage === "live" && hasStarted && !!viewingTeamId;
+  // A Restriction on submitting (to your own team, or for the mods to the team they're viewing) disables Submit with
+  // its reason. Neither Action has a stage of its own, so a reason here is always a Restriction's.
+  const submitCheck = can(viewingTeamId && viewingTeamId !== myTeam?.id ? "submit_for_any_team" : "submit");
+  const submitRestricted = submitWindow && !submitCheck.allowed ? submitCheck.reason : null;
+  const canSubmit = submitWindow && !submitRestricted;
   // Hands go up on your own team's board only, from reveal onwards (the
   // board isn't visible to players before that) until the bingo is over,
   // and not by anyone while the Tiles are sealed (the server refuses it).
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
   // Reactions are for teammates: on your own team's submissions, until the bingo is Finished (then they're closed).
-  const canReact = !!myTeam && viewingTeamId === myTeam.id && bingo.stage !== "complete";
+  // A Restriction on reacting leaves the reactions there to read, with its reason in place of the picker.
+  const reactOpen = !!myTeam && viewingTeamId === myTeam.id && bingo.stage !== "complete";
+  const reactCheck = can("react");
+  const reactRestricted = reactOpen && !reactCheck.allowed ? reactCheck.reason : null;
+  const canReact = reactOpen && !reactRestricted;
   const canViewStats = canViewStatsOf(shell, can);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
@@ -250,6 +261,7 @@ export function BingoPageProvider({
       pendingSubmissionCount: teamSubmissions.filter((s) => s.submission.status === "pending").length,
     },
     canSubmit,
+    submitRestricted,
     pendingCount: pendingData?.count ?? 0,
     showEndCountdown: bingo.stage === "live" && !!bingo.endsAt,
     submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
@@ -301,6 +313,7 @@ export function BingoPageProvider({
     },
     reactions: {
       canReact,
+      restricted: reactRestricted,
       toggle: (submissionId, emoji) => {
         if (!canReact) return;
         const reactors = teamSubmissions.find((s) => s.submission.id === submissionId)?.reactions?.find((g) => g.emoji === emoji)?.users ?? [];

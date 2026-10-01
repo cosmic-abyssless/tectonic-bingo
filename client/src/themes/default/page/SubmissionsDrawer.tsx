@@ -112,7 +112,7 @@ export function SubmissionsDrawer({
                 )}
                 {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
                 {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
-                {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
+                {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
               </div>
 
               <div className="flex shrink-0 flex-col items-end gap-1 text-right">

@@ -37,3 +37,16 @@ describe("lostAccessMessage", () => {
     expect(lostAccessMessage(at("reveal", ["staff"]), at("live", ["staff"]), "view_buyins", "Summer Bingo")).toBe("Buy-ins are only collected from Signups open until the Bingo is Live");
   });
 });
+
+describe("a Restriction", () => {
+  const restricted = resolvePermissions(["player"], { stage: "live", showScreenshotsWhenFinished: true }, [{ action: "react", reason: "Reaction spam" }]);
+
+  it("refuses the Action with its reason", () => {
+    expect(permissionCheck(restricted)("react")).toEqual({ allowed: false, reason: "Restricted: Reaction spam" });
+    expect(permissionCheck(restricted)("submit")).toEqual({ allowed: true, reason: null });
+  });
+
+  it("is what the viewer is told when it takes an Action from them", () => {
+    expect(lostAccessMessage(at("live", ["player"]), restricted, "react", "Summer Bingo")).toBe("Restricted: Reaction spam");
+  });
+});

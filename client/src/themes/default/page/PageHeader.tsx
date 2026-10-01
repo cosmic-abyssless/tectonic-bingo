@@ -3,6 +3,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Button } from "../../../core/ui/Button";
 import { Badge } from "../../../core/ui/Card";
 import { CountdownTimer } from "../../../core/ui/CountdownTimer";
+import { TextTooltip } from "../../../core/ui/Tooltip";
 import { HistoricalBadge } from "../../../core/historical/HistoricalBadge";
 import { useSlot } from "../../context";
 import { ModPanelButton } from "./ModPanelButton";
@@ -55,6 +56,16 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
         <Button size="sm" variant="primary" onPress={() => page.submit.show()} data-tutorial="submit">
           Submit
         </Button>
+      )}
+      {/* Taken by a Restriction: still there, disabled, saying why. */}
+      {page.submitRestricted && (
+        <TextTooltip text={page.submitRestricted}>
+          <span tabIndex={0} aria-label={`Can't submit. ${page.submitRestricted}`} className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            <Button size="sm" variant="primary" isDisabled>
+              Submit
+            </Button>
+          </span>
+        </TextTooltip>
       )}
     </AppHeader>
   );

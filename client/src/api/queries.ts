@@ -2,7 +2,7 @@ import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient }
 import type {
   AccountTypesResponse, AchievementKey, BingoPermissionsResponse, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
-  ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
+  ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
@@ -409,6 +409,23 @@ export function useModWithdrawSignup(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (signupId: string) => api.delete<{ signup: Signup }>(`/api/bingos/${slug}/mod/signups/${signupId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+/** Mods: take an Action (or a wildcard of them) from a player, with a reason (CONTEXT.md "Restriction"). */
+export function useApplyRestriction(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { userId: string; action: string; reason: string }) => api.post<{ restriction: RestrictionEntry }>(`/api/bingos/${slug}/mod/restrictions`, params),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+export function useLiftRestriction(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (restrictionId: string) => api.delete<void>(`/api/bingos/${slug}/mod/restrictions/${restrictionId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
   });
 }

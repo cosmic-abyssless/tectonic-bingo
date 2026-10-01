@@ -30,8 +30,8 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
-import type { useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
+import { describeRestrictionTarget, formatSignupAnswer, formatTimeZone, RESTRICTABLE_ACTIONS, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import type { useApplyRestriction, useLiftRestriction, useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
 import { useGridTheme } from "../ui/agGrid";
 import type { StatsResult } from "../../context/WebSocketContext";
 import { discordName, displayName } from "../ui/user";
@@ -96,6 +96,8 @@ export interface GridContext {
   withdrawSignup: ReturnType<typeof useModWithdrawSignup>;
   refreshStats: ReturnType<typeof useRefreshSignupStats>;
   setTimezone: ReturnType<typeof useSetSignupTimezone>;
+  applyRestriction: ReturnType<typeof useApplyRestriction>;
+  liftRestriction: ReturnType<typeof useLiftRestriction>;
   /** Opens a player's profile (Enter on their RSN); null outside a PlayerProfileProvider. */
   openProfile: ((userId: string) => void) | null;
 }
@@ -256,6 +258,115 @@ function WithdrawEditor({ data, onValueChange, stopEditing }: CustomCellEditorPr
           Withdraw
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Restrictions (CONTEXT.md "Restriction"): what can be taken, a wildcard for both kinds of submitting, or everything.
+const RESTRICTION_OPTIONS: { value: string; label: string }[] = [...RESTRICTABLE_ACTIONS, "submit*", "*"].map((value) => {
+  const words = describeRestrictionTarget(value);
+  return { value, label: words.charAt(0).toUpperCase() + words.slice(1) };
+});
+
+const restrictionLabel = (action: string) => RESTRICTION_OPTIONS.find((o) => o.value === action)?.label ?? action;
+
+/** Whether a row's Restrictions cell opens its editor: to restrict them, or to lift one already on them. */
+function restrictionsEditable(data: RosterRow | undefined): boolean {
+  return !!data && (!!data.restrictable || (data.restrictions?.length ?? 0) > 0);
+}
+
+// A player's Restrictions, a badge each with its reason on hover. A click or Enter opens RestrictionsEditor.
+const RestrictionsCell = memo(function RestrictionsCell({ data }: CustomCellRendererProps<RosterRow, string, GridContext>) {
+  if (!data) return null;
+  const restrictions = data.restrictions ?? [];
+  if (restrictions.length === 0) return data.restrictable ? <EditableCellValue prompt="Restrict…" /> : <span className="text-on-surface-subtle">—</span>;
+  return (
+    <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
+      {restrictions.map((r) => (
+        <span key={r.id} title={`${r.reason}${r.appliedByLabel ? ` (by ${r.appliedByLabel})` : ""}`}>
+          <Badge tone="danger">{restrictionLabel(r.action)}</Badge>
+        </span>
+      ))}
+    </div>
+  );
+});
+
+// The player's Restrictions, each with Lift, and (when the viewer may restrict them) a form to take one more Action,
+// with a reason. Acts straight away through the mutations in context, then closes.
+function RestrictionsEditor({ data, context, stopEditing }: CustomCellEditorProps<RosterRow, string, GridContext>) {
+  const [action, setAction] = useState(RESTRICTION_OPTIONS[0]!.value);
+  const [reason, setReason] = useState("");
+  const name = data.signup.rsn;
+  const restrict = () => {
+    if (!reason.trim()) return;
+    context.applyRestriction.mutate({ userId: data.user.id, action, reason: reason.trim() }, editFailed(`restrict ${name}`));
+    stopEditing();
+  };
+  return (
+    <div className={`${EDITOR_POPUP} w-80 space-y-3 p-3 text-sm`}>
+      {(data.restrictions ?? []).map((r) => (
+        <div key={r.id} className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-on-surface">{restrictionLabel(r.action)}</p>
+            <p className="text-on-surface-muted">{r.reason}</p>
+            <p className="text-xs text-on-surface-subtle">
+              {r.appliedByLabel ?? "Someone"}, {timeAgo(r.appliedAt)}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onPress={() => {
+              context.liftRestriction.mutate(r.id, editFailed(`lift ${name}'s restriction`));
+              stopEditing();
+            }}
+          >
+            Lift
+          </Button>
+        </div>
+      ))}
+      {data.restrictable && (
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            restrict();
+          }}
+        >
+          <p className="text-on-surface">
+            Take an Action from <span className="font-semibold">{name}</span> in this bingo, until it's lifted. They see the reason.
+          </p>
+          <select
+            aria-label="What to restrict"
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            className="w-full rounded-md border border-outline bg-surface px-2 py-1.5 text-on-surface"
+          >
+            {RESTRICTION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <input
+            aria-label="Reason"
+            placeholder="Reason (they see this)"
+            value={reason}
+            maxLength={500}
+            autoFocus
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full rounded-md border border-outline bg-surface px-2 py-1.5 text-on-surface"
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onPress={() => stopEditing(true)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="danger" type="submit" isDisabled={!reason.trim()}>
+              Restrict
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -585,6 +696,22 @@ export function SignupRosterGrid({
         cellEditorPopupPosition: "under",
         // Enter presses the focused button in the confirmation rather than ending the edit.
         suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab"].includes(p.event.key),
+        width: 150,
+      },
+      !readOnly && {
+        colId: "restrictions",
+        headerName: "Restrictions",
+        headerTooltip: "Actions taken from a player, with a reason they see. Click a cell to restrict them or lift one.",
+        // Everything the cell shows, so a refetch that changes a Restriction redraws it; search finds them by it too.
+        valueGetter: (p) => (p.data?.restrictions ?? []).map((r) => `${restrictionLabel(r.action)}: ${r.reason}`).join("; "),
+        cellRenderer: RestrictionsCell,
+        cellClass: (p) => (restrictionsEditable(p.data) ? "cursor-pointer" : ""),
+        editable: (p) => restrictionsEditable(p.data),
+        cellEditor: RestrictionsEditor,
+        cellEditorPopup: true,
+        cellEditorPopupPosition: "under",
+        // The editor's own form: Enter submits it, Tab moves between its fields.
+        suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab", "ArrowUp", "ArrowDown"].includes(p.event.key),
         width: 150,
       },
       !readOnly && {

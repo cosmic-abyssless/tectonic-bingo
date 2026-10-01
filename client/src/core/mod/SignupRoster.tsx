@@ -11,6 +11,8 @@ import {
   useModWithdrawSignup,
   useRefreshSignupStats,
   useSetSignupTimezone,
+  useApplyRestriction,
+  useLiftRestriction,
   useSignupRoster,
   useSignupQuestions,
 } from "../../api/queries";
@@ -329,9 +331,11 @@ export function SignupRoster({ slug }: { slug: string }) {
   const withdrawSignup = useModWithdrawSignup(slug);
   const refreshStats = useRefreshSignupStats(slug);
   const setTimezone = useSetSignupTimezone(slug);
+  const applyRestriction = useApplyRestriction(slug);
+  const liftRestriction = useLiftRestriction(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, onTeam, historical, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile }),
-    [search, partnerRsnMap, canWithdraw, onTeam, historical, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, openProfile],
+    () => ({ search, partnerRsnMap, canWithdraw, onTeam, historical, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile }),
+    [search, partnerRsnMap, canWithdraw, onTeam, historical, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is

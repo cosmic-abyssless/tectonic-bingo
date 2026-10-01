@@ -85,7 +85,7 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
       )}
 
       {!submission.isProof && (
-        <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
+        <ReactionBar className="mt-2" reactions={submission.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(submission.id, emoji)} />
       )}
     </article>
   );
