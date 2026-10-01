@@ -12,6 +12,7 @@ import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
+import { useUrlSet } from "../ui/useUrlParam";
 import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
 import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
@@ -41,6 +42,10 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
+/** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>`. */
+export const SUBMISSION_FILTER_PARAMS = ["status", "teams"] as const;
+const DEFAULT_STATUSES = ["pending"];
+
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
 // A Proof screenshot (CONTEXT.md): no claims, so no item to match or drop value to show.
 const isProofRow = (row: ModSubmissionRow) => row.submission.kind === "proof";
@@ -98,9 +103,9 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const submissions = data?.submissions ?? [];
 
   // Nothing ticked is Any. Status starts on Pending so the view still lands on "Pending only" by default, same as
-  // before; Team starts on Any.
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(() => new Set(["pending"]));
-  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
+  // before; Team starts on Any. Both are in the URL, so a link opens the queue filtered the same way.
+  const [selectedStatuses, setSelectedStatuses] = useUrlSet("status", DEFAULT_STATUSES);
+  const [selectedTeams, setSelectedTeams] = useUrlSet("teams");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -121,8 +126,9 @@ export function ReviewQueue({ slug }: { slug: string }) {
     return () => cancelAnimationFrame(frame);
   }, [expandedId]);
 
-  const allTeams = [...new Set(submissions.map((s) => s.team.name))].sort();
-  const teamOptions = allTeams.map((t) => ({ key: t, label: t }));
+  // By id, so a link survives a Team being renamed.
+  const allTeams = [...new Map(submissions.map((s) => [s.team.id, s.team.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const teamOptions = allTeams.map(([key, label]) => ({ key, label }));
   const statusCounts: Record<SubmissionStatus, number> = {
     pending: submissions.filter((s) => s.submission.status === "pending").length,
     approved: submissions.filter((s) => s.submission.status === "approved").length,
@@ -131,7 +137,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const statuses = inclusionFilter(selectedStatuses, STATUS_OPTIONS);
   const teams = inclusionFilter(selectedTeams, teamOptions);
   const byStatus = statuses.query ? submissions.filter((s) => statuses.query!.includes(s.submission.status)) : submissions;
-  const byTeam = teams.query ? byStatus.filter((s) => teams.query!.includes(s.team.name)) : byStatus;
+  const byTeam = teams.query ? byStatus.filter((s) => teams.query!.includes(s.team.id)) : byStatus;
   // "Pending only" (the default) reads newest-first; any other mix of statuses reads however the server ordered
   // them, same as before.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
