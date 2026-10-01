@@ -141,17 +141,29 @@ export function collectLabeledConditions<T extends { kind: NodeKind; children?: 
   return result;
 }
 
-/** Player-facing heading for a composite condition, e.g. "Complete at least 3 of". */
-export function conditionHeading(node: { kind: NodeKind; minCount?: number | null; quantity?: number | null }): string {
+/**
+ * Player-facing heading for a composite condition, e.g. "Complete at least 3 of". Whether duplicates count is spelled
+ * out where it matters: a SUM adds up every drop ("5 of any (dupes count)"), while a COUNT whose options are all Items
+ * is done at one of each ("3 of any (no dupes)"). A COUNT holding a condition keeps "Complete at least N of".
+ */
+export function conditionHeading(node: {
+  kind: NodeKind;
+  minCount?: number | null;
+  quantity?: number | null;
+  children?: { kind: NodeKind }[] | null;
+}): string {
   switch (node.kind) {
     case "ALL":
       return "Complete all of";
     case "ANY":
       return "Complete any one of";
-    case "COUNT":
-      return `Complete at least ${node.minCount ?? 1} of`;
+    case "COUNT": {
+      const children = node.children ?? [];
+      const overItems = children.length > 0 && children.every((child) => child.kind === "ITEM");
+      return overItems ? `${node.minCount ?? 1} of any (no dupes)` : `Complete at least ${node.minCount ?? 1} of`;
+    }
     case "SUM":
-      return `${node.quantity ?? 1} in total from`;
+      return `${node.quantity ?? 1} of any (dupes count)`;
     default:
       return "";
   }
