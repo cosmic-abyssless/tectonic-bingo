@@ -12,6 +12,7 @@ export interface CachedAuth<U> {
   user: U;
   devMode: boolean;
   canGrantAdmin: boolean;
+  devAdminOff?: boolean;
 }
 
 interface Stored<U> extends CachedAuth<U> {

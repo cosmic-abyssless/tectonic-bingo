@@ -1,3 +1,12 @@
+import type { Session, SessionData } from "express-session";
+
+declare module "express-session" {
+  interface SessionData {
+    /** Dev only: see devAdminOff. */
+    devAdminOff?: boolean;
+  }
+}
+
 /**
  * Dev mode: dev-login, the seed/test-data tools and the request-clock override exist only while this is
  * true. One check, so nothing that is dev-only can drift onto a different gate.
@@ -21,4 +30,13 @@ export function devSkipsOcr(headerValue: string | undefined): boolean {
  */
 export function devSkipsIntegrations(headerValue: string | undefined): boolean {
   return isDevModeActive() && headerValue === "1";
+}
+
+/**
+ * Dev only: an admin switched their admin powers off from the account switcher (POST /auth/dev-admin), to try the app
+ * as their other roles without switching accounts. deserializeUser then loads them as a non-admin, so every check
+ * (server, client and sockets) sees one. It lasts for the session: logging in as anyone (dev-login) starts it over.
+ */
+export function devAdminOff(session: (Session & Partial<SessionData>) | undefined): boolean {
+  return isDevModeActive() && !!session?.devAdminOff;
 }

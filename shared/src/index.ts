@@ -665,6 +665,8 @@ export interface PendingCountResponse {
 export interface MeResponse {
   user: User;
   devMode: boolean;
+  /** Dev only: the viewer is an admin who switched their admin powers off, so `user.isAdmin` reads false. */
+  devAdminOff: boolean;
 }
 
 export interface CreateSubmissionResponse {

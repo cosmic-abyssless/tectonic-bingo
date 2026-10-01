@@ -111,7 +111,9 @@ if (isDevModeActive()) {
   // ?path=<a client page>: each user also says whether they could open that page and who they are in its bingo
   // (services/devPageAccessService.ts), for the header's account switcher to dim the ones who'd be turned away.
   router.get("/dev-users", async (req: Request, res: Response) => {
-    const rows = await db.select().from(users).where(notLike(users.discordId, "dev-seed-%")).orderBy(users.discordUsername);
+    const listed = await db.select().from(users).where(notLike(users.discordId, "dev-seed-%")).orderBy(users.discordUsername);
+    // Yourself as you are now: without admin if you switched it off (devMode.ts devAdminOff), like req.user.
+    const rows = listed.map((u) => (u.id === req.user?.id ? req.user : u));
     const path = typeof req.query.path === "string" ? req.query.path : null;
     if (!path) {
       res.json({ users: rows });
@@ -140,6 +142,23 @@ if (isDevModeActive()) {
       }
       res.json({ user });
     });
+  });
+
+  // The account switcher's "Admin powers" switch (devMode.ts devAdminOff): an admin turns theirs off to try the app as
+  // their other roles (Moderator, Captain, Player…) without switching accounts, and back on.
+  router.post("/dev-admin", requireAuth, async (req: Request, res: Response) => {
+    const { enabled } = req.body as { enabled?: unknown };
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled must be true or false" });
+      return;
+    }
+    const [account] = await db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, req.user!.id));
+    if (!enabled && !account?.isAdmin) {
+      res.status(400).json({ error: "Only an admin has admin powers to switch off" });
+      return;
+    }
+    req.session.devAdminOff = !enabled;
+    res.json({ devAdminOff: !enabled });
   });
 }
 
