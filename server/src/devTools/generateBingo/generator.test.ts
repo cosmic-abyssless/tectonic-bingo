@@ -10,6 +10,8 @@ import { Rng } from "./rng";
 import { chooseCaptains, runInOrder } from "./setup";
 import { DEFAULT_CATEGORIES, planVotes } from "./superlatives";
 import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
+import { placeholderArt } from "./wrappedArt";
+import { cutOut } from "../../services/stickerEffect";
 
 describe("Rng", () => {
   it("repeats for a seed, and differs between seeds", () => {
@@ -558,5 +560,14 @@ describe("planVotes", () => {
   it("plans the same votes for a seed", () => {
     const strip = (vs: ReturnType<typeof planVotes>) => vs.map((v) => [v.at.toISOString(), v.voter.index, v.categoryId, v.nomineeUserId]);
     expect(strip(planVotes(teams(), categories, T0, until, new Rng(11)))).toEqual(strip(planVotes(teams(), categories, T0, until, new Rng(11))));
+  });
+});
+
+describe("placeholderArt", () => {
+  it("is a cut-out already: a transparent PNG with nothing to key out", async () => {
+    for (const star of [true, false]) {
+      const { key } = await cutOut(await placeholderArt("#f5c518", star));
+      expect(key).toBeNull();
+    }
   });
 });

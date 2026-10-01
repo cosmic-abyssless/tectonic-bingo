@@ -2,7 +2,7 @@
 // chrome, submission modal). Slots receive ONLY these shapes + callbacks —
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { ChangeEvent, RefObject } from "react";
 import type { CanResult } from "./permissionCheck";
 import type {
   AuditCategory,
@@ -309,15 +309,15 @@ export interface TileSearchModel {
   query: string;
   setQuery(q: string): void;
   clear(): void;
+  /** The search box has focus (the comic box lights up). */
   focused: boolean;
   setFocused(f: boolean): void;
-  /** Owns the 150ms blur-close timeout. */
-  blur(): void;
+  /** The first few Tiles matching the query. */
   results: { id: string; name: string }[];
   overflowCount: number;
-  showDropdown: boolean;
-  highlightedIndex: number;
-  onKeyDown(e: KeyboardEvent<HTMLInputElement>): void;
+  /** The result the open list is on, by keyboard or pointer (the comic board points it out); null with the list closed. */
+  highlightedId: string | null;
+  setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
 }
@@ -1018,10 +1018,12 @@ interface WrappedShareCardBase {
   /** The OSRS Coins icon, for every GP figure on the card; draw the figure without it if it fails to load. */
   coinsIconUrl: string;
   /**
-   * A still of the Bingo's Wrapped art (the first frame of a sticker) for a theme that decorates its cards with it:
-   * the card's own section's first Category image (You, Team), else a side image. Null when the Bingo has no art.
+   * Stills of the Bingo's Wrapped art (each the first frame of a sticker), in order, for a theme that decorates its
+   * cards with them (CONTEXT.md "Share cards"). The Player card has at most one: the Player card art for the viewer's
+   * Points share rank in the Bingo, else the You section's first Category image, else a side image. The Team card
+   * has the Team section's first 3 Category images, else one side image. Empty when the Bingo has no art.
    */
-  artUrl: string | null;
+  artUrls: string[];
 }
 
 /** The viewer's own card, titled with their name. */

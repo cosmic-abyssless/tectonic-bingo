@@ -8,6 +8,7 @@ import * as schema from "../db/schema";
 import { auditLog } from "../db/schema";
 import { broadcast } from "../ws";
 import { getAuditContext, type AuditContext } from "./context";
+import { fillAuditSearchTextFor } from "./searchText";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -93,6 +94,7 @@ export function audit<A extends AuditAction>(db: Queryable, input: AuditInput<A>
     })
     .returning({ id: auditLog.id })
     .get();
+  fillAuditSearchTextFor(db, row.id);
 
   if (ctx) ctx.recorded++;
   // Safe to broadcast before the enclosing transaction (if any) commits:

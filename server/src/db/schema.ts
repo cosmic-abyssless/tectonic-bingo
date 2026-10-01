@@ -263,6 +263,9 @@ export const auditLog = sqliteTable('audit_log', {
   entityLabel: text('entity_label'),
   teamId: text('team_id'),
   details: text('details').notNull().default('{}'),
+  // Lower-cased text the row shows (title, rendered sentence, Team), for the log's search. Null until filled: audit()
+  // fills it on write, fillAuditSearchText backfills older rows on startup (and refills any cleared after a rewording).
+  searchText: text('search_text'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull().$defaultFn(() => new Date()),
 }, (t) => [
   index('audit_log_bingo_idx').on(t.bingoId, t.id),
@@ -962,10 +965,10 @@ export const achievementEarned = sqliteTable('achievement_earned', {
 ]);
 
 // Wrapped art (#262): decorative cut-outs drawn as stickers on torn paper, in groups (shared WRAPPED_ART_GROUPS): a
-// section's Category images, or the "side" pool. `section` is the group; sortOrder orders a group's images.
-// originalUrl is the upload as it was (so it can be re-cut later with other keying settings, without a new
-// screenshot); frame1Url/frame2Url are the two rendered "boil" frames. keyTolerance/keySoftness are how a
-// solid-background screenshot was keyed, null for an upload that was already transparent. A new Bingo starts with
+// section's Category images, the "side" pool, or the "playerCard" art (#396). `section` is the group; sortOrder
+// orders a group's images. originalUrl is the upload as it was (so it can be re-cut later with other keying settings,
+// without a new screenshot); frame1Url/frame2Url are the two rendered "boil" frames. keyTolerance/keySoftness are how
+// a solid-background screenshot was keyed, null for an upload that was already transparent. A new Bingo starts with
 // copies of the previous Bingo's rows, pointing at the same files, so files are never deleted along with a row.
 export const wrappedArt = sqliteTable('wrapped_art', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),

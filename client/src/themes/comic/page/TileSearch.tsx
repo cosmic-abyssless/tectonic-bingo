@@ -1,5 +1,8 @@
+import { useRef } from "react";
+import { ComboBox, ListBox, ListBoxItem } from "react-aria-components";
 import type { TileSearchModel } from "../../../headless/types";
-import { Input } from "../../../core/ui/Field";
+import { controlClass } from "../../../core/ui/Field";
+import { ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/SearchCombo";
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
@@ -35,27 +38,35 @@ function BubbleTail({ outline, fill }: { outline: string; fill: string }) {
  */
 export function TileSearch({ search }: { search: TileSearchModel }) {
   const { colors } = useComic();
+  const rootRef = useRef<HTMLDivElement>(null);
   const line = search.focused ? colors.YELLOW : colors.LINE;
   const shadow = search.focused ? colors.YELLOW : colors.SHADOW;
   const lift = search.focused ? 5 : 3;
 
   return (
-    <div className="relative h-fit min-w-1/2 flex-1 pb-3">
+    <ComboBox
+      ref={rootRef}
+      aria-label="Search tiles"
+      className="relative h-fit min-w-1/2 flex-1 pb-3"
+      items={search.results}
+      inputValue={search.query}
+      onInputChange={search.setQuery}
+      selectedKey={null}
+      onSelectionChange={(key) => key !== null && search.choose(String(key))}
+      allowsCustomValue
+    >
+      <ComboFocusedKey onChange={search.setHighlightedId} />
       <div
         className="relative flex h-10 items-center gap-2 rounded-md border-[3px] px-3 transition-[box-shadow,border-color] duration-150"
         style={{ borderColor: line, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `${lift}px ${lift}px 0 ${shadow}` }}
       >
         <SearchIcon className="pointer-events-none shrink-0" style={{ color: colors.INK_SUBTLE }} />
-        <Input
+        <ComboInput
           ref={search.inputRef}
-          type="text"
           placeholder="Search tiles, items…"
-          value={search.query}
-          onChange={(e) => search.setQuery(e.target.value)}
           onFocus={() => search.setFocused(true)}
-          onBlur={search.blur}
-          onKeyDown={search.onKeyDown}
-          className="!h-full min-w-0 flex-1 !rounded-none !border-none !bg-transparent !px-0 !text-current !outline-none placeholder:!text-current/50"
+          onBlur={() => search.setFocused(false)}
+          className={`${controlClass()} !h-full min-w-0 flex-1 !rounded-none !border-none !bg-transparent !px-0 !text-current !outline-none placeholder:!text-current/50`}
         />
         {search.query && (
           <ComicIconButton
@@ -73,36 +84,36 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
         <BubbleTail outline={line} fill={colors.PAPER_RAISED} />
       </div>
 
-      {search.showDropdown && (
-        <div
-          className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-md border-[3px]"
-          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
-        >
-          {search.results.map((tile, i) => {
-            const active = i === search.highlightedIndex;
-            return (
-              <button
-                key={tile.id}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => search.choose(tile.id)}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors"
-                style={{ background: active ? colors.YELLOW : undefined, color: active ? colors.ON_YELLOW : colors.INK }}
-              >
-                <span className="w-5 shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: active ? colors.ON_YELLOW : colors.INK_SUBTLE }}>
-                  {i + 1}.
-                </span>
-                <span className="truncate text-sm font-medium">{tile.name}</span>
-              </button>
-            );
-          })}
-          {search.overflowCount > 0 && (
-            <p className="border-t-[3px] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE }}>
-              {search.overflowCount} more — keep typing
-            </p>
+      <ComboPopover
+        anchorRef={rootRef}
+        className="flex w-[var(--trigger-width)] flex-col overflow-hidden rounded-md border-[3px] outline-none"
+        style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
+      >
+        <ListBox items={search.results} className="outline-none">
+          {(tile) => (
+            <ListBoxItem
+              id={tile.id}
+              textValue={tile.name}
+              className="flex w-full cursor-default items-center gap-2 px-3 py-2 text-left outline-none transition-colors"
+              style={({ isFocused }) => ({ background: isFocused ? colors.YELLOW : undefined, color: isFocused ? colors.ON_YELLOW : colors.INK })}
+            >
+              {({ isFocused }) => (
+                <>
+                  <span className="w-5 shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: isFocused ? colors.ON_YELLOW : colors.INK_SUBTLE }}>
+                    {search.results.indexOf(tile) + 1}.
+                  </span>
+                  <span className="truncate text-sm font-medium">{tile.name}</span>
+                </>
+              )}
+            </ListBoxItem>
           )}
-        </div>
-      )}
-    </div>
+        </ListBox>
+        {search.overflowCount > 0 && (
+          <p className="border-t-[3px] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider" style={{ borderColor: colors.LINE, color: colors.INK_SUBTLE }}>
+            {search.overflowCount} more — keep typing
+          </p>
+        )}
+      </ComboPopover>
+    </ComboBox>
   );
 }

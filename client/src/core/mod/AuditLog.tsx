@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AuditCategory, AuditEntry } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
-import { useDebouncedValue } from "../../headless/useDebouncedValue";
+import { actorFilter, useAuditFilters } from "./auditFilters";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { timeAgo } from "../ui/time";
@@ -12,7 +12,7 @@ import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
-import { isRangeSet, type TimeRange } from "../ui/timeRange";
+import { isRangeSet } from "../ui/timeRange";
 import { toCsv } from "../ui/csv";
 import { TableSearchInput } from "../ui/tableSearch";
 import { TooltipSpan } from "../ui/Tooltip";
@@ -131,20 +131,17 @@ export function DetailsView({ details }: { details: unknown }) {
 }
 
 export function AuditLog({ slug }: { slug: string }) {
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(() => new Set());
-  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
-  const [selectedActors, setSelectedActors] = useState<Set<string>>(() => new Set());
-  const [range, setRange] = useState<TimeRange>({});
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 300).trim();
+  // The filters are in the URL, so a link opens the log filtered the same way.
+  const { filters, update, search, setSearch } = useAuditFilters();
+  const { range, q: debouncedSearch } = filters;
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   const { data: shell } = useBingo(slug);
   const [actorNames, rememberActors] = useActorCatalog(slug);
   const teamOptions = useMemo(() => (shell?.teams ?? []).map((t) => ({ key: t.id, label: t.name })), [shell]);
-  const categories = inclusionFilter(selectedCategories, CATEGORIES);
-  const teams = inclusionFilter(selectedTeams, teamOptions);
+  const categories = inclusionFilter(filters.categories, CATEGORIES);
+  const teams = inclusionFilter(filters.teams, teamOptions);
   // Alphabetical, not `actorNames`' own insertion order (which is recency — whichever actor's entry was scanned
   // first) — this has to match actorOptionsFrom's sort below, since it's what `selected` derives its key order
   // from. A mismatch there doesn't affect filtering (a Set), but it does confuse the picker's dropdown: react-aria
@@ -152,7 +149,7 @@ export function AuditLog({ slug }: { slug: string }) {
   // ordered `selected` had the dropdown opening focused (and auto-scrolled) to some arbitrary actor instead of the
   // alphabetically-first one actually shown at the top.
   const actorKeys = useMemo(() => [...actorNames.keys()].sort((a, b) => (actorNames.get(a) ?? "").localeCompare(actorNames.get(b) ?? "")), [actorNames]);
-  const actors = inclusionFilter(selectedActors, actorKeys.map((key) => ({ key })));
+  const actors = actorFilter(filters.actors, actorKeys);
 
   const { data, isLoading, isError, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLog(slug, {
     category: categories.query as AuditCategory[] | undefined,
@@ -166,7 +163,8 @@ export function AuditLog({ slug }: { slug: string }) {
   useEffect(() => {
     rememberActors(entries);
   }, [entries, rememberActors]);
-  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
+  // The picks are listed too, seen or not, so a User filter from a link shows and can be cleared.
+  const actorOptions = actors.withPicked(useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]));
   const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range) || debouncedSearch !== "";
 
   async function copyCsv() {
@@ -182,14 +180,14 @@ export function AuditLog({ slug }: { slug: string }) {
           label="Category"
           options={CATEGORIES}
           selected={categories.checked}
-          onChange={(visible) => setSelectedCategories(new Set(visible))}
+          onChange={(visible) => update({ categories: new Set(visible) })}
         />
         {teamOptions.length > 0 && (
           <MultiSelect
             label="Team"
             options={teamOptions}
             selected={teams.checked}
-            onChange={(visible) => setSelectedTeams(new Set(visible))}
+            onChange={(visible) => update({ teams: new Set(visible) })}
           />
         )}
         {actorOptions.length > 0 && (
@@ -197,10 +195,12 @@ export function AuditLog({ slug }: { slug: string }) {
             label="User"
             options={actorOptions}
             selected={actors.checked}
-            onChange={(visible) => setSelectedActors(new Set(visible))}
+            // Only the users seen so far are listed, so picking all of them isn't everyone.
+            exhaustive={false}
+            onChange={(visible) => update({ actors: actors.pick(visible) })}
           />
         )}
-        <DateTimeRangeFilter value={range} onChange={setRange} />
+        <DateTimeRangeFilter value={range} onChange={(next) => update({ range: next })} />
         <TableSearchInput value={search} onChange={setSearch} placeholder="Search…" />
         <div className="ml-auto">
           <Button size="sm" onPress={copyCsv} isDisabled={entries.length === 0}>
