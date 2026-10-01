@@ -64,16 +64,21 @@ export function isTeamLead(db: Db, teamId: string, userId: string): boolean {
     .get();
 }
 
-/** The Team `userId` leads (as Captain or co-captain) in this bingo, if any — what the signup page tells a lead. */
-export function ledTeamName(db: Db, bingoId: string, userId: string): string | null {
+/** The Team `userId` leads (as Captain or co-captain) in this bingo, if any. */
+export function getLedTeam(db: Db, bingoId: string, userId: string) {
   return (
     db
-      .select({ name: teams.name })
+      .select({ team: teams })
       .from(teamMembers)
       .innerJoin(teams, eq(teamMembers.teamId, teams.id))
       .where(and(eq(teams.bingoId, bingoId), eq(teamMembers.userId, userId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
-      .get()?.name ?? null
+      .get()?.team ?? null
   );
+}
+
+/** The name of the Team `userId` leads in this bingo, if any — what the signup page tells a lead. */
+export function ledTeamName(db: Db, bingoId: string, userId: string): string | null {
+  return getLedTeam(db, bingoId, userId)?.name ?? null;
 }
 
 /**

@@ -3,7 +3,7 @@ import { privateRevalidate } from "../middleware/cacheControl";
 import { Router, type Request } from "express";
 import fs from "fs";
 import type { AccountTypesResponse, AuditLogResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
-import { isAchievementKey } from "@bingo/shared";
+import { isAchievementKey, passesRules } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import * as achievementService from "../services/achievementService";
 import { UPLOADS_DIR } from "../config";
@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoViewer } from "../middleware/requireBingoViewer";
 import { getBingoAccess, isPartOfBingo } from "../services/bingoAccess";
+import { assertCan, bingoRoles } from "../services/permissions";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -550,8 +551,7 @@ const me = (req: { user?: { id: string; discordId: string } }) => ({ id: req.use
 // (pairingService).
 function assertSignupHelpersOpen(req: Request): void {
   if (req.bingo!.stage === "signup") return;
-  if (bingoService.isBingoMod(db, req.bingo!.id, req.user!.id, req.user!.isAdmin)) return;
-  throw new ServiceError(403, "Signups are closed");
+  assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "moderate_bingo", { role: new ServiceError(403, "Signups are closed") });
 }
 
 // Who a player may request as a duo: the whole clan roster when tectonic-api
@@ -783,9 +783,13 @@ router.put(
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    if (bingoService.isBoardLocked(bingo)) throw new ServiceError(400, "Ratings are locked once the bingo is live");
-    const myTeam = teamService.getUserTeamForBingo(db, bingo.id, req.user!.id);
-    if (!myTeam || !teamService.isTeamLead(db, myTeam.id, req.user!.id)) throw new ServiceError(403, "Only team leads can rate picks");
+    // The lock comes before who's asking: everyone gets it once the bingo is live.
+    if (!passesRules(bingo, "rate_picks")) throw new ServiceError(400, "Ratings are locked once the bingo is live");
+    const onlyLeads = new ServiceError(403, "Only team leads can rate picks");
+    assertCan(bingoRoles(db, bingo, req.user!), bingo, "rate_picks", { role: onlyLeads });
+    // Ratings go to the Team the user leads; an Admin who leads none has nothing to rate for.
+    const myTeam = teamService.getLedTeam(db, bingo.id, req.user!.id);
+    if (!myTeam) throw onlyLeads;
 
     const { stars, note } = req.body as { stars?: number; note?: string };
     draftService.setPickRating(db, myTeam.id, req.params.signupId as string, { stars: stars ?? 0, note: note ?? "" });
@@ -868,9 +872,14 @@ router.patch(
   asyncHandler(async (req, res) => {
     const team = teamService.getTeamById(db, req.params.teamId as string);
     if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Team not found");
-    if (!teamService.isTeamLead(db, team.id, req.user!.id)) throw new ServiceError(403, "Only the captain can rename this team");
-    // Admins can still fix names from the mod panel; captains are done once live.
-    if (bingoService.isBoardLocked(req.bingo!)) throw new ServiceError(400, "Team names are locked once the bingo is live");
+    // Only a Team's own Captain or co-captain renames it here. Admins can still fix names from the mod panel; captains
+    // are done once live.
+    const onlyCaptain = new ServiceError(403, "Only the captain can rename this team");
+    if (teamService.getLedTeam(db, req.bingo!.id, req.user!.id)?.id !== team.id) throw onlyCaptain;
+    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", {
+      role: onlyCaptain,
+      stage: new ServiceError(400, "Team names are locked once the bingo is live"),
+    });
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");

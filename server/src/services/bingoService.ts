@@ -156,7 +156,7 @@ export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
-// in @bingo/shared (server can't runtime-import it).
+// in @bingo/shared.
 export function isBoardLocked(bingo: typeof bingos.$inferSelect): boolean {
   return bingo.stage === "live" || bingo.stage === "complete";
 }

@@ -7,6 +7,7 @@ import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
+import { assertCan, bingoRoles } from "./permissions";
 import { rsnsInBingo } from "./playerNames";
 import { getUserTeamForBingo, isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
@@ -459,10 +460,10 @@ export function makePick(db: Db, params: MakePickParams) {
     const pickNumber = nextPickNumber(tx, bingo.id);
     const currentTeam = orderedTeams[pickOrderTeamIndex(orderedTeams.length, pickNumber)]!;
 
+    // A lead picks for their own Team; anyone else on the clock's behalf needs run_draft (an Admin).
     const isLead = isTeamLead(tx, currentTeam.id, actingUserId);
-    if (!actingIsAdmin && !isLead) {
-      throw new ServiceError(403, "It's not your team's turn to pick");
-    }
+    const roles = bingoRoles(tx, fresh, { id: actingUserId, isAdmin: actingIsAdmin });
+    assertCan(roles, fresh, isLead ? "make_draft_pick" : "run_draft", { role: new ServiceError(403, "It's not your team's turn to pick") });
 
     const pair = getAcceptedPairs(tx, bingo.id).find((p) => p.userIds.includes(pickedUserId));
     const userIds = pair ? pair.userIds : [pickedUserId];
@@ -511,7 +512,7 @@ export function makePick(db: Db, params: MakePickParams) {
       entity: { type: "user", id: pickedUserId, label: displayNames.join(" & ") },
       teamId: currentTeam.id,
       details: { pickNumber, userIds, displayNames, pair: !!pair },
-      onBehalfOfUserId: actingIsAdmin && !isLead ? currentTeam.captainUserId : null,
+      onBehalfOfUserId: isLead ? null : currentTeam.captainUserId,
     });
     return picks;
   });
@@ -528,10 +529,10 @@ export interface UndoPickParams {
 // Site admins only, and only while the bingo is still in the draft stage.
 export function undoLastPick(db: Db, params: UndoPickParams) {
   const { bingo, actingUserId, actingIsAdmin } = params;
-  if (!actingIsAdmin) throw new ServiceError(403, "Only site admins can undo a pick");
-  if (bingo.stage !== "draft") {
-    throw new ServiceError(400, `Picks can only be undone during the draft stage (current stage: ${bingo.stage})`);
-  }
+  assertCan(bingoRoles(db, bingo, { id: actingUserId, isAdmin: actingIsAdmin }), bingo, "run_draft", {
+    role: new ServiceError(403, "Only site admins can undo a pick"),
+    rule: new ServiceError(400, `Picks can only be undone during the draft stage (current stage: ${bingo.stage})`),
+  });
 
   return db.transaction((tx) => {
     const rows = tx.select().from(draftPicks).where(eq(draftPicks.bingoId, bingo.id)).all();

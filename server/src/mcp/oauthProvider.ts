@@ -25,7 +25,8 @@ import {
 } from "@modelcontextprotocol/server-legacy/auth";
 import * as schema from "../db/schema";
 import { oauthClients, oauthCodes, oauthTokens, users } from "../db/schema";
-import { discordName } from "@bingo/shared";
+import { can, discordName } from "@bingo/shared";
+import { siteRoles } from "../services/permissions";
 import { MCP_SCOPE, type McpUrls } from "./config";
 import { consentPage, messagePage } from "./pages";
 import { now as clockNow } from "../clock";
@@ -155,7 +156,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
       res.redirect("/auth/discord");
       return;
     }
-    if (!user.isAdmin) {
+    if (!can(siteRoles(user), null, "administer_site").ok) {
       res.status(403).type("html").send(messagePage("Admins only", "Only Tectonic Bingo's site admins can connect Claude. Ask an admin if you need this."));
       return;
     }
@@ -295,7 +296,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
     const now = this.now();
     if (!row || row.token.revokedAt || row.token.accessExpiresAt.getTime() <= now.getTime()) throw invalidToken("The access token is invalid, expired or revoked");
     if (row.token.resource !== this.urls.resource.href) throw invalidToken("The access token is for another resource");
-    if (!row.isAdmin) throw invalidToken("The user is no longer a site admin");
+    if (!can(siteRoles(row), null, "administer_site").ok) throw invalidToken("The user is no longer a site admin");
 
     this.db.update(oauthTokens).set({ lastUsedAt: now }).where(eq(oauthTokens.id, row.token.id)).run();
     return {
@@ -318,7 +319,8 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
   }
 
   private isAdmin(userId: string): boolean {
-    return this.db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, userId)).get()?.isAdmin === true;
+    const user = this.db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, userId)).get();
+    return !!user && can(siteRoles(user), null, "administer_site").ok;
   }
 
   private tokenResponse(access: string, refresh: string, scope: string): OAuthTokens {

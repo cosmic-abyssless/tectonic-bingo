@@ -1451,6 +1451,7 @@ export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";
 export * from "./names.ts";
+export * from "./permissions.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
 export * from "./superlative.ts";
