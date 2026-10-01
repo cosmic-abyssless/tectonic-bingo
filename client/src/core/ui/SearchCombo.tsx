@@ -347,8 +347,14 @@ export function ComboPopover({
         {...(triggerRef ? { triggerRef } : {})}
         // A hook for a theme's CSS to dress the list (the comic signup stage gives it an ink border).
         data-select-list=""
-        // react-aria sizes the list to the text box; with a frame to line up under, it takes the frame's width.
-        style={triggerRef?.current ? { ...style, width: triggerRef.current.offsetWidth } : style}
+        // The list takes the width of the box (or the frame it lines up under), measured as it opens. Not react-aria's
+        // own --trigger-width: it reads the box's on-screen size once, when it first appears, so a box that first appears
+        // in a dialog still scaling up as it opens left the list that much narrower for good.
+        style={(values) => {
+          const own = typeof style === "function" ? style(values) : style;
+          const width = (triggerRef ?? anchorRef).current?.offsetWidth;
+          return width ? { ...own, width, "--trigger-width": `${width}px` } : (own ?? {});
+        }}
         className={className ?? "flex w-[var(--trigger-width)] flex-col rounded-md border border-outline bg-surface-raised shadow-pop outline-none"}
       >
         {children}
