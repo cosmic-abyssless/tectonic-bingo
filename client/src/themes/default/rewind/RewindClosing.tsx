@@ -1,6 +1,7 @@
 import type { RewindClosingModel } from "../../../headless/types";
 import { TitlesSection } from "../../../core/stats/TitlesSection";
 import { XIcon } from "../../../core/ui/icons";
+import { IconButton } from "../../../core/ui/Button";
 
 /**
  * The closing card, plain: "Final Titles" for the viewed Team or the whole Bingo, then every Title as the Stats page
@@ -24,9 +25,9 @@ export function RewindClosing({ closing }: { closing: RewindClosingModel }) {
       <div className="min-h-0 overflow-y-auto px-3 pb-3">
         <TitlesSection picked={closing.titles} contributions={closing.contributions} womReadAt={closing.womReadAt} note={false} />
       </div>
-      <button type="button" aria-label="Close" onClick={closing.close} className="absolute right-1 top-1 rounded p-1 text-on-surface-subtle hover:bg-surface-hover hover:text-on-surface">
+      <IconButton size="sm" label="Close" onPress={closing.close} className="absolute right-1 top-1">
         <XIcon size={14} />
-      </button>
+      </IconButton>
     </div>
   );
 }

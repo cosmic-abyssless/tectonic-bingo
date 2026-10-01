@@ -11,7 +11,6 @@ import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
 import { Select } from "../ui/Select";
 import { Switch } from "../ui/Switch";
-import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 
@@ -425,15 +424,13 @@ function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggl
   useEffect(() => setExpanded(enabled), [enabled]);
 
   return (
-    <div className="rounded-lg border border-outline bg-surface">
-      <div className="flex h-12 w-full items-center gap-3 px-4">
-        <button type="button" onClick={() => setExpanded((v) => !v)} className="flex flex-1 items-center gap-3 text-left text-sm font-semibold text-on-surface">
-          Wise Old Man
-          <span className="text-on-surface-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-        </button>
-        <Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />
-      </div>
-      {expanded && <div className="space-y-4 border-t border-outline p-4">{children}</div>}
-    </div>
+    <Disclosure
+      title={<span className="flex-1 text-sm font-semibold text-on-surface">Wise Old Man</span>}
+      isExpanded={expanded}
+      onExpandedChange={setExpanded}
+      action={<Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />}
+    >
+      <div className="space-y-4">{children}</div>
+    </Disclosure>
   );
 }

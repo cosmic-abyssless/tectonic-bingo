@@ -1,6 +1,7 @@
 import type { TileSearchModel } from "../../../headless/types";
 import { Input } from "../../../core/ui/Field";
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
+import { IconButton } from "../../../core/ui/Button";
 
 export function TileSearch({ search }: { search: TileSearchModel }) {
   return (
@@ -18,17 +19,17 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
         className="pl-9 pr-10"
       />
       {search.query && (
-        <button
-          type="button"
-          aria-label="Clear search"
-          onClick={() => {
+        <IconButton
+          size="sm"
+          label="Clear search"
+          onPress={() => {
             search.clear();
             search.inputRef.current?.focus();
           }}
-          className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-on-surface-subtle transition-colors hover:bg-surface-hover hover:text-on-surface"
+          className="absolute right-1.5 top-1/2 -translate-y-1/2"
         >
           <XIcon />
-        </button>
+        </IconButton>
       )}
       {search.showDropdown && (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-outline bg-surface-raised shadow-pop">

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useSignupForm, type SignupQuestionModel } from "../../headless/useSignupForm";
 import { PartnerPanel } from "./PartnerPanel";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { EmptyState, HEADING_FONT, Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
 import { Field, Input, Textarea } from "../ui/Field";
@@ -96,9 +96,9 @@ function MemberPickField({ question, label }: { question: SignupQuestionModel; l
           {members.picked.map((p) => (
             <li key={p.id} className="flex items-center gap-1 rounded-full border border-outline bg-surface-raised py-0.5 pr-1 pl-2.5 text-sm text-on-surface">
               {p.name}
-              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-full p-0.5 text-on-surface-subtle hover:text-danger">
+              <IconButton size="xs" label={`Remove ${p.name}`} onPress={p.remove} className="rounded-full hover:text-danger">
                 <XIcon size={12} />
-              </button>
+              </IconButton>
             </li>
           ))}
         </ul>

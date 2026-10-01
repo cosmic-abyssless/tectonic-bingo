@@ -6,7 +6,7 @@ import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicField } from "../submission/ComicField";
-import { ComicButton } from "../ui/ComicButton";
+import { ComicButton, ComicIconButton } from "../ui/ComicButton";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { PartnerSheet } from "./PartnerSheet";
@@ -242,9 +242,9 @@ function MemberPickQuestion({ question, label }: { question: SignupQuestionModel
               style={{ borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
             >
               {p.name}
-              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-sm p-0.5 hover:opacity-70">
+              <ComicIconButton label={`Remove ${p.name}`} onPress={p.remove} sfx={false} className="size-6 border-2">
                 <XIcon size={12} />
-              </button>
+              </ComicIconButton>
             </li>
           ))}
         </ul>

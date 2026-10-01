@@ -47,6 +47,7 @@ import { TierBadge, tierTitle } from "../tectonic/ProfileBadges";
 import { timeAgo } from "../ui/time";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { NoTooltips } from "../ui/Tooltip";
+import { Input } from "../ui/Field";
 
 /** A roster entry plus its 1-based signup position — kept on the row (not derived from `rowIndex`) so sorting by
  * another column doesn't change what "#" shows. */
@@ -354,14 +355,14 @@ function RestrictionsEditor({ data, context, stopEditing }: CustomCellEditorProp
               </option>
             ))}
           </select>
-          <input
+          <Input
+            size="sm"
             aria-label="Reason"
             placeholder="Reason (they see this)"
             value={reason}
             maxLength={500}
             autoFocus
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-md border border-outline bg-surface px-2 py-1.5 text-on-surface"
           />
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onPress={() => stopEditing(true)}>
