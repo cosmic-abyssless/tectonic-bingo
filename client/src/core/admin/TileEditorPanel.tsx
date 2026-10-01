@@ -197,13 +197,15 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                   <Input type="number" className="num w-32" defaultValue={bonusDraft} onBlur={(e) => updateBonusPoints(Number(e.target.value) || 0)} />
                 </Field>
               )}
-              <label
-                title="Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots."
-                className="col-span-2 flex h-10 items-center gap-2 text-sm text-on-surface-muted"
-              >
-                <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
-                Proof screenshot for the whole tile
-              </label>
+              <div className="col-span-2">
+                <label className="flex h-10 items-center gap-2 text-sm text-on-surface-muted">
+                  <input type="checkbox" checked={proofTileWide} onChange={(e) => updateProofTileWide(e.target.checked)} className="size-4 accent-accent" />
+                  Proof screenshot for the whole tile
+                </label>
+                <p className="-mt-1.5 pl-6 text-xs text-on-surface-subtle">
+                  Each player posts a screenshot of the tile's starting state before their drops on it count. Replaces any per-task Proof screenshots.
+                </p>
+              </div>
               {proofTileWide && (
                 <Field label="Proof screenshot message" hint="Optional, shown to Players as written, e.g. Show an empty supply cart before your drops count." className="col-span-2">
                   <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />

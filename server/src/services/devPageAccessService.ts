@@ -14,7 +14,18 @@ export interface DevPageAccess {
   access: boolean;
   /** Who they are in the page's bingo, for picking one: "Mod", "Captain · Team A", "Signed up"… Null outside a bingo. */
   role: string | null;
+  /** Where they sort in the switcher by their highest part in the page's bingo (DEV_RANK), lower first. */
+  rank: number;
 }
+
+/**
+ * The switcher's role order: each account sorts by its highest part in the page's bingo. Off a bingo only Site admin is
+ * known, so it's Site admins, then everyone else.
+ */
+export const DEV_RANK = { admin: 0, mod: 1, staff: 2, captain: 3, player: 4, signedUp: 5, cut: 6, other: 7 } as const;
+
+/** Off a bingo's pages (and with no page at all): Site admins first, then everyone else. */
+export const devRankOffBingo = (u: { isAdmin: boolean }) => (u.isAdmin ? DEV_RANK.admin : DEV_RANK.other);
 
 /**
  * For the dev account switcher: which of `users` could open the client page at `path`, and their part in its bingo.
@@ -28,14 +39,14 @@ export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<s
   const admin = (u: SessionUser) => (u.isAdmin ? "Site admin" : null);
 
   if (path === "/admin" || path.startsWith("/admin/")) {
-    for (const u of users) result.set(u.id, { access: u.isAdmin, role: admin(u) });
+    for (const u of users) result.set(u.id, { access: u.isAdmin, role: admin(u), rank: devRankOffBingo(u) });
     return result;
   }
 
   const match = path.match(/^\/b\/([^/?#]+)(?:\/([^/?#]+))?/);
   const bingo = match ? getBingoBySlug(db, decodeURIComponent(match[1]!)) : null;
   if (!match || !bingo) {
-    for (const u of users) result.set(u.id, { access: true, role: admin(u) });
+    for (const u of users) result.set(u.id, { access: true, role: admin(u), rank: devRankOffBingo(u) });
     return result;
   }
   const page = match[2] ?? "";
@@ -72,7 +83,22 @@ export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<s
     else if (isSignedUp) parts.push("Signed up");
     if (!inClan) parts.push("Not in the clan server");
     const role = parts.filter(Boolean).join(" · ") || null;
-    result.set(u.id, { access, role });
+    const rank = u.isAdmin
+      ? DEV_RANK.admin
+      : mods.has(u.id)
+        ? DEV_RANK.mod
+        : roles.includes("staff")
+          ? DEV_RANK.staff
+          : team
+            ? team.isLead
+              ? DEV_RANK.captain
+              : DEV_RANK.player
+            : isCut
+              ? DEV_RANK.cut
+              : isSignedUp
+                ? DEV_RANK.signedUp
+                : DEV_RANK.other;
+    result.set(u.id, { access, role, rank });
   }
   return result;
 }

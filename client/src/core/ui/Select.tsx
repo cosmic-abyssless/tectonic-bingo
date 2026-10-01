@@ -114,7 +114,7 @@ function Option({ option, size }: { option: SelectOption; size: ControlSize }) {
     <ListBoxItem
       id={toKey(option.value)}
       textValue={option.label}
-      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-on-surface-muted outline-none hover:bg-surface-hover hover:text-on-surface focus:bg-surface-hover focus:text-on-surface selected:text-on-surface disabled:opacity-40 ${size === "sm" ? "text-xs" : "text-sm"}`}
+      className={`flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-on-surface-muted outline-none hover:bg-surface-hover hover:text-on-surface focus:bg-surface-hover focus:text-on-surface selected:text-on-surface disabled:opacity-40 ${size === "sm" ? "text-xs" : "text-sm"}`}
     >
       {({ isSelected }) => (
         <>

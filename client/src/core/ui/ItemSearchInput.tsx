@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ItemGroup, OsrsItemSearchResult } from "@bingo/shared";
 import { searchOsrsItems } from "../../api/osrsItemsApi";
 import { controlClass } from "./Field";
 import { LayersIcon } from "./icons";
+import { SearchCombo } from "./SearchCombo";
 
 // Mirrors osrsWikiService.ts's iconUrlFor — the wiki's real upload
 // convention for an item's small inventory-sprite icon (title with spaces
@@ -59,11 +60,11 @@ export function ItemSearchInput({
   containerClassName?: string;
   ariaLabel?: string;
 }) {
-  const [itemResults, setItemResults] = useState<OsrsItemSearchResult[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [highlighted, setHighlighted] = useState(0);
-  const [dropdownRect, setDropdownRect] = useState<DOMRect | null>(null);
+  // The query the current item results are for: results for anything else are on their way (or stale).
+  const [itemResults, setItemResults] = useState<{ query: string; items: OsrsItemSearchResult[] }>({ query: "", items: [] });
+  const [focused, setFocused] = useState(false);
+  // Typed in since the field was focused: only then is it searched, so focusing a filled field doesn't pop a list.
+  const [typed, setTyped] = useState(false);
   // Whether the icon derived from the current value failed to load (not a
   // real item name, or no icon on the wiki). Reset whenever value changes
   // so switching to a different, valid name gets a fresh attempt.
@@ -73,115 +74,105 @@ export function ItemSearchInput({
   // while open, the dropdown's own per-result icons already show what's
   // relevant, and re-deriving this on every keystroke would fire a failed
   // image request for nearly every partial string typed.
-  const closedIconUrl = !open && value.trim() && !iconFailed ? iconUrlFor(value) : null;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const closedIconUrl = !focused && value.trim() && !iconFailed ? iconUrlFor(value) : null;
 
   const query = value.trim();
+  const searching = focused && typed && query.length >= 2;
 
   // Debounced search — fires on every value change while the field is
   // focused, not just on an explicit "search" action, so results feel live.
   useEffect(() => {
-    if (!open || query.length < 2) {
-      setItemResults([]);
-      return;
-    }
+    if (!searching) return;
     let cancelled = false;
-    setLoading(true);
     const timer = setTimeout(() => {
       searchOsrsItems(query)
         .then((res) => {
-          if (!cancelled) setItemResults(res.items);
+          if (!cancelled) setItemResults({ query, items: res.items });
         })
         .catch(() => {
-          if (!cancelled) setItemResults([]);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
+          if (!cancelled) setItemResults({ query, items: [] });
         });
     }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, open]);
+  }, [query, searching]);
 
   // Group matches are a pure in-memory name filter — no debounce needed.
   const matchedGroups = useMemo(() => {
-    if (!open || query.length < 2 || !itemGroups?.length) return [];
+    if (!searching || !itemGroups?.length) return [];
     const q = query.toLowerCase();
     return itemGroups.filter((g) => g.name.toLowerCase().includes(q));
-  }, [itemGroups, query, open]);
+  }, [itemGroups, query, searching]);
 
+  const itemsFresh = itemResults.query === query;
   const suggestions: Suggestion[] = useMemo(
-    () => [...matchedGroups.map((group) => ({ kind: "group" as const, group })), ...itemResults.map((item) => ({ kind: "item" as const, item }))],
-    [matchedGroups, itemResults],
+    () => [
+      ...matchedGroups.map((group) => ({ kind: "group" as const, group })),
+      ...(searching && itemsFresh ? itemResults.items.map((item) => ({ kind: "item" as const, item })) : []),
+    ],
+    [matchedGroups, itemResults, itemsFresh, searching],
   );
-
-  useEffect(() => {
-    if (open && containerRef.current) setDropdownRect(containerRef.current.getBoundingClientRect());
-  }, [open, suggestions.length]);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: Event) => {
-      const target = e.target as Node;
-      if (containerRef.current?.contains(target)) return;
-      if (dropdownRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    setHighlighted(0);
-  }, [suggestions.length]);
 
   const pick = (s: Suggestion) => {
     // Clear rather than fill the field: a pick is final, so leaving the name
-    // in place would only make the blur re-commit it.
+    // in place would only make the blur re-commit it. The field stays focused,
+    // so the very next keystroke searches again.
     onChange("");
     if (s.kind === "item") onPickItem?.(s.item.name);
     else onPickGroup?.(s.group);
-    // Not setOpen(false) here: picking via onMouseDown keeps focus on the
-    // input (see its preventDefault below), so onFocus — the only thing
-    // that flips `open` back to true — never re-fires afterward. Clearing
-    // the value/results is enough to hide the dropdown (empty suggestions);
-    // staying "open" lets the very next keystroke search again instead of
-    // silently doing nothing until the input is blurred and refocused.
-    setItemResults([]);
-  };
-
-  const showDropdown = open && (loading || suggestions.length > 0);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showDropdown) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlighted((h) => Math.min(h + 1, suggestions.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlighted((h) => Math.max(h - 1, 0));
-    } else if (e.key === "Enter") {
-      if (suggestions[highlighted]) {
-        e.preventDefault();
-        pick(suggestions[highlighted]);
-      }
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-      inputRef.current?.blur();
-    }
   };
 
   return (
-    <div ref={containerRef} className={`relative ${containerClassName ?? ""}`}>
+    <SearchCombo
+      items={suggestions}
+      itemKey={(s) => (s.kind === "item" ? `item:${s.item.name}` : `group:${s.group.id}`)}
+      itemText={(s) => (s.kind === "item" ? s.item.name : s.group.name)}
+      renderItem={(s, { isFocused }) =>
+        s.kind === "item" ? (
+          <>
+            <img
+              src={s.item.iconUrl}
+              alt=""
+              className="size-5 shrink-0 object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.visibility = "hidden";
+              }}
+            />
+            <span className="truncate">{s.item.name}</span>
+          </>
+        ) : (
+          <>
+            <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden>
+              <LayersIcon size={14} />
+            </span>
+            <span className="truncate">{s.group.name}</span>
+            <span className={`num ml-auto shrink-0 text-xs ${isFocused ? "text-on-accent/70" : "text-on-surface-subtle"}`}>group · {s.group.itemNames.length}</span>
+          </>
+        )
+      }
+      onPick={pick}
+      inputValue={value}
+      onInputChange={(v) => {
+        setTyped(true);
+        onChange(v);
+      }}
+      loading={searching && !itemsFresh}
+      placeholder={placeholder}
+      aria-label={ariaLabel}
+      className={containerClassName}
+      inputClassName={`${className ?? controlClass()} ${closedIconUrl ? "pl-8" : ""}`}
+      minListWidth={220}
+      onFocus={() => {
+        setFocused(true);
+        setTyped(false);
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onCommit?.(value);
+      }}
+    >
       {closedIconUrl && (
         <img
           src={closedIconUrl}
@@ -190,75 +181,6 @@ export function ItemSearchInput({
           onError={() => setIconFailed(true)}
         />
       )}
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => onCommit?.(value)}
-        onKeyDown={handleKeyDown}
-        className={`${className ?? controlClass()} ${closedIconUrl ? "pl-8" : ""}`}
-      />
-
-      {showDropdown && dropdownRect && (
-        <div
-          ref={dropdownRef}
-          style={{ position: "fixed", top: dropdownRect.bottom + 4, left: dropdownRect.left, width: Math.max(dropdownRect.width, 220), zIndex: 9999 }}
-          className="max-h-64 overflow-y-auto rounded-md border border-outline bg-surface-raised p-1 shadow-pop"
-        >
-          {loading && suggestions.length === 0 ? (
-            <div className="px-2.5 py-1.5 text-sm text-on-surface-subtle">Searching…</div>
-          ) : (
-            suggestions.map((s, i) => (
-              <button
-                key={s.kind === "item" ? `item:${s.item.name}` : `group:${s.group.id}`}
-                type="button"
-                // preventDefault stops the browser's default mousedown-blur
-                // behavior — without it, clicking a suggestion blurs the
-                // input (firing onCommit with the stale, still-being-typed
-                // text) a tick before pick()'s own commit fires, racing two
-                // commits for one click. The actual pick happens on click
-                // (after mouseup), not here: picking clears the results and
-                // unmounts this button, and doing that mid-mousedown (before
-                // mouseup fires) makes the browser re-target mouseup against
-                // whatever is now under the cursor instead — which can steal
-                // focus from the input despite this preventDefault, since
-                // that's a different default action on a different element.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(s)}
-                className={`flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm ${
-                  i === highlighted ? "bg-accent text-on-accent" : "text-on-surface hover:bg-surface-hover"
-                }`}
-              >
-                {s.kind === "item" ? (
-                  <>
-                    <img
-                      src={s.item.iconUrl}
-                      alt=""
-                      className="size-5 shrink-0 object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.visibility = "hidden";
-                      }}
-                    />
-                    <span className="truncate">{s.item.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden>
-                      <LayersIcon size={14} />
-                    </span>
-                    <span className="truncate">{s.group.name}</span>
-                    <span className={`num ml-auto shrink-0 text-xs ${i === highlighted ? "text-on-accent/70" : "text-on-surface-subtle"}`}>group · {s.group.itemNames.length}</span>
-                  </>
-                )}
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+    </SearchCombo>
   );
 }

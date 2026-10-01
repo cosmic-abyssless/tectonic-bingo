@@ -16,7 +16,7 @@ export function BoardPageLayout() {
   // Whichever tile the search dropdown currently has highlighted (arrow-key
   // nav or hovering a suggestion), so BoardGrid can give that tile the same
   // "hover" treatment on the board itself, tying the two together.
-  const highlightedTileId = page.search.showDropdown ? page.search.results[page.search.highlightedIndex]?.id ?? null : null;
+  const highlightedTileId = page.search.highlightedId;
   const { dragActive } = useScreenshotCapture(page);
 
   const PageHeader = useSlot("PageHeader");

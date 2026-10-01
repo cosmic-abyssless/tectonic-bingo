@@ -158,23 +158,35 @@ export function TaskEditor({
             </Field>
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <label title="Can't submit until the previous task is completed" className="flex items-center gap-2 text-xs text-on-surface-muted">
-                <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-                Requires previous task
-              </label>
-              <label title="Can complete early, but points stay 0 until the previous task completes" className="flex items-center gap-2 text-xs text-on-surface-muted">
-                <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-                Withhold points until previous
-              </label>
-              <label title="Players may prepare it before the bingo is live, e.g. pre-load a chest" className="flex items-center gap-2 text-xs text-on-surface-muted">
-                <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
-                Allows pre-load
-              </label>
-              {!tileRequiresProof && (
-                <label title="Each player posts a screenshot of the starting state before their drops on this task count" className="flex items-center gap-2 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
-                  Needs a Proof screenshot
+              <div>
+                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
+                  <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
+                  Requires previous task
                 </label>
+                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Can't submit until the previous task is completed</p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
+                  <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
+                  Withhold points until previous
+                </label>
+                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Can complete early; points stay 0 until the previous task completes</p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
+                  <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
+                  Allows pre-load
+                </label>
+                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Players may prepare it before the bingo is live, e.g. pre-load a chest</p>
+              </div>
+              {!tileRequiresProof && (
+                <div>
+                  <label className="flex items-center gap-2 text-xs text-on-surface-muted">
+                    <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
+                    Needs a Proof screenshot
+                  </label>
+                  <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Each player posts a screenshot of the starting state before their drops on this task count</p>
+                </div>
               )}
             </div>
 

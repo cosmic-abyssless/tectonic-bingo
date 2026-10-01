@@ -13,6 +13,7 @@ import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { TitleChip } from "./TitleChrome";
 import { formatShare } from "./PointsShareBreakdown";
 import { formatGp, formatGpExact } from "../ui/gp";
+import { NoTooltips } from "../ui/Tooltip";
 
 type Row = ContributionCount & { team: Team | null; titles: TitleDefinition[] };
 
@@ -155,24 +156,26 @@ export function ContributorsTable({ contributions, teams, titles }: { contributi
         <p className="text-sm text-on-surface-subtle">No players yet.</p>
       ) : (
         <div style={{ height }}>
-          <AgGridReact<Row>
-            theme={gridTheme}
-            rowData={rows}
-            getRowId={(p) => p.data.userId}
-            {...gridProps}
-            columnDefs={columnDefs}
-            defaultColDef={DEFAULT_COL_DEF}
-            rowHeight={ROW_HEIGHT}
-            rowClass={openProfile ? "cursor-pointer" : undefined}
-            animateRows={false}
-            tooltipShowDelay={200}
-            tooltipHideDelay={4000}
-            enableCellTextSelection
-            accentedSort
-            // The rank is the row's position, so it has to be redrawn whenever the order changes.
-            onSortChanged={() => apiRef.current?.refreshCells({ columns: ["rank"], force: true })}
-            onCellClicked={onCellClicked}
-          />
+          <NoTooltips>
+            <AgGridReact<Row>
+              theme={gridTheme}
+              rowData={rows}
+              getRowId={(p) => p.data.userId}
+              {...gridProps}
+              columnDefs={columnDefs}
+              defaultColDef={DEFAULT_COL_DEF}
+              rowHeight={ROW_HEIGHT}
+              rowClass={openProfile ? "cursor-pointer" : undefined}
+              animateRows={false}
+              tooltipShowDelay={200}
+              tooltipHideDelay={4000}
+              enableCellTextSelection
+              accentedSort
+              // The rank is the row's position, so it has to be redrawn whenever the order changes.
+              onSortChanged={() => apiRef.current?.refreshCells({ columns: ["rank"], force: true })}
+              onCellClicked={onCellClicked}
+            />
+          </NoTooltips>
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, GripIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
 import { Dialog, DialogHeader } from "../ui/Dialog";
+import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
 import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
@@ -56,9 +57,9 @@ function ChipIcon({ name, className }: { name: string; className: string }) {
 function SharedMark({ tasks }: { tasks: string[] }) {
   const title = `Shared with ${tasks.length > 0 ? tasks.join(", ") : "another task"} — removing it here only unlinks it from this task`;
   return (
-    <span title={title} role="img" aria-label={title} className="shrink-0 text-info">
+    <TooltipSpan text={title} label={title} className="shrink-0 text-info">
       <LinkIcon size={14} />
-    </span>
+    </TooltipSpan>
   );
 }
 
@@ -172,14 +173,15 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
   const { buttonProps } = useButton({ ...dragButtonProps, elementType: "div", "aria-label": `Move ${label}` }, ref);
   return (
     <>
-      <div
-        ref={ref}
-        {...mergeProps(dragProps, buttonProps)}
-        title="Drag to move"
-        className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-on-surface-subtle outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-accent active:cursor-grabbing"
-      >
-        <GripIcon size={12} />
-      </div>
+      <TextTooltip text="Drag to move">
+        <div
+          ref={ref}
+          {...mergeProps(dragProps, buttonProps)}
+          className="flex h-6 w-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-on-surface-subtle outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-accent active:cursor-grabbing"
+        >
+          <GripIcon size={12} />
+        </div>
+      </TextTooltip>
       <DragPreview ref={preview}>
         {() => <div className="rounded-md border border-accent bg-surface px-2 py-1 text-xs text-on-surface">{label}</div>}
       </DragPreview>
@@ -431,10 +433,13 @@ function GroupNode(props: NodeProps) {
         <div className={`flex h-8 shrink-0 items-center justify-end gap-0.5 ${TREE_GUTTER}`}>
           {!isRoot && <DragHandle path={path} label={conditionName} />}
           {ownLabel && (
-            <span className="num ml-auto text-xs whitespace-nowrap text-on-surface-subtle" title={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}>
-              <span className="sr-only">Condition </span>
+            <TooltipSpan
+              text={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}
+              label={`Condition ${ownLabel}`}
+              className="num ml-auto text-xs whitespace-nowrap text-on-surface-subtle"
+            >
               {ownLabel}
-            </span>
+            </TooltipSpan>
           )}
         </div>
         <RuleControls node={node} path={path} update={update} />
@@ -614,11 +619,12 @@ function NumberInput({ label, value, onSave }: { label: string; value?: number |
 // "✕" for a plain row, "unlink" for a shared one — the latter is only removed
 // from this task, not deleted (see sharedNodeIds).
 function RemoveButton({ shared, label, what, onPress, className }: { shared: boolean; label: string; what: string; onPress: () => void; className?: string }) {
-  const title = shared ? `Unlink from this task — the ${what} itself is only deleted if this was its last use` : undefined;
   return shared ? (
-    <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-on-surface-subtle hover:text-danger ${className ?? ""}`}>
-      <span title={title}>unlink</span>
-    </Button>
+    <TextTooltip text={`Unlink from this task — the ${what} itself is only deleted if this was its last use`}>
+      <Button variant="ghost" size="sm" aria-label={label} onPress={onPress} className={`h-7 px-2 text-on-surface-subtle hover:text-danger ${className ?? ""}`}>
+        unlink
+      </Button>
+    </TextTooltip>
   ) : (
     <IconButton size="sm" label={label} onPress={onPress} className={`hover:text-danger ${className ?? ""}`}>
       <XIcon size={12} />
@@ -682,27 +688,31 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         <ChipIcon name={name} className="size-4" />
         <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
         {exclusiveRules.length > 0 && (
-          <span
-            title={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+          <TooltipSpan
+            text={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            label="Exclusive"
             className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
           >
             exclusive
-          </span>
+          </TooltipSpan>
         )}
         {parentKind === "SUM" && <CountsAsInput name={name} countsAs={node.countsAs ?? 1} onSave={(countsAs) => update(path, (n) => ({ ...n, countsAs }))} />}
-        <button
-          type="button"
-          onClick={() => setEditingValue((open) => !open)}
-          title={
+        <TextTooltip
+          text={
             valuedAs
               ? `Claims here get their drop value from ${describeValuedAs(valuedAs)}, not from ${name}'s own price`
               : `Price claims here as another item instead of ${name} (e.g. a gold ring from a DT2 boss as a third of its vestige)`
           }
-          // Outlined either way, so the way to add one reads as a button before any Valued as exists.
-          className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] leading-4 transition-colors hover:bg-surface-hover hover:text-on-surface ${valuedAs ? "border-outline text-on-surface-muted" : "border-dashed border-outline-strong text-on-surface-muted"}`}
         >
-          {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "+ Valued as"}
-        </button>
+          <button
+            type="button"
+            onClick={() => setEditingValue((open) => !open)}
+            // Outlined either way, so the way to add one reads as a button before any Valued as exists.
+            className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] leading-4 transition-colors hover:bg-surface-hover hover:text-on-surface ${valuedAs ? "border-outline text-on-surface-muted" : "border-dashed border-outline-strong text-on-surface-muted"}`}
+          >
+            {valuedAs ? `valued as ${describeValuedAs(valuedAs)}${valuedAs.source ? ` · ${valuedAs.source}` : ""}` : "+ Valued as"}
+          </button>
+        </TextTooltip>
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
       </div>
       {editingValue && <ValuedAsEditor itemName={name} valuedAs={valuedAs} onSave={(next) => void saveValuedAs(next)} onCancel={() => setEditingValue(false)} />}
@@ -737,26 +747,25 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
 // from 1. Saved on blur like the total itself, and only when it changed.
 function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: number; onSave: (countsAs: number) => void }) {
   return (
-    <label
-      className="flex shrink-0 items-center gap-1 text-[11px] text-on-surface-muted"
-      title={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}
-    >
+    <label className="flex shrink-0 items-center gap-1 text-[11px] text-on-surface-muted">
       counts as
       <span className="w-14">
-        <input
-          aria-label={`${name} counts as`}
-          type="number"
-          min={1}
-          step={1}
-          defaultValue={countsAs}
-          onBlur={(e) => {
-            const next = Math.max(1, Math.round(Number(e.target.value)) || 1);
-            e.target.value = String(next);
-            if (next !== countsAs) onSave(next);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          className={`${controlClass("sm")} num`}
-        />
+        <TextTooltip text={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}>
+          <input
+            aria-label={`${name} counts as`}
+            type="number"
+            min={1}
+            step={1}
+            defaultValue={countsAs}
+            onBlur={(e) => {
+              const next = Math.max(1, Math.round(Number(e.target.value)) || 1);
+              e.target.value = String(next);
+              if (next !== countsAs) onSave(next);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            className={`${controlClass("sm")} num`}
+          />
+        </TextTooltip>
       </span>
     </label>
   );

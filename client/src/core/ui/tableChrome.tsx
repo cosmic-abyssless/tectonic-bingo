@@ -3,7 +3,7 @@
 // stripe the same way (issue #112: make table behaviour consistent between
 // the scouting page and the admin panel).
 import { useEffect, useState, type ReactNode } from "react";
-import { TextTooltip } from "./Tooltip";
+import { TooltipSpan } from "./Tooltip";
 
 // The column headings stay at the top of the table's own scroll area — draws
 // its own bottom divider: a sticky cell paints over the table's collapsed
@@ -128,14 +128,8 @@ export function Truncate({ children, title, maxWidth = "16rem", className = "" }
     );
   }
   return (
-    <TextTooltip text={title}>
-      {/* tabIndex so a keyboard user can focus-trigger it too, not just hover. role="button": <Focusable> (inside
-          Tooltip) requires a focusable, non-native element to carry an interactive ARIA role — without one it's a dev
-          warning on every mount ("<Focusable> child must have an interactive ARIA role"), spamming the console once
-          per truncated cell. */}
-      <span tabIndex={0} role="button" className={`block truncate outline-none ${className}`} style={{ maxWidth }}>
-        {children}
-      </span>
-    </TextTooltip>
+    <TooltipSpan text={title} label={title} className={`block truncate outline-none ${className}`} style={{ maxWidth }}>
+      {children}
+    </TooltipSpan>
   );
 }

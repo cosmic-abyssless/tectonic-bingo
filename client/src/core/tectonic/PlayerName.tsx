@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, type ReactNode } from "react";
 import type { AccountType } from "@bingo/shared";
 import { useAccountTypes } from "../../api/queries";
-import { AccountTypeIcon } from "../ui/AccountTypeIcon";
+import { AccountTypeIcon, ACCOUNT_TYPE_LABEL } from "../ui/AccountTypeIcon";
 import { useClearUrlParams, useUrlParam } from "../ui/useUrlParam";
 import { INTERACTIVE_TEXT } from "../ui/interactiveText";
 import { PlayerProfileDialog, PROFILE_TAB_PARAM } from "./PlayerProfileDialog";
+import { TextTooltip } from "../ui/Tooltip";
 
 const PROFILE_PARAM = "player";
 const PROFILE_PARAMS = [PROFILE_PARAM, PROFILE_TAB_PARAM];
@@ -47,14 +48,12 @@ export function useOpenProfile(): ((userId: string) => void) | null {
  * The account badge (ironman, UIM, GIM…) before a name: the one given, else the player's from the bingo's account
  * types. "reserve" keeps the badge's width for a player with none, so names in a column line up.
  */
-function NameBadge({ userId, accountType, badge }: { userId: string; accountType?: AccountType | null; badge: "show" | "reserve" }) {
-  const types = useContext(AccountTypesContext);
-  const type = accountType !== undefined ? accountType : (types?.[userId] ?? null);
+function NameBadge({ type, badge, tooltip }: { type: AccountType | null; badge: "show" | "reserve"; tooltip: boolean }) {
   const reserve = badge === "reserve";
   if (!reserve && !type) return null;
   return (
     <span className="mr-1 inline-flex">
-      <AccountTypeIcon accountType={type} reserveSpace={reserve} />
+      <AccountTypeIcon accountType={type} reserveSpace={reserve} tooltip={tooltip} />
     </span>
   );
 }
@@ -79,7 +78,10 @@ export function PlayerName({
   accountType?: AccountType | null;
 }) {
   const open = useContext(OpenProfileContext);
-  const badgeEl = badge === "none" ? null : <NameBadge userId={userId} accountType={accountType} badge={badge} />;
+  const types = useContext(AccountTypesContext);
+  const type = accountType !== undefined ? accountType : (types?.[userId] ?? null);
+  // A clickable name's tooltip says the account type too, so the badge inside it has none of its own.
+  const badgeEl = badge === "none" ? null : <NameBadge type={type} badge={badge} tooltip={!open} />;
   if (!open)
     return (
       <span className={className}>
@@ -88,20 +90,21 @@ export function PlayerName({
       </span>
     );
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        open(userId);
-      }}
-      title="View player profile"
-      // pb/-mb: room for the underline inside the button's own box, layout unchanged. Where the name is truncated
-      // (the draft and signup grids), the box clips its overflow, and at one line's height the underline, 3px
-      // below the text, was clipped away with it.
-      className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 pb-[4px] -mb-[4px] text-left [font:inherit] [line-height:inherit] ${INTERACTIVE_TEXT} ${className}`}
-    >
-      {badgeEl}
-      {children}
-    </button>
+    <TextTooltip text={type && badge !== "none" ? `${ACCOUNT_TYPE_LABEL[type]}. View player profile` : "View player profile"}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          open(userId);
+        }}
+        // pb/-mb: room for the underline inside the button's own box, layout unchanged. Where the name is truncated
+        // (the draft and signup grids), the box clips its overflow, and at one line's height the underline, 3px
+        // below the text, was clipped away with it.
+        className={`cursor-pointer rounded-sm border-0 bg-transparent p-0 pb-[4px] -mb-[4px] text-left [font:inherit] [line-height:inherit] ${INTERACTIVE_TEXT} ${className}`}
+      >
+        {badgeEl}
+        {children}
+      </button>
+    </TextTooltip>
   );
 }

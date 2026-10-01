@@ -81,7 +81,7 @@ export function PlainMenuItem({ children, className, variant = "option", ...prop
   return (
     <AriaMenuItem
       {...props}
-      className={`flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 outline-none hover:bg-surface-hover focus:bg-surface-hover disabled:opacity-40 ${MENU_ITEM_VARIANT[variant]} ${className ?? ""}`}
+      className={`flex items-center gap-2 rounded-sm px-2.5 py-1.5 outline-none hover:bg-surface-hover focus:bg-surface-hover disabled:opacity-40 ${MENU_ITEM_VARIANT[variant]} ${className ?? ""}`}
     >
       {children}
     </AriaMenuItem>

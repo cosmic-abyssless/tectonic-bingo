@@ -14,6 +14,7 @@ import { SingleSelect } from "../ui/SingleSelect";
 import { TableSearchInput, matchesSearch } from "../ui/tableSearch";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { TIME_FORMAT_OPTIONS, formatEventTime, type TimeFormat } from "./timeFormat";
+import { NoTooltips } from "../ui/Tooltip";
 
 const KINDS: { key: TimelineEventType; label: string }[] = [
   { key: "points_earned", label: "Points" },
@@ -134,20 +135,22 @@ export function TimelineTable({ events, teams, startsAt }: { events: TimelineEve
         <p className="text-sm text-on-surface-subtle">Nothing has happened yet.</p>
       ) : (
         <div style={{ height }}>
-          <AgGridReact<Row>
-            theme={gridTheme}
-            rowData={rows}
-            {...gridProps}
-            columnDefs={columnDefs}
-            defaultColDef={DEFAULT_COL_DEF}
-            rowHeight={ROW_HEIGHT}
-            animateRows={false}
-            tooltipShowDelay={200}
-            tooltipHideDelay={4000}
-            enableCellTextSelection
-            accentedSort
-            overlayNoRowsTemplate="Nothing matches the filters."
-          />
+          <NoTooltips>
+            <AgGridReact<Row>
+              theme={gridTheme}
+              rowData={rows}
+              {...gridProps}
+              columnDefs={columnDefs}
+              defaultColDef={DEFAULT_COL_DEF}
+              rowHeight={ROW_HEIGHT}
+              animateRows={false}
+              tooltipShowDelay={200}
+              tooltipHideDelay={4000}
+              enableCellTextSelection
+              accentedSort
+              overlayNoRowsTemplate="Nothing matches the filters."
+            />
+          </NoTooltips>
         </div>
       )}
     </div>

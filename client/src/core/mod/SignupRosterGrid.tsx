@@ -43,9 +43,10 @@ import { toast } from "../ui/Toast";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
 import { CaCell, WomCell, caTitle, formatCaTier, formatWomStat } from "../signup/caStats";
-import { TierBadge } from "../tectonic/ProfileBadges";
+import { TierBadge, tierTitle } from "../tectonic/ProfileBadges";
 import { timeAgo } from "../ui/time";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
+import { NoTooltips } from "../ui/Tooltip";
 
 /** A roster entry plus its 1-based signup position — kept on the row (not derived from `rowIndex`) so sorting by
  * another column doesn't change what "#" shows. */
@@ -164,11 +165,9 @@ const RefreshCell = memo(function RefreshCell({ data, value }: CustomCellRendere
       <XIcon size={14} className="text-danger" aria-label={`Couldn't refresh ${rsn}'s stats`} />
     ) : null;
   // The whole cell is the button (a click anywhere, or Enter: onCellClicked / onCellKeyDown), so this is just the icon.
+  // What it does is the column's tooltip (refreshTooltip).
   return (
-    <div
-      className="flex h-full items-center justify-center"
-      title={value === "failed" ? "The lookup failed; try again in a moment" : value === "refreshing" ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`}
-    >
+    <div className="flex h-full items-center justify-center">
       {icon ?? (
         <RefreshIcon
           size={13}
@@ -179,6 +178,12 @@ const RefreshCell = memo(function RefreshCell({ data, value }: CustomCellRendere
     </div>
   );
 });
+
+function refreshTooltip(p: TooltipCallbackParams<RosterRow, RefreshState>): string {
+  const rsn = p.data?.signup.rsn;
+  if (!rsn) return "";
+  return p.value === "failed" ? "The lookup failed; try again in a moment" : p.value === "refreshing" ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`;
+}
 
 const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<RosterRow>) {
   if (!data?.tectonicProfile) return <span className="text-on-surface-subtle">—</span>;
@@ -194,11 +199,11 @@ const CollectedByCell = memo(function CollectedByCell({ data }: CustomCellRender
 
 const CaCurrentCell = memo(function CaCurrentCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
-  return <CaCell stats={data.caCurrent} loading={context.statsRefreshing.has(data.signup.id)} nativeTitle={false} />;
+  return <CaCell stats={data.caCurrent} loading={context.statsRefreshing.has(data.signup.id)} />;
 });
 const CaPeakCell = memo(function CaPeakCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
-  return <CaCell stats={data.caPeak} loading={context.statsRefreshing.has(data.signup.id)} nativeTitle={false} />;
+  return <CaCell stats={data.caPeak} loading={context.statsRefreshing.has(data.signup.id)} />;
 });
 const EhbCell = memo(function EhbCell({ data, context }: CustomCellRendererProps<RosterRow, number, GridContext>) {
   if (!data) return null;
@@ -222,7 +227,7 @@ const StatusCell = memo(function StatusCell({ data, context }: CustomCellRendere
   const canWithdraw = withdrawable(context, data);
   const busy = context.withdrawSignup.isPending && context.withdrawSignup.variables === data.signup.id;
   return (
-    <div className="flex h-full items-center gap-1" title={canWithdraw ? `Click (or press Enter) to withdraw ${data.signup.rsn}` : undefined}>
+    <div className="flex h-full items-center gap-1">
       <Badge tone={active ? "ok" : "neutral"}>{busy ? "withdrawing…" : data.signup.status}</Badge>
       {data.cut && <Badge tone="warn">{context.historical ? "cut" : "will be cut"}</Badge>}
       {canWithdraw && <XIcon size={12} className="ml-auto shrink-0 text-on-surface-subtle" aria-hidden />}
@@ -275,7 +280,8 @@ function restrictionsEditable(data: RosterRow | undefined): boolean {
   return !!data && (!!data.restrictable || (data.restrictions?.length ?? 0) > 0);
 }
 
-// A player's Restrictions, a badge each with its reason on hover. A click or Enter opens RestrictionsEditor.
+// A player's Restrictions, a badge each, with their reasons on hover (the column's tooltip). A click or Enter opens
+// RestrictionsEditor.
 const RestrictionsCell = memo(function RestrictionsCell({ data }: CustomCellRendererProps<RosterRow, string, GridContext>) {
   if (!data) return null;
   const restrictions = data.restrictions ?? [];
@@ -283,9 +289,9 @@ const RestrictionsCell = memo(function RestrictionsCell({ data }: CustomCellRend
   return (
     <div className="flex h-full min-w-0 items-center gap-1 overflow-hidden">
       {restrictions.map((r) => (
-        <span key={r.id} title={`${r.reason}${r.appliedByLabel ? ` (by ${r.appliedByLabel})` : ""}`}>
-          <Badge tone="danger">{restrictionLabel(r.action)}</Badge>
-        </span>
+        <Badge key={r.id} tone="danger">
+          {restrictionLabel(r.action)}
+        </Badge>
       ))}
     </div>
   );
@@ -384,7 +390,7 @@ const PartnerCell = memo(function PartnerCell({ data, context }: CustomCellRende
   if (data.outgoingPairingRequest) {
     const targetName = data.outgoingPairingRequest.target.name;
     return (
-      <span className="flex h-full min-w-0 items-center gap-1.5" title={`Waiting for ${targetName} to accept. Click to pair them with someone now.`}>
+      <span className="flex h-full min-w-0 items-center gap-1.5">
         <span className="min-w-0 flex-1 truncate text-on-surface-subtle">
           Requested <Mark text={targetName} query={context.search} />
         </span>
@@ -429,7 +435,6 @@ function PickerEditor({
         value={value ?? ""}
         options={options}
         placeholder={placeholder}
-        passEscape
         onChange={(id) => {
           onValueChange(id);
           setPicked(true);
@@ -667,7 +672,7 @@ export function SignupRosterGrid({
         headerName: "Tier",
         valueGetter: (p) => p.data?.tectonicProfile?.points ?? -1,
         cellRenderer: TierCell,
-        tooltip: false,
+        tooltip: (p: TooltipCallbackParams<RosterRow>) => (p.data?.tectonicProfile ? tierTitle(p.data.tectonicProfile) : ""),
         width: 120,
       },
       {
@@ -689,6 +694,8 @@ export function SignupRosterGrid({
         valueGetter: (p) => (p.data ? `${p.data.signup.status}${p.data.cut ? (p.context.historical ? " (cut)" : " (will be cut)") : ""}` : undefined),
         getQuickFilterText: (p) => p.data?.signup.status ?? "",
         cellRenderer: StatusCell,
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) =>
+          withdrawable(p.context as GridContext, p.data) ? `Click (or press Enter) to withdraw ${p.data!.signup.rsn}` : usefulTooltip(p, String(p.value ?? "")),
         cellClass: (p) => (withdrawable(p.context, p.data) ? "cursor-pointer" : ""),
         editable: (p) => withdrawable(p.context, p.data),
         cellEditor: WithdrawEditor,
@@ -705,6 +712,8 @@ export function SignupRosterGrid({
         // Everything the cell shows, so a refetch that changes a Restriction redraws it; search finds them by it too.
         valueGetter: (p) => (p.data?.restrictions ?? []).map((r) => `${restrictionLabel(r.action)}: ${r.reason}`).join("; "),
         cellRenderer: RestrictionsCell,
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) =>
+          (p.data?.restrictions ?? []).map((r) => `${restrictionLabel(r.action)}: ${r.reason}${r.appliedByLabel ? ` (by ${r.appliedByLabel})` : ""}`).join("; "),
         cellClass: (p) => (restrictionsEditable(p.data) ? "cursor-pointer" : ""),
         editable: (p) => restrictionsEditable(p.data),
         cellEditor: RestrictionsEditor,
@@ -724,7 +733,7 @@ export function SignupRosterGrid({
         cellRenderer: RefreshCell,
         cellClass: (p) => (p.value === "idle" ? "cursor-pointer" : ""),
         sortable: false,
-        tooltip: false,
+        tooltip: refreshTooltip,
         width: 84,
         minWidth: 72,
       },
@@ -796,6 +805,10 @@ export function SignupRosterGrid({
         getQuickFilterText: (p) =>
           p.data?.pairing ? (p.context.partnerRsnMap.get(p.data.signup.id) ?? "") : (p.data?.outgoingPairingRequest?.target.name ?? ""),
         cellRenderer: PartnerCell,
+        tooltip: (p: TooltipCallbackParams<RosterRow, string>) => {
+          const request = !p.data?.pairing && p.data?.signup.status === "active" ? p.data.outgoingPairingRequest : null;
+          return request ? `Waiting for ${request.target.name} to accept. Click to pair them with someone now.` : usefulTooltip(p, String(p.value ?? ""));
+        },
         editable: (p) => p.data?.signup.status === "active" && !!p.context.canPair,
         cellEditor: PartnerEditor,
         // Read when the editor opens, so the list is the unpaired players as they are then (see the refs above).
@@ -824,8 +837,8 @@ export function SignupRosterGrid({
 
   // A cell's tooltip is its formatted value, a header's its name, but only when they'd tell you something: text cut
   // off, or detail the cell doesn't show (the exact signup time, the CA points behind a tier). See gridTooltips.ts,
-  // which also says why AG's own tooltipShowMode="whenTruncated" can't do this. `tier` opts out with
-  // `tooltip: false` since TierBadge already has its own native `title`.
+  // which also says why AG's own tooltipShowMode="whenTruncated" can't do this. The shared pieces drawn in cells (a
+  // TierBadge, a player's name) show no tooltips of their own in here (NoTooltips), so a column says what they would.
   // lockPinned: a column's pinned state (left/unpinned) is set by the colDef, not by the user — without this, an
   // unpinned column can be dragged past the pinned #/RSN block into it.
   const defaultColDef = useMemo<ColDef<RosterRow>>(
@@ -942,37 +955,39 @@ export function SignupRosterGrid({
 
   return (
     <div className="h-full min-h-0">
-      <AgGridReact<RosterRow>
-        theme={gridTheme}
-        rowData={rows}
-        getRowId={getRowId}
-        columnDefs={columnDefs}
-        defaultColDef={defaultColDef}
-        context={context}
-        animateRows={false}
-        initialState={initialState}
-        maintainColumnOrder
-        onStateUpdated={onStateUpdated}
-        onGridReady={onGridReady}
-        onModelUpdated={onModelUpdated}
-        quickFilterText={context.search}
-        includeHiddenColumnsInQuickFilter
-        isExternalFilterPresent={isExternalFilterPresent}
-        doesExternalFilterPass={doesExternalFilterPass}
-        tooltipShowDelay={200}
-        tooltipHideDelay={4000}
-        overlayNoRowsTemplate={context.search ? "No signups match this search." : "No signups match these filters."}
-        readOnlyEdit
-        singleClickEdit
-        stopEditingWhenCellsLoseFocus
-        onCellEditRequest={onCellEditRequest}
-        onCellKeyDown={onCellKeyDown}
-        onCellClicked={onCellClicked}
-        enableCellTextSelection
-        // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
-        // and accent-aware, instead of AG's default character-code order.
-        accentedSort
-      />
+      <NoTooltips>
+        <AgGridReact<RosterRow>
+          theme={gridTheme}
+          rowData={rows}
+          getRowId={getRowId}
+          columnDefs={columnDefs}
+          defaultColDef={defaultColDef}
+          context={context}
+          animateRows={false}
+          initialState={initialState}
+          maintainColumnOrder
+          onStateUpdated={onStateUpdated}
+          onGridReady={onGridReady}
+          onModelUpdated={onModelUpdated}
+          quickFilterText={context.search}
+          includeHiddenColumnsInQuickFilter
+          isExternalFilterPresent={isExternalFilterPresent}
+          doesExternalFilterPass={doesExternalFilterPass}
+          tooltipShowDelay={200}
+          tooltipHideDelay={4000}
+          overlayNoRowsTemplate={context.search ? "No signups match this search." : "No signups match these filters."}
+          readOnlyEdit
+          singleClickEdit
+          stopEditingWhenCellsLoseFocus
+          onCellEditRequest={onCellEditRequest}
+          onCellKeyDown={onCellKeyDown}
+          onCellClicked={onCellClicked}
+          enableCellTextSelection
+          // Text columns sort with localeCompare: case-insensitive ("alice" beside "Alice", not after every capital)
+          // and accent-aware, instead of AG's default character-code order.
+          accentedSort
+        />
+      </NoTooltips>
     </div>
   );
 }
