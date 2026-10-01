@@ -21,7 +21,7 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   make_draft_pick: { admin: "xxx+xxx", moderator: NONE, captain: "xxx+xxx", player: NONE },
   run_draft: { admin: "xxx+xxx", moderator: NONE, captain: NONE, player: NONE },
   rate_picks: { admin: "+++++xx", moderator: NONE, captain: "+++++xx", player: NONE },
-  rename_team: { admin: ALL, moderator: NONE, captain: "+++++ss", player: NONE },
+  rename_team: { admin: ALL, moderator: NONE, captain: "ssss+ss", player: NONE },
   view_bingo: { admin: ALL, moderator: ALL, captain: FINISHED, player: "s++++++" },
   view_hidden_board: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
   view_other_teams: { admin: ALL, moderator: ALL, captain: FINISHED, player: FINISHED },
@@ -80,6 +80,7 @@ describe("can()", () => {
 
     it("gives a Captain who is also a Player the Captain's Actions, in the Captain's stages", () => {
       expect(outcome(["captain", "player"], "draft", "make_draft_pick")).toBeNull();
+      expect(outcome(["captain", "player"], "draft", "rename_team")).toBe("stage");
       expect(outcome(["captain", "player"], "reveal", "rename_team")).toBeNull();
       expect(outcome(["captain", "player"], "live", "rename_team")).toBe("stage");
       expect(outcome(["captain", "player"], "draft", "run_draft")).toBe("role");
@@ -101,6 +102,14 @@ describe("can()", () => {
     expect(outcome(["admin"], "live", "make_draft_pick")).toBe("rule");
     expect(outcome(["admin"], "complete", "run_draft")).toBe("rule");
     expect(outcome(["admin", "captain", "player"], "live", "rate_picks")).toBe("rule");
+  });
+
+  it("leaves renaming any Team outside Board revealed to Admins, from the mod panel", () => {
+    for (const stage of ["draft", "live"] as const) {
+      expect(outcome(["admin", "captain", "player"], stage, "rename_team")).toBeNull();
+      expect(outcome(["admin"], stage, "administer_bingo")).toBeNull();
+    }
+    expect(outcome(["moderator", "captain", "player"], "live", "administer_bingo")).toBe("role");
   });
 
   it("answers outside any Bingo from the grants alone", () => {

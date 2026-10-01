@@ -881,14 +881,13 @@ router.patch(
   asyncHandler(async (req, res) => {
     const team = teamService.getTeamById(db, req.params.teamId as string);
     if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Team not found");
-    // Only a Team's own Captain or co-captain renames it here. Admins can still fix names from the mod panel; captains
-    // are done once live.
+    // Only a Team's own Captain or co-captain renames it here, and only during Board revealed: before it the Draft
+    // hasn't set the Team, and Live locks the name (CONTEXT.md "Team name"). Admins can still fix names from the mod
+    // panel at any stage.
     const onlyCaptain = new ServiceError(403, "Only the captain can rename this team");
     if (teamService.getLedTeam(db, req.bingo!.id, req.user!.id)?.id !== team.id) throw onlyCaptain;
-    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", {
-      role: onlyCaptain,
-      stage: new ServiceError(400, "Team names are locked once the bingo is live"),
-    });
+    // Outside Board revealed, the shared reason says which side of it the Bingo is on.
+    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", { role: onlyCaptain });
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");
