@@ -27,7 +27,9 @@ import { avatarUrl, displayName } from "./user";
 const ROW_HEIGHT = 48;
 
 // The server's dev user list, asked about the page you're on (server: routes/auth.ts, services/devPageAccessService.ts).
-type DevUser = User & { access?: boolean; role?: string | null };
+// `rank` is their highest part in the page's bingo (Site admin, Mod, Staff, Captain, Player, Signed up, Cut, the rest),
+// lower first.
+type DevUser = User & { access?: boolean; role?: string | null; rank?: number };
 
 /**
  * Dev mode only: the header's account switcher. A searchable list of every account (search by name, Discord name or
@@ -63,11 +65,12 @@ function Switcher({ currentUserId, adminPowers }: { currentUserId: string; admin
     };
   }, [open, pathname]);
 
-  // Who can open this page first, then whoever has a part in its bingo, then by name.
+  // Who can open this page first, then by their part in its bingo (the server's rank), then by name.
   const ordered = useMemo(
     () =>
       [...(users ?? [])].sort(
-        (a, b) => Number(b.access !== false) - Number(a.access !== false) || Number(!!b.role) - Number(!!a.role) || displayName(a).localeCompare(displayName(b)),
+        (a, b) =>
+          Number(b.access !== false) - Number(a.access !== false) || (a.rank ?? Infinity) - (b.rank ?? Infinity) || displayName(a).localeCompare(displayName(b)),
       ),
     [users],
   );

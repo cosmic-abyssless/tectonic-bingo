@@ -20,6 +20,7 @@ import { formatGp } from "../ui/gp";
 import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
 import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
+import { filterSubmissions, page, PAGE_SIZE, reviewerOptions, shownToInclude, submitterOptions } from "./reviewQueueFilters";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +44,7 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
 /** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>`. */
-export const SUBMISSION_FILTER_PARAMS = ["status", "teams"] as const;
+export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers"] as const;
 const DEFAULT_STATUSES = ["pending"];
 
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
@@ -103,9 +104,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const submissions = data?.submissions ?? [];
 
   // Nothing ticked is Any. Status starts on Pending so the view still lands on "Pending only" by default, same as
-  // before; Team starts on Any. Both are in the URL, so a link opens the queue filtered the same way.
+  // before; Team, Submitter and Reviewer start on Any. All four are in the URL, so a link opens the queue filtered the
+  // same way.
   const [selectedStatuses, setSelectedStatuses] = useUrlSet("status", DEFAULT_STATUSES);
   const [selectedTeams, setSelectedTeams] = useUrlSet("teams");
+  const [selectedSubmitters, setSelectedSubmitters] = useUrlSet("submitters");
+  const [selectedReviewers, setSelectedReviewers] = useUrlSet("reviewers");
+  // How many of the filtered list are drawn (issue #383): a Bingo has 1,000+ Submissions, and drawing every one is
+  // what's slow, so Load more adds a page at a time. Changing a filter goes back to the first page.
+  const [shown, setShown] = useState(PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -134,14 +141,32 @@ export function ReviewQueue({ slug }: { slug: string }) {
     approved: submissions.filter((s) => s.submission.status === "approved").length,
     rejected: submissions.filter((s) => s.submission.status === "rejected").length,
   };
+  const submitterChoices = submitterOptions(submissions);
+  const reviewerChoices = reviewerOptions(submissions);
   const statuses = inclusionFilter(selectedStatuses, STATUS_OPTIONS);
   const teams = inclusionFilter(selectedTeams, teamOptions);
-  const byStatus = statuses.query ? submissions.filter((s) => statuses.query!.includes(s.submission.status)) : submissions;
-  const byTeam = teams.query ? byStatus.filter((s) => teams.query!.includes(s.team.id)) : byStatus;
+  const submitters = inclusionFilter(selectedSubmitters, submitterChoices);
+  const reviewers = inclusionFilter(selectedReviewers, reviewerChoices);
+  const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers });
   // "Pending only" (the default) reads newest-first; any other mix of statuses reads however the server ordered
   // them, same as before.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
-  const visible = onlyPending ? [...byTeam].reverse() : byTeam;
+  const visible = onlyPending ? [...filtered].reverse() : filtered;
+  const drawn = page(visible, shown);
+
+  // Picking a filter starts its list from the top.
+  function setFilter(set: (keys: Set<string>) => void) {
+    return (keys: string[]) => {
+      set(new Set(keys));
+      setShown(PAGE_SIZE);
+    };
+  }
+
+  // Opening a row (the keyboard can reach past the drawn ones) draws enough pages to show it.
+  function expand(id: string) {
+    setShown((n) => shownToInclude(visible.findIndex((r) => r.submission.id === id), n));
+    setExpandedId(id);
+  }
 
   async function submitReview(row: ModSubmissionRow, action: "approve" | "reject") {
     setError(null);
@@ -204,14 +229,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
         if (pendingRows.length === 0) return;
         const currIndex = pendingRows.findIndex((r) => r.submission.id === expandedId);
         const next = currIndex === -1 || currIndex >= pendingRows.length - 1 ? pendingRows[0] : pendingRows[currIndex + 1];
-        setExpandedId(next.submission.id);
+        expand(next.submission.id);
       } else if (e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "k" || e.key === "K") {
         e.preventDefault();
         const pendingRows = visible.filter((r) => r.submission.status === "pending");
         if (pendingRows.length === 0) return;
         const currIndex = pendingRows.findIndex((r) => r.submission.id === expandedId);
         const prev = currIndex <= 0 ? pendingRows[pendingRows.length - 1] : pendingRows[currIndex - 1];
-        setExpandedId(prev.submission.id);
+        expand(prev.submission.id);
       } else if (e.key === "a" || e.key === "A") {
         if (!expandedId) return;
         const curr = visible.find((r) => r.submission.id === expandedId && r.submission.status === "pending");
@@ -242,15 +267,21 @@ export function ReviewQueue({ slug }: { slug: string }) {
             label="Status"
             options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.key] }))}
             selected={statuses.checked}
-            onChange={(visibleKeys) => setSelectedStatuses(new Set(visibleKeys))}
+            onChange={setFilter(setSelectedStatuses)}
           />
           {allTeams.length > 0 && (
             <MultiSelect
               label="Team"
               options={teamOptions}
               selected={teams.checked}
-              onChange={(visibleKeys) => setSelectedTeams(new Set(visibleKeys))}
+              onChange={setFilter(setSelectedTeams)}
             />
+          )}
+          {submitterChoices.length > 0 && (
+            <MultiSelect label="Submitter" options={submitterChoices} selected={submitters.checked} onChange={setFilter(setSelectedSubmitters)} />
+          )}
+          {reviewerChoices.length > 0 && (
+            <MultiSelect label="Reviewer" options={reviewerChoices} selected={reviewers.checked} onChange={setFilter(setSelectedReviewers)} />
           )}
         </div>
         <div className="flex items-center gap-2 text-xs text-on-surface-subtle">
@@ -272,11 +303,11 @@ export function ReviewQueue({ slug }: { slug: string }) {
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
-          {onlyPending ? "New submissions show up here as they come in." : "No submissions match this filter."}
+          {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed ? "New submissions show up here as they come in." : "No submissions match this filter."}
         </EmptyState>
       ) : (
         <div className="space-y-2">
-          {visible.map((row) => {
+          {drawn.rows.map((row) => {
             const isExpanded = expandedId === row.submission.id;
             const canReview = row.submission.status === "pending";
             const isManual = isManualRow(row);
@@ -472,6 +503,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
               </Card>
             );
           })}
+          {drawn.remaining > 0 && (
+            <div className="flex flex-col items-center gap-1 pt-2">
+              <Button variant="ghost" onPress={() => setShown((n) => n + PAGE_SIZE)}>
+                Load more
+              </Button>
+              <span className="text-xs text-on-surface-subtle">
+                Showing {drawn.rows.length} of {visible.length}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
