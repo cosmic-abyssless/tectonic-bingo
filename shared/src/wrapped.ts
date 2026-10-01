@@ -283,6 +283,9 @@ export const MAX_WRAPPED_CREDIT_LENGTH = 60;
  *   three, a Duo's two). Duo and Captain are the sections of those names. Each can carry a credit, and each category
  *   can also hold additional credits with no image.
  * - Side images ("side"): one pool, shown large beside the story's sections in turn (wide screens only).
+ * - Player card art ("playerCard"): a ranked pool for the Player card, best first (CONTEXT.md "Wrapped art"). Never
+ *   shown in the story.
+ * Side images and Player card art carry no credits.
  */
 /**
  * `moderator` is a reviewing Moderator's own section (captioned with their name); `moderators` is the Bingo-wide
@@ -291,7 +294,7 @@ export const MAX_WRAPPED_CREDIT_LENGTH = 60;
 export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "moderators", "outro"] as const;
 export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
 
-export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side"] as const;
+export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side", "playerCard"] as const;
 export type WrappedArtGroup = (typeof WRAPPED_ART_GROUPS)[number];
 
 /** How many images a group holds at most: a row above a heading gets crowded quickly; the side pool less so. */
@@ -323,13 +326,14 @@ export interface WrappedArtPiece {
 export type WrappedArtCredits = Partial<Record<WrappedArtSection, WrappedCredit[]>>;
 
 /**
- * The art the story shows, in order: each section's Category images (a section without any is missing), each
- * category's additional credits, and the side pool.
+ * A Bingo's Wrapped art, in order: each section's Category images (a section without any is missing), each
+ * category's additional credits, the side pool, and the Player card art (best first; only the share cards show it).
  */
 export interface WrappedArtSet {
   sections: Partial<Record<WrappedArtSection, WrappedArtPiece[]>>;
   additionalCredits: WrappedArtCredits;
   side: WrappedArtFrames[];
+  playerCard: WrappedArtFrames[];
 }
 
 /**
@@ -354,7 +358,7 @@ export interface WrappedArtImage {
   keying: WrappedArtKeying | null;
   /** The background colour that was keyed out, "#rrggbb"; null when nothing was. */
   keyColor: string | null;
-  /** Who it credits (CONTEXT.md "Credits"), captioned on it. Always null for a side image. */
+  /** Who it credits (CONTEXT.md "Credits"), captioned on it. Always null outside a section (side, Player card). */
   credit: WrappedCredit | null;
   updatedAt: string;
 }

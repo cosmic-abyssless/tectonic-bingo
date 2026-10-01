@@ -90,6 +90,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
+   The admin also uploads **Wrapped art** (CONTEXT.md) through the Wrapped art manager's endpoints (`wrappedArt.ts`):
+   four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
+   Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
+   A group the Bingo already has art in (copied from the previous real Bingo on the server) is left alone.
 2. **Signups** (through the real endpoint), front-loaded over the signup window, with
    about 60% of players pairing up as duos (request, then accept). Each player fills in the
    board's signup questions (read from the imported bingo, so whatever is added is answered):
@@ -181,6 +185,8 @@ through the real Site admin → Import historical Bingo endpoint:
   id, and the first one's account has been renamed since ("<name> Now" in the competition), so the
   leaderboard shows it connecting by id, under the name they played as;
 - dates some weeks to a year ago, `--days` long.
+
+Once imported, its Wrapped art is filled in the same way as a played run's (step 1 of "What it does").
 
 The server accepts the made-up Discord ids only in dev mode. `--progress` and `--mods` don't apply.
 
