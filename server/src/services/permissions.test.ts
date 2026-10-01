@@ -2,7 +2,23 @@
 // why a refusal is refused. Written out by hand rather than read off GRANTS, so a change to the grants has to change
 // this table too.
 import { describe, expect, it } from "vitest";
-import { ACTIONS, can, OPEN_TO_EVERYONE, resolvePermissions, STAGE_ORDER, unavailableReason, type Action, type PermissionDenial, type Role, type Stage } from "@bingo/shared";
+import {
+  ACTIONS,
+  can,
+  isRestrictionTarget,
+  mayRestrict,
+  OPEN_TO_EVERYONE,
+  resolvePermissions,
+  RESTRICTABLE_ACTIONS,
+  restrictedBy,
+  STAGE_ORDER,
+  unavailableReason,
+  type Action,
+  type PermissionDenial,
+  type RestrictionTarget,
+  type Role,
+  type Stage,
+} from "@bingo/shared";
 
 // One character per stage, in STAGE_ORDER (planning, signup, captains, draft, reveal, live, complete):
 // "+" allowed, "r" refused for the role, "s" refused for the stage, "x" refused by a rule for everyone. The Bingo shows
@@ -17,7 +33,9 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   administer_site: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   administer_bingo: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   moderate_bingo: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  submit: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
   submit_for_any_team: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  react: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
   make_draft_pick: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: "xxx+xxx", player: NONE },
   run_draft: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   rate_picks: { admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
@@ -141,6 +159,85 @@ describe("can()", () => {
     expect(can(["admin"], null, "administer_site")).toEqual({ ok: true });
     expect(can([], null, "administer_site")).toEqual({ ok: false, reason: "role" });
     expect(can(["captain"], null, "rename_team")).toEqual({ ok: false, reason: "stage" });
+  });
+});
+
+describe("Restrictions", () => {
+  const bingo = (stage: Stage) => ({ stage, showScreenshotsWhenFinished: true });
+  const restricted = (action: string, reason = "Spamming the channel") => [{ action: action as RestrictionTarget, reason }];
+
+  it("lists what can be restricted: Actions that do something, never a view, a Draft pick, or what only Admins hold", () => {
+    expect([...RESTRICTABLE_ACTIONS].sort()).toEqual(["rate_picks", "react", "rename_team", "submit", "submit_for_any_team"]);
+    for (const action of ACTIONS) {
+      if (action.startsWith("view_") || action === "make_draft_pick") expect(isRestrictionTarget(action), action).toBe(false);
+    }
+  });
+
+  // From the table: wherever a role grants a restrictable Action (allowed, or closed for the stage or by a rule), a
+  // Restriction on it refuses it instead, whatever the stage.
+  const restrictedCases = RESTRICTABLE_ACTIONS.flatMap((action) =>
+    (["moderator", "captain", "player"] as const).flatMap((role) =>
+      STAGE_ORDER.flatMap((stage, i) => (TABLE[action][role][i] === "r" ? [] : [{ action, role, stage }])),
+    ),
+  );
+  it.each(restrictedCases)("beats $role's $action in $stage", ({ action, role, stage }) => {
+    const roles: Role[] = role === "captain" ? ["captain", "player"] : [role];
+    expect(can(roles, bingo(stage), action, restricted(action))).toEqual({ ok: false, reason: "restricted", restriction: restricted(action)[0] });
+  });
+
+  it("leaves a refusal by role a refusal by role", () => {
+    expect(can(["moderator"], bingo("reveal"), "rename_team", restricted("rename_team"))).toEqual({ ok: false, reason: "role" });
+  });
+
+  it("doesn't hold for an Admin", () => {
+    for (const action of RESTRICTABLE_ACTIONS) expect(can(["admin", "captain", "player"], bingo("reveal"), action, restricted("*")).ok, action).toBe(true);
+  });
+
+  it("takes only the Action named", () => {
+    expect(can(["player"], bingo("live"), "submit", restricted("react")).ok).toBe(true);
+    expect(can(["player"], bingo("live"), "react", restricted("react")).ok).toBe(false);
+  });
+
+  it("takes every restrictable Action a wildcard covers, and nothing else", () => {
+    expect(restrictedBy("submit*")).toEqual(["submit", "submit_for_any_team"]);
+    expect(can(["moderator", "player"], bingo("live"), "submit", restricted("submit*")).ok).toBe(false);
+    expect(can(["moderator", "player"], bingo("live"), "submit_for_any_team", restricted("submit*")).ok).toBe(false);
+    expect(can(["moderator", "player"], bingo("live"), "react", restricted("submit*")).ok).toBe(true);
+    // "*" takes everything restrictable, but never what a user sees or a Captain's Draft pick.
+    expect(restrictedBy("*")).toEqual([...RESTRICTABLE_ACTIONS]);
+    expect(can(["captain", "player"], bingo("draft"), "make_draft_pick", restricted("*")).ok).toBe(true);
+    expect(can(["moderator", "player"], bingo("live"), "view_bingo", restricted("*")).ok).toBe(true);
+    expect(can(["moderator", "player"], bingo("live"), "moderate_bingo", restricted("*")).ok).toBe(true);
+  });
+
+  it("refuses to restrict a view, a Draft pick, or a wildcard that covers nothing restrictable", () => {
+    for (const target of ["view_bingo", "view_*", "make_draft_pick", "make_*", "moderate_bingo", "administer_bingo", "sub*mit*", "nonsense", ""]) {
+      expect(isRestrictionTarget(target), target).toBe(false);
+    }
+    for (const target of ["submit", "rename_team", "submit*", "r*", "*"]) expect(isRestrictionTarget(target), target).toBe(true);
+  });
+
+  it("tells the restricted user why, in the permissions response, with the Restriction's reason", () => {
+    const { allowed, reasons } = resolvePermissions(["captain", "player"], bingo("reveal"), restricted("rename_team", "Offensive team names."));
+    expect(allowed).not.toContain("rename_team");
+    expect(reasons.rename_team).toBe("Restricted: Offensive team names");
+    // Even where the stage closes it too: the Restriction is what they need to know about.
+    expect(resolvePermissions(["captain", "player"], bingo("live"), restricted("rename_team")).reasons.rename_team).toBe("Restricted: Spamming the channel");
+  });
+
+  it("lets an Admin restrict anyone but an Admin, and a Moderator only Captains and Players", () => {
+    expect(mayRestrict(["admin"], ["moderator", "player"])).toBe(true);
+    expect(mayRestrict(["admin"], ["captain", "player"])).toBe(true);
+    expect(mayRestrict(["admin"], ["admin", "player"])).toBe(false);
+    expect(mayRestrict(["moderator"], ["captain", "player"])).toBe(true);
+    expect(mayRestrict(["moderator"], ["player"])).toBe(true);
+    expect(mayRestrict(["moderator"], ["moderator"])).toBe(false);
+    expect(mayRestrict(["moderator"], ["moderator", "player"])).toBe(false);
+    expect(mayRestrict(["moderator"], ["admin"])).toBe(false);
+    // A role a Moderator isn't listed as restricting is refused, whatever it is (Staff, once it exists).
+    expect(mayRestrict(["moderator"], ["player", "someone_else" as Role])).toBe(false);
+    expect(mayRestrict(["captain", "player"], ["player"])).toBe(false);
+    expect(mayRestrict(["player"], ["player"])).toBe(false);
   });
 });
 

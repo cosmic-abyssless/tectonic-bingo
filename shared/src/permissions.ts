@@ -17,8 +17,12 @@ export const ACTIONS = [
   "administer_bingo",
   /** The mod panel: reviewing Submissions, Point Adjustments, the signup roster (pairings, withdrawals), Wrapped, the audit log. */
   "moderate_bingo",
+  /** Making Submissions for your own Team, Proof screenshots included. */
+  "submit",
   /** Submitting for a Team that isn't your own, naming the Player it's for. */
   "submit_for_any_team",
+  /** Reacting to your own Team's Submissions (CONTEXT.md "Reaction"). */
+  "react",
   /** Picking for your own Team when it's on the clock. */
   "make_draft_pick",
   /** Picking for whichever Team is on the clock, and undoing the latest pick. */
@@ -62,6 +66,91 @@ export const ACTIONS = [
   "view_buyins",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
+
+/**
+ * The Actions a Restriction can take (CONTEXT.md "Restriction"): the ones that do something and that someone other than
+ * an Admin holds. Not what a user sees (the view_ Actions), not a Captain's make_draft_pick (a Captain who can't pick
+ * is replaced instead), not moderate_bingo (all of the mod panel: taking it is removing the Moderator), and not what
+ * only Admins hold, since Admins can't be restricted. A new Action isn't restrictable until it's listed here.
+ */
+export const RESTRICTABLE_ACTIONS = ["submit", "submit_for_any_team", "react", "rate_picks", "rename_team"] as const satisfies readonly Action[];
+export type RestrictableAction = (typeof RESTRICTABLE_ACTIONS)[number];
+
+/**
+ * What a Restriction takes: one restrictable Action, or a wildcard ending in "*" that takes every restrictable Action
+ * whose name starts with what comes before it ("submit*" takes submit and submit_for_any_team; "*" alone takes them
+ * all). A wildcard never reaches an Action that isn't restrictable.
+ */
+export type RestrictionTarget = RestrictableAction | `${string}*`;
+
+/** One user's Restriction in one Bingo, as can() reads it. */
+export interface Restriction {
+  action: RestrictionTarget;
+  reason: string;
+}
+
+/**
+ * A Restriction as the Bingo's Moderators and Admins see it, on the user's roster row (GET .../mod/signups): who it's
+ * on, who applied it (a label, kept even if they've left) and when.
+ */
+export interface RestrictionEntry extends Restriction {
+  id: string;
+  userId: string;
+  appliedByLabel: string | null;
+  appliedAt: string;
+}
+
+/** Whether a Restriction on `target` takes `action`. */
+export function restrictionCovers(target: string, action: Action): boolean {
+  if (!(RESTRICTABLE_ACTIONS as readonly Action[]).includes(action)) return false;
+  return target.endsWith("*") ? action.startsWith(target.slice(0, -1)) : target === action;
+}
+
+/** The restrictable Actions a Restriction on `target` takes: none for something that isn't a RestrictionTarget. */
+export function restrictedBy(target: string): RestrictableAction[] {
+  return RESTRICTABLE_ACTIONS.filter((action) => restrictionCovers(target, action));
+}
+
+/** Whether `value` can be restricted: a restrictable Action, or a wildcard that takes at least one. */
+export function isRestrictionTarget(value: unknown): value is RestrictionTarget {
+  return typeof value === "string" && !value.slice(0, -1).includes("*") && restrictedBy(value).length > 0;
+}
+
+const RESTRICTABLE_ACTION_WORDS: Record<RestrictableAction, string> = {
+  submit: "submitting",
+  submit_for_any_team: "submitting for other Teams",
+  react: "reacting",
+  rate_picks: "rating picks",
+  rename_team: "renaming their Team",
+};
+
+/** What a Restriction on `target` takes, in words: "submitting and submitting for other Teams", "everything". */
+export function describeRestrictionTarget(target: string): string {
+  if (target === "*") return "everything that can be restricted";
+  const words = restrictedBy(target).map((action) => RESTRICTABLE_ACTION_WORDS[action]);
+  return words.length === 0 ? target : words.length === 1 ? words[0]! : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
+
+/** What a restricted user is told, on the control and in the server's 403 alike. */
+export function restrictedReason(restriction: Restriction): string {
+  return `Restricted: ${restriction.reason.trim().replace(/\.+$/, "")}`;
+}
+
+/**
+ * The roles a Moderator may restrict. Listed as who they may restrict rather than who they may not, so a target who
+ * holds any other role (Moderator, or one added later) is refused.
+ */
+export const MODERATOR_RESTRICTS: readonly Role[] = ["captain", "player"];
+
+/**
+ * Whether someone holding `actorRoles` in a Bingo may apply or lift a Restriction on someone holding `targetRoles` there:
+ * an Admin on anyone but an Admin, a Moderator only on someone whose every role is in MODERATOR_RESTRICTS.
+ */
+export function mayRestrict(actorRoles: readonly Role[], targetRoles: readonly Role[]): boolean {
+  if (targetRoles.includes("admin")) return false;
+  if (actorRoles.includes("admin")) return true;
+  return actorRoles.includes("moderator") && targetRoles.every((role) => MODERATOR_RESTRICTS.includes(role));
+}
 
 /** An Action a role holds, in every stage or only in the ones listed. */
 export interface Grant {
@@ -121,7 +210,11 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
     { action: "view_draft_pool_answers" },
     { action: "view_player_card_answers", stages: SCOUTING },
   ],
+  // Submitting and reacting keep their own rules on top (submissionService: Live only, your own Team's Submissions);
+  // they're granted here so that a Restriction can take them.
   player: [
+    { action: "submit" },
+    { action: "react" },
     { action: "view_bingo", stages: AFTER_PLANNING },
     { action: "view_team_stats", stages: ["live"] },
     { action: "view_draft_room", stages: ["captains", "draft", "reveal", "live", "complete"] },
@@ -156,8 +249,11 @@ export function siteRoles(user: { isAdmin: boolean }): Role[] {
   return user.isAdmin ? ["admin"] : [];
 }
 
-export type PermissionDenial = "role" | "stage" | "rule";
-export type Permission = { ok: true } | { ok: false; reason: PermissionDenial };
+export type PermissionDenial = "role" | "stage" | "rule" | "restricted";
+export type Permission =
+  | { ok: true }
+  | { ok: false; reason: Exclude<PermissionDenial, "restricted"> }
+  | { ok: false; reason: "restricted"; restriction: Restriction };
 
 /** Whether the rules for everyone leave `action` open in this Bingo, whoever asks. */
 export function passesRules(bingo: PermissionBingo, action: Action): boolean {
@@ -165,11 +261,13 @@ export function passesRules(bingo: PermissionBingo, action: Action): boolean {
 }
 
 /**
- * Whether a user holding `roles` may take `action` in `bingo` (null for the Site admin pages, outside any Bingo). The
- * reason says why not: no role grants it ("role"), a role grants it but not in this stage ("stage"), or it's granted
- * (or open to everyone) but a rule for everyone refuses it ("rule").
+ * Whether a user holding `roles`, under `restrictions` (theirs in this Bingo), may take `action` in `bingo` (null for
+ * the Site admin pages, outside any Bingo). The reason says why not: no role grants it ("role"), a role grants it but
+ * one of their Restrictions takes it ("restricted", whatever the stage), a role grants it but not in this stage
+ * ("stage"), or it's granted (or open to everyone) but a rule for everyone refuses it ("rule"). An Admin's
+ * Restrictions don't count: Admins can't be restricted, and one left from before they were made Admin doesn't hold.
  */
-export function can(roles: readonly Role[], bingo: PermissionBingo | null, action: Action): Permission {
+export function can(roles: readonly Role[], bingo: PermissionBingo | null, action: Action, restrictions: readonly Restriction[] = []): Permission {
   if (bingo && OPEN_TO_EVERYONE[action]?.(bingo)) return passesRules(bingo, action) ? { ok: true } : { ok: false, reason: "rule" };
   let granted = false;
   let inStage = false;
@@ -186,6 +284,8 @@ export function can(roles: readonly Role[], bingo: PermissionBingo | null, actio
     }
   }
   if (!granted) return { ok: false, reason: "role" };
+  const restriction = roles.includes("admin") ? undefined : restrictions.find((r) => restrictionCovers(r.action, action));
+  if (restriction) return { ok: false, reason: "restricted", restriction };
   if (!inStage) return { ok: false, reason: "stage" };
   if (bingo && !passesRules(bingo, action)) return { ok: false, reason: "rule" };
   return { ok: true };
@@ -220,8 +320,9 @@ export function unavailableReason(bingo: PermissionBingo, action: Action): strin
 
 /**
  * A viewer's Actions in one Bingo at its current stage (GET /api/bingos/:slug/permissions): the ones they may take, and
- * why not for each one a role of theirs grants but that's closed right now. An Action no role of theirs grants is in
- * neither. `roles` are theirs in the Bingo, for saying which one they lost.
+ * why not for each one a role of theirs grants but that's closed right now, or that a Restriction of theirs takes
+ * ("Restricted: <its reason>"). An Action no role of theirs grants is in neither. `roles` are theirs in the Bingo, for
+ * saying which one they lost.
  */
 export interface BingoPermissionsResponse {
   roles: Role[];
@@ -229,14 +330,21 @@ export interface BingoPermissionsResponse {
   reasons: { [A in Action]?: string };
 }
 
-/** can() for every Action at once, for someone holding `roles` in `bingo`. */
-export function resolvePermissions(roles: readonly Role[], bingo: PermissionBingo): BingoPermissionsResponse {
+/** What a refusal other than by role tells the user: the Restriction's reason, or why the Action is closed now. */
+export function refusalReason(bingo: PermissionBingo, action: Action, permission: Permission): string | null {
+  if (permission.ok || permission.reason === "role") return null;
+  return permission.reason === "restricted" ? restrictedReason(permission.restriction) : unavailableReason(bingo, action);
+}
+
+/** can() for every Action at once, for someone holding `roles`, under `restrictions`, in `bingo`. */
+export function resolvePermissions(roles: readonly Role[], bingo: PermissionBingo, restrictions: readonly Restriction[] = []): BingoPermissionsResponse {
   const allowed: Action[] = [];
   const reasons: BingoPermissionsResponse["reasons"] = {};
   for (const action of ACTIONS) {
-    const permission = can(roles, bingo, action);
+    const permission = can(roles, bingo, action, restrictions);
     if (permission.ok) allowed.push(action);
-    else if (permission.reason !== "role") reasons[action] = unavailableReason(bingo, action);
+    const reason = refusalReason(bingo, action, permission);
+    if (reason) reasons[action] = reason;
   }
   return { roles: [...roles], allowed, reasons };
 }

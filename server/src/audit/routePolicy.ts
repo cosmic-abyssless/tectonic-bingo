@@ -40,6 +40,8 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],
   "PATCH /api/bingos/:slug/mod/signups/:id/timezone": ["signup.timezone_set"],
   "DELETE /api/bingos/:slug/mod/signups/:id": ["signup.withdrawn", "pairing.dissolved"],
+  "POST /api/bingos/:slug/mod/restrictions": ["restriction.applied"],
+  "DELETE /api/bingos/:slug/mod/restrictions/:id": ["restriction.lifted"],
 
   // routes/buyins.ts, mounted at /api/bingos/:slug/buyins
   "PATCH /api/bingos/:slug/buyins/:signupId": ["signup.buyin_marked"],

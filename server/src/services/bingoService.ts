@@ -11,6 +11,7 @@ import {
   bingoLines,
   bingoModerators,
   bingoStaff,
+  bingoRestrictions,
   bingoTitleSettings,
   bingoWrapped,
   playerWrapped,
@@ -402,6 +403,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     wrappedArtService.deleteBingoArt(tx, bingoId);
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
     tx.delete(bingoStaff).where(eq(bingoStaff.bingoId, bingoId)).run();
+    tx.delete(bingoRestrictions).where(eq(bingoRestrictions.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();
     // Detach, don't delete: a past WOM competition snapshot is deliberately

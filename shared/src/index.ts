@@ -16,6 +16,7 @@ import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
 import type { ProofCheck, SubmissionKind } from "./proof.ts";
 import type { HistoricalRecorded } from "./historical.ts";
+import type { RestrictionEntry } from "./permissions.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -830,6 +831,11 @@ export interface RosterEntry {
   caCurrent?: CombatAchievementStats | null;
   caPeak?: CombatAchievementStats | null;
   womStats?: WomPlayerStats | null;
+  // Mod roster only: the player's Restrictions in this bingo (CONTEXT.md "Restriction"), oldest first.
+  restrictions?: RestrictionEntry[];
+  // Mod roster only: whether the viewer may restrict this player now (an Admin anyone but an Admin, a Moderator only
+  // Captains and Players).
+  restrictable?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1466,7 +1472,10 @@ export type BroadcastEvent =
   // These users' roles in the Bingo changed (Moderator, Captain, a Team, a Signup), and with them maybe their Actions:
   // each refetches their own permissions (BingoPermissionsResponse). bingoId null: their Admin flag changed, which
   // counts in every Bingo and on the Site admin pages. IDs only, per the unauthenticated-broadcast rule above.
-  | { type: "access_changed"; bingoId: string | null; payload: { userIds: string[] } };
+  | { type: "access_changed"; bingoId: string | null; payload: { userIds: string[] } }
+  // A Restriction was applied or lifted: Moderators and Admins refetch the roster that shows them. The restricted user
+  // hears it as access_changed. Nothing else, per the unauthenticated-broadcast rule above.
+  | { type: "restrictions_changed"; bingoId: string; payload: Record<string, never> };
 
 export * from "./achievements.ts";
 export * from "./audit.ts";

@@ -100,6 +100,10 @@ export const SQL_TABLES: Record<string, TableClass> = {
     note: "Staff of a Bingo: clan leadership who collect its Buy-ins, and see nothing else of it.",
     columns: { id: "", bingo_id: "", user_id: "", created_at: TS },
   },
+  bingo_restrictions: {
+    note: "Restrictions in force: one Action (or a wildcard ending in *) taken from one user in one Bingo, with a reason. Lifting one deletes its row; the audit log has the history (restriction.applied / restriction.lifted).",
+    columns: { id: "", bingo_id: "", user_id: "", action: "An Action name such as submit or rename_team, or a wildcard such as submit*", reason: "", applied_by_user_id: "", applied_at: TS },
+  },
   stage_transitions: {
     note: "Every stage change of a Bingo, with who made it. The move to live is when the Bingo actually started; to complete, when it ended.",
     columns: { id: "", bingo_id: "", from_stage: "", to_stage: "", changed_by_user_id: "", created_at: TS },

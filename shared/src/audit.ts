@@ -10,6 +10,7 @@
 import type { AchievementKey } from "./achievements.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
+import { describeRestrictionTarget } from "./permissions.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system";
@@ -122,6 +123,9 @@ export interface AuditDetailsMap {
   "moderator.removed": { userId: string; displayName: string };
   "staff.added": { userId: string; displayName: string };
   "staff.removed": { userId: string; displayName: string };
+  /** A Restriction (CONTEXT.md) applied to or lifted from a user. `action`: the Action or wildcard it takes. */
+  "restriction.applied": { userId: string; displayName: string; action: string; reason: string };
+  "restriction.lifted": { userId: string; displayName: string; action: string; reason: string };
 
   "category.created": { label: string; colorHex: string | null; sortOrder: number };
   "category.updated": { changes: FieldChanges<{ label: string; colorHex: string | null; sortOrder: number }> };
@@ -566,6 +570,21 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Staff removed",
     label: (i) => `${actor(i)} removed ${i.details.displayName} as Staff`,
+  },
+  // Mods only: nobody but the restricted user, the Moderators and the Admins sees a Restriction (CONTEXT.md).
+  "restriction.applied": {
+    category: "moderation",
+    tone: "danger",
+    visibility: "mods",
+    title: "Restriction applied",
+    label: (i) => `${actor(i)} restricted ${i.details.displayName} from ${describeRestrictionTarget(i.details.action)}: "${i.details.reason}"`,
+  },
+  "restriction.lifted": {
+    category: "moderation",
+    tone: "ok",
+    visibility: "mods",
+    title: "Restriction lifted",
+    label: (i) => `${actor(i)} lifted ${i.details.displayName}'s restriction on ${describeRestrictionTarget(i.details.action)} ("${i.details.reason}")`,
   },
   "category.created": { category: "board", tone: "ok", visibility: "mods", title: "Category created", label: (i) => `${actor(i)} created the category "${i.details.label}"` },
   "category.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Category updated", label: (i) => `${actor(i)} updated the category "${i.entityLabel ?? ""}"` },

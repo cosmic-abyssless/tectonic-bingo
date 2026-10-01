@@ -214,6 +214,20 @@ export const bingoStaff = sqliteTable('bingo_staff', {
   uniqueIndex('bingo_staff_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 
+// One Action (or a wildcard of them) taken from one user in one Bingo, with a reason (CONTEXT.md "Restriction";
+// @bingo/shared RESTRICTABLE_ACTIONS). Lasts until lifted, which deletes the row: the audit log keeps the history.
+export const bingoRestrictions = sqliteTable('bingo_restrictions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  action: text('action').notNull(),
+  reason: text('reason').notNull(),
+  appliedByUserId: text('applied_by_user_id').references(() => users.id),
+  appliedAt: integer('applied_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  uniqueIndex('bingo_restrictions_bingo_user_action_unq').on(t.bingoId, t.userId, t.action),
+]);
+
 // Append-only audit log of stage changes. Feeds the post-bingo timeline view.
 export const stageTransitions = sqliteTable('stage_transitions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
