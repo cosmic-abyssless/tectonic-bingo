@@ -147,7 +147,7 @@ describe("a SUM holds only Items", () => {
 
   it("refuses a condition inside a SUM when a tree is created, and writes nothing", () => {
     const bingo = seedBingo();
-    expect(() => db.transaction((tx) => insertSubtree(tx, bingo.id, sumWithCondition))).toThrow(/"Page 1" \("N in total from"\) can only be made of Items/);
+    expect(() => db.transaction((tx) => insertSubtree(tx, bingo.id, sumWithCondition))).toThrow(/"Page 1" \("N of any \(dupes count\)"\) can only be made of Items/);
     expect(db.select().from(nodes).all()).toHaveLength(0);
   });
 
