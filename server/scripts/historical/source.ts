@@ -12,9 +12,15 @@ const SNOWFLAKE = /^\d{15,21}$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 export interface SourcePlayer {
+  /** The RSN they played under then, as the Bingo shows them. */
   rsn: string;
   /** null when it's `unknown`. */
   discordId: string | null;
+  /**
+   * Their account's name in the Wise Old Man competition, when it isn't `rsn`: one renamed since, or a main whose
+   * ironman played. null to match by `rsn`.
+   */
+  wom: string | null;
 }
 
 export interface SourceTeam {
@@ -165,11 +171,12 @@ export function readSource(folder: string): SourceCheck {
           const pWhere = `${label} players[${pi}]`;
           const rsn = str(["teams", ti, "players", pi, "rsn"], true);
           const id = discordId(["teams", ti, "players", pi, "discordId"]);
+          const wom = str(["teams", ti, "players", pi, "wom"], false);
           if (id === undefined) err(node(["teams", ti, "players", pi]), `${pWhere}${rsn ? ` (${rsn})` : ""}`, "discordId missing: a Discord user id, or unknown");
           else if (id !== null && !SNOWFLAKE.test(id)) err(node(["teams", ti, "players", pi, "discordId"]), `${pWhere}${rsn ? ` (${rsn})` : ""}`, `discordId "${id}" isn't a Discord user id (or unknown)`);
           else if (id !== null && seenIds.has(id)) err(node(["teams", ti, "players", pi, "discordId"]), `${pWhere}${rsn ? ` (${rsn})` : ""}`, `Discord id ${id} is also ${seenIds.get(id)}`);
           else if (id !== null && rsn) seenIds.set(id, rsn);
-          if (rsn) players.push({ rsn, discordId: id ?? null });
+          if (rsn) players.push({ rsn, discordId: id ?? null, wom });
         });
       }
       const find = (rsn: string | null) => (rsn ? players.find((p) => p.rsn.toLowerCase() === rsn.toLowerCase()) : undefined);
