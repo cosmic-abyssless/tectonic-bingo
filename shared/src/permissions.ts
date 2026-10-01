@@ -223,6 +223,47 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
 };
 
 /**
+ * Each Action in words, for the mod panel's Permissions tab, which lists what every role holds. Typed over every
+ * Action, so a new one can't ship without saying what it is. `onlyIn` is for an Action whose stages a check outside
+ * can() narrows further, so the tab doesn't say it's open where that check refuses it.
+ */
+export const ACTION_INFO: { readonly [A in Action]: { label: string; description?: string; onlyIn?: readonly Stage[] } } = {
+  administer_site: { label: "Site admin pages", description: "Users, Bingos, Historical imports and test data, outside any Bingo." },
+  administer_bingo: {
+    label: "Run the Bingo",
+    description: "Settings, Board, Teams, Moderators and Staff, signup questions, stage changes, the pick order and Superlative tallies.",
+  },
+  moderate_bingo: {
+    label: "Mod panel",
+    description: "Reviewing Submissions, Point Adjustments, the signup roster (pairings, withdrawals, Restrictions), Wrapped and the audit log.",
+  },
+  // submissionService: assertSubmissionsOpen takes Submissions while Live only, and reactions close once Finished
+  // (with no Submissions before Live, that leaves Live).
+  submit: { label: "Submit", description: "Submissions for their own Team, Proof screenshots included.", onlyIn: ["live"] },
+  submit_for_any_team: { label: "Submit for any Team", description: "For a Team that isn't their own, naming the Player it's for.", onlyIn: ["live"] },
+  react: { label: "React", description: "To their own Team's Submissions.", onlyIn: ["live"] },
+  make_draft_pick: { label: "Make Draft picks", description: "For their own Team, when it's on the clock." },
+  run_draft: { label: "Run the Draft", description: "Picking for whichever Team is on the clock, and undoing the latest pick." },
+  rate_picks: { label: "Rate picks", description: "Signups on their Team's scouting list." },
+  rename_team: { label: "Rename their Team", description: "From the Team dialog. Renaming any Team from the mod panel is running the Bingo." },
+  mark_buyins: { label: "Mark Buy-ins", description: "A signup's Buy-in received or not, and who collected it." },
+  view_bingo: { label: "The Bingo", description: "Its Board, Teams, rules, players and the pages under it." },
+  view_hidden_board: { label: "The hidden Board", description: "The Board before Board revealed, and sealed Tiles in full: rules text, exclusive item lists, Task interest." },
+  view_other_teams: { label: "Other Teams", description: "Their progress, Submissions and activity, and every Team's stats." },
+  view_team_stats: { label: "Their Team's stats", description: "Before every Team's are open." },
+  view_mod_activity: { label: "Mod-only activity", description: "The entries in a Team's activity that only Moderators see." },
+  view_other_teams_screenshots: { label: "Other Teams' screenshots", description: "In a Finished Bingo, where Show screenshots once Finished leaves them out." },
+  view_wrapped_preview: { label: "Wrapped preview", description: "Wrapped before it's published." },
+  view_draft_room: { label: "The draft room", description: "Scouting the signups before the Draft, then the Draft itself." },
+  view_draft_pool_answers: { label: "Signup answers in the draft pool" },
+  view_player_card_answers: { label: "Signup answers on player cards" },
+  view_mod_questions: { label: "Mod-only answers", description: "Answers to signup questions only Moderators may see." },
+  view_admin_questions: { label: "Admin-only answers", description: "Answers to signup questions only Admins may see." },
+  view_any_player: { label: "Anyone's player card", description: "Of anyone in the clan, not only those in the Bingo." },
+  view_buyins: { label: "Buy-ins", description: "Each signup's RSN, Discord name and Buy-in, who collected it and who recorded it." },
+};
+
+/**
  * Rules that hold for everyone, Admins included: an Action granted by a role is still refused while its rule says no.
  * Not grants, so a new grant can't skip them. Each returns whether the Action is open in this Bingo right now.
  */
