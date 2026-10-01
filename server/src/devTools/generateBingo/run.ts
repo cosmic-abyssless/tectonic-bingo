@@ -13,6 +13,7 @@ import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
+import { runRestrictions } from "./restrictions";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
 export type BoardSource = { kind: "bingo"; slug: string } | { kind: "document"; document: BingoExportDocument };
@@ -141,7 +142,13 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     if (mod.userId && mod.signupAt) await api.as(adminDiscordId).post(`/api/bingos/${slug}/admin/mods`, { userId: mod.userId }, { at: modAt });
   }
   log(`${mods.length} mods${options.me ? " plus you" : ""}`);
-  if (options.stage === "captains") return result;
+  const restrictions = await runRestrictions(ctx, players, mods, seeds);
+  log(`restrictions: ${restrictions.applied} applied, ${restrictions.lifted} lifted`);
+  result.problems.push(...restrictions.problems);
+  if (options.stage === "captains") {
+    for (const p of result.problems) log(`SANITY CHECK FAILED: ${p}`);
+    return result;
+  }
 
   // Moving into the Draft needs a Cut review first while any cut can be avoided (CONTEXT.md "Cut review"). The
   // generator's Teams are already made, so it applies an empty one: the Admin keeping the cuts as they are.
