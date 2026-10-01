@@ -429,7 +429,6 @@ function PickerEditor({
         value={value ?? ""}
         options={options}
         placeholder={placeholder}
-        passEscape
         onChange={(id) => {
           onValueChange(id);
           setPicked(true);
