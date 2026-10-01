@@ -443,8 +443,21 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
 /** Most Titles, and Superlatives, a share card shows. */
 const CARD_TITLES = 3;
 const CARD_SUPERLATIVES = 3;
+/** Most of the Team section's Category images the Team card shows. */
+const CARD_TEAM_ART = 3;
 /** The wiki's icon of a stack of coins, beside every GP figure on a card. */
 const COINS_ICON = "Coins 10000";
+
+/**
+ * The Player card art for a Points share rank in the Bingo (CONTEXT.md "Wrapped art"): the ranked Players split into
+ * as many equal bands as there are images, best first, so tied Players (who share a rank) share an image. Undefined
+ * with no art, or for Wrapped published before the rank was stored.
+ */
+export function rankedArt<T>(pool: readonly T[], bingoRank: number | undefined, bingoPlayers: number | undefined): T | undefined {
+  if (pool.length === 0 || !bingoRank || !bingoPlayers) return undefined;
+  const band = Math.floor(((bingoRank - 1) * pool.length) / bingoPlayers);
+  return pool[Math.min(Math.max(band, 0), pool.length - 1)];
+}
 
 /**
  * The share cards the story ends on (WrappedOutroModel.cards): a Player's Player and Team cards, each left out when it
@@ -454,18 +467,24 @@ const COINS_ICON = "Coins 10000";
 export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, slug: string, person: (u: AvatarUser) => WrappedPersonModel): WrappedShareCardModel[] {
   const { bingo, player } = data;
   if (!player) return [];
-  // Each card's art: its own section's first Category image, else a side image (the Team card a different one from
-  // the Player card's where there are two).
-  const sectionArt = (section: WrappedArtSection) => data.art?.sections?.[section]?.[0]?.frames[0];
+  // Each card's art (CONTEXT.md "Share cards"). Fallbacks are a side image, the Team card a different one from the
+  // Player card's where there are two.
+  const sectionArt = (section: WrappedArtSection) => (data.art?.sections?.[section] ?? []).map((piece) => piece.frames[0]);
   const side = (data.art?.side ?? []).map((f) => f[0]);
-  const cardArt = { player: sectionArt("you") ?? side[0] ?? null, team: sectionArt("team") ?? side[1] ?? side[0] ?? null };
+  const ranked = rankedArt((data.art?.playerCard ?? []).map((f) => f[0]), player.you.bingoRank, player.you.bingoPlayers);
+  const teamArt = sectionArt("team").slice(0, CARD_TEAM_ART);
+  const one = (url: string | undefined) => (url ? [url] : []);
+  const cardArt = {
+    player: one(ranked ?? sectionArt("you")[0] ?? side[0]),
+    team: teamArt.length > 0 ? teamArt : one(side[1] ?? side[0]),
+  };
   const base = (kind: WrappedShareCardModel["kind"], label: string) => ({
     key: kind,
     label,
     bingoName: bingo.bingoName,
     fileName: `${slug}-wrapped-${kind}.png`,
     coinsIconUrl: wikiIconUrl(COINS_ICON)!,
-    artUrl: cardArt[kind],
+    artUrls: cardArt[kind],
   });
   const cardDrop = (d: WrappedDrop): WrappedShareCardDropModel => ({
     key: `${d.submissionId}:${d.itemName}`,
