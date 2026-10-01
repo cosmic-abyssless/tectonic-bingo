@@ -83,7 +83,7 @@ export function BoardPageLayout() {
                       selector={page.canPickTeam && page.teams.length > 0 ? page.teamSelector : undefined}
                     />
                   </div>
-                  {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="shrink-0 md:hidden" />}
+                  {(page.canSubmit || page.submitRestricted) && <SubmitButton onPress={() => page.submit.show()} restricted={page.submitRestricted} className="shrink-0 md:hidden" />}
                 </div>
               )}
             </div>

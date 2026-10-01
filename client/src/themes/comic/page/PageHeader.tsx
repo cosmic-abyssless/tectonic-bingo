@@ -31,7 +31,7 @@ export function PageHeader({ page }: { page: BingoPageModel }) {
       team={page.viewing.team ? { onShow: page.teamInfo.show } : undefined}
     >
       {/* On phones Submit lives beside the team banner instead. */}
-      {page.canSubmit && <SubmitButton onPress={() => page.submit.show()} className="max-md:hidden" />}
+      {(page.canSubmit || page.submitRestricted) && <SubmitButton onPress={() => page.submit.show()} restricted={page.submitRestricted} className="max-md:hidden" />}
     </Masthead>
   );
 }

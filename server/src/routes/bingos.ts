@@ -12,7 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoViewer } from "../middleware/requireBingoViewer";
 import { getBingoAccess, isPartOfBingo } from "../services/bingoAccess";
-import { assertCan, bingoRoles, unavailable } from "../services/permissions";
+import { assertCan, assertUserCan, bingoRoles, restrictionsOf, unavailable } from "../services/permissions";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -104,16 +104,16 @@ router.get(
 );
 
 // The viewer's Actions in this bingo at its current stage, and why not for the ones a role of theirs grants but that
-// are closed right now (BingoPermissionsResponse): what the client shows and hides by. Asked by everyone who gets the
-// shell, whether or not they can see the bingo's content, and again whenever their roles or the stage change
-// (access_changed, stage_changed).
+// are closed right now or taken by one of their Restrictions (BingoPermissionsResponse): what the client shows and
+// hides by. Asked by everyone who gets the shell, whether or not they can see the bingo's content, and again whenever
+// their roles, their Restrictions or the stage change (access_changed, stage_changed).
 router.get(
   "/:slug/permissions",
   requireAuth,
   requireBingo,
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
-    res.json(resolvePermissions(bingoRoles(db, bingo, req.user!), bingo) satisfies BingoPermissionsResponse);
+    res.json(resolvePermissions(bingoRoles(db, bingo, req.user!), bingo, restrictionsOf(db, bingo.id, req.user!.id)) satisfies BingoPermissionsResponse);
   }),
 );
 
@@ -795,7 +795,7 @@ router.put(
     // The lock comes before who's asking: everyone gets it once the bingo is live.
     if (!passesRules(bingo, "rate_picks")) throw unavailable(bingo, "rate_picks");
     const onlyLeads = new ServiceError(403, "Only team leads can rate picks");
-    assertCan(bingoRoles(db, bingo, req.user!), bingo, "rate_picks", { role: onlyLeads });
+    assertUserCan(db, bingo, req.user!, "rate_picks", { role: onlyLeads });
     // Ratings go to the Team the user leads; an Admin who leads none has nothing to rate for.
     const myTeam = teamService.getLedTeam(db, bingo.id, req.user!.id);
     if (!myTeam) throw onlyLeads;
@@ -819,6 +819,8 @@ router.put(
     const submissionId = req.params.id as string;
     const team = teamService.getTeamById(db, submissionService.getSubmissionById(db, submissionId)?.teamId ?? "");
     if (!team || team.bingoId !== req.bingo!.id) throw new ServiceError(404, "Submission not found");
+    // Refuses for a Restriction; who is on the submission's team is the service's to say.
+    assertUserCan(db, req.bingo!, req.user!, "react", { role: new ServiceError(403, "Only the submission's team can react to it") });
     const { teamId } = submissionService.setSubmissionReaction(db, submissionId, req.user!.id, emoji, reacted === true);
     broadcast({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, submissionId } });
     res.json({ reactions: submissionService.getSubmissionDetails(db, submissionId)?.reactions ?? [] });
@@ -887,7 +889,7 @@ router.patch(
     const onlyCaptain = new ServiceError(403, "Only the captain can rename this team");
     if (teamService.getLedTeam(db, req.bingo!.id, req.user!.id)?.id !== team.id) throw onlyCaptain;
     // Outside Board revealed, the shared reason says which side of it the Bingo is on.
-    assertCan(bingoRoles(db, req.bingo!, req.user!), req.bingo!, "rename_team", { role: onlyCaptain });
+    assertUserCan(db, req.bingo!, req.user!, "rename_team", { role: onlyCaptain });
 
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");

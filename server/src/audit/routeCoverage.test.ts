@@ -49,6 +49,7 @@ describe("route coverage", () => {
   it("maps every non-GET /api/* route to AUDITED_ROUTES or an auditSkip marker, with no stale entries", async () => {
     const { default: bingosRouter } = await import("../routes/bingos");
     const { default: modRouter } = await import("../routes/mod");
+    const { default: buyinsRouter } = await import("../routes/buyins");
     const { default: adminRouter } = await import("../routes/admin");
     const { default: siteAdminRouter } = await import("../routes/siteAdmin");
     const { default: historicalScreenshotsRouter } = await import("../routes/historicalScreenshots");
@@ -64,6 +65,7 @@ describe("route coverage", () => {
       ...routesFor(createMcpRouter(db, { issuer: new URL("http://localhost/"), resource: new URL("http://localhost/mcp") }), ""),
       ...routesFor(bingosRouter, "/api/bingos"),
       ...routesFor(modRouter, "/api/bingos/:slug/mod"),
+      ...routesFor(buyinsRouter, "/api/bingos/:slug/buyins"),
       ...routesFor(adminRouter, "/api/bingos/:slug/admin"),
       ...routesFor(historicalScreenshotsRouter, "/api/bingos/:slug/admin/historical"),
       ...routesFor(siteAdminRouter, "/api/admin"),

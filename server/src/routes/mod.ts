@@ -12,6 +12,7 @@ import * as historicalService from "../services/historicalService";
 import * as submissionService from "../services/submissionService";
 import { changeSubmissionAttribution } from "../services/submissionTarget";
 import * as signupService from "../services/signupService";
+import * as restrictionService from "../services/restrictionService";
 import * as draftService from "../services/draftService";
 import { fetchProfiles } from "../services/tectonicProfileService";
 import { applyRosterNames } from "../services/pairingNames";
@@ -25,7 +26,7 @@ import { getTectonicClient, TectonicUnavailableError } from "../services/tectoni
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncSignupRsn } from "../services/rsnSyncService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
-import { bingoRoles } from "../services/permissions";
+import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { markAuditedNoop } from "../audit/record";
@@ -251,10 +252,14 @@ router.get(
       fetchProfiles(db, roster.map((entry) => entry.user.id)),
       applyRosterNames(roster.flatMap((entry) => (entry.outgoingPairingRequest ? [entry.outgoingPairingRequest.target] : []))),
     ]);
+    const restrictions = restrictionService.getRestrictions(db, req.bingo!.id);
+    const restrictable = restrictionService.restrictableUserIds(db, req.bingo!, req.user!, roster.map((entry) => entry.user.id));
     const signups = roster.map((entry) => ({
       ...entry,
       cut: cut.has(entry.user.id),
       tectonicProfile: tectonic.profiles[entry.user.id] ?? null,
+      restrictions: restrictions.filter((r) => r.userId === entry.user.id),
+      restrictable: restrictable.has(entry.user.id),
     }));
     res.json({ signups });
   }),
@@ -278,12 +283,12 @@ router.get(
   }),
 );
 
-// Who can be recorded as having collected a buy-in. Mods only need names, so
-// this mirrors the admin-only GET /mods without opening up user management.
+// Who can be recorded as having collected a buy-in: the bingo's Moderators and its Staff (CONTEXT.md "Staff"). Mods
+// only need names, so this mirrors the admin-only GET /mods and /staff without opening up user management.
 router.get(
   "/moderators",
   asyncHandler(async (req, res) => {
-    res.json({ mods: bingoService.getModerators(db, req.bingo!.id) });
+    res.json({ mods: [...bingoService.getModerators(db, req.bingo!.id), ...bingoService.getStaff(db, req.bingo!.id)] });
   }),
 );
 
@@ -360,6 +365,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { received, collectedByUserId } = req.body as { received?: boolean; collectedByUserId?: string | null };
     if (typeof received !== "boolean") throw new ServiceError(400, "received must be a boolean");
+    assertUserCan(db, req.bingo!, req.user!, "mark_buyins", { role: new ServiceError(403, "Moderator access required for this bingo") });
     const signup = signupService.markBuyin(db, req.bingo!, req.params.id as string, {
       received,
       collectedByUserId,
@@ -390,6 +396,34 @@ router.delete(
     const signup = signupService.withdrawSignup(db, req.bingo!, req.params.id as string, { byMod: true });
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
+  }),
+);
+
+// Restrictions (CONTEXT.md "Restriction"): an Admin restricts anyone but an Admin, a Moderator only Captains and
+// Players (restrictionService). The restricted user's client refetches its Actions (access_changed), the mods' their
+// roster (restrictions_changed).
+function restrictionsChanged(bingoId: string, userId: string): void {
+  broadcast({ type: "access_changed", bingoId, payload: { userIds: [userId] } });
+  broadcast({ type: "restrictions_changed", bingoId, payload: {} });
+}
+
+router.post(
+  "/restrictions",
+  asyncHandler(async (req, res) => {
+    const { userId, action, reason } = req.body as { userId?: unknown; action?: unknown; reason?: unknown };
+    if (typeof userId !== "string" || !userId) throw new ServiceError(400, "userId is required");
+    const restriction = restrictionService.applyRestriction(db, req.bingo!, req.user!, { userId, action, reason });
+    restrictionsChanged(req.bingo!.id, userId);
+    res.status(201).json({ restriction });
+  }),
+);
+
+router.delete(
+  "/restrictions/:id",
+  asyncHandler(async (req, res) => {
+    const { userId } = restrictionService.liftRestriction(db, req.bingo!, req.user!, req.params.id as string);
+    restrictionsChanged(req.bingo!.id, userId);
+    res.status(204).end();
   }),
 );
 

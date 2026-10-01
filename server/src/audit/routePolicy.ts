@@ -40,11 +40,18 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/bingos/:slug/mod/signups/:id/buyin": ["signup.buyin_marked"],
   "PATCH /api/bingos/:slug/mod/signups/:id/timezone": ["signup.timezone_set"],
   "DELETE /api/bingos/:slug/mod/signups/:id": ["signup.withdrawn", "pairing.dissolved"],
+  "POST /api/bingos/:slug/mod/restrictions": ["restriction.applied"],
+  "DELETE /api/bingos/:slug/mod/restrictions/:id": ["restriction.lifted"],
+
+  // routes/buyins.ts, mounted at /api/bingos/:slug/buyins
+  "PATCH /api/bingos/:slug/buyins/:signupId": ["signup.buyin_marked"],
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
   "DELETE /api/bingos/:slug/admin/mods/:userId": ["moderator.removed"],
+  "POST /api/bingos/:slug/admin/staff": ["staff.added"],
+  "DELETE /api/bingos/:slug/admin/staff/:userId": ["staff.removed"],
   "POST /api/bingos/:slug/admin/categories": ["category.created"],
   "PATCH /api/bingos/:slug/admin/categories/:id": ["category.updated"],
   "DELETE /api/bingos/:slug/admin/categories/:id": ["category.deleted"],

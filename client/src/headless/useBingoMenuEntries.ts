@@ -18,7 +18,7 @@ export interface BoardMenuActions {
 /**
  * The "This Bingo" group of the header's ☰ menu (AppHeader's menuEntries), in order: the Board (the way back to it, the
  * ☰ having taken the back arrow's place), Submissions, the team, Rules,
- * Stats, Rewind, the Draft or Scouting room, Wrapped, Achievements and the Tutorial. Each shows only when it applies, and the page
+ * Stats, Rewind, the Draft or Scouting room, Buy-ins (Staff), Wrapped, Achievements and the Tutorial. Each shows only when it applies, and the page
  * you're on (stats, Rewind, the draft room, Wrapped) shows as current. Achievements come from the page's
  * AchievementsProvider, where there is one.
  *
@@ -55,6 +55,7 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
     const label = header.draftRoom === "draft" ? "Draft room" : "Scouting room";
     entries.push({ id: "draft", text: label, label, wikiIcon: "Spyglass", current: page === "draft", onAction: goTo("draft") });
   }
+  if (header.canCollectBuyins) entries.push({ id: "buyins", text: "Buy-ins", label: "Buy-ins", wikiIcon: "Coins 10000", current: page === "buyins", onAction: goTo("buyins") });
   if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", wikiIcon: "Present", current: page === "wrapped", onAction: goTo("wrapped") });
   // Nothing can be unlocked before Live, so there's nothing to look at until then.
   const achievementsStarted = header.stage === "live" || header.stage === "complete";

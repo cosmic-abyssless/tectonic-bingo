@@ -101,9 +101,15 @@ target (say `signup`), the later dates are simply scheduled in the future.
    given made-up WOM, RuneProfile and combat achievement stats (the ones the signup seed
    tool uses, random, not seeded), because signing up with the integrations off leaves
    them empty and the roster's stats columns would be blank.
+   As Signups open the admin makes two **Staff** (CONTEXT.md), who don't sign up. About 80% of players pay
+   their Buy-in some hours after signing up: Staff mark most of them on the Buy-ins page as the one who
+   collected it, and the admin marks the rest, crediting a Staff member as the collector.
 3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
    in a duo bingo only paired players captain, since every Team is led by a pair) create
-   the teams. Before the draft the admin applies an empty **Cut review** (keeping the cuts
+   the teams. Once the mods are made, a few **Restrictions** (CONTEXT.md) are applied from the mod roster: a
+   Moderator takes rating picks from a Captain and reacting from a Player, and the Admin takes submitting (the
+   `submit*` wildcard) from another Player and lifts it again that day. A Moderator also tries to restrict another
+   Moderator, which has to be refused (a sanity check). Before the draft the admin applies an empty **Cut review** (keeping the cuts
    as they are), which the move into the draft needs while any cut is avoidable. Then the
    **real draft** runs: the admin sets the pick order, starts
    the draft, and captains pick in turn a minute or so apart, favouring better players,

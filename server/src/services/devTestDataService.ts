@@ -4,7 +4,7 @@
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { auditLog, bingoModerators, bingos, signups, teamMembers, teams, users, womPastCompetitions } from "../db/schema";
+import { auditLog, bingoModerators, bingoStaff, bingos, signups, teamMembers, teams, users, womPastCompetitions } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { ServiceError } from "./errors";
 import { deleteBingo } from "./bingoService";
@@ -90,6 +90,8 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
   const candidateIds = new Set<string>();
   for (const s of db.select({ id: signups.userId }).from(signups).where(eq(signups.bingoId, bingo.id)).all()) candidateIds.add(s.id);
   if (teamIds.length > 0) for (const m of db.select({ id: teamMembers.userId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all()) candidateIds.add(m.id);
+  // Staff need not sign up, so they may be in the bingo only as Staff.
+  for (const s of db.select({ id: bingoStaff.userId }).from(bingoStaff).where(eq(bingoStaff.bingoId, bingo.id)).all()) candidateIds.add(s.id);
   // deleteBingo only detaches these (bingoService.ts — a real archived competition outlives its bingo on
   // purpose), so a mocked one (issue #133) needs deleting here or it lingers as an orphan forever.
   const pastCompetitionIds = db.select({ id: womPastCompetitions.id }).from(womPastCompetitions).where(eq(womPastCompetitions.bingoId, bingo.id)).all().map((c) => c.id);
@@ -107,6 +109,7 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
       db.select({ id: signups.id }).from(signups).where(eq(signups.userId, id)).get() ||
       db.select({ id: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.userId, id)).get() ||
       db.select({ id: bingoModerators.userId }).from(bingoModerators).where(eq(bingoModerators.userId, id)).get() ||
+      db.select({ id: bingoStaff.userId }).from(bingoStaff).where(eq(bingoStaff.userId, id)).get() ||
       db.select({ id: auditLog.id }).from(auditLog).where(or(eq(auditLog.actorUserId, id), eq(auditLog.onBehalfOfUserId, id))).get();
     if (stillUsed) continue;
     try {

@@ -15,6 +15,8 @@ export interface BingoHeaderModel {
   stageLabel: string;
   /** The viewer may open the mod panel (moderate_bingo). */
   canModerate: boolean;
+  /** The ☰ menu's way to the Buy-ins page: Staff's (view_buyins), as a Moderator has the mod panel's Signups tab. */
+  canCollectBuyins: boolean;
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only once the bingo is Finished (see canRewind). */
   canRewind: boolean;
@@ -89,6 +91,7 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     stage: shell.bingo.stage,
     stageLabel: STAGE_LABEL[shell.bingo.stage],
     canModerate,
+    canCollectBuyins: can("view_buyins").allowed && !canModerate,
     canViewStats: canViewStats(shell, can),
     canRewind: canRewind(shell),
     historical: shell.bingo.historical,

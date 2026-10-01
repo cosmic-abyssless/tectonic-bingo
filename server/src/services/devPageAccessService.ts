@@ -20,7 +20,7 @@ export interface DevPageAccess {
  * For the dev account switcher: which of `users` could open the client page at `path`, and their part in its bingo.
  * Mirrors the gates the page's API calls hit: requireAdmin (/admin), requireGuildMember (every bingo route), requireBingo
  * (a Planning bingo is mods only), the mod routes' requireBingoMod, requireBingoViewer and the stats route's
- * view_other_teams / view_team_stats rule, and the draft room's view_draft_room. Dev mode only. The bingo's own page opens for anyone else too, as the
+ * view_other_teams / view_team_stats rule, and the draft room's view_draft_room, the Buy-ins page's view_buyins. Dev mode only. The bingo's own page opens for anyone else too, as the
  * signup form or the "not part of this bingo" notice.
  */
 export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<string, DevPageAccess> {
@@ -63,9 +63,10 @@ export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<s
     if (page === "mod") access = inClan && allowed("moderate_bingo");
     else if (page === "stats") access = inClan && canSee && (allowed("view_other_teams") || (allowed("view_team_stats") && !!team));
     else if (page === "draft") access = inClan && allowed("view_draft_room");
+    else if (page === "buyins") access = inClan && allowed("view_buyins");
     else access = inClan;
 
-    const parts = [u.isAdmin ? "Site admin" : mods.has(u.id) ? "Mod" : null];
+    const parts = [u.isAdmin ? "Site admin" : mods.has(u.id) ? "Mod" : null, roles.includes("staff") ? "Staff" : null];
     if (team) parts.push(team.isLead ? `${team.coLead ? "Co-captain" : "Captain"} · ${team.team}` : team.team);
     else if (isCut) parts.push("Cut");
     else if (isSignedUp) parts.push("Signed up");

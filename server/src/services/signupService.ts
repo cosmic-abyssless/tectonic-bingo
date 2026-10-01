@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { can, canSeeAnswers, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
+import { can, canSeeAnswers, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type PublicUser, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -12,6 +12,7 @@ import { withRsn } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
 import { parseWomSummary } from "./womService";
 import { PUBLIC_USER_COLS } from "./userService";
+import { getModerators, getStaff } from "./bingoService";
 import { inGuildUserIds, nameMemberPicks, withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -727,7 +728,37 @@ export function hasAnySignup(db: Db, bingoId: string): boolean {
   return db.select({ id: signups.id }).from(signups).where(eq(signups.bingoId, bingoId)).get() !== undefined;
 }
 
-const BUYIN_STAGES: Bingo["stage"][] = ["signup", "captains", "draft", "reveal"];
+/**
+ * The Buy-ins page (view_buyins; CONTEXT.md "Staff"): every active signup's RSN and Discord name, its Buy-in, and who
+ * collected and who recorded it. Nothing else of the signup, so Staff never get its answers, stats or Pick Ratings.
+ */
+export function getBuyins(db: Db, bingoId: string): BuyinsResponse {
+  const rows = db
+    .select({ signup: PUBLIC_SIGNUP_COLS, user: PUBLIC_USER_COLS })
+    .from(signups)
+    .innerJoin(users, eq(signups.userId, users.id))
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active")))
+    .orderBy(signups.createdAt)
+    .all();
+  const markerIds = [...new Set(rows.flatMap((r) => [r.signup.buyinCollectedByUserId, r.signup.buyinRecordedByUserId]).filter((id): id is string => !!id))];
+  const markers = markerIds.length ? withRsn(db, bingoId, db.select(PUBLIC_USER_COLS).from(users).where(inArray(users.id, markerIds)).all()) : [];
+  const markerById = new Map(markers.map((u) => [u.id, u]));
+  const buyins = rows.map((r) => ({
+    signupId: r.signup.id,
+    user: { ...r.user, rsn: r.signup.rsn },
+    receivedAt: r.signup.buyinReceivedAt?.toISOString() ?? null,
+    collectedBy: r.signup.buyinCollectedByUserId ? (markerById.get(r.signup.buyinCollectedByUserId) ?? null) : null,
+    recordedBy: r.signup.buyinRecordedByUserId ? (markerById.get(r.signup.buyinRecordedByUserId) ?? null) : null,
+  }));
+  return { buyins, collectors: getBuyinCollectors(db, bingoId) };
+}
+
+/** Who can be recorded as having collected a Buy-in: the Bingo's Moderators and Staff. */
+export function getBuyinCollectors(db: Db, bingoId: string) {
+  const byId = new Map<string, PublicUser>();
+  for (const row of [...getModerators(db, bingoId), ...getStaff(db, bingoId)]) byId.set(row.userId, row.user);
+  return [...byId.values()];
+}
 
 export interface MarkBuyinParams {
   received: boolean;
@@ -736,12 +767,10 @@ export interface MarkBuyinParams {
 }
 
 export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBuyinParams) {
-  if (!BUYIN_STAGES.includes(bingo.stage)) {
-    throw new ServiceError(400, `Buy-in can only be marked during signup, draft, or reveal (current stage: ${bingo.stage})`);
-  }
+  if (!passesRules(bingo, "mark_buyins")) throw new ServiceError(400, unavailableReason(bingo, "mark_buyins"));
   return db.transaction((tx) => {
     const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
-    if (!existing) throw new ServiceError(404, "Signup not found");
+    if (!existing || existing.bingoId !== bingo.id) throw new ServiceError(404, "Signup not found");
     const collectedByUserId = params.received ? (params.collectedByUserId ?? null) : null;
     const updated = tx
       .update(signups)

@@ -122,6 +122,10 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["adminBugReports"]);
       invalidate(["myBugReports"]);
       break;
+    case "restrictions_changed":
+      // The mod roster shows each player's Restrictions.
+      invalidate(["signupRoster"]);
+      break;
     case "access_changed":
       // Only the users named: their roles changed, and with them maybe their Actions and what the shell shows them.
       if (!viewerId || !event.payload.userIds.includes(viewerId)) break;

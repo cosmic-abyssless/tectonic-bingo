@@ -203,6 +203,31 @@ export const bingoModerators = sqliteTable('bingo_moderators', {
   uniqueIndex('bingo_moderators_bingo_user_unq').on(t.bingoId, t.userId),
 ]);
 
+// A Bingo's Staff (CONTEXT.md "Staff"): clan leadership who collect its Buy-ins. Granted per Bingo by Admins, like
+// its Moderators.
+export const bingoStaff = sqliteTable('bingo_staff', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  uniqueIndex('bingo_staff_bingo_user_unq').on(t.bingoId, t.userId),
+]);
+
+// One Action (or a wildcard of them) taken from one user in one Bingo, with a reason (CONTEXT.md "Restriction";
+// @bingo/shared RESTRICTABLE_ACTIONS). Lasts until lifted, which deletes the row: the audit log keeps the history.
+export const bingoRestrictions = sqliteTable('bingo_restrictions', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  action: text('action').notNull(),
+  reason: text('reason').notNull(),
+  appliedByUserId: text('applied_by_user_id').references(() => users.id),
+  appliedAt: integer('applied_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  uniqueIndex('bingo_restrictions_bingo_user_action_unq').on(t.bingoId, t.userId, t.action),
+]);
+
 // Append-only audit log of stage changes. Feeds the post-bingo timeline view.
 export const stageTransitions = sqliteTable('stage_transitions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -230,7 +255,7 @@ export const auditLog = sqliteTable('audit_log', {
   action: text('action').notNull(),
   visibility: text('visibility', { enum: ['mods', 'team', 'public'] }).notNull(),
   actorType: text('actor_type', { enum: ['user', 'system', 'dev'] }).notNull(),
-  actorRole: text('actor_role', { enum: ['admin', 'mod', 'player', 'system'] }).notNull(),
+  actorRole: text('actor_role', { enum: ['admin', 'mod', 'staff', 'player', 'system'] }).notNull(),
   actorUserId: text('actor_user_id').references(() => users.id),
   onBehalfOfUserId: text('on_behalf_of_user_id').references(() => users.id),
   entityType: text('entity_type').notNull(),

@@ -10,6 +10,8 @@ import { REACTION_ART } from "./reactionArt";
 export interface ReactionBarProps {
   reactions: ReactionModel[];
   canReact: boolean;
+  /** Why the viewer can't react, when a Restriction takes it ("Restricted: <reason>"): shown in place of the smiley. */
+  restricted?: string | null;
   onToggle: (emoji: SubmissionReaction) => void;
   className?: string;
 }
@@ -49,8 +51,8 @@ export function ReactionIcon({ emoji, size = 16 }: { emoji: SubmissionReaction; 
 }
 
 /** The bar with a theme's skin: what the ReactionBar slot renders, with its own. */
-export function ReactionBarView({ reactions, canReact, onToggle, className = "", skin }: ReactionBarProps & { skin: ReactionSkin }) {
-  if (!canReact && reactions.length === 0) return null;
+export function ReactionBarView({ reactions, canReact, restricted, onToggle, className = "", skin }: ReactionBarProps & { skin: ReactionSkin }) {
+  if (!canReact && !restricted && reactions.length === 0) return null;
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
       {reactions.map((r) => {
@@ -73,6 +75,18 @@ export function ReactionBarView({ reactions, canReact, onToggle, className = "",
         );
       })}
       {canReact && <ReactionPicker reactions={reactions} onToggle={onToggle} skin={skin} />}
+      {!canReact && restricted && (
+        <TextTooltip text={restricted}>
+          <span
+            tabIndex={0}
+            aria-label={`Can't react. ${restricted}`}
+            className={`flex size-7 cursor-not-allowed items-center justify-center opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-accent ${skin.add.className}`}
+            style={skin.add.style}
+          >
+            <SmilePlusIcon size={16} />
+          </span>
+        </TextTooltip>
+      )}
     </div>
   );
 }

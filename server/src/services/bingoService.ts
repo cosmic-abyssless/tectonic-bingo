@@ -10,6 +10,8 @@ import {
   bingoAchievementSettings,
   bingoLines,
   bingoModerators,
+  bingoStaff,
+  bingoRestrictions,
   bingoTitleSettings,
   bingoWrapped,
   playerWrapped,
@@ -400,6 +402,8 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(bingoWrapped).where(eq(bingoWrapped.bingoId, bingoId)).run();
     wrappedArtService.deleteBingoArt(tx, bingoId);
     tx.delete(bingoModerators).where(eq(bingoModerators.bingoId, bingoId)).run();
+    tx.delete(bingoStaff).where(eq(bingoStaff.bingoId, bingoId)).run();
+    tx.delete(bingoRestrictions).where(eq(bingoRestrictions.bingoId, bingoId)).run();
     tx.delete(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).run();
     tx.delete(womReads).where(eq(womReads.bingoId, bingoId)).run();
     // Detach, don't delete: a past WOM competition snapshot is deliberately
@@ -462,6 +466,72 @@ export function getModerators(db: Db, bingoId: string) {
     .from(bingoModerators)
     .innerJoin(users, eq(bingoModerators.userId, users.id))
     .where(eq(bingoModerators.bingoId, bingoId))
+    .all();
+  const rsns = rsnsInBingo(db, bingoId, rows.map((r) => r.userId));
+  return rows.map((r) => ({ ...r, user: { ...r.user, rsn: rsns.get(r.userId) ?? null } }));
+}
+
+// Staff (CONTEXT.md "Staff"), granted and removed by Admins the same way as Moderators, and audited the same way.
+
+export function isBingoStaff(db: Db, bingoId: string, userId: string): boolean {
+  return !!db
+    .select({ id: bingoStaff.id })
+    .from(bingoStaff)
+    .where(and(eq(bingoStaff.bingoId, bingoId), eq(bingoStaff.userId, userId)))
+    .get();
+}
+
+export function addStaff(db: Db, params: { bingoId: string; userId: string }) {
+  return db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(bingoStaff)
+      .where(and(eq(bingoStaff.bingoId, params.bingoId), eq(bingoStaff.userId, params.userId)))
+      .get();
+    if (existing) {
+      markAuditedNoop();
+      return existing;
+    }
+    const staff = tx.insert(bingoStaff).values({ ...params, createdAt: clockNow() }).returning().get();
+    audit(tx, {
+      action: "staff.added",
+      bingoId: params.bingoId,
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
+    });
+    return staff;
+  });
+}
+
+export function removeStaff(db: Db, params: { bingoId: string; userId: string }): void {
+  db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(bingoStaff)
+      .where(and(eq(bingoStaff.bingoId, params.bingoId), eq(bingoStaff.userId, params.userId)))
+      .get();
+    if (!existing) {
+      markAuditedNoop();
+      return;
+    }
+    tx.delete(bingoStaff)
+      .where(and(eq(bingoStaff.bingoId, params.bingoId), eq(bingoStaff.userId, params.userId)))
+      .run();
+    audit(tx, {
+      action: "staff.removed",
+      bingoId: params.bingoId,
+      entity: { type: "user", id: params.userId, label: userLabelById(tx, params.userId, params.bingoId) },
+      details: { userId: params.userId, displayName: userLabelById(tx, params.userId, params.bingoId) ?? "Unknown user" },
+    });
+  });
+}
+
+export function getStaff(db: Db, bingoId: string) {
+  const rows = db
+    .select({ id: bingoStaff.id, bingoId: bingoStaff.bingoId, userId: bingoStaff.userId, createdAt: bingoStaff.createdAt, user: PUBLIC_USER_COLS })
+    .from(bingoStaff)
+    .innerJoin(users, eq(bingoStaff.userId, users.id))
+    .where(eq(bingoStaff.bingoId, bingoId))
     .all();
   const rsns = rsnsInBingo(db, bingoId, rows.map((r) => r.userId));
   return rows.map((r) => ({ ...r, user: { ...r.user, rsn: rsns.get(r.userId) ?? null } }));

@@ -1,6 +1,6 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { BingoExportDocument, BoardResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
@@ -170,6 +170,68 @@ export async function runSignups(ctx: Ctx, players: Player[], pairs: [Player, Pl
   const ran = await runInOrder(events, ctx.limit);
   for (const p of players) if (!signedUp.has(p.index)) p.signupAt = null;
   ctx.log(`${signedUp.size}/${players.length} players signed up, ${pairs.filter(([a, b]) => signedUp.has(a.index) && signedUp.has(b.index)).length} duos (${ran} requests)`);
+}
+
+// ---------------------------------------------------------------------------
+// Staff and Buy-ins
+// ---------------------------------------------------------------------------
+
+/** Clan leadership collecting the Buy-ins (CONTEXT.md "Staff"): not signed up, only Staff. */
+export interface StaffMember {
+  discordId: string;
+  discordName: string;
+  userId: string | null;
+}
+
+const STAFF_NAMES = ["goldkeeper", "clan_treasurer"];
+
+/**
+ * The Staff, made and granted by the Admin just after Signups open, so they're there to collect the first Buy-ins.
+ * Stamped at the run's limit at the latest, for a run that stops before then.
+ */
+export async function grantStaff(ctx: Ctx, count = STAFF_NAMES.length): Promise<StaffMember[]> {
+  const at = new Date(Math.min(plus(ctx.tl.signupOpensAt, 5 * MINUTE).getTime(), ctx.limit.getTime()));
+  const staff: StaffMember[] = [];
+  for (let i = 0; i < count; i++) {
+    const member: StaffMember = { discordId: `${ctx.slug}-staff-${i}`, discordName: STAFF_NAMES[i % STAFF_NAMES.length]!, userId: null };
+    const { user } = await ctx.api.as(ctx.admin).post<{ user: { id: string } }>("/api/dev/users", { discordId: member.discordId, discordUsername: member.discordName }, { at });
+    member.userId = user.id;
+    await ctx.api.as(ctx.admin).post(path(ctx, "/admin/staff"), { userId: user.id }, { at });
+    staff.push(member);
+  }
+  ctx.log(`${staff.length} Staff: ${staff.map((s) => s.discordName).join(", ")}`);
+  return staff;
+}
+
+/**
+ * Most players pay their Buy-in some hours after signing up, before Signups close. Staff mark most of them, as the
+ * one who collected the GP; the Admin marks the rest, crediting whichever Staff member handed it over.
+ */
+export async function runBuyins(ctx: Ctx, players: Player[], staff: StaffMember[]): Promise<void> {
+  if (staff.length === 0) return;
+  const rng = ctx.rng.fork("buyins");
+  const { buyins } = await ctx.api.as(ctx.admin).get<BuyinsResponse>(path(ctx, "/buyins"));
+  const signupByUserId = new Map(buyins.map((b) => [b.user.id, b.signupId]));
+  const latest = ctx.tl.captainsAt.getTime() - 5 * MINUTE;
+  const events: Timed[] = [];
+  let byStaff = 0;
+  for (const p of players) {
+    const signupId = p.userId ? signupByUserId.get(p.userId) : undefined;
+    if (!signupId || !p.signupAt || !rng.chance(0.8)) continue;
+    const at = new Date(Math.min(p.signupAt.getTime() + rng.between(0.5, 36) * HOUR, latest));
+    if (at <= p.signupAt) continue;
+    const collector = rng.pick(staff);
+    const asStaff = rng.chance(0.7);
+    if (asStaff) byStaff++;
+    events.push({
+      at,
+      run: async () => {
+        await ctx.api.as(asStaff ? collector.discordId : ctx.admin).patch(path(ctx, `/buyins/${signupId}`), { received: true, collectedByUserId: collector.userId }, { at });
+      },
+    });
+  }
+  const ran = await runInOrder(events, ctx.limit);
+  ctx.log(`${ran} Buy-ins marked (${byStaff} of ${events.length} planned by Staff)`);
 }
 
 // ---------------------------------------------------------------------------
