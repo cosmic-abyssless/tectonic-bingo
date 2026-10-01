@@ -1,6 +1,8 @@
 import { STAGE_LABEL, areRulesHidden, type BingoShellResponse } from "@bingo/shared";
 import { useBingo, useDraftState, usePendingCount } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
+import { useBingoCan, useSiteCan } from "./permissions";
+import type { CanCheck } from "./permissionCheck";
 
 // What a bingo's page header shows, for the pages around the board (the draft room, stats, Rewind, Wrapped): the same
 // header and ☰ menu as the board page, without loading the board. The board page's own model (useBingoPage) carries
@@ -11,7 +13,8 @@ export interface BingoHeaderModel {
   stage: BingoShellResponse["bingo"]["stage"];
   /** "Signups open", "Draft", "Live"… */
   stageLabel: string;
-  isMod: boolean;
+  /** The viewer may open the mod panel (moderate_bingo). */
+  canModerate: boolean;
   canViewStats: boolean;
   /** Rewind (CONTEXT.md) exists only once the bingo is Finished (see canRewind). */
   canRewind: boolean;
@@ -46,23 +49,23 @@ export interface BingoHeaderModel {
 export const RULES_COME_LATER = "The rules will be posted at a later date.";
 
 /**
- * Players see their own team's stats while the bingo is live and everyone's once it's over (the stats endpoint 403s
- * otherwise); mods see every team's from Live on. Before Live there's nothing to show, so nobody gets the way in.
+ * Who sees every team's stats (view_other_teams: mods, and everyone once it's over), and players their own team's while
+ * the bingo is live (view_team_stats), as the stats endpoint answers. Before Live there's nothing to show, so nobody
+ * gets the way in.
  */
-export function canViewStats(shell: Pick<BingoShellResponse, "bingo" | "isMod" | "myTeam" | "historical">): boolean {
+export function canViewStats(shell: Pick<BingoShellResponse, "bingo" | "myTeam" | "historical">, can: CanCheck): boolean {
   if (shell.historical && !shell.historical.submissions) return false;
-  return shell.bingo.stage === "complete" || (shell.bingo.stage === "live" && (shell.isMod || !!shell.myTeam));
+  if (shell.bingo.stage !== "live" && shell.bingo.stage !== "complete") return false;
+  return can("view_other_teams").allowed || (can("view_team_stats").allowed && !!shell.myTeam);
 }
 
 /**
- * Scouting (CONTEXT.md): Captains get picked while signups are open (#39), so leads (and mods) scout ahead; once Signups
- * are closed every Player can look through them too.
+ * Scouting (CONTEXT.md): the draft room before the Draft stage (view_draft_room). Captains get picked while signups are
+ * open (#39), so leads (and mods) scout ahead; once Signups are closed every Player can look through them too.
  */
-export function canScout(shell: Pick<BingoShellResponse, "bingo" | "isMod" | "myTeam" | "teams" | "viewer">, userId: string | undefined): boolean {
+export function canScout(shell: Pick<BingoShellResponse, "bingo">, can: CanCheck): boolean {
   const { stage } = shell.bingo;
-  const myTeam = shell.teams.find((t) => t.id === shell.myTeam?.id);
-  const isLead = !!myTeam?.members.some((m) => m.user.id === userId && (m.isCaptain || m.isCoCaptain));
-  return (stage === "signup" && (shell.isMod || isLead)) || (stage === "captains" && (shell.isMod || isLead || shell.viewer.canSee));
+  return (stage === "signup" || stage === "captains") && can("view_draft_room").allowed;
 }
 
 /** Rewind (CONTEXT.md) exists only once the bingo is Finished, and for a Historical Bingo only when it recorded Submissions. */
@@ -72,9 +75,12 @@ export function canRewind(shell: Pick<BingoShellResponse, "bingo" | "historical"
 
 /** Null while the bingo is loading. */
 export function useBingoHeader(slug: string): BingoHeaderModel | null {
-  const { user, devMode } = useAuth();
+  const { devMode } = useAuth();
   const { data: shell } = useBingo(slug);
-  const { data: pending } = usePendingCount(slug, !!shell?.isMod);
+  const can = useBingoCan(slug);
+  const canModerate = can("moderate_bingo").allowed;
+  const siteAdmin = useSiteCan("administer_site").allowed;
+  const { data: pending } = usePendingCount(slug, canModerate);
   // The same query the board asks in the Draft stage: having draft state at all means the room lets this viewer in.
   const { data: draftState } = useDraftState(shell?.bingo.stage === "draft" && shell.viewer.canSee ? slug : undefined);
   if (!shell) return null;
@@ -82,16 +88,16 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     name: shell.bingo.name,
     stage: shell.bingo.stage,
     stageLabel: STAGE_LABEL[shell.bingo.stage],
-    isMod: shell.isMod,
-    canViewStats: canViewStats(shell),
+    canModerate,
+    canViewStats: canViewStats(shell, can),
     canRewind: canRewind(shell),
     historical: shell.bingo.historical,
     pendingCount: pending?.count ?? 0,
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",
-    rulesComeLater: !shell.isMod && areRulesHidden(shell.bingo),
-    canSeeAllBingos: !!user?.isAdmin || devMode,
-    draftRoom: shell.historical?.draft ? "draft" : shell.bingo.stage === "draft" ? (draftState ? "draft" : null) : canScout(shell, user?.id) ? "scouting" : null,
-    canOpenWrapped: shell.bingo.stage === "complete" && !shell.bingo.historical && (shell.wrappedPublished || shell.isMod),
+    rulesComeLater: !can("view_hidden_board").allowed && areRulesHidden(shell.bingo),
+    canSeeAllBingos: siteAdmin || devMode,
+    draftRoom: shell.historical?.draft ? "draft" : shell.bingo.stage === "draft" ? (draftState ? "draft" : null) : canScout(shell, can) ? "scouting" : null,
+    canOpenWrapped: shell.bingo.stage === "complete" && !shell.bingo.historical && (shell.wrappedPublished || can("view_wrapped_preview").allowed),
     hasTeam: !!shell.myTeam,
     hasTeamBoards: !shell.historical || shell.historical.tasks,
   };

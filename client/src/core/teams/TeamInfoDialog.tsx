@@ -31,23 +31,24 @@ function TeamInfo({ slug, team, stage, onClose }: { slug: string; team: TeamMode
     <>
       <DialogHeader title={team.name} subtitle={`${team.members.length} ${team.members.length === 1 ? "member" : "members"}`} onClose={onClose} />
       <div className="space-y-5 p-5">
-        {team.canRename && (
+        {team.rename && (
           <form
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
+              if (team.rename?.allowed && dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
             }}
           >
             <Field label="Team name" className="flex-1">
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!team.rename.allowed} />
             </Field>
-            <Button type="submit" variant="primary" isDisabled={!dirty || !trimmed || rename.isPending}>
+            <Button type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || rename.isPending}>
               {rename.isPending ? "Saving…" : "Rename"}
             </Button>
           </form>
         )}
-        {team.isLead && !team.canRename && <p className="text-sm text-on-surface-subtle">Team names are locked once the bingo is live.</p>}
+        {/* Closed for now (the stage): disabled above, and why. */}
+        {team.rename?.reason && <p className="text-sm text-on-surface-subtle">{team.rename.reason}.</p>}
         {rename.error && <Notice tone="danger">{rename.error.message}</Notice>}
         <ul className="divide-y divide-outline rounded-md border border-outline">
           {team.members.map((member) => (

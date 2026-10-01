@@ -1,5 +1,6 @@
 import { titlesHeldBy, type ContributionCount, type PickedTitle } from "@bingo/shared";
 import { useBingo, useStats } from "../../api/queries";
+import { useCan } from "../../headless/permissions";
 import { pickStatsTitles } from "./titles";
 
 export interface PlayerContribution {
@@ -17,8 +18,9 @@ export interface PlayerContribution {
  */
 export function usePlayerContribution(slug: string, userId: string): PlayerContribution | null {
   const { data: shell } = useBingo(slug);
+  const seesOtherTeams = useCan("view_other_teams", slug).allowed;
   const stage = shell?.bingo.stage;
-  const maySee = !!shell && (stage === "live" || stage === "complete") && (shell.isMod || stage === "complete" || !!shell.myTeam);
+  const maySee = !!shell && (stage === "live" || stage === "complete") && (seesOtherTeams || !!shell.myTeam);
   const { data: stats } = useStats(slug, maySee);
   if (!maySee || !stats || !shell) return null;
 

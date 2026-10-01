@@ -23,6 +23,18 @@ function clientTimezone(): string {
   }
 }
 
+type RefusalListener = (path: string, method: string, error: ApiError) => void;
+const refusalListeners = new Set<RefusalListener>();
+
+/**
+ * Hears every 403 the server answers, whoever made the request: the page may be stale, so the viewer's permissions are
+ * asked again (headless/permissions.ts useAccessWatch). Returns the unsubscribe.
+ */
+export function onRefused(listener: RefusalListener): () => void {
+  refusalListeners.add(listener);
+  return () => refusalListeners.delete(listener);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -45,7 +57,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // response body wasn't JSON — keep the generic message
     }
     if (res.status >= 500) reportClientError(`${path} ${message}`, "api.5xx");
-    throw new ApiError(res.status, message, code);
+    const error = new ApiError(res.status, message, code);
+    if (res.status === 403) for (const listener of refusalListeners) listener(path, init?.method ?? "GET", error);
+    throw error;
   }
   if (res.status === 204) return undefined as T;
   return res.json();

@@ -11,7 +11,7 @@ import { useComic } from "../ui/useComic";
  * shading and a red button. Blue stands out from both the light palette's yellow page and the dark palettes' papyrus
  * sheets.
  */
-export function ScoutBanner({ onOpen, isLead }: { onOpen: () => void; isLead: boolean }) {
+export function ScoutBanner({ onOpen, canRate }: { onOpen: () => void; canRate: boolean }) {
   const { colors } = useComic();
   return (
     <div className="mx-auto mb-8 mt-2 max-w-lg">
@@ -38,7 +38,7 @@ export function ScoutBanner({ onOpen, isLead }: { onOpen: () => void; isLead: bo
               </span>
             </div>
             <p className="mt-1.5 text-sm font-semibold">
-              {isLead ? "Star and note players now, so your picks are ready when the draft starts." : "See who's signed up before the draft starts."}
+              {canRate ? "Star and note players now, so your picks are ready when the draft starts." : "See who's signed up before the draft starts."}
             </p>
           </div>
           {/* Outlined in the dark ink the palettes keep for lettering on bright fills, not the line colour: in a dark

@@ -1,7 +1,7 @@
 // Pure builders that turn raw server shapes into the view models in
 // ./types.ts. No React, no hooks — safe to call from anywhere, including
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
-import { isBoardLocked, isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type Stage, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
+import { isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
@@ -12,6 +12,7 @@ import { submissionSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
 import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
+import type { CanCheck } from "./permissionCheck";
 
 // Moved from BoardGrid.tsx, unchanged.
 export function getRowCategory(tiles: Tile[], categories: TileCategory[], row: number): TileCategory | null {
@@ -59,18 +60,19 @@ export function toCategoryModel(category: TileCategory): CategoryModel {
   return { id: category.id, label: category.label, color: category.colorHex, sortOrder: category.sortOrder };
 }
 
-export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, viewerUserId: string, stage: Stage, isMod = false): TeamModel {
-  const isLead = team.members.some((m) => m.user.id === viewerUserId && (m.isCaptain || m.isCoCaptain));
+export function toTeamModel(team: TeamWithMembers, myTeamId: string | null, can: CanCheck): TeamModel {
+  const isMine = team.id === myTeamId;
+  // A lead renames their own team (rename_team); a reason means the stage closes it for now, and its control says so.
+  const rename = can("rename_team");
   return {
     id: team.id,
     name: team.name,
     color: team.color,
-    isMine: team.id === myTeamId,
+    isMine,
     members: team.members.map((m) => ({ id: m.user.id, displayName: displayName(m.user), avatarUrl: avatarUrl(m.user), isCaptain: m.isCaptain, isCoCaptain: m.isCoCaptain })),
-    isLead,
-    // Mirrors the captain rename route: names freeze once the bingo is live.
-    canRename: isLead && !isBoardLocked(stage),
-    codeword: team.id === myTeamId || isMod ? team.codeword : null,
+    rename: isMine && (rename.allowed || rename.reason) ? rename : null,
+    // Whoever can submit for any team needs each one's Codeword for the screenshot.
+    codeword: isMine || can("submit_for_any_team").allowed ? team.codeword : null,
   };
 }
 

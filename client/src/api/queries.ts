@@ -1,6 +1,6 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AchievementKey, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
@@ -8,7 +8,7 @@ import type {
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { useMarkStatsRefreshing, useMarkStatsResult } from "../context/WebSocketContext";
-import { api } from "./client";
+import { api, ApiError } from "./client";
 import * as bugReportsApi from "./bugReportsApi";
 import { readBoardCache, writeBoardCache } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
@@ -17,6 +17,7 @@ import { optimisticUpdate } from "./optimistic";
 export const queryKeys = {
   bingos: () => ["bingos"] as const,
   bingo: (slug: string) => ["bingo", slug] as const,
+  permissions: (slug: string) => ["permissions", slug] as const,
   board: (slug: string) => ["board", slug] as const,
   teamProgress: (slug: string, teamId: string) => ["teamProgress", slug, teamId] as const,
   teamSubmissions: (slug: string, teamId: string) => ["teamSubmissions", slug, teamId] as const,
@@ -93,6 +94,30 @@ export function useBingo(slug: string | undefined) {
   return useQuery({
     queryKey: queryKeys.bingo(slug ?? ""),
     queryFn: async () => persisted.save(await api.get<BingoShellResponse>(`/api/bingos/${slug}`)),
+    enabled: !!slug,
+    initialData: persisted.initialData,
+    initialDataUpdatedAt: persisted.initialDataUpdatedAt,
+  });
+}
+
+/** Holds no role: what a bingo that's gone for the viewer (a Planning one they no longer moderate) answers with. */
+const NO_PERMISSIONS: BingoPermissionsResponse = { roles: [], allowed: [], reasons: {} };
+
+// The viewer's Actions in the bingo (headless/permissions.ts reads them). Persisted like the shell, so a reload shows
+// the same controls straight away. Refetched when their roles or the stage change (WebSocketContext) and after a 403.
+export function usePermissions(slug: string | undefined) {
+  const persisted = persistedPart<BingoPermissionsResponse>(useAuth().user?.id, slug, "permissions");
+  return useQuery({
+    queryKey: queryKeys.permissions(slug ?? ""),
+    queryFn: async () => {
+      try {
+        return persisted.save(await api.get<BingoPermissionsResponse>(`/api/bingos/${slug}/permissions`));
+      } catch (err) {
+        // A Planning bingo 404s once the viewer can't see it: they can do nothing there, which moves them off its pages.
+        if (err instanceof ApiError && err.status === 404) return NO_PERMISSIONS;
+        throw err;
+      }
+    },
     enabled: !!slug,
     initialData: persisted.initialData,
     initialDataUpdatedAt: persisted.initialDataUpdatedAt,

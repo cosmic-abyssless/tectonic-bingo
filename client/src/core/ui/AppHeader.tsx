@@ -3,6 +3,7 @@ import { Link, useMatch, useNavigate } from "react-router-dom";
 import { useBingo, useMyBugReports } from "../../api/queries";
 import { useBugReports } from "../../api/adminQueries";
 import { useAuth } from "../../context/AuthContext";
+import { useSiteCan } from "../../headless/permissions";
 import { useColorSchemePreference } from "./colorScheme";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportButton } from "./BugReportButton";
@@ -55,6 +56,7 @@ export function AppHeader({
   style?: CSSProperties;
 }) {
   const { user, devMode, logout } = useAuth();
+  const siteAdmin = useSiteCan("administer_site").allowed;
   const navigate = useNavigate();
   // Inside a bingo the viewer is named by the RSN they signed up with (their team's roster carries it); anywhere
   // else, and for an account that isn't playing, by their Discord name.
@@ -79,14 +81,14 @@ export function AppHeader({
   // Site admins: a dot on ☰ (and on "Site admin" in it) when anyone has filed a report since they last looked at the
   // Bug reports tab, which shares this "last seen" and clears it. New reports only, not status changes: an admin
   // resolving one shouldn't light it up.
-  const { data: allReports } = useBugReports(!!user?.isAdmin);
+  const { data: allReports } = useBugReports(siteAdmin);
   // A theme can draw its own (the BugReportButton and HeaderMenu slots); pages outside a theme (mod panel, site admin)
   // get core's.
   const BugButton = useOptionalSlot("BugReportButton") ?? BugReportButton;
   const HeaderMenu = useOptionalSlot("HeaderMenu") ?? PlainHeaderMenu;
   // A Bingo page holds the ☰'s open state (its Tutorial opens and closes it with the Player); elsewhere it's the menu's own.
   const navMenuControl = useContext(NavMenuControlContext);
-  const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(user?.isAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
+  const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(siteAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
 
   // The ☰, at the left: getting around.
   const navGroups: HeaderMenuGroup[] = [
@@ -96,8 +98,8 @@ export function AppHeader({
       label: "Site",
       items: [
         // Admins and dev login, who have several Bingos to move between; everyone else plays the latest ("/").
-        ...(user?.isAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/bingos") }] : []),
-        ...(user?.isAdmin
+        ...(siteAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/bingos") }] : []),
+        ...(siteAdmin
           ? [
               {
                 id: "site-admin",
@@ -125,7 +127,7 @@ export function AppHeader({
       items: [
         { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
         ...(user && openProfile ? [{ id: "profile", text: "Profile", label: "Profile", wikiIcon: "Worn Equipment", onAction: () => openProfile(user.id) }] : []),
-        ...(user?.isAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
+        ...(siteAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [
               {
@@ -195,7 +197,7 @@ export function AppHeader({
           {user && <HeaderMenu trigger={{ kind: "account", name: myRsn || displayName(user), avatarUrl: avatarUrl(user) }} groups={accountGroups} />}
         </div>
         {user && <PhoneLoginDialog isOpen={phoneLoginOpen} onClose={() => setPhoneLoginOpen(false)} />}
-        {user?.isAdmin && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
+        {siteAdmin && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
       </div>
     </header>
   );

@@ -1,6 +1,7 @@
 import { useState, type Key, type ReactNode } from "react";
 import { formatSignupAnswer, type AchievementCount, type PlayerProfile, type SignupQuestion } from "@bingo/shared";
 import { useBingo, usePlayerProfile, useSignupQuestions } from "../../api/queries";
+import { useCan } from "../../headless/permissions";
 import { useOpenAchievements } from "../achievements/AchievementsProvider";
 import { useDialogParts } from "../ui/useDialogParts";
 import { Badge, Notice } from "../ui/Card";
@@ -106,11 +107,12 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
   const statsRefreshing = useStatsRefreshingUserIds();
   const caLoading = statsRefreshing.has(player.user.id);
   const { data: shell } = useBingo(slug);
+  const canModerate = useCan("moderate_bingo", slug).allowed;
   // This bingo only exists once it has started; the answers only for mods, and for captains while scouting and
   // drafting (the server sends null otherwise). A tab that's there but has nothing to show is dimmed instead.
   const stage = shell?.bingo.stage;
   const showBingoTab = stage === "live" || stage === "complete";
-  const showSignupTab = !!shell?.isMod || player.answers !== null;
+  const showSignupTab = canModerate || player.answers !== null;
   // The tab in the URL (?profileTab=, so a shared link opens it), else the tab last picked in any profile: flicking
   // through players stays on the same one, unless it isn't here.
   const [savedTab, saveTab] = usePreference("profileTab");

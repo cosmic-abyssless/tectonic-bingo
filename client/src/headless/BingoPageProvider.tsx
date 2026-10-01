@@ -9,6 +9,7 @@ import { useHasPassed } from "../core/ui/useHasPassed";
 import { toCategoryModel, toTeamModel, buildSubmissionModels, sealedBoardAsTiles } from "./boardModel";
 import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { useViewingTeam } from "./useViewingTeam";
+import { useBingoCan } from "./permissions";
 import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
 import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
 import { toastQueue } from "../core/ui/Toast";
@@ -84,13 +85,15 @@ export function BingoPageProvider({
   const setTileInterest = useSetTileInterest(slug);
   const setReaction = useSetSubmissionReaction(slug);
   const { data: submissionsData } = useTeamSubmissions(canSee ? slug : undefined, viewingTeamId ?? undefined);
-  const { data: pendingData } = usePendingCount(slug, !!shell?.isMod);
+  const can = useBingoCan(slug);
+  const canModerate = can("moderate_bingo").allowed;
+  const { data: pendingData } = usePendingCount(slug, canModerate);
   // Only fetches while actually on the draft stage — same net effect as the
   // old DraftStageView only ever mounting (and thus only ever querying)
   // while it was rendered, just expressed via TanStack Query's `enabled`.
   const { data: draftState, isLoading: draftLoading } = useDraftState(shell?.bingo.stage === "draft" && canSee ? slug : undefined);
 
-  usePageEvents(shell);
+  usePageEvents(shell, canModerate);
   // Mirrors the server's submission gate: nothing can be submitted before startsAt.
   const hasStarted = useHasPassed(shell?.bingo.effectiveStartsAt);
 
@@ -148,15 +151,15 @@ export function BingoPageProvider({
   if (shellLoading) return renderLoading();
   if (shellError || !shell) return renderError("Bingo not found");
 
-  const { bingo, categories: categoriesRaw, teams, isMod, myTeam } = shell;
+  const { bingo, categories: categoriesRaw, teams, myTeam } = shell;
   const nodeStates = progressData?.nodeStates ?? EMPTY_NODE_STATES;
   const interests = progressData?.interests ?? EMPTY_INTERESTS;
   const teamSubmissions = submissionsData?.submissions ?? EMPTY_SUBMISSIONS;
 
   // A Historical Bingo (CONTEXT.md): what it recorded decides what's shown. With no Tasks there are no Team boards.
   const historical = shell.historical;
-  // Mods can look at any team's board; once the bingo is Finished, so can everyone (read-only).
-  const canPickTeam = (isMod || bingo.stage === "complete") && (!historical || historical.tasks);
+  // Whoever sees other teams can look at any team's board: mods, and once the bingo is Finished everyone (read-only).
+  const canPickTeam = can("view_other_teams").allowed && (!historical || historical.tasks);
   const isViewingOtherTeam = canPickTeam && !!viewingTeamId && viewingTeamId !== myTeam?.id;
   // Mods can submit for the team they are viewing too (naming the player it is for), so this doesn't depend on whose team it is.
   const canSubmit = bingo.stage === "live" && hasStarted && !!viewingTeamId;
@@ -166,7 +169,7 @@ export function BingoPageProvider({
   const canToggleInterest = !!myTeam && viewingTeamId === myTeam.id && (bingo.stage === "reveal" || bingo.stage === "live") && !areTilesSealed(bingo);
   // Reactions are for teammates: on your own team's submissions, until the bingo is Finished (then they're closed).
   const canReact = !!myTeam && viewingTeamId === myTeam.id && bingo.stage !== "complete";
-  const canViewStats = canViewStatsOf(shell);
+  const canViewStats = canViewStatsOf(shell, can);
 
   // Exact branch order as the old BingoPage.tsx: signup -> planning|captains
   // -> draft -> !viewingTeamId -> board, with anyone who isn't part of the
@@ -187,11 +190,11 @@ export function BingoPageProvider({
               ? "noTeam"
               : "board";
 
-  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, user.id, bingo.stage, isMod));
+  const teamModels = teams.map((t) => toTeamModel(t, myTeam?.id ?? null, can));
   // shell.myTeam is the bare row; the roster lives on the matching entry in shell.teams.
   const myTeamModel = teamModels.find((t) => t.isMine) ?? null;
   // Shared with the header of the pages around the board (useBingoHeader), which shows the same way in.
-  const canScout = canScoutOf(shell, user.id);
+  const canScout = canScoutOf(shell, can);
   const viewingTeamModel = teamModels.find((t) => t.id === viewingTeamId) ?? null;
 
   const openSubmit = (tileId?: string, file?: File, taskId?: string) => {
@@ -215,7 +218,7 @@ export function BingoPageProvider({
       stage: bingo.stage,
       stageLabel: STAGE_LABEL[bingo.stage],
       rulesMarkdown: bingo.rulesMarkdown,
-      rulesComeLater: !isMod && areRulesHidden(bingo),
+      rulesComeLater: !can("view_hidden_board").allowed && areRulesHidden(bingo),
       startsAt: bingo.effectiveStartsAt ? new Date(bingo.effectiveStartsAt).getTime() : null,
       endsAt: bingo.endsAt ? new Date(bingo.endsAt).getTime() : null,
       boardRows: bingo.boardRows,
@@ -225,7 +228,9 @@ export function BingoPageProvider({
     historical,
     milestone: nextMilestone(bingo),
     user: { displayName: myTeamModel?.members.find((m) => m.id === user.id)?.displayName ?? displayName(user), avatarUrl: avatarUrl(user) },
-    isMod,
+    canModerate,
+    // Ratings go to the Team the viewer leads: an Admin on none has nothing to rate for.
+    canRatePicks: can("rate_picks").allowed && !!myTeam,
     myTeam: myTeamModel,
     teams: teamModels,
     categories: categoriesRaw.map(toCategoryModel),
@@ -236,7 +241,7 @@ export function BingoPageProvider({
     canViewStats,
     canRewind: canRewindOf(shell),
     // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
-    wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || isMod), preview: !shell.wrappedPublished },
+    wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || can("view_wrapped_preview").allowed), preview: !shell.wrappedPublished },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {

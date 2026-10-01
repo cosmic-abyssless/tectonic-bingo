@@ -9,7 +9,7 @@ export function StatsPageLayout({ slug, bingoName }: { slug: string; bingoName: 
   return (
     <div className="min-h-dvh bg-background text-on-surface">
       <AppHeader title="Stats" subtitle={bingoName} menuEntries={menuEntries}>
-        {header?.isMod && <ModPanelButton slug={slug} pendingCount={header.pendingCount} />}
+        {header?.canModerate && <ModPanelButton slug={slug} pendingCount={header.pendingCount} />}
       </AppHeader>
       <StatsView slug={slug} />
     </div>

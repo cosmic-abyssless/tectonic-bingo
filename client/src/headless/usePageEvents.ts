@@ -3,9 +3,9 @@ import { useWebSocketEvent } from "../context/WebSocketContext";
 import { toast } from "../core/ui/Toast";
 
 // Moved from BingoPage.tsx verbatim: filters to this bingo's own events,
-// toasts on a stage change, and (for mods, when the tab isn't visible)
-// raises a browser notification on a new submission.
-export function usePageEvents(shell: BingoShellResponse | undefined): void {
+// toasts on a stage change, and (for whoever moderates it, when the tab isn't
+// visible) raises a browser notification on a new submission.
+export function usePageEvents(shell: BingoShellResponse | undefined, canModerate: boolean): void {
   useWebSocketEvent((event) => {
     if (!shell) return;
     if (!("bingoId" in event) || event.bingoId !== shell.bingo.id) return;
@@ -13,7 +13,7 @@ export function usePageEvents(shell: BingoShellResponse | undefined): void {
       toast({ title: "Stage changed", description: STAGE_LABEL[event.payload.stage] });
     }
     if (
-      shell.isMod &&
+      canModerate &&
       event.type === "submission_created" &&
       "Notification" in window &&
       Notification.permission === "granted" &&

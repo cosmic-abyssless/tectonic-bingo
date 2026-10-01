@@ -60,7 +60,7 @@ export interface ThemeSlots {
   // Bingo pages outside the board — whole-page layout like BoardPage, but
   // props-only: DraftRoom/StatsView already encapsulate their own api/*
   // calls as ordinary core/ components, so there's no headless model here.
-  DraftPage: ComponentType<{ slug: string; bingoName: string; isMod: boolean }>;
+  DraftPage: ComponentType<{ slug: string; bingoName: string }>;
   StatsPage: ComponentType<{ slug: string; bingoName: string }>;
   // The shape that pops up for everyone watching when a player is drafted (core/draft/DraftPickReveal). The theme
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
@@ -102,9 +102,9 @@ export interface ThemeSlots {
   PlanningStage: ComponentType<{ stage: "planning" | "captains" }>;
   SignupStage: ComponentType<{ slug: string }>;
   // Shown above the signup/closed stage content to whoever may scout (page.canScout: mods and team leads, and every
-  // Player once signups are closed) — the way into the scouting room before the draft. `isLead`: the viewer leads a
+  // Player once signups are closed) — the way into the scouting room before the draft. `canRate`: the viewer leads a
   // team, so rates players there; everyone else only looks.
-  ScoutBanner: ComponentType<{ onOpen: () => void; isLead: boolean }>;
+  ScoutBanner: ComponentType<{ onOpen: () => void; canRate: boolean }>;
   /** The team's Codeword (CONTEXT.md), which every screenshot must show: beside the board's title while Live, and in the Submit flow. */
   CodewordBanner: ComponentType<{ codeword: string }>;
   DraftStage: ComponentType<{ draft: BingoPageModel["draft"]; milestone: StageMilestone | null; onOpenDraft: () => void }>;

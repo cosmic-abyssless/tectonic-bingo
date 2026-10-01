@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { titlesByHolder } from "@bingo/shared";
 import { fullBoard, useBingo, useBoard, useStats } from "../../api/queries";
+import { useCan } from "../../headless/permissions";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { MultiSelect } from "../ui/MultiSelect";
 import { BetaTag } from "../ui/BetaTag";
@@ -30,6 +31,8 @@ function Section({ title, beta, children }: { title: string; beta?: boolean; chi
 
 export function StatsView({ slug }: { slug: string }) {
   const { data: shell } = useBingo(slug);
+  // Repricing a drop is a mod route (moderate_bingo).
+  const canModerate = useCan("moderate_bingo", slug).allowed;
   const { data: stats, error } = useStats(slug);
   const boardData = fullBoard(useBoard(slug).data);
   const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
@@ -101,7 +104,7 @@ export function StatsView({ slug }: { slug: string }) {
       </Section>
 
       <Section title="Total drop value">
-        <GpGained slug={slug} teamGpGained={filtered.teamGpGained} drops={filtered.drops} teams={filtered.teams} canReprice={shell.isMod} />
+        <GpGained slug={slug} teamGpGained={filtered.teamGpGained} drops={filtered.drops} teams={filtered.teams} canReprice={canModerate} />
       </Section>
 
       <Section title="Tile completion">

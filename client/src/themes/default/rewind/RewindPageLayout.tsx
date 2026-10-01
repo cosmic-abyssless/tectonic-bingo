@@ -68,7 +68,7 @@ export function RewindPageLayout() {
   return (
     <div ref={rootRef} className="min-h-dvh bg-background text-on-surface">
       <AppHeader title="Rewind" subtitle={rewind.bingoName} menuEntries={menuEntries} controls={rewind.teamSelector.teams.length > 0 && <TeamSelector selector={rewind.teamSelector} />}>
-        {header?.isMod && <ModPanelButton slug={rewind.slug} pendingCount={header.pendingCount} />}
+        {header?.canModerate && <ModPanelButton slug={rewind.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
 
       <main className="mx-auto grid max-w-6xl gap-4 px-3 py-4 pb-44 sm:px-6 sm:py-6 sm:pb-40 lg:grid-cols-[minmax(0,1fr)_15rem]">

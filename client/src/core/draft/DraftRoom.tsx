@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
+import { useBingoCan, useCloseOnLoss } from "../../headless/permissions";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
 import { Notice } from "../ui/Card";
@@ -140,6 +141,9 @@ export function DraftRoom({ slug }: { slug: string }) {
   const [pickError, setPickError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
+  const can = useBingoCan(slug);
+  // The pick order is the Admin's: losing that while its dialog is open closes it, saying why.
+  useCloseOnLoss("administer_bingo", orderOpen, () => setOrderOpen(false), slug);
   const OnTheClockBanner = useSlot("OnTheClockBanner");
   const reveals = useDraftReveals(shell?.bingo.id, state);
 
@@ -164,17 +168,17 @@ export function DraftRoom({ slug }: { slug: string }) {
     return <div className="py-24 text-center text-on-surface-muted">Loading…</div>;
   }
 
-  const isMod = shell.isMod;
-  // The pick-on-behalf-of override is site-admin only — a regular per-bingo
-  // mod who isn't also a site admin doesn't get it, only the acting team
-  // lead (captain or co-captain) does. Matches draftService.makePick.
-  const isAdmin = !!user.isAdmin;
+  const canModerate = can("moderate_bingo").allowed;
+  // The team the viewer leads, whose turn it may be and whose ratings these are.
   const myTeam = state.teams.find((t) => t.captainUserId === user.id || t.coCaptain?.userId === user.id) ?? null;
-  const isLead = myTeam !== null;
+  // Ratings go to that team: an Admin who leads none has nothing to rate for.
+  const canRate = can("rate_picks").allowed && myTeam !== null;
   const pairRows = pairPickRows(state.teams.map((t) => state.picks.filter((p) => p.teamId === t.id)));
   const currentTeam = state.currentPick ? (state.teams.find((t) => t.id === state.currentPick!.teamId) ?? null) : null;
   const isMyTurn = !!myTeam && currentTeam?.id === myTeam.id;
-  const canAct = !!state.currentPick && (isAdmin || isMyTurn);
+  // A lead picks for their own team when it's on the clock (make_draft_pick); picking on the clock's behalf is
+  // run_draft (an Admin, not a per-bingo mod). Matches draftService.makePick.
+  const canAct = !!state.currentPick && (can("run_draft").allowed || (isMyTurn && can("make_draft_pick").allowed));
   // Before the draft stage the room is a scouting view: leads (and mods)
   // browse and rate signups; nothing can start or be picked yet.
   // A Historical Bingo's Draft is over and read-only: its recorded picks, and no pool.
@@ -185,12 +189,12 @@ export function DraftRoom({ slug }: { slug: string }) {
   const revealing = lockMs > 0;
   const revealedTeam = reveals.active ? (state.teams.find((t) => t.id === reveals.active!.teamId) ?? null) : null;
   const draftComplete = !scouting && state.draftStarted && !state.currentPick && !revealing && state.picks.length > 0;
-  const canControlOrder = isAdmin && !scouting && state.picks.length === 0;
+  const canControlOrder = can("administer_bingo").allowed && !scouting && state.picks.length === 0;
   // Only the latest pick can be taken back (an admin's fix for a misclick).
   const latestPickNumber = state.picks.reduce((max, p) => Math.max(max, p.pickNumber), 0);
   const latestPick = state.picks.find((p) => p.pickNumber === latestPickNumber);
   const latestPickTeam = latestPick ? (state.teams.find((t) => t.id === latestPick.teamId) ?? null) : null;
-  const canUndo = isAdmin && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
+  const canUndo = can("run_draft").allowed && !scouting && state.draftStarted && !!latestPick && !!latestPickTeam;
   const busy = shuffleOrder.isPending || setOrder.isPending || startDraft.isPending;
   // A pick is on the clock (the Teams panel carries the banner).
   const onTheClock = !scouting && state.draftStarted && !!state.currentPick && !!currentTeam && !revealing;
@@ -309,7 +313,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     scouting ? (
       <Notice tone="info">
         Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
-        {isLead && " Star and note players now; your ratings carry over into the draft, and only your co-captain sees them."}
+        {canRate && " Star and note players now; your ratings carry over into the draft, and only your co-captain sees them."}
         {state.shares && ` As things stand, each team drafts ${describeShares(state.shares, shell.bingo.signupMode)}.`}
       </Notice>
     ) : !state.draftStarted ? (
@@ -369,7 +373,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       <Notice tone="info">Draft started.</Notice>
     ) : (
       <Notice tone="ok">
-        Draft complete. {isMod ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
+        Draft complete. {canModerate ? "Advance to the reveal stage from the mod panel when you're ready." : "The board is revealed next."}
         {poolCount > 0 && (
           <>
             {" "}
@@ -449,12 +453,12 @@ export function DraftRoom({ slug }: { slug: string }) {
         poolCount={poolCount}
         poolGlow={poolGlow}
         isMyTurn={isMyTurn}
-        lead={(isLead || isMod) && !historical}
+        lead={(canRate || canModerate) && !historical}
         pool={
           <DraftPoolList
             pool={state.pool}
             questions={questions}
-            ratings={isLead ? state.ratings : null}
+            ratings={canRate ? state.ratings : null}
             onRate={handleRate}
             canPick={canAct}
             onPick={handlePick}
@@ -498,7 +502,7 @@ export function DraftRoom({ slug }: { slug: string }) {
       <DraftPoolGrid
         pool={state.pool}
         questions={questions}
-        ratings={isLead ? state.ratings : null}
+        ratings={canRate ? state.ratings : null}
         onRate={handleRate}
         canPick={canAct}
         onPick={handlePick}
