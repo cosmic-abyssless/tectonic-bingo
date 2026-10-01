@@ -4,15 +4,18 @@
 // Types only from index.ts: it re-exports this module, so a value imported back from it isn't there yet at load.
 import type { Bingo, Stage } from "./index.ts";
 
-/** A user's standing in one Bingo. They combine: a Moderator can also be a Player, a Captain always is one. */
-export type Role = "admin" | "moderator" | "captain" | "player";
+/**
+ * A user's standing in one Bingo. They combine: a Moderator can also be a Player, a Captain always is one, and Staff
+ * who also play see the Bingo as a Player too.
+ */
+export type Role = "admin" | "moderator" | "staff" | "captain" | "player";
 
 export const ACTIONS = [
   /** The Site admin pages, outside any Bingo: users, Bingos, Historical imports, test data. */
   "administer_site",
   /** Setting a Bingo up and running it: settings, Board, Teams, Moderators, signup questions, stage changes, the pick order, Superlative tallies. */
   "administer_bingo",
-  /** The mod panel: reviewing Submissions, Point Adjustments, the signup roster (Buy-ins, pairings, withdrawals), Wrapped, the audit log. */
+  /** The mod panel: reviewing Submissions, Point Adjustments, the signup roster (pairings, withdrawals), Wrapped, the audit log. */
   "moderate_bingo",
   /** Submitting for a Team that isn't your own, naming the Player it's for. */
   "submit_for_any_team",
@@ -24,6 +27,8 @@ export const ACTIONS = [
   "rate_picks",
   /** Renaming your own Team, from the Team dialog. Renaming any Team from the mod panel is administer_bingo. */
   "rename_team",
+  /** Marking a signup's Buy-in received, or not, and who collected it. */
+  "mark_buyins",
 
   // What a user can see. Everyone who can't see a Bingo still gets its name and stage, and its signup form while
   // Signups are open.
@@ -53,6 +58,8 @@ export const ACTIONS = [
   "view_admin_questions",
   /** The card of anyone in the clan, not only of those in the Bingo. */
   "view_any_player",
+  /** The Buy-ins page: each signup's RSN, Discord name and Buy-in, who collected it and who recorded it. Nothing else of theirs. */
+  "view_buyins",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -73,6 +80,8 @@ const BEFORE_REVEAL: readonly Stage[] = ["planning", "signup", "captains", "draf
 const AFTER_PLANNING: readonly Stage[] = ["signup", "captains", "draft", "reveal", "live", "complete"];
 // While Captains scout the signups and pick: their window on a player's signup answers.
 const SCOUTING: readonly Stage[] = ["signup", "captains", "draft"];
+// While Buy-ins are collected: from Signups open until play starts.
+const BUYINS: readonly Stage[] = ["signup", "captains", "draft", "reveal"];
 
 /**
  * Every role's grants. Each role lists its Actions in full, so a new Action is never granted to one by accident; Admin
@@ -94,6 +103,13 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
     { action: "view_player_card_answers" },
     { action: "view_mod_questions" },
     { action: "view_any_player" },
+    { action: "mark_buyins" },
+    { action: "view_buyins" },
+  ],
+  // Clan leadership collecting the Buy-ins: those, while they're collected, and nothing else (CONTEXT.md "Staff").
+  staff: [
+    { action: "mark_buyins", stages: BUYINS },
+    { action: "view_buyins", stages: BUYINS },
   ],
   // A Captain is always a Player too (they're on a Team), so what every Player sees isn't repeated here.
   captain: [
@@ -120,6 +136,7 @@ export const RULES: { readonly [A in Action]?: (bingo: PermissionBingo) => boole
   make_draft_pick: (bingo) => bingo.stage === "draft",
   run_draft: (bingo) => bingo.stage === "draft",
   rate_picks: (bingo) => BEFORE_LIVE.includes(bingo.stage),
+  mark_buyins: (bingo) => BUYINS.includes(bingo.stage),
 };
 
 /**
@@ -185,6 +202,8 @@ export const UNAVAILABLE_REASONS: { readonly [A in Action]?: (bingo: PermissionB
   run_draft: () => "Picks can only be undone during the draft stage",
   rate_picks: () => "Ratings are locked once the bingo is live",
   rename_team: (bingo) => (BEFORE_REVEAL.includes(bingo.stage) ? "Team names can be changed once the Board is revealed" : "Team names are locked once the Bingo is Live"),
+  mark_buyins: () => "Buy-ins can only be marked from Signups open until the Bingo is Live",
+  view_buyins: () => "Buy-ins are only collected from Signups open until the Bingo is Live",
   view_team_stats: () => "Stats aren't visible until the bingo is complete",
   view_draft_room: (bingo) =>
     bingo.stage === "signup"

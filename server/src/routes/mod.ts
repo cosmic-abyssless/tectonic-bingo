@@ -278,12 +278,12 @@ router.get(
   }),
 );
 
-// Who can be recorded as having collected a buy-in. Mods only need names, so
-// this mirrors the admin-only GET /mods without opening up user management.
+// Who can be recorded as having collected a buy-in: the bingo's Moderators and its Staff (CONTEXT.md "Staff"). Mods
+// only need names, so this mirrors the admin-only GET /mods and /staff without opening up user management.
 router.get(
   "/moderators",
   asyncHandler(async (req, res) => {
-    res.json({ mods: bingoService.getModerators(db, req.bingo!.id) });
+    res.json({ mods: [...bingoService.getModerators(db, req.bingo!.id), ...bingoService.getStaff(db, req.bingo!.id)] });
   }),
 );
 

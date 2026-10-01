@@ -195,6 +195,34 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
+// Staff (CONTEXT.md "Staff"): granted next to the Moderators. Removing someone tells them with access_changed
+// (broadcastAccessChanges), so an open Buy-ins page sends them away.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/staff",
+  asyncHandler(async (req, res) => {
+    res.json({ staff: bingoService.getStaff(db, req.bingo!.id) });
+  }),
+);
+router.post(
+  "/staff",
+  asyncHandler(async (req, res) => {
+    const { userId } = req.body as { userId?: string };
+    if (!userId) throw new ServiceError(400, "userId is required");
+    const staff = bingoService.addStaff(db, { bingoId: req.bingo!.id, userId });
+    res.status(201).json({ staff });
+  }),
+);
+router.delete(
+  "/staff/:userId",
+  asyncHandler(async (req, res) => {
+    bingoService.removeStaff(db, { bingoId: req.bingo!.id, userId: req.params.userId as string });
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 

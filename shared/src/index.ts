@@ -967,6 +967,27 @@ export interface BingoModerator {
   user: PublicUser;
 }
 
+/** One of a Bingo's Staff (CONTEXT.md "Staff"), as the admin page lists them. */
+export type BingoStaff = BingoModerator;
+
+/**
+ * One active signup on the Buy-ins page (view_buyins): only what collecting its Buy-in needs, its RSN (user.rsn) and
+ * Discord name, and never its signup answers, stats or Pick Ratings.
+ */
+export interface BuyinEntry {
+  signupId: string;
+  user: PublicUser;
+  receivedAt: string | null;
+  collectedBy: PublicUser | null;
+  recordedBy: PublicUser | null;
+}
+
+/** GET /api/bingos/:slug/buyins: the signups, and who can be recorded as having collected a Buy-in (Moderators and Staff). */
+export interface BuyinsResponse {
+  buyins: BuyinEntry[];
+  collectors: PublicUser[];
+}
+
 export interface TeamMember {
   id: string;
   teamId: string;

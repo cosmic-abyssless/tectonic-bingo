@@ -13,7 +13,7 @@ import { playerName } from "./names.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system";
-export type AuditActorRole = "admin" | "mod" | "player" | "system";
+export type AuditActorRole = "admin" | "mod" | "staff" | "player" | "system";
 // Matches client/src/core/ui/Card.tsx's Badge TONE keys.
 export type AuditTone = "neutral" | "info" | "ok" | "warn" | "danger";
 
@@ -120,6 +120,8 @@ export interface AuditDetailsMap {
 
   "moderator.added": { userId: string; displayName: string };
   "moderator.removed": { userId: string; displayName: string };
+  "staff.added": { userId: string; displayName: string };
+  "staff.removed": { userId: string; displayName: string };
 
   "category.created": { label: string; colorHex: string | null; sortOrder: number };
   "category.updated": { changes: FieldChanges<{ label: string; colorHex: string | null; sortOrder: number }> };
@@ -550,6 +552,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Moderator removed",
     label: (i) => `${actor(i)} removed ${i.details.displayName} as a moderator`,
+  },
+  "staff.added": {
+    category: "moderation",
+    tone: "ok",
+    visibility: "mods",
+    title: "Staff added",
+    label: (i) => `${actor(i)} made ${i.details.displayName} Staff`,
+  },
+  "staff.removed": {
+    category: "moderation",
+    tone: "warn",
+    visibility: "mods",
+    title: "Staff removed",
+    label: (i) => `${actor(i)} removed ${i.details.displayName} as Staff`,
   },
   "category.created": { category: "board", tone: "ok", visibility: "mods", title: "Category created", label: (i) => `${actor(i)} created the category "${i.details.label}"` },
   "category.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Category updated", label: (i) => `${actor(i)} updated the category "${i.entityLabel ?? ""}"` },

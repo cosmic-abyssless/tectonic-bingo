@@ -96,6 +96,10 @@ export const SQL_TABLES: Record<string, TableClass> = {
     note: "Moderators of a Bingo (Site Admins moderate every Bingo without a row here).",
     columns: { id: "", bingo_id: "", user_id: "", created_at: TS },
   },
+  bingo_staff: {
+    note: "Staff of a Bingo: clan leadership who collect its Buy-ins, and see nothing else of it.",
+    columns: { id: "", bingo_id: "", user_id: "", created_at: TS },
+  },
   stage_transitions: {
     note: "Every stage change of a Bingo, with who made it. The move to live is when the Bingo actually started; to complete, when it ended.",
     columns: { id: "", bingo_id: "", from_stage: "", to_stage: "", changed_by_user_id: "", created_at: TS },

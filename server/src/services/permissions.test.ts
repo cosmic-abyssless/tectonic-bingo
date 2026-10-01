@@ -14,27 +14,29 @@ const NONE = "rrrrrrr";
 const FINISHED = "rrrrrr+";
 
 const TABLE: Record<Action, Record<Role, Row>> = {
-  administer_site: { admin: ALL, moderator: NONE, captain: NONE, player: NONE },
-  administer_bingo: { admin: ALL, moderator: NONE, captain: NONE, player: NONE },
-  moderate_bingo: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  submit_for_any_team: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  make_draft_pick: { admin: "xxx+xxx", moderator: NONE, captain: "xxx+xxx", player: NONE },
-  run_draft: { admin: "xxx+xxx", moderator: NONE, captain: NONE, player: NONE },
-  rate_picks: { admin: "+++++xx", moderator: NONE, captain: "+++++xx", player: NONE },
-  rename_team: { admin: ALL, moderator: NONE, captain: "ssss+ss", player: NONE },
-  view_bingo: { admin: ALL, moderator: ALL, captain: FINISHED, player: "s++++++" },
-  view_hidden_board: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  view_other_teams: { admin: ALL, moderator: ALL, captain: FINISHED, player: FINISHED },
-  view_team_stats: { admin: ALL, moderator: NONE, captain: NONE, player: "sssss+s" },
-  view_mod_activity: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  view_other_teams_screenshots: { admin: ALL, moderator: ALL, captain: FINISHED, player: FINISHED },
-  view_wrapped_preview: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  view_draft_room: { admin: ALL, moderator: ALL, captain: "s++sss+", player: "ss+++++" },
-  view_draft_pool_answers: { admin: ALL, moderator: ALL, captain: ALL, player: NONE },
-  view_player_card_answers: { admin: ALL, moderator: ALL, captain: "s+++sss", player: NONE },
-  view_mod_questions: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
-  view_admin_questions: { admin: ALL, moderator: NONE, captain: NONE, player: NONE },
-  view_any_player: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
+  administer_site: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  administer_bingo: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  moderate_bingo: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  submit_for_any_team: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  make_draft_pick: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: "xxx+xxx", player: NONE },
+  run_draft: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  rate_picks: { admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
+  rename_team: { admin: ALL, moderator: NONE, staff: NONE, captain: "ssss+ss", player: NONE },
+  mark_buyins: { admin: "x++++xx", moderator: "x++++xx", staff: "s++++ss", captain: NONE, player: NONE },
+  view_bingo: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: "s++++++" },
+  view_hidden_board: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_other_teams: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
+  view_team_stats: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: "sssss+s" },
+  view_mod_activity: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_other_teams_screenshots: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
+  view_wrapped_preview: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_draft_room: { admin: ALL, moderator: ALL, staff: FINISHED, captain: "s++sss+", player: "ss+++++" },
+  view_draft_pool_answers: { admin: ALL, moderator: ALL, staff: NONE, captain: ALL, player: NONE },
+  view_player_card_answers: { admin: ALL, moderator: ALL, staff: NONE, captain: "s+++sss", player: NONE },
+  view_mod_questions: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_admin_questions: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  view_any_player: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_buyins: { admin: ALL, moderator: ALL, staff: "s++++ss", captain: NONE, player: NONE },
 };
 
 const CODES: Record<string, PermissionDenial | null> = { "+": null, r: "role", s: "stage", x: "rule" };
@@ -93,6 +95,29 @@ describe("can()", () => {
       expect(outcome(["captain", "player"], "live", "view_player_card_answers")).toBe("stage");
     });
 
+    it("lets Staff who also play see the Bingo as a Player, and mark Buy-ins as Staff", () => {
+      for (const stage of ["signup", "captains", "draft", "reveal"] as const) {
+        expect(outcome(["staff", "player"], stage, "view_bingo")).toBeNull();
+        expect(outcome(["staff", "player"], stage, "view_buyins")).toBeNull();
+        expect(outcome(["staff", "player"], stage, "mark_buyins")).toBeNull();
+        expect(outcome(["staff", "captain", "player"], stage, "mark_buyins")).toBeNull();
+      }
+      expect(outcome(["staff", "player"], "live", "view_bingo")).toBeNull();
+      expect(outcome(["staff", "player"], "live", "view_team_stats")).toBeNull();
+      expect(outcome(["staff", "player"], "live", "view_buyins")).toBe("stage");
+      expect(outcome(["staff", "player"], "live", "mark_buyins")).toBe("stage");
+      // Staff adds nothing a Moderator would see.
+      for (const action of ["moderate_bingo", "view_other_teams", "view_mod_questions", "view_draft_pool_answers", "view_player_card_answers", "view_hidden_board"] as const) {
+        expect(outcome(["staff", "player"], "draft", action), action).toBe(outcome(["player"], "draft", action));
+      }
+    });
+
+    it("keeps a Moderator's Buy-in powers whether or not they're Staff too", () => {
+      expect(outcome(["moderator", "staff"], "live", "view_buyins")).toBeNull();
+      expect(outcome(["moderator", "staff"], "reveal", "mark_buyins")).toBeNull();
+      expect(outcome(["moderator", "staff"], "live", "mark_buyins")).toBe("rule");
+    });
+
     it("doesn't widen a Captain's stages with a role that doesn't grant the Action", () => {
       expect(outcome(["moderator", "captain", "player"], "live", "rename_team")).toBe("stage");
     });
@@ -132,7 +157,7 @@ describe("why an Action is closed", () => {
 
   it("is given for every Action a role grants but the stage or a rule closes, and for none it doesn't grant", () => {
     for (const stage of STAGE_ORDER) {
-      for (const roles of [["admin"], ["moderator"], ["captain", "player"], ["player"], []] as Role[][]) {
+      for (const roles of [["admin"], ["moderator"], ["staff"], ["staff", "player"], ["captain", "player"], ["player"], []] as Role[][]) {
         const { allowed, reasons } = resolvePermissions(roles, bingo(stage));
         for (const action of ACTIONS) {
           const permission = can(roles, bingo(stage), action);

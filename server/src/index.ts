@@ -19,6 +19,7 @@ import devRouter from "./routes/dev";
 import meRouter from "./routes/me";
 import bingosRouter from "./routes/bingos";
 import modRouter from "./routes/mod";
+import buyinsRouter from "./routes/buyins";
 import adminRouter from "./routes/admin";
 import siteAdminRouter from "./routes/siteAdmin";
 import historicalScreenshotsRouter from "./routes/historicalScreenshots";
@@ -193,6 +194,7 @@ app.use("/api/admin", siteAdminRouter);
 app.use("/api/bingos/:slug", broadcastAccessChanges);
 app.use("/api/bingos", requireGuildMember, bingosRouter);
 app.use("/api/bingos/:slug/mod", requireGuildMember, modRouter);
+app.use("/api/bingos/:slug/buyins", requireGuildMember, buyinsRouter);
 // Ahead of the admin router: a Historical Bingo's screenshot uploads, the one write it takes.
 app.use("/api/bingos/:slug/admin/historical", requireGuildMember, historicalScreenshotsRouter);
 app.use("/api/bingos/:slug/admin", requireGuildMember, adminRouter);
