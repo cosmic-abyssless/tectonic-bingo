@@ -11,6 +11,8 @@ import { log } from "../log";
 import { rsnsAcrossBingos } from "../services/playerNames";
 
 type Db = BetterSQLite3Database<typeof schema>;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type Queryable = Db | Tx;
 
 const MINIMAL_USER_COLS = {
   id: users.id,
@@ -34,7 +36,7 @@ function parseDetails(row: AuditLogRow): unknown {
   }
 }
 
-function toAuditEntries(db: Db, rows: AuditLogRow[]): AuditEntry[] {
+export function toAuditEntries(db: Queryable, rows: AuditLogRow[]): AuditEntry[] {
   const userIds = [...new Set(rows.flatMap((r) => [r.actorUserId, r.onBehalfOfUserId]).filter((id): id is string => !!id))];
   const teamIds = [...new Set(rows.map((r) => r.teamId).filter((id): id is string => !!id))];
 
@@ -96,15 +98,17 @@ function parseWhen(value: string, name: "since" | "until"): Date {
   return date;
 }
 
-// q matches what a mod actually sees on the row: the rendered label's subject text (entity_label), the action
-// itself, and — since most labels lead with "<actor> did X" — the actor's name. The actor isn't a plain column
-// (it's resolved from users, plus a per-bingo RSN from signups, at read time — see toAuditEntries), so those two
-// are correlated EXISTS subqueries rather than a join, to leave the row shape and pagination untouched.
-function actorMatches(db: Db, q: string) {
+// q matches what a mod actually sees on the row: its stored search_text (the title, rendered sentence and Team — see
+// searchText.ts), its subject text (entity_label, for a row still waiting on the startup backfill), and the actor's and
+// Team's current names, matched live since names change after a row is written. Those aren't plain columns (resolved
+// from users, a per-bingo RSN from signups, and teams at read time — see toAuditEntries), so they're correlated EXISTS
+// subqueries rather than a join, to leave the row shape and pagination untouched.
+function namesMatch(db: Db, q: string) {
   const like_ = `%${q}%`;
   return or(
     exists(db.select({ id: users.id }).from(users).where(and(eq(users.id, auditLog.actorUserId), or(like(users.discordUsername, like_), like(users.discordGlobalName, like_), like(users.discordGuildNick, like_))))),
     exists(db.select({ id: signups.id }).from(signups).where(and(eq(signups.userId, auditLog.actorUserId), eq(signups.bingoId, auditLog.bingoId), like(signups.rsn, like_)))),
+    exists(db.select({ id: teams.id }).from(teams).where(and(eq(teams.id, auditLog.teamId), like(teams.name, like_)))),
   );
 }
 
@@ -118,7 +122,10 @@ function applyFilters(db: Db, conditions: (ReturnType<typeof eq> | undefined)[],
   if (filters.visibility) conditions.push(eq(auditLog.visibility, filters.visibility));
   if (filters.since) conditions.push(gte(auditLog.createdAt, parseWhen(filters.since, "since")));
   if (filters.until) conditions.push(lte(auditLog.createdAt, parseWhen(filters.until, "until")));
-  if (filters.q) conditions.push(or(like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`), actorMatches(db, filters.q)));
+  if (filters.q) {
+    const q = filters.q.toLowerCase();
+    conditions.push(or(like(auditLog.searchText, `%${q}%`), like(auditLog.entityLabel, `%${filters.q}%`), like(auditLog.action, `%${filters.q}%`), namesMatch(db, filters.q)));
+  }
 }
 
 // `condensed` collapses runs of alike entries within this page (see condenseAuditEntries); the cursor

@@ -5,6 +5,8 @@ import * as schema from "../db/schema";
 import { auditLog } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { queryAuditLog, queryTeamActivity } from "./query";
+import { audit } from "./record";
+import { fillAuditSearchText } from "./searchText";
 import type { AuditAction, AuditVisibility } from "@bingo/shared";
 
 let sqlite: Database.Database;
@@ -199,6 +201,71 @@ describe("queryAuditLog", () => {
     row({ bingoId: "b1", actorUserId: user.id });
 
     expect(queryAuditLog(db, { bingoId: "b1" }, { q: "comfy hug" }, {}).entries).toHaveLength(0);
+  });
+
+  describe("q matches the text the row shows", () => {
+    // Written through audit(), the real write path, which fills search_text as it goes.
+    function seed() {
+      const bingo = seedRealBingo("b1");
+      const [actor] = db.insert(schema.users).values({ discordId: "u1", discordUsername: "jugrah" }).returning().all();
+      const team = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: actor.id, name: "Jugheads", codeword: "cw" }).returning().get();
+      const earned = audit(db, { action: "achievement.earned", bingoId: "b1", entity: { type: "user", id: actor.id }, details: { key: "first_drop" as never, name: "First blood" }, actor: { userId: actor.id } });
+      const created = audit(db, {
+        action: "team.created",
+        bingoId: "b1",
+        entity: { type: "team", id: team.id },
+        details: { name: "Jugheads", captainUserId: actor.id, captainName: "jugrah", coCaptainUserId: null, coCaptainName: null, color: null },
+        actor: "system",
+      });
+      const approved = audit(db, {
+        action: "submission.approved",
+        bingoId: "b1",
+        entity: { type: "submission", id: "s1" },
+        teamId: team.id,
+        details: { tileName: "Zulrah", taskLabels: [], nodeIds: [], newlyCompletedNodeIds: [], pointsDelta: 1, reviewerNotes: null, submittedByUserId: actor.id },
+        actor: "system",
+      });
+      return { team, earned, created, approved };
+    }
+    const ids = (q: string) => queryAuditLog(db, { bingoId: "b1" }, { q }, {}).entries.map((e) => e.id);
+
+    it("matches the row's title", () => {
+      const { earned } = seed();
+      expect(ids("Achievement earned")).toEqual([earned]);
+    });
+
+    it("matches a word from the row's sentence", () => {
+      const { created } = seed();
+      expect(ids("created the team")).toEqual([created]);
+    });
+
+    it("matches the row's Team, stored and as renamed since", () => {
+      const { approved } = seed();
+      expect(db.select().from(auditLog).all().find((r) => r.id === approved)!.searchText).toContain("jugheads");
+      expect(ids("JUGHEADS")).toEqual(expect.arrayContaining([approved]));
+      db.update(schema.teams).set({ name: "Zulrah Gang" }).run();
+      expect(ids("zulrah gang")).toEqual([approved]);
+    });
+
+    it("matches the actor's name", () => {
+      const { earned } = seed();
+      expect(ids("jugrah")).toEqual(expect.arrayContaining([earned]));
+    });
+
+    it("finds nothing for a term no row shows", () => {
+      seed();
+      expect(ids("nothing like this")).toEqual([]);
+    });
+
+    it("finds a row written before search_text existed once the backfill has run", () => {
+      const old = row({ action: "achievement.earned" as AuditAction, details: JSON.stringify({ key: "first_drop", name: "First blood" }) });
+      expect(old.searchText).toBeNull();
+      expect(ids("Achievement earned")).toEqual([]);
+
+      expect(fillAuditSearchText(db, 1)).toBe(1);
+      expect(ids("Achievement earned")).toEqual([old.id]);
+      expect(fillAuditSearchText(db)).toBe(0);
+    });
   });
 
   it("paginates with a keyset cursor, newest first", () => {

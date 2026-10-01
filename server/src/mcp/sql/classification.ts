@@ -125,6 +125,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       entity_label: "",
       team_id: "",
       details: "JSON",
+      search_text: "Lower-cased text the row shows in the Audit log (title, sentence, Team), for its search",
       created_at: "unix milliseconds",
     },
   },
