@@ -35,7 +35,7 @@ describe("audit log filters in the URL", () => {
 describe("actorFilter", () => {
   it("filters by a link's picks before their entries have been seen", () => {
     const f = actorFilter(new Set(["u9"]), []);
-    expect(f).toMatchObject({ query: ["u9"], narrowed: true, checked: [] });
+    expect(f).toMatchObject({ query: ["u9"], narrowed: true, checked: ["u9"] });
   });
 
   it("is Any with nothing picked, and picking every option stores nothing", () => {
@@ -44,5 +44,17 @@ describe("actorFilter", () => {
     expect(f.checked).toEqual(["u1"]);
     expect([...f.pick(["u1", "u2"])]).toEqual([]);
     expect([...f.pick(["u2"])]).toEqual(["u2"]);
+  });
+});
+
+describe("actorFilter with a link's picks", () => {
+  it("lists a pick whose entries haven't been seen, so the filter shows and can be cleared", () => {
+    const f = actorFilter(new Set(["u9"]), ["u1"]);
+    expect(f.checked).toEqual(["u9"]);
+    expect(f.withPicked([{ key: "u1", label: "Ann" }])).toEqual([
+      { key: "u1", label: "Ann" },
+      { key: "u9", label: "Unknown user" },
+    ]);
+    expect(actorFilter(new Set(["u1"]), ["u1"]).withPicked([{ key: "u1", label: "Ann" }])).toHaveLength(1);
   });
 });

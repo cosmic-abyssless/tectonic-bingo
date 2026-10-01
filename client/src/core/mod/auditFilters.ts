@@ -66,15 +66,18 @@ export function useAuditFilters() {
 
 /**
  * The User filter. Its options are only the actors whose entries have been seen so far, which a link's picks may not be
- * among yet, so what's picked filters as it is (unlike inclusionFilter, which only counts picks it has options for).
+ * among yet, so what's picked filters as it is (unlike inclusionFilter, which only counts picks it has options for),
+ * and `withPicked` lists the picks among the options whether seen or not, so the filter shows and can be cleared.
  * Picking every option is Any, as for the other checklists: `pick` stores that as nothing picked.
  */
 export function actorFilter(selected: Set<string>, known: readonly string[]) {
   const query = selected.size ? [...selected] : undefined;
+  const unseen = [...selected].filter((key) => !known.includes(key));
   return {
-    checked: known.filter((key) => selected.has(key)),
+    checked: [...known.filter((key) => selected.has(key)), ...unseen],
     query,
     narrowed: !!query,
+    withPicked: <T extends { key: string; label: string }>(options: T[]) => [...options, ...unseen.map((key) => ({ key, label: "Unknown user" }) as T)],
     pick: (visible: string[]) => new Set(visible.length >= known.length ? [] : visible),
   };
 }

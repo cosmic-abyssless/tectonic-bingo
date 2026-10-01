@@ -162,7 +162,8 @@ export function AuditLog({ slug }: { slug: string }) {
   useEffect(() => {
     rememberActors(entries);
   }, [entries, rememberActors]);
-  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
+  // The picks are listed too, seen or not, so a User filter from a link shows and can be cleared.
+  const actorOptions = actors.withPicked(useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]));
   const filtered = categories.narrowed || teams.narrowed || actors.narrowed || isRangeSet(range) || debouncedSearch !== "";
 
   async function copyCsv() {
@@ -193,6 +194,8 @@ export function AuditLog({ slug }: { slug: string }) {
             label="User"
             options={actorOptions}
             selected={actors.checked}
+            // Only the users seen so far are listed, so picking all of them isn't everyone.
+            exhaustive={false}
             onChange={(visible) => update({ actors: actors.pick(visible) })}
           />
         )}

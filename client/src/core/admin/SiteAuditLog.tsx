@@ -61,7 +61,8 @@ export function SiteAuditLog() {
   useEffect(() => {
     rememberActors(entries);
   }, [entries, rememberActors]);
-  const actorOptions = useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]);
+  // The picks are listed too, seen or not, so a User filter from a link shows and can be cleared.
+  const actorOptions = actors.withPicked(useMemo(() => actorOptionsFrom(actorNames, entries), [actorNames, entries]));
 
   async function copyCsv() {
     await navigator.clipboard.writeText(buildCsv(entries));
@@ -83,6 +84,8 @@ export function SiteAuditLog() {
             label="User"
             options={actorOptions}
             selected={actors.checked}
+            // Only the users seen so far are listed, so picking all of them isn't everyone.
+            exhaustive={false}
             onChange={(visible) => update({ actors: actors.pick(visible) })}
           />
         )}
