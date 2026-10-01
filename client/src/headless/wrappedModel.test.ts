@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { achievementDef } from "@bingo/shared";
 import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
 import type { WrappedOutroModel, WrappedShareCardModel, WrappedTeamModel } from "./types";
-import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
+import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rankedArt, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
 
 const T0 = Date.UTC(2026, 0, 3, 12);
 const HOUR = 3_600_000;
@@ -63,7 +63,7 @@ function bingo(): BingoWrapped {
 }
 
 function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse> = {}): MyWrappedResponse {
-  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: { sections: {}, additionalCredits: {}, side: [] }, ...extra };
+  return { state: { published: true, publishedAt: iso(48), publishOnFinish: false, pendingSubmissions: 0 }, preview: false, bingo: bingo(), player, moderator: null, art: { sections: {}, additionalCredits: {}, side: [], playerCard: [] }, ...extra };
 }
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
@@ -81,7 +81,7 @@ describe("buildWrappedStory", () => {
     const frames = (name: string): [string, string] => [`/uploads/wrapped-art/${name}-1.webp`, `/uploads/wrapped-art/${name}-2.webp`];
     const piece = (name: string) => ({ frames: frames(name), credit: null });
     const built = story(
-      response(player({ submissions: 5 }), { art: { sections: { intro: [piece("intro")], team: [piece("team"), piece("team2")], duo: [piece("duo")] }, additionalCredits: {}, side: [frames("side")] } }),
+      response(player({ submissions: 5 }), { art: { sections: { intro: [piece("intro")], team: [piece("team"), piece("team2")], duo: [piece("duo")] }, additionalCredits: {}, side: [frames("side")], playerCard: [frames("card")] } }),
     );
     const sections = built.sections;
     expect(built.sideArt.map((f) => f[0])).toEqual(["/uploads/wrapped-art/side-1.webp"]);
@@ -96,7 +96,7 @@ describe("buildWrappedStory", () => {
 
   it("doesn't tell You just because it has art", () => {
     const frames: [string, string] = ["/a.webp", "/b.webp"];
-    expect(kinds(response(player(), { art: { sections: { you: [{ frames, credit: null }] }, additionalCredits: {}, side: [] } }))).toEqual(["intro", "team", "bingo", "outro"]);
+    expect(kinds(response(player(), { art: { sections: { you: [{ frames, credit: null }] }, additionalCredits: {}, side: [], playerCard: [] } }))).toEqual(["intro", "team", "bingo", "outro"]);
   });
 
   it("gives a viewer who isn't a Player the Bingo only", () => {
@@ -125,6 +125,7 @@ describe("buildWrappedStory", () => {
       },
       additionalCredits: { outro: [{ name: "Lynx", role: "Art" }], team: [{ name: "B0aty", role: "" }] },
       side: [],
+      playerCard: [],
     };
     const moderation = { ...bingo().moderation, reviewed: 12 };
     const model = story(response(player({ submissions: 1 }), { art, bingo: { ...bingo(), moderation } }));
@@ -364,26 +365,54 @@ describe("share cards", () => {
     }
   });
 
-  it("gives each card its own section's art, else a side image, a different one for each card where there are two", () => {
+  describe("art", () => {
     const frames = (name: string): [string, string] => [`/${name}-1.webp`, `/${name}-2.webp`];
     const piece = (name: string) => ({ frames: frames(name), credit: null });
-    const artOf = (art: MyWrappedResponse["art"]) => cardsOf(response(scored(), { art })).map((c) => [c.kind, c.artUrl]);
-    expect(artOf({ sections: { you: [piece("you"), piece("you2")], team: [piece("team")] }, additionalCredits: {}, side: [frames("side")] })).toEqual([
-      ["player", "/you-1.webp"],
-      ["team", "/team-1.webp"],
-    ]);
-    expect(artOf({ sections: {}, additionalCredits: {}, side: [frames("s1"), frames("s2")] })).toEqual([
-      ["player", "/s1-1.webp"],
-      ["team", "/s2-1.webp"],
-    ]);
-    expect(artOf({ sections: {}, additionalCredits: {}, side: [frames("s1")] })).toEqual([
-      ["player", "/s1-1.webp"],
-      ["team", "/s1-1.webp"],
-    ]);
-    expect(artOf({ sections: {}, additionalCredits: {}, side: [] })).toEqual([
-      ["player", null],
-      ["team", null],
-    ]);
+    const art = (a: Partial<MyWrappedResponse["art"]>): MyWrappedResponse["art"] => ({ sections: {}, additionalCredits: {}, side: [], playerCard: [], ...a });
+    const artOf = (a: Partial<MyWrappedResponse["art"]>, you: Partial<WrappedYou> = {}) => cardsOf(response(scored(you), { art: art(a) })).map((c) => [c.kind, c.artUrls]);
+
+    it("splits the ranked Players into equal bands, one per Player card image, best first", () => {
+      const pool = [1, 2, 3, 4];
+      expect([1, 10, 11, 25, 40].map((rank) => rankedArt(pool, rank, 40))).toEqual([1, 1, 2, 3, 4]);
+      // Tied Players share a rank, so they share a band: three tied at 9th, straddling the cut at 10th, all get the top one.
+      expect(rankedArt(pool, 9, 40)).toBe(1);
+      expect([1, 7, 20].map((rank) => rankedArt(["only"], rank, 20))).toEqual(["only", "only", "only"]);
+      expect(rankedArt([], 1, 20)).toBeUndefined();
+      expect(rankedArt(pool, undefined, undefined)).toBeUndefined();
+    });
+
+    it("gives the Player card its rank's Player card art", () => {
+      const playerCard = [frames("p1"), frames("p2"), frames("p3"), frames("p4")];
+      expect(artOf({ sections: { you: [piece("you")] }, playerCard }, { bingoRank: 1, bingoPlayers: 40 })[0]).toEqual(["player", ["/p1-1.webp"]]);
+      expect(artOf({ sections: { you: [piece("you")] }, playerCard }, { bingoRank: 25, bingoPlayers: 40 })[0]).toEqual(["player", ["/p3-1.webp"]]);
+      expect(artOf({ sections: { you: [piece("you")] }, playerCard }, { bingoRank: 40, bingoPlayers: 40 })[0]).toEqual(["player", ["/p4-1.webp"]]);
+    });
+
+    it("falls back to the You section's art, else a side image, with no Player card art or no Bingo rank", () => {
+      expect(artOf({ sections: { you: [piece("you"), piece("you2")] } })[0]).toEqual(["player", ["/you-1.webp"]]);
+      expect(artOf({ sections: { you: [piece("you")] }, playerCard: [frames("p1")] }, { bingoRank: undefined, bingoPlayers: undefined })[0]).toEqual(["player", ["/you-1.webp"]]);
+      expect(artOf({ side: [frames("s1")] })[0]).toEqual(["player", ["/s1-1.webp"]]);
+    });
+
+    it("gives the Team card the Team section's first 3 images, else a side image, a different one from the Player card's where there are two", () => {
+      expect(artOf({ sections: { team: [piece("t1"), piece("t2"), piece("t3"), piece("t4")] }, side: [frames("s1")] })[1]).toEqual(["team", ["/t1-1.webp", "/t2-1.webp", "/t3-1.webp"]]);
+      expect(artOf({ sections: { team: [piece("t1")] } })[1]).toEqual(["team", ["/t1-1.webp"]]);
+      expect(artOf({ side: [frames("s1"), frames("s2")] })).toEqual([
+        ["player", ["/s1-1.webp"]],
+        ["team", ["/s2-1.webp"]],
+      ]);
+      expect(artOf({ side: [frames("s1")] })).toEqual([
+        ["player", ["/s1-1.webp"]],
+        ["team", ["/s1-1.webp"]],
+      ]);
+    });
+
+    it("leaves both cards without art when the Bingo has none", () => {
+      expect(artOf({})).toEqual([
+        ["player", []],
+        ["team", []],
+      ]);
+    });
   });
 
   it("badges the Team's rank and the Bingo's apart, and only the Team's in Wrapped published before the Bingo's was stored", () => {
