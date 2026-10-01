@@ -2,7 +2,7 @@
 // chrome, submission modal). Slots receive ONLY these shapes + callbacks —
 // never a raw Tile, TeamNodeState[], SubmissionDetails[], or LeafClaimMaps.
 // See docs/headless-theming-plan.md §2.
-import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
+import type { ChangeEvent, RefObject } from "react";
 import type { CanResult } from "./permissionCheck";
 import type {
   AuditCategory,
@@ -309,15 +309,15 @@ export interface TileSearchModel {
   query: string;
   setQuery(q: string): void;
   clear(): void;
+  /** The search box has focus (the comic box lights up). */
   focused: boolean;
   setFocused(f: boolean): void;
-  /** Owns the 150ms blur-close timeout. */
-  blur(): void;
+  /** The first few Tiles matching the query. */
   results: { id: string; name: string }[];
   overflowCount: number;
-  showDropdown: boolean;
-  highlightedIndex: number;
-  onKeyDown(e: KeyboardEvent<HTMLInputElement>): void;
+  /** The result the open list is on, by keyboard or pointer (the comic board points it out); null with the list closed. */
+  highlightedId: string | null;
+  setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
 }

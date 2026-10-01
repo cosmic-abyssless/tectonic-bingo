@@ -194,11 +194,13 @@ function DragHandle({ path, label }: { path: Path; label: string }) {
 // so it doesn't take pixel-perfect aim. With `children` (an empty condition's "no requirements yet"), that's the spot.
 // With `or` (between an ANY's options), the gap holds the player checklist's "OR" divider and is still a drop spot.
 // Focusable (though never in the tab order): a keyboard drag moves focus from spot to spot, and `label` says where each is.
-// The tree line (see GroupNode): it runs 6px in from the heading's start, children sit 20px right of it, and each branch
-// meets its child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop
-// spot between children, so it stops at the last child's branch rather than running on past it.
-const TREE_LINE_OFFSET = "ml-1.5";
-const TREE_INDENT = "ml-1.5 pl-5";
+// The tree line (see GroupNode): it runs 36px in from the heading's start, under the condition's number, and children
+// sit 20px right of it, at the same 56px as the heading's own controls (the gutter and its gap). Each branch meets its
+// child's first row (32px tall) at its middle. The line is drawn per child (the part beside it) and per drop spot
+// between children, so it stops at the last child's branch rather than running on past it.
+const TREE_GUTTER = "w-12";
+const TREE_LINE_OFFSET = "ml-9";
+const TREE_INDENT = "ml-9 pl-5";
 const TREE_BRANCH =
   "relative pl-5 before:absolute before:left-0 before:top-0 before:w-0 before:border-l-2 before:border-outline after:absolute after:left-0 after:top-[15px] after:w-4 after:border-t-2 after:border-outline";
 const TREE_BRANCH_THROUGH = "before:bottom-0";
@@ -423,21 +425,25 @@ function GroupNode(props: NodeProps) {
 
   // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
   // the last), then the add row, indented with the children: the same order at every level, the task's own included.
+  // The drag handle and the number sit in a gutter, so the rule's controls start where the item rows under it do. A
+  // number too long for it (four levels deep) spills left, over the branch, rather than into the controls.
   return (
     <div className={dragging ? "opacity-40" : undefined}>
       <div className="flex min-h-8 flex-wrap items-center gap-2">
-        {!isRoot && <DragHandle path={path} label={conditionName} />}
-        {ownLabel && (
-          <TooltipSpan
-            text={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}
-            label={`Condition ${ownLabel}`}
-            className="num shrink-0 text-xs text-on-surface-subtle"
-          >
-            {ownLabel}
-          </TooltipSpan>
-        )}
-        {isShared && <SharedMark tasks={sharedWithTasks} />}
+        <div className={`flex h-8 shrink-0 items-center justify-end gap-0.5 ${TREE_GUTTER}`}>
+          {!isRoot && <DragHandle path={path} label={conditionName} />}
+          {ownLabel && (
+            <TooltipSpan
+              text={`Condition ${ownLabel}: shown in this task's own tree, and in other tasks' "+ existing condition" picker once saved`}
+              label={`Condition ${ownLabel}`}
+              className="num ml-auto text-xs whitespace-nowrap text-on-surface-subtle"
+            >
+              {ownLabel}
+            </TooltipSpan>
+          )}
+        </div>
         <RuleControls node={node} path={path} update={update} />
+        {isShared && <SharedMark tasks={sharedWithTasks} />}
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${conditionName}` : `Remove ${conditionName}`} what="condition" onPress={() => remove(path)} className="ml-auto" />}
       </div>
       {children.length === 0 ? (

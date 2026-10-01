@@ -18,6 +18,7 @@ export function MultiSelect({
   selected,
   onChange,
   attention,
+  exhaustive = true,
 }: {
   label: string;
   options: MultiSelectOption[];
@@ -25,13 +26,15 @@ export function MultiSelect({
   onChange: (keys: string[]) => void;
   /** Something in this filter wants looking at: a yellow dot on the button, with this as its hover and screen-reader text. */
   attention?: string;
+  /** False when the options may not be everything there is (the users seen so far), so every one ticked isn't "All". */
+  exhaustive?: boolean;
 }) {
   const { Picker } = usePickerParts();
   const picked = selected.filter((key) => options.some((o) => o.key === key));
   const summary =
     picked.length === 0
       ? "Any"
-      : picked.length === options.length
+      : picked.length === options.length && exhaustive
         ? "All"
         : picked.length === 1
           ? (options.find((o) => o.key === picked[0])?.label ?? picked[0])
