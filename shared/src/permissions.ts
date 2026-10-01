@@ -24,6 +24,35 @@ export const ACTIONS = [
   "rate_picks",
   /** Renaming your own Team, from the Team dialog. Renaming any Team from the mod panel is administer_bingo. */
   "rename_team",
+
+  // What a user can see. Everyone who can't see a Bingo still gets its name and stage, and its signup form while
+  // Signups are open.
+  /** A Bingo's content: its Board, Teams, rules, players and the pages under it. */
+  "view_bingo",
+  /** The Board before Board revealed, and in full while its Tiles are sealed: rules text, exclusive item lists, Task interest. */
+  "view_hidden_board",
+  /** Other Teams' progress, Submissions and activity, and every Team's stats. */
+  "view_other_teams",
+  /** Your own Team's stats, before every Team's are open. */
+  "view_team_stats",
+  /** The entries in a Team's activity that only Moderators see. */
+  "view_mod_activity",
+  /** Other Teams' screenshots, once a Finished Bingo leaves only the Submissions open (Show screenshots once Finished). */
+  "view_other_teams_screenshots",
+  /** Wrapped before it's published, as a preview worked out on the spot. */
+  "view_wrapped_preview",
+  /** The draft room: scouting the signups before the Draft, then the Draft itself. */
+  "view_draft_room",
+  /** Signup answers in the draft room's pool. */
+  "view_draft_pool_answers",
+  /** Signup answers on a player's card. */
+  "view_player_card_answers",
+  /** Answers to signup questions only Moderators may see (QuestionVisibility "mods"). */
+  "view_mod_questions",
+  /** Answers to signup questions only Admins may see (QuestionVisibility "admins"). */
+  "view_admin_questions",
+  /** The card of anyone in the clan, not only of those in the Bingo. */
+  "view_any_player",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -33,11 +62,15 @@ export interface Grant {
   stages?: readonly Stage[];
 }
 
-/** What can() needs of a Bingo: its stage (and, as rules come to need them, its per-Bingo settings). */
-export type PermissionBingo = Pick<Bingo, "stage">;
+/** What can() needs of a Bingo: its stage and the per-Bingo settings its rules read. */
+export type PermissionBingo = Pick<Bingo, "stage" | "showScreenshotsWhenFinished">;
 
 // Before play starts: what Team names and Pick Ratings lock on (isBoardLocked).
 const BEFORE_LIVE: readonly Stage[] = ["planning", "signup", "captains", "draft", "reveal"];
+// Past Planning, which is for Moderators and Admins only (CONTEXT.md "Stage").
+const AFTER_PLANNING: readonly Stage[] = ["signup", "captains", "draft", "reveal", "live", "complete"];
+// While Captains scout the signups and pick: their window on a player's signup answers.
+const SCOUTING: readonly Stage[] = ["signup", "captains", "draft"];
 
 /**
  * Every role's grants. Each role lists its Actions in full, so a new Action is never granted to one by accident; Admin
@@ -45,9 +78,35 @@ const BEFORE_LIVE: readonly Stage[] = ["planning", "signup", "captains", "draft"
  */
 export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "admin">]: readonly Grant[] } = {
   admin: "*",
-  moderator: [{ action: "moderate_bingo" }, { action: "submit_for_any_team" }],
-  captain: [{ action: "make_draft_pick" }, { action: "rate_picks" }, { action: "rename_team", stages: BEFORE_LIVE }],
-  player: [],
+  moderator: [
+    { action: "moderate_bingo" },
+    { action: "submit_for_any_team" },
+    { action: "view_bingo" },
+    { action: "view_hidden_board" },
+    { action: "view_other_teams" },
+    { action: "view_mod_activity" },
+    { action: "view_other_teams_screenshots" },
+    { action: "view_wrapped_preview" },
+    { action: "view_draft_room" },
+    { action: "view_draft_pool_answers" },
+    { action: "view_player_card_answers" },
+    { action: "view_mod_questions" },
+    { action: "view_any_player" },
+  ],
+  // A Captain is always a Player too (they're on a Team), so what every Player sees isn't repeated here.
+  captain: [
+    { action: "make_draft_pick" },
+    { action: "rate_picks" },
+    { action: "rename_team", stages: BEFORE_LIVE },
+    { action: "view_draft_room", stages: ["signup", "captains"] },
+    { action: "view_draft_pool_answers" },
+    { action: "view_player_card_answers", stages: SCOUTING },
+  ],
+  player: [
+    { action: "view_bingo", stages: AFTER_PLANNING },
+    { action: "view_team_stats", stages: ["live"] },
+    { action: "view_draft_room", stages: ["captains", "draft", "reveal", "live", "complete"] },
+  ],
 };
 
 /**
@@ -58,6 +117,18 @@ export const RULES: { readonly [A in Action]?: (bingo: PermissionBingo) => boole
   make_draft_pick: (bingo) => bingo.stage === "draft",
   run_draft: (bingo) => bingo.stage === "draft",
   rate_picks: (bingo) => BEFORE_LIVE.includes(bingo.stage),
+};
+
+/**
+ * Rules that hold for everyone the other way: while one says yes, the Action is open to every clan member, whatever
+ * their roles (the rules above still apply). A Finished Bingo is open, read-only, to everyone, and so are other Teams'
+ * screenshots in it while Show screenshots once Finished is on.
+ */
+export const OPEN_TO_EVERYONE: { readonly [A in Action]?: (bingo: PermissionBingo) => boolean } = {
+  view_bingo: (bingo) => bingo.stage === "complete",
+  view_other_teams: (bingo) => bingo.stage === "complete",
+  view_draft_room: (bingo) => bingo.stage === "complete",
+  view_other_teams_screenshots: (bingo) => bingo.stage === "complete" && bingo.showScreenshotsWhenFinished,
 };
 
 export type PermissionDenial = "role" | "stage" | "rule";
@@ -71,9 +142,10 @@ export function passesRules(bingo: PermissionBingo, action: Action): boolean {
 /**
  * Whether a user holding `roles` may take `action` in `bingo` (null for the Site admin pages, outside any Bingo). The
  * reason says why not: no role grants it ("role"), a role grants it but not in this stage ("stage"), or it's granted
- * but a rule for everyone refuses it ("rule").
+ * (or open to everyone) but a rule for everyone refuses it ("rule").
  */
 export function can(roles: readonly Role[], bingo: PermissionBingo | null, action: Action): Permission {
+  if (bingo && OPEN_TO_EVERYONE[action]?.(bingo)) return passesRules(bingo, action) ? { ok: true } : { ok: false, reason: "rule" };
   let granted = false;
   let inStage = false;
   for (const role of roles) {

@@ -1,11 +1,11 @@
 import { eq } from "drizzle-orm";
+import { can, type Action } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoModerators, signups, teamMembers, teams } from "../db/schema";
 import type { SessionUser } from "../types";
 import { getBingoBySlug } from "./bingoService";
 import { getBingoAccess } from "./bingoAccess";
-import { canViewDraftRoom } from "./draftService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -19,8 +19,8 @@ export interface DevPageAccess {
 /**
  * For the dev account switcher: which of `users` could open the client page at `path`, and their part in its bingo.
  * Mirrors the gates the page's API calls hit: requireAdmin (/admin), requireGuildMember (every bingo route), requireBingo
- * (a Planning bingo is mods only), the mod routes' requireBingoMod, requireBingoViewer and the stats route's stage/team
- * rule, and draftService.canViewDraftRoom. Dev mode only. The bingo's own page opens for anyone else too, as the
+ * (a Planning bingo is mods only), the mod routes' requireBingoMod, requireBingoViewer and the stats route's
+ * view_other_teams / view_team_stats rule, and the draft room's view_draft_room. Dev mode only. The bingo's own page opens for anyone else too, as the
  * signup form or the "not part of this bingo" notice.
  */
 export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<string, DevPageAccess> {
@@ -53,16 +53,16 @@ export function devPageAccess(db: Db, path: string, users: SessionUser[]): Map<s
   );
 
   for (const u of users) {
-    const isMod = u.isAdmin || mods.has(u.id);
     const team = membership.get(u.id);
     const isSignedUp = signedUp.has(u.id);
-    const { canSee, isCut } = getBingoAccess(db, bingo, u);
+    const { canSee, isCut, roles } = getBingoAccess(db, bingo, u);
+    const allowed = (action: Action) => can(roles, bingo, action).ok;
     // Bingo routes turn away anyone whose last Discord login showed them outside the clan server (site admins aside).
-    const inClan = (u.inGuild || u.isAdmin) && (bingo.stage !== "planning" || isMod);
+    const inClan = (u.inGuild || u.isAdmin) && (bingo.stage !== "planning" || canSee);
     let access: boolean;
-    if (page === "mod") access = inClan && isMod;
-    else if (page === "stats") access = inClan && canSee && (isMod || bingo.stage === "complete" || (bingo.stage === "live" && !!team));
-    else if (page === "draft") access = inClan && canViewDraftRoom(bingo.stage, { isMod, isLead: !!team?.isLead, canSeeBingo: canSee });
+    if (page === "mod") access = inClan && allowed("moderate_bingo");
+    else if (page === "stats") access = inClan && canSee && (allowed("view_other_teams") || (allowed("view_team_stats") && !!team));
+    else if (page === "draft") access = inClan && allowed("view_draft_room");
     else access = inClan;
 
     const parts = [u.isAdmin ? "Site admin" : mods.has(u.id) ? "Mod" : null];

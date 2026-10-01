@@ -8,7 +8,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTeam } from "./teamService";
 import { createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
-import { canViewDraftRoom, draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, ratingsForViewer, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
+import { draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, ratingsForViewer, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -56,34 +56,7 @@ afterEach(() => {
   sqlite.close();
 });
 
-describe("canViewDraftRoom", () => {
-  const player = { isMod: false, isLead: false, canSeeBingo: true };
-  const lead = { isMod: false, isLead: true, canSeeBingo: true };
-  const mod = { isMod: true, isLead: false, canSeeBingo: true };
-  const outsider = { isMod: false, isLead: false, canSeeBingo: false };
-
-  it("keeps Signups open scouting to leads and mods", () => {
-    expect(canViewDraftRoom("signup", player)).toBe(false);
-    expect(canViewDraftRoom("signup", outsider)).toBe(false);
-    expect(canViewDraftRoom("signup", lead)).toBe(true);
-    expect(canViewDraftRoom("signup", mod)).toBe(true);
-  });
-
-  it("lets every Player scout once Signups are closed", () => {
-    expect(canViewDraftRoom("captains", player)).toBe(true);
-    expect(canViewDraftRoom("captains", outsider)).toBe(false);
-    expect(canViewDraftRoom("captains", lead)).toBe(true);
-    expect(canViewDraftRoom("captains", mod)).toBe(true);
-  });
-
-  it("lets whoever can see the bingo watch from the draft on", () => {
-    expect(canViewDraftRoom("draft", player)).toBe(true);
-    expect(canViewDraftRoom("draft", outsider)).toBe(false);
-    expect(canViewDraftRoom("draft", lead)).toBe(true);
-    expect(canViewDraftRoom("draft", mod)).toBe(true);
-    expect(canViewDraftRoom("live", outsider)).toBe(false);
-  });
-
+describe("draftRoomForbiddenMessage", () => {
   it("uses scouting copy before draft and draft-room copy after", () => {
     expect(draftRoomForbiddenMessage("signup")).toMatch(/captains and mods/i);
     expect(draftRoomForbiddenMessage("captains")).toMatch(/scouting.*players and mods/i);

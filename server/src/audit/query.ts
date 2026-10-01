@@ -174,10 +174,10 @@ export function queryTeamActivity(
   db: Db,
   bingoId: string,
   teamId: string,
-  opts: { isMod: boolean; cursor?: number; limit?: number; condensed?: boolean },
+  opts: { seesModEntries: boolean; cursor?: number; limit?: number; condensed?: boolean },
 ): AuditLogResponse {
   const limit = Math.min(opts.limit ?? TEAM_ACTIVITY_DEFAULT_LIMIT, MAX_LIMIT);
-  const visibilityRule = opts.isMod
+  const visibilityRule = opts.seesModEntries
     ? eq(auditLog.teamId, teamId)
     : or(
         and(eq(auditLog.teamId, teamId), inArray(auditLog.visibility, ["team", "public"])),

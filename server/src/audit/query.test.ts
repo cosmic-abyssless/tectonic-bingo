@@ -72,7 +72,7 @@ describe("queryAuditLog", () => {
       row({ action: "settings.updated" as AuditAction, details: "{}" });
       expect(queryAuditLog(db, { bingoId: "b1" }, {}, { condensed: true }).entries).toHaveLength(1);
       row({ action: "team.updated" as AuditAction, teamId: "t1", visibility: "team" as AuditVisibility, details: "{}" });
-      expect(queryTeamActivity(db, "b1", "t1", { isMod: true }).entries).toHaveLength(1);
+      expect(queryTeamActivity(db, "b1", "t1", { seesModEntries: true }).entries).toHaveLength(1);
     });
 
     it("shows a row whose action this build doesn't know as a plain entry", () => {
@@ -247,7 +247,7 @@ describe("queryTeamActivity", () => {
     row({ teamId: null, visibility: "public" as AuditVisibility, action: "points.adjusted" as AuditAction });
     row({ teamId: null, visibility: "mods" as AuditVisibility, action: "team.deleted" as AuditAction });
 
-    const result = queryTeamActivity(db, "b1", "teamX", { isMod: false });
+    const result = queryTeamActivity(db, "b1", "teamX", { seesModEntries: false });
     expect(result.entries.map((e) => e.action)).toEqual(["points.adjusted", "team.updated"]);
   });
 
@@ -256,7 +256,7 @@ describe("queryTeamActivity", () => {
     row({ teamId: "teamX", visibility: "mods" as AuditVisibility, action: "team.deleted" as AuditAction });
     row({ teamId: "teamY", visibility: "public" as AuditVisibility, action: "points.adjusted" as AuditAction });
 
-    const result = queryTeamActivity(db, "b1", "teamX", { isMod: true });
+    const result = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true });
     expect(result.entries.map((e) => e.action).sort()).toEqual(["team.deleted", "team.updated"]);
   });
 
@@ -266,12 +266,12 @@ describe("queryTeamActivity", () => {
     row({ teamId: null, visibility: "public" as AuditVisibility, action: "stage.changed" as AuditAction }); // bingo — dropped
     row({ teamId: null, visibility: "public" as AuditVisibility, action: "draft.started" as AuditAction }); // draft — dropped
 
-    const player = queryTeamActivity(db, "b1", "teamX", { isMod: false });
+    const player = queryTeamActivity(db, "b1", "teamX", { seesModEntries: false });
     expect(player.entries.map((e) => e.action)).toEqual(["team.updated"]);
 
     // Category filtering applies to the mod view of this feed too — it's a
     // "what happened to this team" highlight reel either way, not the full log.
-    const mod = queryTeamActivity(db, "b1", "teamX", { isMod: true });
+    const mod = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true });
     expect(mod.entries.map((e) => e.action)).toEqual(["team.updated"]);
   });
 
@@ -285,8 +285,8 @@ describe("queryTeamActivity", () => {
       points();
     }
 
-    const raw = queryTeamActivity(db, "b1", "teamX", { isMod: true, limit: 4 });
-    const condensed = queryTeamActivity(db, "b1", "teamX", { isMod: true, limit: 4, condensed: true });
+    const raw = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true, limit: 4 });
+    const condensed = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true, limit: 4, condensed: true });
 
     expect(raw.entries).toHaveLength(4);
     expect(condensed.nextCursor).toBe(raw.nextCursor);
@@ -295,7 +295,7 @@ describe("queryTeamActivity", () => {
     expect(condensed.entries[2]!.condensed?.count).toBe(2);
     expect(condensed.entries[2]!.label).toBe('Someone approved 2 submissions for "C" and "B"');
 
-    const everything = queryTeamActivity(db, "b1", "teamX", { isMod: true, condensed: true });
+    const everything = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true, condensed: true });
     expect(everything.entries.map((e) => e.action)).toEqual(["points.earned", "points.earned", "points.earned", "submission.approved"]);
     expect(everything.entries[3]!.condensed?.count).toBe(3);
   });
@@ -305,7 +305,7 @@ describe("queryTeamActivity", () => {
     row({ teamId: "teamX", visibility: "mods" as AuditVisibility, action: "submission.screenshot_analyzed" as AuditAction });
     row({ teamId: "teamX", visibility: "team" as AuditVisibility, action: "team.updated" as AuditAction, details: JSON.stringify({ changes: { before: {}, after: {} } }) });
 
-    const mod = queryTeamActivity(db, "b1", "teamX", { isMod: true });
+    const mod = queryTeamActivity(db, "b1", "teamX", { seesModEntries: true });
     expect(mod.entries.map((e) => e.action)).toEqual(["team.updated"]);
 
     const full = queryAuditLog(db, { bingoId: "b1" }, {}, {});

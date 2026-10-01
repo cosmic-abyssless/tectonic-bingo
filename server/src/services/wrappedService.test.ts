@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { WrappedDrop } from "@bingo/shared";
+import type { Role, WrappedDrop } from "@bingo/shared";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { auditLog, bingos, claims, stageTransitions, submissions } from "../db/schema";
@@ -101,7 +101,8 @@ function play(fx: Fx) {
   review(submitAt(fx.teamB.id, fx.frank.id, t(50), { nodeId: fx.scales.id, itemName: "Zulrah's scales" }), fx.mod2.id, 120);
 }
 
-const viewer = (userId: string, isMod: boolean, myTeamId: string | null = null) => ({ userId, isMod, myTeamId });
+// A Moderator, or (anyone else) a Player: what Wrapped tells apart.
+const viewer = (userId: string, isMod: boolean, myTeamId: string | null = null) => ({ userId, roles: [isMod ? "moderator" : "player"] as Role[], myTeamId });
 
 describe("publishing", () => {
   it("is refused before the Bingo is Finished", () => {

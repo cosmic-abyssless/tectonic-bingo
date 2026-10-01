@@ -7,6 +7,7 @@ import { and, count, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   achievementDef,
+  can,
   pickTitles,
   titlesHeldBy,
   type AvatarUser,
@@ -14,6 +15,7 @@ import {
   type BingoWrappedResponse,
   type MyWrappedResponse,
   type PlayerWrapped,
+  type Role,
   type RewindSubmission,
   type WrappedCaptain,
   type WrappedDrop,
@@ -471,16 +473,18 @@ export function publishWhenReady(db: Db, bingo: Bingo, userId: string): boolean 
 
 export interface WrappedViewer {
   userId: string;
-  isMod: boolean;
+  /** Their roles in the Bingo, for can(). */
+  roles: Role[];
   myTeamId: string | null;
 }
 
 /**
- * With "Show screenshots once Finished" off, other Teams' screenshots are left out for anyone but the mods, the same
- * rule as Rewind and a Team's submission list. Applied on read, so the stored data doesn't depend on the viewer.
+ * With "Show screenshots once Finished" off, other Teams' screenshots are left out for anyone but the mods
+ * (view_other_teams_screenshots), the same rule as Rewind and a Team's submission list. Applied on read, so the
+ * stored data doesn't depend on the viewer.
  */
 function hideScreenshots(data: BingoWrapped, bingo: Bingo, viewer: WrappedViewer): BingoWrapped {
-  if (viewer.isMod || bingo.showScreenshotsWhenFinished) return data;
+  if (can(viewer.roles, bingo, "view_other_teams_screenshots").ok) return data;
   const hide = (d: WrappedDrop | null): WrappedDrop | null => (d && d.teamId !== viewer.myTeamId ? { ...d, screenshotUrl: null } : d);
   return {
     ...data,
@@ -520,7 +524,7 @@ function read(db: Db, bingo: Bingo, viewer: WrappedViewer, withPlayer: boolean):
       art: artSet(db, bingo.id),
     };
   }
-  if (!viewer.isMod) notPublished();
+  if (!can(viewer.roles, bingo, "view_wrapped_preview").ok) notPublished();
   const computed = computeWrapped(db, bingo);
   return {
     state,

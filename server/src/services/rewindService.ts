@@ -276,9 +276,10 @@ export function getRewind(db: Db, bingo: typeof schema.bingos.$inferSelect): Rew
 
 /**
  * What a viewer may see of it: with "Show screenshots once Finished" off, other Teams' screenshots are left out for
- * anyone but the mods (the Submissions themselves stay), the same rule as a Team's submission list.
+ * anyone who may not see them (view_other_teams_screenshots: anyone but the mods; the Submissions themselves stay),
+ * the same rule as a Team's submission list.
  */
-export function hideScreenshots(rewind: RewindResponse, viewer: { isMod: boolean; myTeamId: string | null; showScreenshotsWhenFinished: boolean }): RewindResponse {
-  if (viewer.isMod || viewer.showScreenshotsWhenFinished) return rewind;
+export function hideScreenshots(rewind: RewindResponse, viewer: { seesOtherTeamsScreenshots: boolean; myTeamId: string | null }): RewindResponse {
+  if (viewer.seesOtherTeamsScreenshots) return rewind;
   return { ...rewind, submissions: rewind.submissions.map((s) => (s.teamId === viewer.myTeamId ? s : { ...s, screenshotUrl: null })) };
 }

@@ -156,9 +156,10 @@ export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
 
 // A team's progress as one viewer may see it. While the Tiles are sealed (CONTEXT.md "Sealed Tiles") a player
 // doesn't get the interest markers: they're kept in storage and come back unchanged once the Tiles are unsealed.
-export function getTeamProgressForViewer(db: Db, bingo: typeof bingos.$inferSelect, teamId: string, isMod: boolean): TeamProgressSummary {
+// Whoever may see the hidden Board (view_hidden_board) still does.
+export function getTeamProgressForViewer(db: Db, bingo: typeof bingos.$inferSelect, teamId: string, seesHiddenBoard: boolean): TeamProgressSummary {
   const progress = getTeamProgress(db, teamId);
-  return !isMod && areTilesSealed(bingo) ? { ...progress, interests: [] } : progress;
+  return !seesHiddenBoard && areTilesSealed(bingo) ? { ...progress, interests: [] } : progress;
 }
 
 // A member raises (or lowers) their hand for one part (task) of a tile.
