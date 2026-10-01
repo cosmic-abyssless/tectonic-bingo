@@ -19,7 +19,7 @@ export function StagedClaimsList({ staged }: { staged: SubmissionFlowModel["stag
                 style={{ color: colors.INK, borderTop: i > 0 ? `2px dashed ${colors.RULE}` : undefined }}
               >
                 <span className="truncate">{item.label}</span>
-                <ComicIconButton label={`Remove ${item.label}`} onPress={() => staged.remove(i)} className="size-7">
+                <ComicIconButton label={`Remove ${item.label}`} onPress={() => staged.remove(i)}>
                   <XIcon size={14} />
                 </ComicIconButton>
               </li>

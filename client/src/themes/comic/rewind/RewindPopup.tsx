@@ -7,6 +7,8 @@ import { ComicReactionBar } from "../ui/ComicReactionBar";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { RewindSfxBubble } from "./RewindSfxBubble";
+import { ComicIconButton } from "../ui/ComicButton";
+import { ScreenshotLink } from "../../../core/submissions/ScreenshotThumb";
 
 const noop = () => {};
 
@@ -68,10 +70,8 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
           </div>
 
           {s.thumbnailUrl && (
-            <a
+            <ScreenshotLink
               href={s.screenshotUrl ?? s.thumbnailUrl}
-              target="_blank"
-              rel="noreferrer"
               className="mx-3 block -rotate-1 border-[3px] p-0.5"
               style={{
                 borderColor: colors.LINE,
@@ -80,7 +80,7 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
               }}
             >
               <img src={s.thumbnailUrl} alt="Screenshot" className={`w-full object-contain ${big ? "max-h-52" : "max-h-28"}`} />
-            </a>
+            </ScreenshotLink>
           )}
 
           <ul className="space-y-0.5 px-3 pt-2 text-sm">
@@ -129,9 +129,9 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
 
         {s.rejected && <Stamp kind="rejected" size="md" rotate={-12} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />}
 
-        <button type="button" aria-label="Close" onClick={popup.close} className="absolute right-1.5 top-1.5 rounded p-1 hover:brightness-90" style={{ color: colors.INK_SUBTLE }}>
+        <ComicIconButton label="Close" onPress={popup.close} sfx={false} className="absolute right-1.5 top-1.5 size-7 border-2">
           <XIcon size={14} />
-        </button>
+        </ComicIconButton>
       </div>
 
       {s.standout && s.tileId && <RewindSfxBubble submissionId={s.id} tileId={s.tileId} standout={s.standout} big={big} rejected={s.rejected} />}

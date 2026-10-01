@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRepriceSubmission } from "../../api/queries";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { formatGp } from "../ui/gp";
 import { CheckIcon, RefreshIcon, XIcon } from "../ui/icons";
@@ -43,12 +43,12 @@ export function RepriceGpButton({ slug, submissionId }: { slug: string; submissi
   return (
     <span onClick={(e) => e.stopPropagation()}>
       <TextTooltip text={title}>
-        <button
-          type="button"
-          aria-label={title}
-          disabled={reprice.isPending}
-          className="inline-flex size-5 items-center justify-center rounded align-middle hover:bg-surface-hover"
-          onClick={() => {
+        <IconButton
+          size="xs"
+          label={title}
+          isDisabled={reprice.isPending}
+          className="align-middle"
+          onPress={() => {
             if (warning === "seen") void run();
             else setConfirming(true);
           }}
@@ -62,7 +62,7 @@ export function RepriceGpButton({ slug, submissionId }: { slug: string; submissi
           ) : (
             <RefreshIcon size={12} className={reprice.isPending ? "animate-spin text-on-surface-subtle" : "text-on-surface-muted"} />
           )}
-        </button>
+        </IconButton>
       </TextTooltip>
 
       <Dialog isOpen={confirming} onClose={() => setConfirming(false)}>

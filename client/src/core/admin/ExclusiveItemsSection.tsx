@@ -3,10 +3,11 @@ import { normalizeItemName, type ExclusivityRule, type ExclusivityScope, type It
 import { useItemGroups } from "../../api/adminQueries";
 import { fullBoard, useBoard } from "../../api/queries";
 import { boardItemSources, type ItemSource } from "../board/exclusivity";
-import { Button } from "../ui/Button";
+import { Button, IconButton } from "../ui/Button";
 import { Field, Input } from "../ui/Field";
 import { Select, type SelectOption } from "../ui/Select";
 import { ItemSearchInput } from "../ui/ItemSearchInput";
+import { XIcon } from "../ui/icons";
 
 const SCOPE_HELP: Record<ExclusivityScope, string> = {
   tile: "one tile only: several of an item on one tile all count, but not on another tile",
@@ -100,14 +101,14 @@ function RuleRow({
           {rule.itemNames.map((name) => (
             <li key={name} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5">
               {name}
-              <button
-                type="button"
-                aria-label={`Remove ${name} from ${rule.label}`}
-                onClick={() => onChange({ ...rule, itemNames: rule.itemNames.filter((n) => n !== name) })}
-                className="text-on-surface-subtle hover:text-danger"
+              <IconButton
+                size="xs"
+                label={`Remove ${name} from ${rule.label}`}
+                onPress={() => onChange({ ...rule, itemNames: rule.itemNames.filter((n) => n !== name) })}
+                className="-my-0.5 -mr-1.5 rounded-full hover:text-danger"
               >
-                &times;
-              </button>
+                <XIcon size={12} />
+              </IconButton>
             </li>
           ))}
         </ul>

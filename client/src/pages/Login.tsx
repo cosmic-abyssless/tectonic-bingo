@@ -90,7 +90,7 @@ export function Login() {
         )}
         <a
           href="/auth/discord"
-          className="inline-flex h-10 w-full items-center justify-center gap-2.5 rounded-md bg-[#5865F2] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4752c4]"
+          className="inline-flex h-10 w-full items-center justify-center gap-2.5 rounded-md bg-discord px-4 text-sm font-medium text-on-discord transition-colors hover:bg-discord-hover"
         >
           <DiscordIcon />
           Continue with Discord

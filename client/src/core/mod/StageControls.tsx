@@ -12,6 +12,7 @@ import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
 import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
 import { CutReviewModal } from "./CutReviewModal";
+import { TextButton } from "../ui/TextButton";
 
 // What advancing *into* each stage does, so a mod knows before confirming.
 const ENTER_EFFECT: Record<Stage, string> = {
@@ -226,9 +227,9 @@ function DraftCutsPreview({
           {someAvoidable && (
             <p className="mt-2">
               <strong>Some cuts can be avoided.</strong>{" "}
-              <button type="button" onClick={onReviewCuts} className="cursor-pointer font-medium text-on-surface underline underline-offset-2 hover:opacity-70">
+              <TextButton onPress={onReviewCuts} className="font-medium text-on-surface">
                 Review cuts
-              </button>
+              </TextButton>
             </p>
           )}
         </Notice>

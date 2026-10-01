@@ -148,7 +148,7 @@ export function ComicDialogHeader({
         </div>
         <div className="relative flex shrink-0 items-center gap-2">
           {action}
-          <ComicIconButton label="Close" onPress={onClose} className="size-9">
+          <ComicIconButton label="Close" onPress={onClose}>
             <XIcon />
           </ComicIconButton>
         </div>

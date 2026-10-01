@@ -3,8 +3,9 @@ import type { WrappedArtFrames } from "@bingo/shared";
 import type { WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
 import { OsrsCaption } from "./OsrsCaption";
+import { ScreenshotLink } from "../submissions/ScreenshotThumb";
 import { StickerArt } from "./StickerArt";
-import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
+import { TooltipSpan } from "../ui/Tooltip";
 
 // Small shared pieces of Wrapped's default sections, for any theme to reuse.
 
@@ -37,11 +38,9 @@ export function WrappedDropCard({ drop, showPlayer = false, showTeam = showPlaye
   return (
     <div className={`flex w-full items-center gap-3 rounded-xl border border-outline bg-surface p-3 text-left ${className}`}>
       {drop.thumbnailUrl && drop.screenshotUrl ? (
-        <TextTooltip text="View screenshot">
-          <a href={drop.screenshotUrl} target="_blank" rel="noreferrer" className="shrink-0">
-            <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="size-16 rounded-lg border border-outline object-cover sm:size-20" />
-          </a>
-        </TextTooltip>
+        <ScreenshotLink href={drop.screenshotUrl} className="shrink-0">
+          <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="size-16 rounded-lg border border-outline object-cover sm:size-20" />
+        </ScreenshotLink>
       ) : (
         <div aria-hidden className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-outline bg-surface-raised sm:size-20">
           <WikiIcon name={drop.itemName} className="size-8 [image-rendering:pixelated]" />

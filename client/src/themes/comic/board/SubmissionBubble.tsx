@@ -10,7 +10,8 @@ import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { displayName } from "../../../core/ui/user";
 import { LinkedClaimsSummary } from "../../../core/submissions/LinkedClaimsSummary";
-import { TextTooltip, Tooltip } from "../../../core/ui/Tooltip";
+import { ScreenshotLink } from "../../../core/submissions/ScreenshotThumb";
+import { Tooltip } from "../../../core/ui/Tooltip";
 
 /**
  * A submission rendered as a postcard-ish paper card
@@ -32,11 +33,13 @@ export function SubmissionBubble({ submission, showTile = false }: { submission:
 
       <div className="flex items-start gap-3">
         {submission.thumbnailUrl ? (
-          <TextTooltip text="View screenshot">
-            <a href={submission.thumbnailUrl} target="_blank" rel="noreferrer" className="shrink-0 -rotate-3 cursor-pointer border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, padding: 2, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}>
-              <img src={thumbUrl(submission.thumbnailUrl)} alt="Submission screenshot" className="block size-14 object-cover" />
-            </a>
-          </TextTooltip>
+          <ScreenshotLink
+            href={submission.thumbnailUrl}
+            className="shrink-0 -rotate-3 border-[3px] outline-none transition-[filter] hover:brightness-90 focus-visible:ring-2"
+            style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, padding: 2, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
+          >
+            <img src={thumbUrl(submission.thumbnailUrl)} alt="Submission screenshot" className="block size-14 object-cover" />
+          </ScreenshotLink>
         ) : (
           <Tooltip content={submission.screenshotPending ? SCREENSHOT_NOT_UPLOADED : null}>
             <div

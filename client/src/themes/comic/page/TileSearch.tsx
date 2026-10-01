@@ -6,6 +6,7 @@ import { ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/Sear
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { ComicIconButton } from "../ui/ComicButton";
 
 /**
  * Speech-bubble tail: two stacked CSS border-triangles. The bigger one is
@@ -71,18 +72,17 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
           className={`${controlClass()} !h-full min-w-0 flex-1 !rounded-none !border-none !bg-transparent !px-0 !text-current !outline-none placeholder:!text-current/50`}
         />
         {search.query && (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => {
+          <ComicIconButton
+            label="Clear search"
+            sfx={false}
+            onPress={() => {
               search.clear();
               search.inputRef.current?.focus();
             }}
-            className="hit-40 flex shrink-0 items-center justify-center rounded-sm transition-colors hover:opacity-70"
-            style={{ color: colors.INK }}
+            className="hit-40 size-7 shrink-0 border-2"
           >
             <XIcon />
-          </button>
+          </ComicIconButton>
         )}
         <BubbleTail outline={line} fill={colors.PAPER_RAISED} />
       </div>

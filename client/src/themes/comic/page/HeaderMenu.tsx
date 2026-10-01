@@ -23,7 +23,7 @@ export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenu
   return (
     <MenuTrigger isOpen={isOpen} onOpenChange={onOpenChange}>
       {trigger.kind === "nav" ? (
-        <ComicIconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative size-9 shrink-0" data-tutorial="menu">
+        <ComicIconButton label={trigger.hasUnseen ? "Menu (new bug reports)" : "Menu"} className="relative shrink-0" data-tutorial="menu">
           <MenuIcon />
           {trigger.hasUnseen && <PulseDot className="-right-1 -top-1" />}
         </ComicIconButton>
