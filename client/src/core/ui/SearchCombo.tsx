@@ -191,6 +191,9 @@ export function SearchCombo<T>({
       isReadOnly={readOnly}
     >
       <StateRef stateRef={stateRef} />
+      {/* Choosing, once typed in: the top match is highlighted, so Enter picks it. Searching (an item name, a user), Enter
+          keeps what's typed until a row is picked. */}
+      <ComboFocusFirst enabled={choosing && filtering && q !== ""} />
       <ComboInput
         ref={inputRef}
         placeholder={placeholder}
@@ -352,6 +355,27 @@ export function ComboPopover({
       </Popover>
     </UNSAFE_PortalProvider>
   );
+}
+
+/**
+ * Keeps the top match highlighted while the list is open and no other row is, so Enter picks it. react-aria clears the
+ * highlight whenever the text changes, in its own effect, after this component's and without a re-render when the
+ * highlight was already set; so this puts it back on the first row a frame later, once react-aria is done.
+ */
+export function ComboFocusFirst({ enabled = true }: { enabled?: boolean }) {
+  const state = useContext(ComboBoxStateContext);
+  useEffect(() => {
+    if (!enabled || !state?.isOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const { collection, selectionManager } = state;
+      if (selectionManager.focusedKey != null) return;
+      let key = collection.getFirstKey();
+      while (key != null && (collection.getItem(key)?.type !== "item" || selectionManager.isDisabled(key))) key = collection.getKeyAfter(key);
+      if (key != null) selectionManager.setFocusedKey(key);
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  return null;
 }
 
 /** Reports the row the keyboard or pointer is on while the list is open (null otherwise), e.g. to point it out on the board. */
