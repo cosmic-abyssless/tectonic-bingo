@@ -41,10 +41,11 @@ export function getBoardLines(db: Db, bingoId: string) {
 }
 
 // GET /:slug/board: the board as one viewer may see it. Nothing before the reveal for a player; while the Tiles
-// are sealed, only the sealed board; otherwise the full board. Mods always get the full board.
-export function getBoardForViewer(db: Db, bingo: Bingo, isMod: boolean) {
-  if (!canViewTiles(bingo, isMod)) return { sealed: false as const, tiles: [], lines: [] };
-  if (!isMod && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
+// are sealed, only the sealed board; otherwise the full board. Whoever may see the hidden Board (view_hidden_board:
+// mods) always gets the full board.
+export function getBoardForViewer(db: Db, bingo: Bingo, seesHiddenBoard: boolean) {
+  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [] };
+  if (!seesHiddenBoard && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
   return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id) };
 }
 

@@ -702,14 +702,13 @@ function withoutFirstCompletions(stats: Stats): Stats {
 }
 
 /**
- * The stats one viewer may see. Mods get everything. A Player still in the running (`teamId` set) sees only
- * their own team's rows, and first completions only once the bingo is `complete`.
+ * The stats one viewer may see. Whoever may see every Team (view_other_teams: mods, and everyone once the bingo is
+ * Finished) gets everything (`teamId` null). A Player who sees only their own Team (view_team_stats) gets only its
+ * rows, and no first completions.
  */
-export function getStatsForViewer(db: Db, bingoId: string, viewer: { isMod: boolean; teamId: string | null; bingoComplete: boolean }): Stats {
+export function getStatsForViewer(db: Db, bingoId: string, viewer: { teamId: string | null }): Stats {
   const stats = getStats(db, bingoId);
-  if (viewer.isMod) return stats;
-  const visible = viewer.bingoComplete ? stats : withoutFirstCompletions(stats);
-  return viewer.teamId ? filterStatsForTeam(visible, viewer.teamId) : visible;
+  return viewer.teamId ? filterStatsForTeam(withoutFirstCompletions(stats), viewer.teamId) : stats;
 }
 
 // One cell per (team, tile) — completedTasks/totalTasks lets the client shade

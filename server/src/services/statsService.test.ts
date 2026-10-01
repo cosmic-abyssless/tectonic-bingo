@@ -324,7 +324,7 @@ describe("getStatsForViewer", () => {
 
   it("gives a mod everything, including who was first to complete a task", () => {
     const fx = seedRace();
-    const timeline = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false }).timeline;
+    const timeline = getStatsForViewer(db, fx.bingoId, { teamId: null }).timeline;
     expect(timeline.filter((e) => e.type === "first_completion").map((e) => e.teamId)).toEqual([fx.teamAId]);
     expect(types(timeline)).toContain("stage_changed");
   });
@@ -332,7 +332,7 @@ describe("getStatsForViewer", () => {
   it("hides first completions from a player on a team while live, even their own team's", () => {
     const fx = seedRace();
     for (const teamId of [fx.teamAId, fx.teamBId]) {
-      const timeline = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId, bingoComplete: false }).timeline;
+      const timeline = getStatsForViewer(db, fx.bingoId, { teamId }).timeline;
       expect(types(timeline)).not.toContain("first_completion");
       expect(timeline.length).toBeGreaterThan(0); // their own points are still there
       expect(timeline.every((e) => e.teamId === teamId)).toBe(true);
@@ -341,7 +341,7 @@ describe("getStatsForViewer", () => {
 
   it("shows first completions to players once the bingo is complete", () => {
     const fx = seedRace();
-    const stats = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: null, bingoComplete: true });
+    const stats = getStatsForViewer(db, fx.bingoId, { teamId: null });
     expect(stats.timeline.filter((e) => e.type === "first_completion").map((e) => e.teamId)).toEqual([fx.teamAId]);
     expect(types(stats.timeline)).toContain("points_earned");
     expect(stats.pointsOverTime.length).toBeGreaterThan(0);
@@ -378,12 +378,12 @@ describe("Total drop value", () => {
     for (let i = 1; i <= 12; i++) valuedClaim(fx, fx.teamAId, fx.memberUserId, i * 1_000);
     valuedClaim(fx, fx.teamBId, fx.modUserId, 1_000_000);
 
-    const player = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false });
+    const player = getStatsForViewer(db, fx.bingoId, { teamId: fx.teamAId });
     expect(player.teamGpGained.map((t) => t.teamId)).toEqual([fx.teamAId]);
     expect(player.drops).toHaveLength(12);
     expect(player.drops.every((d) => d.teamId === fx.teamAId)).toBe(true);
 
-    const mod = getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false });
+    const mod = getStatsForViewer(db, fx.bingoId, { teamId: null });
     expect(mod.drops).toHaveLength(13);
     expect(mod.drops[0]!.gpValue).toBe(1_000_000);
   });
@@ -475,10 +475,10 @@ describe("Title facts", () => {
     const fx = seedPlayers();
     const task = addTask(fx.tileId, { points: 5 });
     approveSubmission(db, { submissionId: submitItem(fx.teamBId, task.id, "Bruma torch", fx.rivalUserId).id, reviewedByUserId: fx.modUserId });
-    const facts = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleFacts;
+    const facts = getStatsForViewer(db, fx.bingoId, { teamId: fx.teamAId }).titleFacts;
     expect(facts.length).toBeGreaterThan(0);
     expect(facts.every((f) => f.teamId === fx.teamAId)).toBe(true);
-    expect(getStatsForViewer(db, fx.bingoId, { isMod: true, teamId: null, bingoComplete: false }).titleFacts.map((f) => f.userId)).toContain(fx.rivalUserId);
+    expect(getStatsForViewer(db, fx.bingoId, { teamId: null }).titleFacts.map((f) => f.userId)).toContain(fx.rivalUserId);
   });
 
   it("adds each Player's Wise Old Man gains from their stored snapshots", () => {
@@ -555,7 +555,7 @@ describe("Luck facts", () => {
 
     expect(luckOfPlayer(fx.bingoId, fx.memberUserId)!.spoon).toBeNull();
     expect(getStats(db, fx.bingoId).titleSettings.luck.spoonMinLuck).toBe(3);
-    expect(getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleSettings.luck.spoonMinLuck).toBe(3);
+    expect(getStatsForViewer(db, fx.bingoId, { teamId: fx.teamAId }).titleSettings.luck.spoonMinLuck).toBe(3);
   });
 
   it("keeps a Finished Bingo's luck weights and Title settings when the Site admin's change (#221)", () => {
@@ -622,7 +622,7 @@ describe("Luck facts", () => {
 
     // Team A's Ultor doesn't end the rival's streak.
     expect(luckOfPlayer(fx.bingoId, fx.rivalUserId)!.dry).toMatchObject({ boss: "Vardorvis", kills: 3000 });
-    const own = getStatsForViewer(db, fx.bingoId, { isMod: false, teamId: fx.teamAId, bingoComplete: false }).titleFacts;
+    const own = getStatsForViewer(db, fx.bingoId, { teamId: fx.teamAId }).titleFacts;
     expect(own.some((f) => f.userId === fx.rivalUserId)).toBe(false);
   });
 });

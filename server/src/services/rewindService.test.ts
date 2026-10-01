@@ -344,10 +344,9 @@ describe("getRewind", () => {
     const rewind = getRewind(db, finish(fx.bingo.id, fx.mod.id));
     const urls = (r: RewindResponse) => Object.fromEntries(r.submissions.map((s) => [s.teamId, s.screenshotUrl]));
 
-    const hidden = urls(hideScreenshots(rewind, { isMod: false, myTeamId: fx.teamA.id, showScreenshotsWhenFinished: false }));
+    const hidden = urls(hideScreenshots(rewind, { seesOtherTeamsScreenshots: false, myTeamId: fx.teamA.id }));
     expect(hidden[fx.teamA.id]).toBe(`/uploads/${a.id}.png`);
     expect(hidden[fx.teamB.id]).toBeNull();
-    expect(urls(hideScreenshots(rewind, { isMod: true, myTeamId: null, showScreenshotsWhenFinished: false }))[fx.teamB.id]).toBe(`/uploads/${b.id}.png`);
-    expect(urls(hideScreenshots(rewind, { isMod: false, myTeamId: null, showScreenshotsWhenFinished: true }))[fx.teamB.id]).toBe(`/uploads/${b.id}.png`);
+    expect(urls(hideScreenshots(rewind, { seesOtherTeamsScreenshots: true, myTeamId: null }))[fx.teamB.id]).toBe(`/uploads/${b.id}.png`);
   });
 });

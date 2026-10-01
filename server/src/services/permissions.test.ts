@@ -2,13 +2,16 @@
 // why a refusal is refused. Written out by hand rather than read off GRANTS, so a change to the grants has to change
 // this table too.
 import { describe, expect, it } from "vitest";
-import { ACTIONS, can, STAGE_ORDER, type Action, type PermissionDenial, type Role, type Stage } from "@bingo/shared";
+import { ACTIONS, can, OPEN_TO_EVERYONE, STAGE_ORDER, type Action, type PermissionDenial, type Role, type Stage } from "@bingo/shared";
 
 // One character per stage, in STAGE_ORDER (planning, signup, captains, draft, reveal, live, complete):
-// "+" allowed, "r" refused for the role, "s" refused for the stage, "x" refused by a rule for everyone.
+// "+" allowed, "r" refused for the role, "s" refused for the stage, "x" refused by a rule for everyone. The Bingo shows
+// screenshots once Finished (the default); with that off, see below.
 type Row = string;
 const ALL = "+++++++";
 const NONE = "rrrrrrr";
+// Refused for the role, but open to everyone once the Bingo is Finished.
+const FINISHED = "rrrrrr+";
 
 const TABLE: Record<Action, Record<Role, Row>> = {
   administer_site: { admin: ALL, moderator: NONE, captain: NONE, player: NONE },
@@ -19,12 +22,25 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   run_draft: { admin: "xxx+xxx", moderator: NONE, captain: NONE, player: NONE },
   rate_picks: { admin: "+++++xx", moderator: NONE, captain: "+++++xx", player: NONE },
   rename_team: { admin: ALL, moderator: NONE, captain: "+++++ss", player: NONE },
+  view_bingo: { admin: ALL, moderator: ALL, captain: FINISHED, player: "s++++++" },
+  view_hidden_board: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
+  view_other_teams: { admin: ALL, moderator: ALL, captain: FINISHED, player: FINISHED },
+  view_team_stats: { admin: ALL, moderator: NONE, captain: NONE, player: "sssss+s" },
+  view_mod_activity: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
+  view_other_teams_screenshots: { admin: ALL, moderator: ALL, captain: FINISHED, player: FINISHED },
+  view_wrapped_preview: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
+  view_draft_room: { admin: ALL, moderator: ALL, captain: "s++sss+", player: "ss+++++" },
+  view_draft_pool_answers: { admin: ALL, moderator: ALL, captain: ALL, player: NONE },
+  view_player_card_answers: { admin: ALL, moderator: ALL, captain: "s+++sss", player: NONE },
+  view_mod_questions: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
+  view_admin_questions: { admin: ALL, moderator: NONE, captain: NONE, player: NONE },
+  view_any_player: { admin: ALL, moderator: ALL, captain: NONE, player: NONE },
 };
 
 const CODES: Record<string, PermissionDenial | null> = { "+": null, r: "role", s: "stage", x: "rule" };
 
-function outcome(roles: Role[], stage: Stage, action: Action): PermissionDenial | null {
-  const result = can(roles, { stage }, action);
+function outcome(roles: Role[], stage: Stage, action: Action, showScreenshotsWhenFinished = true): PermissionDenial | null {
+  const result = can(roles, { stage, showScreenshotsWhenFinished }, action);
   return result.ok ? null : result.reason;
 }
 
@@ -40,8 +56,20 @@ describe("can()", () => {
     expect(outcome([role], stage, action)).toBe(expected);
   });
 
-  it("refuses everything to someone with no role", () => {
-    for (const action of ACTIONS) for (const stage of STAGE_ORDER) expect(outcome([], stage, action)).toBe("role");
+  it("refuses everything to someone with no role, but what a Finished Bingo opens to everyone", () => {
+    for (const action of ACTIONS) {
+      for (const stage of STAGE_ORDER) expect(outcome([], stage, action)).toBe(stage === "complete" && OPEN_TO_EVERYONE[action] ? null : "role");
+    }
+    expect(Object.keys(OPEN_TO_EVERYONE).sort()).toEqual(["view_bingo", "view_draft_room", "view_other_teams", "view_other_teams_screenshots"]);
+  });
+
+  it("keeps other Teams' screenshots to Moderators and Admins when the Bingo doesn't show them once Finished", () => {
+    expect(outcome([], "complete", "view_other_teams_screenshots", false)).toBe("role");
+    expect(outcome(["captain", "player"], "complete", "view_other_teams_screenshots", false)).toBe("role");
+    expect(outcome(["moderator"], "complete", "view_other_teams_screenshots", false)).toBeNull();
+    expect(outcome(["admin"], "complete", "view_other_teams_screenshots", false)).toBeNull();
+    // Other Teams' Submissions themselves stay open.
+    expect(outcome(["player"], "complete", "view_other_teams", false)).toBeNull();
   });
 
   describe("combines roles", () => {
@@ -55,6 +83,13 @@ describe("can()", () => {
       expect(outcome(["captain", "player"], "reveal", "rename_team")).toBeNull();
       expect(outcome(["captain", "player"], "live", "rename_team")).toBe("stage");
       expect(outcome(["captain", "player"], "draft", "run_draft")).toBe("role");
+    });
+
+    it("lets a Captain scout the draft room while Signups are open, before the other Players can", () => {
+      expect(outcome(["captain", "player"], "signup", "view_draft_room")).toBeNull();
+      expect(outcome(["player"], "signup", "view_draft_room")).toBe("stage");
+      expect(outcome(["captain", "player"], "live", "view_draft_room")).toBeNull();
+      expect(outcome(["captain", "player"], "live", "view_player_card_answers")).toBe("stage");
     });
 
     it("doesn't widen a Captain's stages with a role that doesn't grant the Action", () => {

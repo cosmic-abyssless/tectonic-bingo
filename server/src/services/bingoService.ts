@@ -1,8 +1,9 @@
-import type { AchievementKey, CutMode, ExclusivityRule } from "@bingo/shared";
+import { can, type AchievementKey, type CutMode, type ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
+import { bingoRoles } from "./permissions";
 import {
   achievementActivity,
   achievementEarned,
@@ -68,15 +69,12 @@ export type Stage = (typeof STAGE_ORDER)[number];
 // the board revealed; see toViewerBingo). A Planning bingo is left out for anyone but its Moderators and Admins
 // (CONTEXT.md "Stage"), so nobody else is redirected to one either; every other stage is listed to every clan member.
 export function listBingos(db: Db, viewer: { id: string; isAdmin: boolean }) {
-  const modOf = viewer.isAdmin
-    ? null
-    : new Set(db.select({ bingoId: bingoModerators.bingoId }).from(bingoModerators).where(eq(bingoModerators.userId, viewer.id)).all().map((r) => r.bingoId));
   return db
     .select()
     .from(bingos)
     .orderBy(desc(bingos.createdAt))
     .all()
-    .filter((b) => b.stage !== "planning" || !modOf || modOf.has(b.id))
+    .filter((b) => b.stage !== "planning" || can(bingoRoles(db, b, viewer), b, "view_bingo").ok)
     .sort((a, b) => Number(a.historical) - Number(b.historical) || (a.historical ? (b.startsAt?.getTime() ?? 0) - (a.startsAt?.getTime() ?? 0) : 0))
     .map((b) => toViewerBingo(b, false));
 }
@@ -100,13 +98,13 @@ export function toPublicBingo<T extends { womGroupVerificationCode: string | nul
 
 /**
  * A bingo as one viewer may see it. The rules text and the exclusive item lists describe the board (which items
- * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Mods
- * always see them. During Board revealed, Sealed Tiles keeps back the exclusive item lists (they name Items) and
- * Hide rules keeps back the rules text (CONTEXT.md "Sealed Tiles").
+ * are on it), so a player gets neither until the board is revealed, the same point tiles become visible. Whoever
+ * may see the hidden Board (view_hidden_board) always sees them. During Board revealed, Sealed Tiles keeps back the
+ * exclusive item lists (they name Items) and Hide rules keeps back the rules text (CONTEXT.md "Sealed Tiles").
  */
-export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, isMod: boolean) {
+export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, seesHiddenBoard: boolean) {
   const publicBingo = toPublicBingo(bingo);
-  if (isMod) return publicBingo;
+  if (seesHiddenBoard) return publicBingo;
   if (!isBoardRevealed(bingo)) return { ...publicBingo, rulesMarkdown: null, exclusivityRules: [] as ExclusivityRule[] };
   return {
     ...publicBingo,
@@ -193,10 +191,10 @@ export function isBoardRevealed(bingo: typeof bingos.$inferSelect): boolean {
   return bingo.stage === "reveal" || bingo.stage === "live" || bingo.stage === "complete";
 }
 
-// Tiles are only visible to non-mods once the board has been revealed. Mods
-// can always see them (for building/testing the board before reveal).
-export function canViewTiles(bingo: typeof bingos.$inferSelect, isMod: boolean): boolean {
-  return isMod || isBoardRevealed(bingo);
+// Tiles are only visible to Players once the board has been revealed. Whoever may see the hidden Board
+// (view_hidden_board: mods) always can (for building/testing the board before reveal).
+export function canViewTiles(bingo: typeof bingos.$inferSelect, seesHiddenBoard: boolean): boolean {
+  return seesHiddenBoard || isBoardRevealed(bingo);
 }
 
 // Sealed Tiles (CONTEXT.md): only ever during Board revealed, so it ends by itself at Live. While sealed, Players

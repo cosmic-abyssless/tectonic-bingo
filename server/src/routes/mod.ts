@@ -25,6 +25,7 @@ import { getTectonicClient, TectonicUnavailableError } from "../services/tectoni
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncSignupRsn } from "../services/rsnSyncService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
+import { bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { markAuditedNoop } from "../audit/record";
@@ -245,7 +246,7 @@ router.get(
   asyncHandler(async (req, res) => {
     historicalService.assertRecorded(db, req.bingo!, "signupRoster");
     const cut = draftService.getCutUserIds(db, req.bingo!);
-    const roster = signupService.getAllSignups(db, req.bingo!.id, signupService.answerViewerFor(req.user!.isAdmin, true));
+    const roster = signupService.getAllSignups(db, req.bingo!.id, signupService.answerViewerFor(bingoRoles(db, req.bingo!, req.user!), req.bingo!));
     const [tectonic] = await Promise.all([
       fetchProfiles(db, roster.map((entry) => entry.user.id)),
       applyRosterNames(roster.flatMap((entry) => (entry.outgoingPairingRequest ? [entry.outgoingPairingRequest.target] : []))),

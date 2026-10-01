@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { BingoViewerAccess } from "@bingo/shared";
+import { can, type BingoViewerAccess, type Role } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { signups } from "../db/schema";
-import { isBingoMod } from "./bingoService";
 import { getCutUserIds } from "./draftService";
+import { bingoRoles } from "./permissions";
 import { getUserTeamForBingo, removedFromTeamName } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -49,17 +49,19 @@ function playerStanding(db: Db, bingo: Bingo, userId: string): { isPlayer: boole
 }
 
 /**
- * What one viewer may see of a Bingo. Moderators and Admins see every Bingo at every stage. Everyone else needs to be
- * a Player, except that a Finished Bingo is open, read-only, to every clan member (requireGuildMember keeps everyone
- * else out), and a Planning Bingo is for Moderators and Admins only (requireBingo 404s it for anyone else).
+ * What one viewer may see of a Bingo (view_bingo). Moderators and Admins see every Bingo at every stage. Everyone else
+ * needs to be a Player, except that a Finished Bingo is open, read-only, to every clan member (requireGuildMember keeps
+ * everyone else out), and a Planning Bingo is for Moderators and Admins only (requireBingo 404s it for anyone else).
+ * `roles` are theirs in this Bingo, for whatever else the route asks can().
  */
-export function getBingoAccess(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }): BingoViewerAccess & { isMod: boolean } {
-  const isMod = isBingoMod(db, bingo.id, user.id, user.isAdmin);
+export function getBingoAccess(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }): BingoViewerAccess & { isMod: boolean; roles: Role[] } {
   const { isPlayer, isCut } = playerStanding(db, bingo, user.id);
-  const canSee = isMod || bingo.stage === "complete" || (bingo.stage !== "planning" && isPlayer);
+  const roles = bingoRoles(db, bingo, user, isPlayer);
+  const isMod = can(roles, bingo, "moderate_bingo").ok;
+  const canSee = can(roles, bingo, "view_bingo").ok;
   // The Cut notice is for someone who can't see the Bingo; at Finished everyone can. So is the note that they were
   // taken off a Team (Remove from Team).
-  return { isMod, isPlayer, isCut: isCut && !canSee, canSee, removedFromTeam: canSee ? null : removedFromTeamName(db, bingo.id, user.id) };
+  return { isMod, roles, isPlayer, isCut: isCut && !canSee, canSee, removedFromTeam: canSee ? null : removedFromTeamName(db, bingo.id, user.id) };
 }
 
 /** Whether `userId` is in the Bingo at all, for whose player card may be opened: an active Signup, or on a Team. */

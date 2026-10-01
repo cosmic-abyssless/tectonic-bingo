@@ -19,13 +19,13 @@ export function siteRoles(user: { isAdmin: boolean }): Role[] {
 /**
  * The roles `user` holds in `bingo`: Admin (a site admin), Moderator (a bingo_moderators row), Captain (Captain or
  * co-captain of a Team) and Player (bingoAccess.isPlayerOf). A site admin is an Admin, not also a Moderator: Admin's
- * grants already cover a Moderator's.
+ * grants already cover a Moderator's. `isPlayer` is for a caller that has already worked it out.
  */
-export function bingoRoles(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }): Role[] {
+export function bingoRoles(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }, isPlayer = isPlayerOf(db, bingo, user.id)): Role[] {
   const roles = siteRoles(user);
   if (isBingoMod(db, bingo.id, user.id, false)) roles.push("moderator");
   if (getLedTeam(db, bingo.id, user.id)) roles.push("captain");
-  if (isPlayerOf(db, bingo, user.id)) roles.push("player");
+  if (isPlayer) roles.push("player");
   return roles;
 }
 
