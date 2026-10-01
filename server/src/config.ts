@@ -29,9 +29,11 @@ export function sessionCookieSecure(env: Record<string, string | undefined> = pr
   return env.NODE_ENV === "production";
 }
 
-// Comma-separated Discord user IDs that bootstrap as site admins on login.
-// Granted admins (users.isAdmin) get every site-admin power except granting
-// site admin itself — that stays with the IDs listed here.
+// Comma-separated Discord user IDs: the Owners (CONTEXT.md). They bootstrap as
+// site admins on login, and while listed here they hold the Owner's Actions
+// (OWNER_ACTIONS: granting and revoking site admin, everyone's Claude
+// connections) and can't be revoked. Read live, never stored: taking an id off
+// leaves a plain site admin.
 export function getAdminDiscordIds(): string[] {
   return (process.env.ADMIN_DISCORD_IDS ?? "")
     .split(",")

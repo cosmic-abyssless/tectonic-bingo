@@ -41,15 +41,21 @@ A task or requirement that players are permitted to prepare before the Bingo goe
 
 ## Roles & Identity
 
+### Owner
+A Site Admin whose Discord id is listed in the server's `ADMIN_DISCORD_IDS`. The list is read live and never stored: taking an id off it leaves a plain Site Admin.
+- **Capabilities:** Everything a Site Admin can, plus the Owner-only Actions: **Manage site admins** (grant and revoke site admin, from Site admin > Site admins) and **See everyone's Claude connections** (and revoke any of them).
+- **Rules:** An Owner can't be revoked, by another Owner or themselves; only removing them from `ADMIN_DISCORD_IDS` makes them revocable. An Owner id that has never signed in is listed as "Not signed in yet" and becomes a Site Admin on first login. Revoking a Site Admin also ends all of their Claude connections.
+- **Not:** A Bingo-level role. Owner exists only on the Site admin pages.
+
 ### Site Admin
-An infrastructure administrator with complete platform access.
-- **Capabilities:** Can create, edit, and delete any Bingo; change site-wide settings; automatically acts as a Moderator on every Bingo.
+A site-wide administrator with complete platform access, made one by an Owner (or by being an Owner).
+- **Capabilities:** Can create, edit, and delete any Bingo; change site-wide settings; automatically acts as a Moderator on every Bingo. Sees who the Owners and Site Admins are, but can't grant or revoke site admin.
 - **Not:** An in-game clan rank.
 
 ### Admin
-A site-wide administrator with permission to create, configure, and manage Bingos and site settings.
+The same people as Site Admins, named for what they do in a Bingo: create, configure and manage it.
 - **Capabilities:** Create Bingos, manage signup questions, assign Captains and Moderators, transition stages, override scores.
-- **Note:** In the current system, Site Admin and Admin share the top-tier site administrative role; Site Admin implies infrastructure ownership.
+- **Note:** "Site Admin" and "Admin" are one role (the `admin` role in the permissions model): Site Admin when talking about the Site admin pages, Admin inside a Bingo. Owner sits on top of it.
 
 ### Moderator
 A trusted clan member whose elevated permissions are scoped to a single specific Bingo, granted by an Admin (or inherited by Site Admins).

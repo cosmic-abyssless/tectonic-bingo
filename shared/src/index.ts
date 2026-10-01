@@ -667,8 +667,19 @@ export interface PendingCountResponse {
 export interface MeResponse {
   user: User;
   devMode: boolean;
+  /** The viewer is an Owner (CONTEXT.md): a site admin listed in ADMIN_DISCORD_IDS. False while their admin powers are off. */
+  isOwner: boolean;
   /** Dev only: the viewer is an admin who switched their admin powers off, so `user.isAdmin` reads false. */
   devAdminOff: boolean;
+}
+
+/**
+ * Site admin > Site admins (GET /api/admin/site-admins): the Owners, in ADMIN_DISCORD_IDS order, each with their account,
+ * or null for an id that has never signed in; then every other site admin, alphabetical.
+ */
+export interface SiteAdminsResponse {
+  owners: { discordId: string; user: User | null }[];
+  admins: User[];
 }
 
 export interface CreateSubmissionResponse {

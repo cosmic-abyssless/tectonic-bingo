@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { STAGE_LABEL, type Bingo, type BingoExportDocument, type BingoListResponse, type User } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
-import { useSitePageAccess } from "../headless/permissions";
+import { useSiteCan, useSitePageAccess } from "../headless/permissions";
 import { queryKeys, useBingos } from "../api/queries";
 import { useBugReports } from "../api/adminQueries";
 import * as adminApi from "../api/adminApi";
@@ -18,6 +18,7 @@ import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SITE_AUDIT_FILTER_PARAMS, SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { McpConnectionsList } from "../core/admin/McpConnectionsList";
+import { SiteAdminsPanel } from "../core/admin/SiteAdminsPanel";
 import { ImportHistoricalBingoPanel } from "../core/admin/ImportHistoricalBingoPanel";
 import { displayName } from "../core/ui/user";
 import { AppHeader } from "../core/ui/AppHeader";
@@ -280,47 +281,15 @@ function BingosPanel() {
   );
 }
 
-function GrantAdminPanel() {
-  const [granted, setGranted] = useState<User[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  async function grant(user: User) {
-    setError(null);
-    try {
-      const { user: updated } = await adminApi.setUserAdmin(user.id, true);
-      setGranted((prev) => [updated, ...prev.filter((u) => u.id !== updated.id)]);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to grant admin");
-    }
-  }
-
-  return (
-    <div className="max-w-md space-y-3">
-      <p className="text-sm text-on-surface-muted">Site admins can create bingos and edit any board.</p>
-        <UserSearchInput scope="site" onSelect={grant} />
-        {error && <Notice tone="danger">{error}</Notice>}
-        {granted.length > 0 && (
-          <ul className="space-y-1">
-            {granted.map((u) => (
-              <li key={u.id} className="flex items-center gap-2 text-sm text-ok">
-                <CheckIcon size={14} />
-                {displayName(u)} is now a site admin
-              </li>
-            ))}
-          </ul>
-        )}
-    </div>
-  );
-}
-
 const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
-  const { canGrantAdmin, devMode } = useAuth();
+  const { devMode } = useAuth();
   // Losing Admin while here sends them back to the list of Bingos.
   const mayAdminister = useSitePageAccess("administer_site");
+  const seesAllConnections = useSiteCan("manage_claude_connections").allowed;
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", ...(canGrantAdmin ? ["grant-admin", "claude"] : []), ...(devMode ? ["test-data"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : []), ...(devMode ? ["test-data"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs", SITE_AUDIT_FILTER_PARAMS);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -357,8 +326,8 @@ export function SiteAdminPage() {
               <Tab id="piece-values">Piece values</Tab>
               <Tab id="titles">Titles</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
-              {canGrantAdmin && <Tab id="grant-admin">Grant site admin</Tab>}
-              {canGrantAdmin && <Tab id="claude">Claude connections</Tab>}
+              <Tab id="site-admins">Site admins</Tab>
+              {seesAllConnections && <Tab id="claude">Claude connections</Tab>}
               {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
               {devMode && <Tab id="test-data">Test data</Tab>}
             </TabList>
@@ -399,14 +368,12 @@ export function SiteAdminPage() {
               <PastWomCompetitionsPanel />
             </div>
           </TabPanel>
-          {canGrantAdmin && (
-            <TabPanel id="grant-admin">
-              <div className={NARROW}>
-                <GrantAdminPanel />
-              </div>
-            </TabPanel>
-          )}
-          {canGrantAdmin && (
+          <TabPanel id="site-admins">
+            <div className={NARROW}>
+              <SiteAdminsPanel />
+            </div>
+          </TabPanel>
+          {seesAllConnections && (
             <TabPanel id="claude">
               <div className={NARROW}>
                 <div className="max-w-2xl space-y-3">

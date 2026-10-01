@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { can, restrictedReason, siteRoles, unavailableReason, type Action, type PermissionBingo, type PermissionDenial, type Restriction, type RestrictionTarget, type Role } from "@bingo/shared";
+import { isAdminDiscordId } from "../config";
 import * as schema from "../db/schema";
 import { bingoModerators, bingoRestrictions, bingoStaff, signups, teamMembers, teams } from "../db/schema";
 import { isPlayerOf, playerStandingFrom } from "./bingoAccess";
@@ -15,6 +16,19 @@ type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
 
 export { siteRoles };
+
+/**
+ * Whether `user` is an Owner (CONTEXT.md): a site admin whose Discord id is in ADMIN_DISCORD_IDS, read live. Not while
+ * their admin powers are off (devMode.ts devAdminOff), which loads them with isAdmin false.
+ */
+export function isOwner(user: { isAdmin: boolean; discordId: string }): boolean {
+  return user.isAdmin && isAdminDiscordId(user.discordId);
+}
+
+/** siteRoles for a user the server has loaded, Owner included. */
+export function userSiteRoles(user: { isAdmin: boolean; discordId: string }): Role[] {
+  return siteRoles(user, isOwner(user));
+}
 
 /**
  * The roles `user` holds in `bingo`: Admin (a site admin), Moderator (a bingo_moderators row), Staff (a bingo_staff

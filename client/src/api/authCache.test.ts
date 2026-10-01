@@ -18,7 +18,7 @@ function memoryStorage(opts: { throwOnSet?: boolean; throwOnGet?: boolean } = {}
   };
 }
 
-const auth = { user: { id: "u1" }, devMode: true, canGrantAdmin: false };
+const auth = { user: { id: "u1" }, devMode: true, isOwner: false };
 
 describe("authCache", () => {
   it("round-trips the user", () => {

@@ -27,10 +27,10 @@ export function useCan(action: Action, slug?: string): CanResult {
   return useBingoCan(slug ?? params.slug)(action);
 }
 
-/** can() for an Action outside any Bingo (the Site admin pages), from the viewer's own Admin flag. */
+/** can() for an Action outside any Bingo (the Site admin pages), from the viewer's own Admin flag and whether they're an Owner. */
 export function useSiteCan(action: Action): CanResult {
-  const { user } = useAuth();
-  return { allowed: !!user && can(siteRoles(user), null, action).ok, reason: null };
+  const { user, isOwner } = useAuth();
+  return { allowed: !!user && can(siteRoles(user, isOwner), null, action).ok, reason: null };
 }
 
 /**

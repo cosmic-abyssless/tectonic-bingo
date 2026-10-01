@@ -11,7 +11,7 @@ export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export interface CachedAuth<U> {
   user: U;
   devMode: boolean;
-  canGrantAdmin: boolean;
+  isOwner: boolean;
   devAdminOff?: boolean;
 }
 
@@ -36,7 +36,7 @@ export function readAuthCache<U>(build: string, now = Date.now(), storage: Stora
     if (!raw) return null;
     const stored = JSON.parse(raw) as Stored<U> | null;
     if (stored && stored.build === build && typeof stored.savedAt === "number" && now - stored.savedAt <= AUTH_CACHE_MAX_AGE_MS && stored.user) {
-      return { user: stored.user, devMode: !!stored.devMode, canGrantAdmin: !!stored.canGrantAdmin };
+      return { user: stored.user, devMode: !!stored.devMode, isOwner: !!stored.isOwner };
     }
     storage.removeItem(KEY);
   } catch {

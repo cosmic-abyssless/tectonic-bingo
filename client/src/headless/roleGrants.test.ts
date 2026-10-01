@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACTIONS } from "@bingo/shared";
+import { ACTIONS, OWNER_ACTIONS, type Action } from "@bingo/shared";
 import { describeStages, roleGrants } from "./roleGrants";
 
 // The mod panel's Permissions tab (CONTEXT.md "Action"): every role's grants, in the stages they're open in.
@@ -8,10 +8,16 @@ const settings = { showScreenshotsWhenFinished: true };
 const grant = (role: Parameters<typeof roleGrants>[0], action: string) => roleGrants(role, settings).find((g) => g.action === action);
 
 describe("roleGrants", () => {
-  it("gives Admin every Action, none of them restrictable", () => {
+  it("gives Admin every Action but the Owner's, none of them restrictable", () => {
     const grants = roleGrants("admin", settings);
-    expect(grants.map((g) => g.action)).toEqual([...ACTIONS]);
+    expect(grants.map((g) => g.action)).toEqual(ACTIONS.filter((a) => !(OWNER_ACTIONS as readonly Action[]).includes(a)));
     expect(grants.some((g) => g.restrictable)).toBe(false);
+  });
+
+  it("gives Owner the Owner's Actions alone, in every stage", () => {
+    const grants = roleGrants("owner", settings);
+    expect(grants.map((g) => g.action)).toEqual([...OWNER_ACTIONS]);
+    expect(grants.every((g) => g.stages.length === 7 && !g.restrictable)).toBe(true);
   });
 
   it("narrows a grant to the stages the rules for everyone leave open", () => {
