@@ -22,6 +22,7 @@ import { fullUrl } from "../../api/imageVariants";
 import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
 import { TooltipSpan } from "../ui/Tooltip";
 import { filterSubmissions, page, PAGE_SIZE, reviewerOptions, shownToInclude, submitterOptions } from "./reviewQueueFilters";
+import { TextButton } from "../ui/TextButton";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -359,18 +360,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {creditFor !== row.submission.id && (
                         <>
                           {" · "}
-                          <button
-                            type="button"
-                            className="underline-offset-2 hover:text-on-surface hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                          <TextButton
+                            onPress={() => {
                               setCreditFor(row.submission.id);
                               setCreditUserId("");
                               setCreditError(null);
                             }}
                           >
                             Change player
-                          </button>
+                          </TextButton>
                         </>
                       )}
 

@@ -2,6 +2,7 @@ import type { MyAchievement } from "@bingo/shared";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { TextButton } from "../../../core/ui/TextButton";
 
 // A yellow narration caption, inked and hard-shadowed like the rest of the book, with the item sprite in a little
 // paper panel of its own.
@@ -25,14 +26,14 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
           </div>
           <div className="mt-1 text-base font-semibold leading-snug">{achievement.description}</div>
           <div className="text-sm italic leading-snug">{achievement.flavor}</div>
-          <button
-            type="button"
-            onClick={onViewAchievements}
-            className="mt-1 cursor-pointer text-base uppercase tracking-wide underline decoration-2 underline-offset-2 hover:no-underline"
+          <TextButton
+            ownColour
+            onPress={onViewAchievements}
+            className="mt-1 text-base uppercase tracking-wide decoration-2"
             style={{ fontFamily: COMIC_FONT }}
           >
             View my achievements
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

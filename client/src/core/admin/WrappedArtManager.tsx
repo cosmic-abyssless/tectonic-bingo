@@ -21,6 +21,8 @@ import { Input } from "../ui/Field";
 import { ArrowLeftIcon, ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, PlusIcon, TrashIcon, XIcon } from "../ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
 import { StickerArt } from "../wrapped/StickerArt";
+import { ExternalLink } from "../ui/ExternalLink";
+import { FileDropButton } from "../ui/FileDropButton";
 
 const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
   intro: { label: "Intro", hint: "The opening screen" },
@@ -107,7 +109,6 @@ export function WrappedArtManager({ slug }: { slug: string }) {
 /** One group's images in order, each with its controls, and an "Add" tile while there's room. */
 function ArtGroup({ slug, group, images, loading, large = false }: { slug: string; group: WrappedArtGroup; images: WrappedArtImage[]; loading: boolean; large?: boolean }) {
   const queryClient = useQueryClient();
-  const addInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -187,18 +188,18 @@ function ArtGroup({ slug, group, images, loading, large = false }: { slug: strin
           </div>
         ))}
         {images.length < max && (
-          <button
-            type="button"
-            onClick={() => addInput.current?.click()}
-            disabled={busy !== null}
-            className={`${tile} flex flex-col items-center justify-center gap-1 self-start rounded-md border border-dashed border-outline-strong text-xs text-on-surface-subtle transition-colors hover:border-on-surface/60 hover:text-on-surface-muted disabled:cursor-wait`}
+          <FileDropButton
+            accept={IMAGE_TYPES}
+            multiple
+            onFiles={addMany}
+            isDisabled={busy !== null}
+            className={`${tile} flex flex-col items-center justify-center gap-1 self-start text-xs disabled:cursor-wait`}
           >
             <PlusIcon size={18} />
             {loading ? "…" : busy === "add" ? progress : "Add images"}
-          </button>
+          </FileDropButton>
         )}
       </div>
-      <FileInput inputRef={addInput} multiple onFiles={addMany} />
 
       {selected && <ImageDetails key={selected.id} slug={slug} image={selected} busy={busy} run={run} />}
       {error && (
@@ -361,6 +362,8 @@ function AdditionalCredits({ slug, section, saved }: { slug: string; section: Wr
   );
 }
 
+const IMAGE_TYPES = "image/png,image/jpeg,image/webp,image/gif";
+
 /** A hidden file picker for images; `multiple` lets several be picked at once, handed over in the order picked. */
 function FileInput({ inputRef, multiple = false, onFiles }: { inputRef: React.RefObject<HTMLInputElement | null>; multiple?: boolean; onFiles: (files: File[]) => void }) {
   return (
@@ -368,7 +371,7 @@ function FileInput({ inputRef, multiple = false, onFiles }: { inputRef: React.Re
       ref={inputRef}
       type="file"
       multiple={multiple}
-      accept="image/png,image/jpeg,image/webp,image/gif"
+      accept={IMAGE_TYPES}
       className="hidden"
       onChange={(e) => {
         const files = [...(e.target.files ?? [])];
@@ -405,9 +408,7 @@ function HowToMakeOne() {
       <ol className="list-decimal space-y-1 pl-5">
         <li>
           Open it in{" "}
-          <a href="https://www.photopea.com" target="_blank" rel="noreferrer" className="underline">
-            Photopea
-          </a>
+          <ExternalLink href="https://www.photopea.com">Photopea</ExternalLink>
           : Select → Color Range, click the background, Fuzziness 1. Raise it a little at a time if a fringe of the background colour is left.
         </li>
         <li>Add raster mask (layers panel), then Ctrl + I to invert it, so the character stays.</li>

@@ -18,6 +18,7 @@ import { PlayerName } from "../tectonic/PlayerName";
 import { TierBadge } from "../tectonic/ProfileBadges";
 import { RatingCell } from "./RatingCell";
 import { poolSearchValues, takesBlock, unitSortValue, type PoolRatings, type Takes } from "./poolData";
+import { TextButton } from "../ui/TextButton";
 
 // Each sort runs in the direction you'd want it: the best first for stats and ratings, A→Z for names, west→east.
 const SORTS: { key: string; label: string; descending: boolean; when?: "ratings" | "profiles" }[] = [
@@ -178,9 +179,9 @@ function PoolCard({
 
       {hasAnswers && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setAnswersOpen((o) => !o)} className="text-xs text-on-surface-subtle underline underline-offset-2 hover:text-on-surface" aria-expanded={answersOpen}>
+          <TextButton onPress={() => setAnswersOpen((o) => !o)} className="text-xs text-on-surface-subtle" aria-expanded={answersOpen}>
             {answersOpen ? "Hide answers" : "Signup answers"}
-          </button>
+          </TextButton>
         </div>
       )}
       {answersOpen && (

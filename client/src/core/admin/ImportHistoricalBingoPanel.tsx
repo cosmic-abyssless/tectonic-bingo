@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { validateHistoricalBundle, type HistoricalBundle } from "@bingo/shared";
@@ -6,6 +6,7 @@ import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
+import { FileDropButton } from "../ui/FileDropButton";
 
 /**
  * Site admin → Import historical Bingo (CONTEXT.md "Historical Bingo"): a bundle made by the local script
@@ -31,7 +32,6 @@ function richSummary(bundle: HistoricalBundle): string | null {
 export function ImportHistoricalBingoPanel() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("");
   const [bundle, setBundle] = useState<HistoricalBundle | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
@@ -77,14 +77,9 @@ export function ImportHistoricalBingoPanel() {
       <p className="text-sm text-on-surface-muted">
         Add a past Bingo that ran on another website, from a historical bundle. It's created Finished and read-only. To import one again, delete it first.
       </p>
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        className="w-full rounded-md border border-dashed border-outline-strong px-3 py-4 text-center text-sm text-on-surface-muted transition-colors hover:border-on-surface/60 hover:text-on-surface"
-      >
+      <FileDropButton accept=".json,application/json" onFiles={([file]) => onFileChange(file)} className="w-full px-3 py-4 text-center text-sm">
         {fileName || "Choose a historical bundle…"}
-      </button>
-      <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && onFileChange(e.target.files[0])} />
+      </FileDropButton>
 
       {bundle && (
         <div className="space-y-1 text-sm">

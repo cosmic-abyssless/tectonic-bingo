@@ -1,5 +1,6 @@
 import type { MyAchievement } from "@bingo/shared";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
+import { TextButton } from "../../../core/ui/TextButton";
 
 // After OSRS's combat achievement / collection log popups: a dark translucent panel with a thin gold rule, the item
 // sprite straight on it, and the Achievement's name in the game's orange.
@@ -13,9 +14,9 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
           <div className="text-lg font-semibold leading-tight text-achievement-title">{achievement.name}</div>
           <div className="mt-0.5 text-sm text-achievement-body">{achievement.description}</div>
           <div className="mt-0.5 text-xs italic text-achievement-body opacity-80">{achievement.flavor}</div>
-          <button type="button" onClick={onViewAchievements} className="mt-1.5 cursor-pointer text-xs font-semibold text-achievement-title underline underline-offset-2 hover:no-underline">
+          <TextButton ownColour onPress={onViewAchievements} className="mt-1.5 text-xs font-semibold text-achievement-title">
             View my achievements
-          </button>
+          </TextButton>
         </div>
       </div>
     </div>

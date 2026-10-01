@@ -64,6 +64,11 @@
   --color-achievement-title: #ffb830;
   --color-achievement-body: #ece3cf;
 
+  /* Discord's brand colour, for the "Log in with Discord" button — same in both schemes, not overridden below. */
+  --color-discord: #5865f2;
+  --color-discord-hover: #4752c4;
+  --color-on-discord: #ffffff;
+
   /* A QR code: dark on light, whatever the scheme, since not every camera reads one the other way round. */
   --color-qr: #09090b;
   --color-qr-backdrop: #ffffff;

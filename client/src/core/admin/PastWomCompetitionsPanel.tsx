@@ -7,6 +7,7 @@ import { adminQueryKeys, usePastWomCompetitions } from "../../api/adminQueries";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Input } from "../ui/Field";
+import { ExternalLink } from "../ui/ExternalLink";
 
 function AddCompetitionForm() {
   const queryClient = useQueryClient();
@@ -126,9 +127,7 @@ function CompetitionRow({ competition }: { competition: WomPastCompetition }) {
         <div className="min-w-0">
           <div className="text-sm font-semibold text-on-surface">
             {competition.womId > 0 ? (
-              <a href={`https://wiseoldman.net/competitions/${competition.womId}`} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-on-surface">
-                {competition.title}
-              </a>
+              <ExternalLink href={`https://wiseoldman.net/competitions/${competition.womId}`}>{competition.title}</ExternalLink>
             ) : (
               competition.title
             )}
