@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { SubmissionStatus } from "@bingo/shared";
 import type { SubmissionModel } from "../../../headless/types";
-import { Select } from "../../../core/ui/Select";
+import { MultiSelect } from "../../../core/ui/MultiSelect";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
 import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox } from "../ui/CaptionBox";
@@ -36,9 +36,12 @@ export function SubmissionsDrawer({
 }) {
   const { colors } = useComic();
   const [filter, setFilter] = useState<Filter>("all");
-  const [submitter, setSubmitter] = useState("");
+  // None picked = everyone. Names come from the submissions themselves, so the list only ever offers people who
+  // actually submitted something.
+  const [picked, setPicked] = useState<string[]>([]);
   const submitters = [...new Set(submissions.flatMap((s) => (s.submittedBy ? [s.submittedBy] : [])))].sort();
-  const bySubmitter = submitter ? submissions.filter((s) => s.submittedBy === submitter) : submissions;
+  const submitterOptions = submitters.map((name) => ({ key: name, label: name, count: submissions.filter((s) => s.submittedBy === name).length }));
+  const bySubmitter = picked.length > 0 ? submissions.filter((s) => s.submittedBy != null && picked.includes(s.submittedBy)) : submissions;
   const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
   const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
   const pending = submissions.filter((s) => s.status === "pending").length;
@@ -77,20 +80,15 @@ export function SubmissionsDrawer({
         );
       })}
       {submitters.length > 1 && (
-        <Select
-          size="sm"
-          value={submitter}
-          onChange={setSubmitter}
-          aria-label="Submitted by"
-          className="mb-2 ml-auto w-auto!"
-          options={[{ value: "", label: "Everyone" }, ...submitters.map((name) => ({ value: name, label: name }))]}
-        />
+        <div className="mb-2 ml-auto">
+          <MultiSelect label="Player" options={submitterOptions} selected={picked} onChange={setPicked} />
+        </div>
       )}
     </div>
   );
 
   return (
-    <ComicDialog isOpen={isOpen} onClose={onClose} size="lg">
+    <ComicDialog isOpen={isOpen} onClose={onClose} size="lg" fixedHeight>
       <ComicDialogHeader
         title="Submissions"
         tone="red"
@@ -123,7 +121,7 @@ export function SubmissionsDrawer({
         ) : shown.length === 0 ? (
           <CaptionBox tone="paper" tilt={-0.5}>
             <p className="text-sm" style={{ color: colors.INK_BODY }}>
-              No {filter === "all" ? "" : `${filter} `}submissions{submitter && ` from ${submitter}`}.
+              No {filter === "all" ? "" : `${filter} `}submissions{picked.length === 1 ? ` from ${picked[0]}` : picked.length > 1 && ` from those Players`}.
             </p>
           </CaptionBox>
         ) : (
