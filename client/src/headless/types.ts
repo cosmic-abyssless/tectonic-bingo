@@ -78,7 +78,7 @@ export interface UserModel {
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 in total from"). */
+  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 of any (dupes count)"). */
   label: string;
   /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count, real items), what one of it adds to the total (`countsAs`, CONTEXT.md "Counts as": 1 unless the Item counts as more, shown as "counts as 25" when it isn't 1), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
   items: { name: string; iconUrl: string | null; count: number; countsAs: number; lockedBy: string | null }[];

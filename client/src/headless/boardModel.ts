@@ -124,7 +124,7 @@ export function buildRequirementTree(
     const items = node.children
       .filter((child) => !!child.itemName)
       .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), countsAs: child.countsAs ?? 1, lockedBy: lockOf(child.id) }));
-    // Over several items it's a group ("5 in total from", one row per item); over one it stays a single row.
+    // Over several items it's a group ("5 of any (dupes count)", one row per item); over one it stays a single row.
     const isGroup = items.length > 1;
     return {
       id: node.id,

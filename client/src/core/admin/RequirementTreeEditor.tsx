@@ -95,13 +95,13 @@ function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: st
 // SUM needs a summed quantity across ITEM children. One dropdown, one set of
 // children (items or nested composites) — no separate "item row" shape.
 // Worded so a condition's heading reads as its rule, with the number typed in
-// where it's read ("at least [2] of", "[3] in total from", see RuleControls):
+// where it's read ("at least [2] of", "[3] of any (dupes count)", see RuleControls):
 // the list shows each kind whole, the closed dropdown only its own words.
 const GROUP_KINDS: { kind: NodeKind; label: string; selectedLabel?: string }[] = [
   { kind: "ALL", label: "all of" },
   { kind: "ANY", label: "any one of" },
   { kind: "COUNT", label: "at least … of", selectedLabel: "at least" },
-  { kind: "SUM", label: "… in total from", selectedLabel: "in total from" },
+  { kind: "SUM", label: "… of any (dupes count)", selectedLabel: "of any (dupes count)" },
 ];
 
 function updateAt(root: GraphNodeInput, path: Path, fn: (node: GraphNodeInput) => GraphNodeInput): GraphNodeInput {
@@ -416,7 +416,7 @@ function GroupNode(props: NodeProps) {
     await onSaveAsGroup!(names);
   }
 
-  // A total ("N in total from") only adds up Items, so it offers no conditions to add (the server refuses them too).
+  // A total ("N of any (dupes count)") only adds up Items, so it offers no conditions to add (the server refuses them too).
   const holdsConditions = node.kind !== "SUM";
 
   // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
@@ -541,7 +541,7 @@ function GroupNode(props: NodeProps) {
   );
 }
 
-// A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] in total from". The
+// A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] of any (dupes count)". The
 // dropdown changes the kind; the number is typed in where it's read.
 function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | "update">) {
   const kind = (
@@ -727,7 +727,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
   );
 }
 
-// Counts as (CONTEXT.md), on an item in a total ("N in total from"): what one of it adds to the total, a whole number
+// Counts as (CONTEXT.md), on an item in a total ("N of any (dupes count)"): what one of it adds to the total, a whole number
 // from 1. Saved on blur like the total itself, and only when it changed.
 function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: number; onSave: (countsAs: number) => void }) {
   return (
