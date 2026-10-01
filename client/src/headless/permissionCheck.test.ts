@@ -29,9 +29,11 @@ describe("lostAccessMessage", () => {
     expect(lostAccessMessage(at("live", ["moderator", "player"]), at("live", ["player"]), "moderate_bingo", "Summer Bingo")).toBe("You're no longer a Moderator on Summer Bingo");
     expect(lostAccessMessage(at("signup", ["captain", "player"]), at("signup", ["player"]), "view_draft_room", "Summer Bingo")).toBe("You're no longer a Captain on Summer Bingo");
     expect(lostAccessMessage(at("live", ["admin"]), at("live", []), "administer_bingo", "Summer Bingo")).toBe("You're no longer an Admin");
+    expect(lostAccessMessage(at("draft", ["staff", "player"]), at("draft", ["player"]), "view_buyins", "Summer Bingo")).toBe("You're no longer Staff on Summer Bingo");
   });
 
   it("says why when the stage closed it rather than a role going", () => {
     expect(lostAccessMessage(at("reveal", ["captain", "player"]), at("live", ["captain", "player"]), "rename_team", "Summer Bingo")).toBe("Team names are locked once the Bingo is Live");
+    expect(lostAccessMessage(at("reveal", ["staff"]), at("live", ["staff"]), "view_buyins", "Summer Bingo")).toBe("Buy-ins are only collected from Signups open until the Bingo is Live");
   });
 });

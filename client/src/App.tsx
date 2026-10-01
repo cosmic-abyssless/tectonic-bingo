@@ -10,6 +10,7 @@ import { BingoList } from "./pages/BingoList";
 import { LatestBingoRedirect } from "./pages/LatestBingoRedirect";
 import { BingoPage } from "./pages/BingoPage";
 import { ModPage } from "./pages/ModPage";
+import { BuyinsPage } from "./pages/BuyinsPage";
 import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
 import { RewindPage } from "./pages/RewindPage";
@@ -84,6 +85,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <ModPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/buyins"
+              element={
+                <ProtectedRoute>
+                  <BuyinsPage />
                 </ProtectedRoute>
               }
             />

@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -125,6 +125,16 @@ export function addMod(slug: string, userId: string) {
 }
 export function removeMod(slug: string, userId: string) {
   return api.delete(`${base(slug)}/mods/${userId}`);
+}
+
+export function getStaff(slug: string) {
+  return api.get<{ staff: BingoStaff[] }>(`${base(slug)}/staff`);
+}
+export function addStaff(slug: string, userId: string) {
+  return api.post<{ staff: BingoStaff }>(`${base(slug)}/staff`, { userId });
+}
+export function removeStaff(slug: string, userId: string) {
+  return api.delete(`${base(slug)}/staff/${userId}`);
 }
 
 export function createCategory(slug: string, payload: { label: string; colorHex?: string; sortOrder?: number }) {

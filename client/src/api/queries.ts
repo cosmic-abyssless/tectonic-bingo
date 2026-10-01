@@ -1,6 +1,6 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
@@ -31,6 +31,8 @@ export const queryKeys = {
   cutReview: (slug: string) => ["signupRoster", slug, "cutReview"] as const,
   cutReviewScore: (slug: string, changesJson: string) => ["signupRoster", slug, "cutReview", "score", changesJson] as const,
   bingoMods: (slug: string) => ["bingoMods", slug] as const,
+  // Under the roster's key too, so a Buy-in marked anywhere (signup_changed) refreshes the Buy-ins page.
+  buyins: (slug: string) => ["signupRoster", slug, "buyins"] as const,
   signupQuestions: (slug: string) => ["signupQuestions", slug] as const,
   mySignup: (slug: string) => ["mySignup", slug] as const,
   myTectonicRsns: (slug: string) => ["myTectonicRsns", slug] as const,
@@ -371,6 +373,25 @@ export function useMarkBuyin(slug: string) {
         received: params.received,
         collectedByUserId: params.collectedByUserId,
       }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+  });
+}
+
+/** The Buy-ins page (view_buyins): the signups' Buy-ins, and who can be recorded as collecting one. */
+export function useBuyins(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.buyins(slug ?? ""),
+    queryFn: () => api.get<BuyinsResponse>(`/api/bingos/${slug}/buyins`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** Marks a Buy-in from the Buy-ins page (mark_buyins): Staff's way, and the Moderators' there. */
+export function useMarkBuyinOnPage(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { signupId: string; received: boolean; collectedByUserId?: string | null }) =>
+      api.patch<void>(`/api/bingos/${slug}/buyins/${params.signupId}`, { received: params.received, collectedByUserId: params.collectedByUserId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
   });
 }

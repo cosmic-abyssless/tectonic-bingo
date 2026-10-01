@@ -13,7 +13,7 @@ import { StageControls } from "../core/mod/StageControls";
 import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
-import { ModsManager } from "../core/admin/ModsManager";
+import { ModsManager, StaffManager } from "../core/admin/ModsManager";
 import { AchievementsManager } from "../core/admin/AchievementsManager";
 import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
@@ -52,7 +52,7 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
   { key: "superlatives", label: "Superlatives", adminOnly: true },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
-  { key: "mods", label: "Moderators", adminOnly: true },
+  { key: "mods", label: "Moderators & Staff", adminOnly: true },
   { key: "wrapped-art", label: "Wrapped", adminOnly: true },
 ];
 type TabDef = (typeof TABS)[number];
@@ -243,8 +243,16 @@ export function ModPage() {
                     </div>
                   </TabPanel>
                   <TabPanel id="mods">
-                    <div className={NARROW}>
-                      <ModsManager slug={slug} />
+                    {/* Staff next to the Moderators: both granted per Bingo, Staff only for the Buy-ins (CONTEXT.md "Staff"). */}
+                    <div className={`${NARROW} grid gap-8 md:grid-cols-2`}>
+                      <section className="space-y-3">
+                        <h2 className="text-base font-semibold text-on-surface">Moderators</h2>
+                        <ModsManager slug={slug} />
+                      </section>
+                      <section className="space-y-3">
+                        <h2 className="text-base font-semibold text-on-surface">Staff</h2>
+                        <StaffManager slug={slug} />
+                      </section>
                     </div>
                   </TabPanel>
                   <TabPanel id="wrapped-art">

@@ -7,6 +7,7 @@ import * as adminApi from "./adminApi";
 
 export const adminQueryKeys = {
   mods: (slug: string) => ["adminMods", slug] as const,
+  staff: (slug: string) => ["adminStaff", slug] as const,
   lines: (slug: string) => ["adminLines", slug] as const,
   questions: (slug: string) => ["adminQuestions", slug] as const,
   superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
@@ -68,6 +69,10 @@ export function useBugReports(enabled = true) {
 
 export function useMods(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.mods(slug), queryFn: () => adminApi.getMods(slug) });
+}
+
+export function useStaff(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.staff(slug), queryFn: () => adminApi.getStaff(slug) });
 }
 
 export function useLines(slug: string) {

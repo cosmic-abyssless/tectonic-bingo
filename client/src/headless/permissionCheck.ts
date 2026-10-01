@@ -17,7 +17,7 @@ export function permissionCheck(permissions: BingoPermissionsResponse | undefine
   return (action) => (permissions ? { allowed: permissions.allowed.includes(action), reason: permissions.reasons[action] ?? null } : REFUSED);
 }
 
-const ROLE_NAMES: Record<Exclude<Role, "admin">, string> = { moderator: "a Moderator", captain: "a Captain", player: "a Player" };
+const ROLE_NAMES: Record<Exclude<Role, "admin">, string> = { moderator: "a Moderator", staff: "Staff", captain: "a Captain", player: "a Player" };
 
 /**
  * What the toast says when the viewer loses `action` (a page, or a control's dialog): the role they lost that granted
