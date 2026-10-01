@@ -1,13 +1,13 @@
 import { now as clockNow } from "../clock";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { PAIRS_FIRST_MESSAGE, playerName, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares, type DraftTakes } from "@bingo/shared";
+import { PAIRS_FIRST_MESSAGE, playerName, unavailableReason, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares, type DraftTakes } from "@bingo/shared";
 import { visibleQuestionIds } from "./signupService";
 import * as schema from "../db/schema";
 import { bingos, draftPicks, pickRatings, signupAnswers, signups, teamMembers, teams, tileInterests, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { getAcceptedPairs } from "./pairingService";
-import { assertCan, bingoRoles } from "./permissions";
+import { assertCan, bingoRoles, unavailable } from "./permissions";
 import { rsnsInBingo } from "./playerNames";
 import { getUserTeamForBingo, isTeamLead } from "./teamService";
 import { audit, markAuditedNoop } from "../audit/record";
@@ -23,10 +23,9 @@ const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername
 // Who may look in is view_draft_room. Scouting during Signups open is captains + mods only. Once Signups are closed,
 // and from the draft on, whoever can see the bingo can look in: its Players (every active signup while Signups are
 // closed; during the draft, every active signup that isn't cut), its mods, and every clan member once it's Finished.
-export function draftRoomForbiddenMessage(stage: Bingo["stage"] | string): string {
-  if (stage === "signup") return "Scouting is only visible to captains and mods";
-  if (stage === "captains") return "Scouting is only visible to this bingo's players and mods";
-  return "The draft room is only visible to this bingo's players and mods";
+// The refusal is in the shared words the client shows (UNAVAILABLE_REASONS), whether it's for the role or the stage.
+export function draftRoomForbiddenMessage(stage: Bingo["stage"]): string {
+  return unavailableReason({ stage, showScreenshotsWhenFinished: false }, "view_draft_room");
 }
 
 // Snake order: odd rounds go draftOrder ascending, even rounds descending.
@@ -433,9 +432,8 @@ export interface MakePickParams {
 // isn't also a site admin does not get this override.
 export function makePick(db: Db, params: MakePickParams) {
   const { bingo, pickedUserId, actingUserId, actingIsAdmin } = params;
-  if (bingo.stage !== "draft") {
-    throw new ServiceError(400, `Picks can only be made during the draft stage (current stage: ${bingo.stage})`);
-  }
+  // make_draft_pick's rule, in its shared words, ahead of whose turn it is: it's the same for everyone.
+  if (bingo.stage !== "draft") throw unavailable(bingo, "make_draft_pick");
 
   return db.transaction((tx) => {
     const fresh = tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
@@ -525,7 +523,6 @@ export function undoLastPick(db: Db, params: UndoPickParams) {
   const { bingo, actingUserId, actingIsAdmin } = params;
   assertCan(bingoRoles(db, bingo, { id: actingUserId, isAdmin: actingIsAdmin }), bingo, "run_draft", {
     role: new ServiceError(403, "Only site admins can undo a pick"),
-    rule: new ServiceError(400, `Picks can only be undone during the draft stage (current stage: ${bingo.stage})`),
   });
 
   return db.transaction((tx) => {
