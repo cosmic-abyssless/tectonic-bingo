@@ -65,7 +65,7 @@ export interface Grant {
 /** What can() needs of a Bingo: its stage and the per-Bingo settings its rules read. */
 export type PermissionBingo = Pick<Bingo, "stage" | "showScreenshotsWhenFinished">;
 
-// Before play starts: what Team names and Pick Ratings lock on (isBoardLocked).
+// Before play starts: what Pick Ratings lock on (isBoardLocked).
 const BEFORE_LIVE: readonly Stage[] = ["planning", "signup", "captains", "draft", "reveal"];
 // Past Planning, which is for Moderators and Admins only (CONTEXT.md "Stage").
 const AFTER_PLANNING: readonly Stage[] = ["signup", "captains", "draft", "reveal", "live", "complete"];
@@ -97,7 +97,8 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
   captain: [
     { action: "make_draft_pick" },
     { action: "rate_picks" },
-    { action: "rename_team", stages: BEFORE_LIVE },
+    // Once the Draft has set the Team, until Live locks its name (CONTEXT.md "Team name").
+    { action: "rename_team", stages: ["reveal"] },
     { action: "view_draft_room", stages: ["signup", "captains"] },
     { action: "view_draft_pool_answers" },
     { action: "view_player_card_answers", stages: SCOUTING },

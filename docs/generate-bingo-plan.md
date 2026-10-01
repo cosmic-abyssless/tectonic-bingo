@@ -115,7 +115,8 @@ npm run generate-bingo:teardown -- --slug testdata-20260919-1432 # or --all
   `draftService.pickOrderTeamIndex(teamCount, pickNumber)` (snake).
   Leftovers per `bingo.leftoverMode`. `GET /api/bingos/:slug/draft` gives
   the draft state (pool, whose turn). Team names: `PATCH
-  /api/bingos/:slug/teams/:teamId { name }` by the captain, before live.
+  /api/bingos/:slug/teams/:teamId { name }` by the captain, during reveal
+  only (400 before it and once live).
 - **Mods:** `POST /api/bingos/:slug/admin/mods { userId }`.
 - **Hands:** `PUT /api/bingos/:slug/tiles/:tileId/tasks/:taskId/interest
   { interested }` by a team member, reveal or live only.

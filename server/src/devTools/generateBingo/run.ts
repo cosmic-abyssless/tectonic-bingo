@@ -4,7 +4,7 @@
 // (scripts/generate-bingo/generate.ts). See docs/generate-bingo.md.
 import { isHistoricalTestDataStage, type BingoExportDocument } from "@bingo/shared";
 import { buildBoard } from "./board";
-import type { Api } from "./client";
+import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
@@ -197,6 +197,23 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     });
   }
 
+  // A Captain tries renaming their Team once it's Live, which locks the name (CONTEXT.md "Team name"): refused.
+  const lateRename = { tried: false, refusal: "" };
+  const renameRng = rng.fork("late-rename");
+  const renamer = seeds.length > 0 ? renameRng.pick(seeds) : null;
+  if (renamer) {
+    const when = new Date(tl.startsAt.getTime() + renameRng.between(1, 12) * HOUR);
+    sim.at(when, async () => {
+      lateRename.tried = true;
+      try {
+        await api.as(renamer.captain.discordId).patch(`/api/bingos/${slug}/teams/${renamer.teamId}`, { name: "Renamed Too Late" }, { at: when });
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 400) lateRename.refusal = err.detail;
+        else throw err;
+      }
+    });
+  }
+
   // Superlative votes, through Live (voting closes when the Bingo is Finished); any past the run's limit never happen.
   const votes = planVotes(teamRows.map((t) => ({ members: t.players })), categories, new Date(tl.startsAt.getTime() + 2 * HOUR), new Date(tl.endsAt.getTime() - 5 * 60_000), rng.fork("superlatives"));
   const voting = { cast: 0, voters: new Set<number>(), refused: 0 };
@@ -221,6 +238,10 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`made-up Wise Old Man snapshots: ${wom.snapshots} for ${wom.players} players`);
   log(`superlative votes: ${voting.cast} cast by ${voting.voters.size} players${voting.refused ? `, ${voting.refused} refused` : ""}`);
   if (voting.refused > 0) result.problems.push(`${voting.refused} superlative votes were refused`);
+  if (lateRename.tried) {
+    if (lateRename.refusal) log(`a captain's rename during Live was refused: ${lateRename.refusal}`);
+    else result.problems.push("a captain renamed their team during Live");
+  }
 
   log(describe(summary));
   for (const t of summary.teams) {
