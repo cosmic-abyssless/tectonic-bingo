@@ -8,6 +8,9 @@ const MAX_WIDTH = {
   lg: "max-w-2xl",
 } as const;
 
+/** A fixedHeight dialog's height: tall enough for a long list, and never past the viewport's 90vh cap. */
+export const FIXED_HEIGHT = "h-[min(90vh,44rem)]";
+
 export { DialogTrigger };
 
 /**
@@ -21,12 +24,18 @@ export function Dialog({
   children,
   size = "md",
   isDismissable = true,
+  fixedHeight = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
   size?: keyof typeof MAX_WIDTH;
   isDismissable?: boolean;
+  /**
+   * One height whatever the content, so switching a filter inside doesn't make the dialog jump. The dialog becomes a
+   * flex column that doesn't scroll itself: give the part that should scroll `min-h-0 flex-1 overflow-y-auto`.
+   */
+  fixedHeight?: boolean;
 }) {
   return (
     <ModalOverlay
@@ -35,8 +44,10 @@ export function Dialog({
       isDismissable={isDismissable}
       className="overlay-backdrop fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 p-4"
     >
-      <AriaModal className={`overlay-panel w-full ${MAX_WIDTH[size]} max-h-[90vh] overflow-y-auto rounded-lg border border-outline bg-surface shadow-pop`}>
-        <AriaDialog className="outline-none">{children}</AriaDialog>
+      <AriaModal
+        className={`overlay-panel w-full ${MAX_WIDTH[size]} max-h-[90vh] rounded-lg border border-outline bg-surface shadow-pop ${fixedHeight ? `${FIXED_HEIGHT} flex flex-col overflow-hidden` : "overflow-y-auto"}`}
+      >
+        <AriaDialog className={`outline-none ${fixedHeight ? "flex min-h-0 flex-1 flex-col" : ""}`}>{children}</AriaDialog>
       </AriaModal>
     </ModalOverlay>
   );
