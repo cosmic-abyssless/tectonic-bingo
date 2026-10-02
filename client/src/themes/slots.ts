@@ -266,8 +266,18 @@ export interface ThemeSlots {
   // Wrapped* slots are one group. WrappedPage is whole-surface (may call useWrappedModel() directly): the page frame,
   // the progress indicator, and each of the model's sections in order through its section slot. The section slots are
   // props-only, each one section's model; a section the model leaves out (nothing to say for this viewer) is never
-  // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story) and Reveal (a line that fades up
-  // as the viewer scrolls; just fades in with reduced motion), and must work at phone width. Each section model carries
+  // drawn. Sections are built from core/wrapped's WrappedScene (one screen of the story, saying how many steps it has)
+  // and Reveal (a line that belongs to one of those steps), and must work at phone width. WrappedPage either lets them
+  // follow scrolling (the default: a Reveal fades up as its Scene scrolls into view; with reduced motion it just fades
+  // in) or supplies their progress, for a page that doesn't scroll, such as a guided view: it wraps the sections in
+  // core/wrapped/sceneProgress's WrappedProgressProvider with a WrappedProgressSource, usually
+  // createWrappedProgressStore(). Each Scene then registers its step count with the source (read it with
+  // useWrappedScenes(store): id, steps, element, in document order) and the page sets, per Scene,
+  // store.setSceneState(id, { reached, current }): its Reveals at steps below `reached` are shown (instantly with
+  // reduced motion), the rest hidden. Nothing scrolls or is measured then, and the sections are the same either way. A guided
+  // page reads a Scene as a page and a Reveal step as a panel on it (a step no Reveal is at is skipped), and may give the
+  // provider a `reveal` component to draw each Reveal itself, as a frame of its own that is empty until its step is reached
+  // (the comic's panels); a section whose Reveal brings its own frame marks it `bare`. Each section model carries
   // its category's art (`art`: any number of Category images, each two boil frames and maybe a credited name, and
   // the category's additional credits; both empty without any): draw it with core/wrapped's WrappedCategoryArt (or
   // WrappedSectionArt / StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section

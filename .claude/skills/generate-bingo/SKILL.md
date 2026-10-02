@@ -32,7 +32,8 @@ Do not generate until the user says yes.
 If a task needs a filled Bingo, show the exact command and wait (or point them
 at the Test data tab). Ask **stage** and whether to put them on a team
 (`--me <discordId>`). Leave the rest at defaults (`live`, `--progress 0.5`,
-random seed) unless they override.
+random seed, `--theme default`) unless they override. `--theme comic` makes the Bingo (Board, Wrapped and the rest) draw in
+the comic theme; any theme not in `THEME_KEYS` (`shared/src/themes.ts`) is refused.
 
 ```
 npm run generate-bingo -- --stage live --progress 0.5 --me <discordId>

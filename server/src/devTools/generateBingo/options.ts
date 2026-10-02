@@ -1,6 +1,6 @@
 // What a generator run is asked to make, checked the same way wherever it comes from: the Test data tab's form (the
 // POST body of /api/dev/generate) or the CLI's flags (scripts/generate-bingo/common.ts turns them into this shape).
-import { TEST_DATA_STAGES, type TestDataOptions, type TestDataStage } from "@bingo/shared";
+import { DEFAULT_THEME, TEST_DATA_STAGES, THEME_KEYS, type TestDataOptions, type TestDataStage } from "@bingo/shared";
 
 /** What a run is asked to make (the shared type, so the Test data tab and the job agree on it). */
 export type GenerateOptions = TestDataOptions;
@@ -41,6 +41,8 @@ export function normalizeOptions(raw: RawOptions, now = new Date(), names: Parti
   if (!TEST_DATA_STAGES.includes(stage)) throw new OptionsError(`${label("stage")} must be one of ${TEST_DATA_STAGES.join(", ")}`);
   const slug = str("slug") ?? defaultSlug(now);
   if (!/^testdata-[a-z0-9-]+$/.test(slug)) throw new OptionsError(`${label("slug")} must start with "testdata-" and use lowercase letters, numbers and hyphens`);
+  const theme = str("theme") ?? DEFAULT_THEME;
+  if (!(THEME_KEYS as readonly string[]).includes(theme)) throw new OptionsError(`${label("theme")} must be one of ${THEME_KEYS.join(", ")}`);
 
   return {
     stage,
@@ -52,5 +54,6 @@ export function normalizeOptions(raw: RawOptions, now = new Date(), names: Parti
     me: str("me"),
     seed: num("seed", Math.floor(Math.random() * 1_000_000), 0, 4_294_967_295, true),
     slug,
+    theme,
   };
 }
