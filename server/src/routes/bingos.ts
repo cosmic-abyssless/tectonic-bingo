@@ -272,6 +272,20 @@ router.get(
   }),
 );
 
+// Who a Member pick question on the Feedback form can pick: every clan member who has logged in, except the asker. Only
+// for someone the form is open to.
+router.get(
+  "/:slug/feedback/members",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  noStore,
+  asyncHandler(async (req, res) => {
+    if (!feedbackService.getFeedbackForm(db, req.bingo!, req.user!).open) throw new ServiceError(403, "The Feedback form isn't open to you");
+    res.json({ members: memberPickService.getPickableMembers(db, req.user!.id) });
+  }),
+);
+
 router.put(
   "/:slug/feedback",
   requireAuth,

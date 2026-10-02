@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import express from "express";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BroadcastEvent, FeedbackFormResponse, FeedbackResultsResponse, SignupQuestion, Stage } from "@bingo/shared";
 import * as schema from "../db/schema";
 import type { SessionUser } from "../types";
@@ -263,6 +263,18 @@ describe("answering", () => {
     expect(db.select().from(schema.feedbackResponses).all()).toHaveLength(0);
   });
 
+  it("offers a Member pick the clan's members (not the asker) while the form is open, and to no one else", async () => {
+    db.update(schema.users).set({ inGuild: true }).run();
+    const open = await call("player", "GET", "/bingos/b1/feedback/members");
+    expect(open.status).toBe(200);
+    const ids = (open.body.members as { userId: string }[]).map((m) => m.userId);
+    expect(ids).toContain(people.otherPlayer.id);
+    expect(ids).not.toContain(people.player.id);
+    expect((await call("bystander", "GET", "/bingos/b1/feedback/members")).status).toBe(403);
+    setStage("live");
+    expect((await call("player", "GET", "/bingos/b1/feedback/members")).status).toBe(403);
+  });
+
   it("checks answers like signup answers: required, the options, no repeats, no unknown questions, something answered", async () => {
     const put = (answers: unknown) => call("player", "PUT", "/bingos/b1/feedback", { answers });
     expect((await put([{ questionId: general.id, value: "only this" }])).status).toBe(400); // required one missing
@@ -377,6 +389,8 @@ describe("results (Moderators and Admins)", () => {
     // Order by the responses' ids, not by when they came in.
     const ids = db.select({ id: schema.feedbackResponses.id }).from(schema.feedbackResponses).where(eq(schema.feedbackResponses.kind, "player")).orderBy(schema.feedbackResponses.id).all();
     expect(ids).toHaveLength(4);
+    const given = (responseId: string) => db.select().from(schema.feedbackAnswers).where(and(eq(schema.feedbackAnswers.responseId, responseId), eq(schema.feedbackAnswers.questionId, general.id))).get()!.value;
+    expect(first.feedback.responses.map((r) => r.answers.find((a) => a.questionId === general.id)!.value)).toEqual(ids.map((r) => given(r.id)));
   });
 
   it("are refused to Players and Captains", async () => {

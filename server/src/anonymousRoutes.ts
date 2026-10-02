@@ -3,7 +3,7 @@
 // no error report is tagged with it, and the audit context holds no actor. The routes themselves are marked auditSkip
 // (routes/bingos.ts), so the audit log records nothing either, not even that "someone" answered.
 
-const ANONYMOUS_PATH = /^\/api\/bingos\/[^/]+\/feedback\/?$/;
+const ANONYMOUS_PATH = /^\/api\/bingos\/[^/]+\/feedback(\/.*)?$/;
 
 /** Whether a request to this URL (query string and all) is one that must stay anonymous. */
 export function isAnonymousRoute(url: string): boolean {

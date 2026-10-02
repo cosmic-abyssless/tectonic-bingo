@@ -62,6 +62,12 @@ export interface ThemeSlots {
   // calls as ordinary core/ components, so there's no headless model here.
   DraftPage: ComponentType<{ slug: string; bingoName: string }>;
   StatsPage: ComponentType<{ slug: string; bingoName: string }>;
+  // A Finished Bingo's Feedback form (CONTEXT.md "Feedback form"), at /b/:slug/feedback: whole-page layout like StatsPage and
+  // props-only too, holding core/feedback's FeedbackForm (which does its own fetching and draws with the page's tokens).
+  FeedbackPage: ComponentType<{ slug: string; bingoName: string }>;
+  // The Board's card for a Finished Bingo's Player, inviting them to give feedback until `responded`, then a link to edit
+  // it. It says the answers are anonymous. Every BoardPage must draw it when page.feedback.canOpen.
+  FeedbackBanner: ComponentType<{ responded: boolean; onOpen: () => void }>;
   // The shape that pops up for everyone watching when a player is drafted (core/draft/DraftPickReveal). The theme
   // draws only the shape — a fixed-size card or burst, no positioning; core handles the pop, the hold and the flight
   // to the roster. One name per drafted player (two for a duo pair). teamColor is null for a team with none.

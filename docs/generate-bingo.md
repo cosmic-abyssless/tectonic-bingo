@@ -94,6 +94,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
    Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
    A group the Bingo already has art in (copied from the previous real Bingo on the server) is left alone.
+   The admin also adds the **Feedback questions** (CONTEXT.md "Feedback form") unless the board brought its own:
+   every question type, with Other, helper text and required where they fit, and two for Captains only
+   (`feedback.ts`).
 2. **Signups** (through the real endpoint), front-loaded over the signup window, with
    about 60% of players pairing up as duos (request, then accept). Each player fills in the
    board's signup questions (read from the imported bingo, so whatever is added is answered):
@@ -129,7 +132,11 @@ target (say `signup`), the later dates are simply scheduled in the future.
    goes through is a sanity check failure). Then, for `complete`, the mods clear the
    queue and an admin completes the bingo. Every player on a team is then given made-up
    **Wise Old Man snapshots** up to the end of the run (see below), so Grinder, the luck
-   Titles (Spoon, Dry, Clutch) and the achievements that read WOM have something to judge.
+   Titles (Spoon, Dry, Clutch) and the achievements that read WOM have something to judge. For `complete` the
+   Players then answer the **Feedback form** through its endpoint, about 70% of a Team's Players and most Captains
+   (a Captain also answering the Captains-only questions), a few editing what they sent; the run checks the
+   results' counts against what it sent. The run's own player (`--me`) never answers, so their card is still there to
+   try. Nothing records who answered (docs/adr/0002-anonymous-feedback.md), so the run only counts them.
 
 ### How the play is made realistic
 

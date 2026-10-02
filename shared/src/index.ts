@@ -832,11 +832,11 @@ export interface FeedbackFormResponse {
 }
 
 /**
- * PUT /api/bingos/:slug/feedback: the Player's whole Feedback response and, for a Captain, their Captain response (left
- * out to leave it as it is). Each replaces what was saved.
+ * PUT /api/bingos/:slug/feedback: the Player's whole Feedback response and, for a Captain, their Captain response. Each
+ * replaces what was saved; one left out is left as it is (a Captain can answer only their own questions).
  */
 export interface FeedbackSubmission {
-  answers: FeedbackAnswer[];
+  answers?: FeedbackAnswer[];
   captainAnswers?: FeedbackAnswer[];
 }
 

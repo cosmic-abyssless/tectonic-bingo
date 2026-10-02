@@ -125,9 +125,14 @@ of truth and will drift less than a doc copy. Broadly:
 
 - **Whole-surface**: `BoardPage` (may call headless hooks directly; every
   other slot is props-only).
-- **Bingo pages (non-board)**: `DraftPage`, `StatsPage` — whole-page layout
-  (header + `core/draft`/`core/stats` content), but unlike `BoardPage`
+- **Bingo pages (non-board)**: `DraftPage`, `StatsPage`, `FeedbackPage` — whole-page layout
+  (header + `core/draft`/`core/stats`/`core/feedback` content), but unlike `BoardPage`
   still props-only — they don't have a headless model of their own.
+- **Feedback** (`/b/:slug/feedback`, a Finished Bingo's anonymous questionnaire for its Players):
+  `FeedbackPage` holds `core/feedback`'s `FeedbackForm`, which draws with the page's tokens (so
+  it works under any theme, as `StatsView` does), and `FeedbackBanner` is the Board's card inviting a
+  Player to answer it (`responded`: a link to edit instead). Every `BoardPage` must draw the card when
+  `page.feedback.canOpen`. The results are in the mod panel, which is never themed.
 - **Draft reveal**: `DraftPickBurst` — the shape that pops up for everyone
   watching when a player is drafted. The theme draws only the shape (a
   fixed-size card or burst with the player names and team); `core/draft`
