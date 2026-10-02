@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import type { RequirementNodeModel } from "../../../headless/types";
+import type { RequirementNodeModel, SumItemModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { WikiItemLink } from "../../../core/ui/WikiItemLink";
@@ -55,18 +55,45 @@ function Progress({ node }: { node: RequirementNodeModel }) {
   );
 }
 
-// A SUM over several items: one row per item with how many have been received,
-// and no tick per item, since no single item completes it on its own.
-function SumItemRows({ node }: { node: RequirementNodeModel }) {
-  return node.items.map((item) => (
-    <li key={item.name} className={`text-sm ${node.dim || item.lockedBy ? "text-on-surface-subtle" : "text-on-surface"}`}>
-      <ItemIcon url={item.iconUrl} className={iconClass(node.dim || !!item.lockedBy)} />
-      <WikiItemLink name={item.name} />
-      <CountsAs countsAs={item.countsAs} />
-      <span className={`num ml-1.5 text-xs font-medium ${item.count > 0 ? "text-ok" : "text-on-surface-subtle"}`}>×{item.count}</span>
-      {item.lockedBy && <span className="ml-1.5 text-xs text-warn">{item.lockedBy}</span>}
+// An "any one of" group of Items inside a SUM: one row, its label then its pieces, each linked, with a tick once one of
+// them is in (it then adds its 1, and its other pieces add nothing, so the row dims like a done item).
+function GroupRow({ node, group }: { node: RequirementNodeModel; group: NonNullable<SumItemModel["group"]> }) {
+  return (
+    <li className={`text-sm ${node.dim || group.done ? "text-on-surface-subtle" : "text-on-surface"}`}>
+      {group.label ? `${group.label} (any one of: ` : "Any one of: "}
+      {group.pieces.map((piece, i) => (
+        <Fragment key={piece}>
+          {i > 0 && ", "}
+          <WikiItemLink name={piece} />
+        </Fragment>
+      ))}
+      {group.label && ")"}
+      {group.done && (
+        <span className="ml-1.5 inline-flex align-middle">
+          <Check />
+        </span>
+      )}
     </li>
-  ));
+  );
+}
+
+// A SUM over several items: one row per item with how many have been received,
+// and no tick per item, since no single item completes it on its own (a group,
+// which one piece does complete, is a GroupRow).
+function SumItemRows({ node }: { node: RequirementNodeModel }) {
+  return node.items.map((item) =>
+    item.group ? (
+      <GroupRow key={item.name} node={node} group={item.group} />
+    ) : (
+      <li key={item.name} className={`text-sm ${node.dim || item.lockedBy ? "text-on-surface-subtle" : "text-on-surface"}`}>
+        <ItemIcon url={item.iconUrl} className={iconClass(node.dim || !!item.lockedBy)} />
+        <WikiItemLink name={item.name} />
+        <CountsAs countsAs={item.countsAs} />
+        <span className={`num ml-1.5 text-xs font-medium ${item.count > 0 ? "text-ok" : "text-on-surface-subtle"}`}>×{item.count}</span>
+        {item.lockedBy && <span className="ml-1.5 text-xs text-warn">{item.lockedBy}</span>}
+      </li>
+    ),
+  );
 }
 
 // Between an ANY's direct options, in the heading style.

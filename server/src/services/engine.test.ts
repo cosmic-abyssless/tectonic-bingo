@@ -110,6 +110,55 @@ describe("evaluateGraph — Counts as", () => {
   });
 });
 
+describe("evaluateGraph — an ANY of Items inside a SUM", () => {
+  // A Slayer Page's uniques: "Bludgeon piece" (any one of three) counts once, beside the whip, toward 3 in total.
+  const nodes = [
+    composite("uniques", "SUM", { quantity: 3 }),
+    composite("bludgeon", "ANY"),
+    item("axon", { itemName: "Bludgeon axon" }),
+    item("claw", { itemName: "Bludgeon claw" }),
+    item("spine", { itemName: "Bludgeon spine" }),
+    item("whip", { itemName: "Abyssal whip" }),
+  ];
+  const childrenOf = new Map([
+    ["uniques", ["bludgeon", "whip"]],
+    ["bludgeon", ["axon", "claw", "spine"]],
+  ]);
+  const day = (d: number) => new Date(Date.UTC(2026, 0, d));
+
+  it("adds 1 once one piece is approved", () => {
+    const result = evaluateGraph(nodes, childrenOf, [claim("claw", { reviewedAt: day(1) })]);
+    expect(result.get("bludgeon")).toEqual({ complete: true, completedAt: day(1) });
+    expect(result.get("uniques")).toEqual({ complete: false, completedAt: null, value: 1 });
+  });
+
+  it("adds nothing for a second piece, or more of the same piece", () => {
+    const claims = [claim("claw", { reviewedAt: day(1) }), claim("axon", { reviewedAt: day(2) }), claim("claw", { quantity: 2, reviewedAt: day(3) })];
+    expect(evaluateGraph(nodes, childrenOf, claims).get("uniques")).toEqual({ complete: false, completedAt: null, value: 1 });
+  });
+
+  it("completes the SUM when the group and the Items reach the target, counting the group at its first piece", () => {
+    const claims = [
+      claim("whip", { reviewedAt: day(1) }),
+      claim("spine", { reviewedAt: day(2) }), // the group: 2
+      claim("axon", { reviewedAt: day(3) }), // nothing
+      claim("whip", { reviewedAt: day(4) }), // 3: this one tips it
+    ];
+    expect(evaluateGraph(nodes, childrenOf, claims).get("uniques")).toEqual({ complete: true, completedAt: day(4), value: 3 });
+    // The group is the last to land: it tips the total at its first piece, not a later one.
+    const groupLast = [claim("whip", { quantity: 2, reviewedAt: day(1) }), claim("axon", { reviewedAt: day(5) }), claim("spine", { reviewedAt: day(6) })];
+    expect(evaluateGraph(nodes, childrenOf, groupLast).get("uniques")).toEqual({ complete: true, completedAt: day(5), value: 3 });
+  });
+
+  it("frees the group when its only piece's Claim is no longer approved", () => {
+    const claims = [claim("whip", { quantity: 2, reviewedAt: day(1) })];
+    expect(evaluateGraph(nodes, childrenOf, [...claims, claim("axon", { reviewedAt: day(2) })]).get("uniques")!.complete).toBe(true);
+    const result = evaluateGraph(nodes, childrenOf, claims);
+    expect(result.get("bludgeon")!.complete).toBe(false);
+    expect(result.get("uniques")).toEqual({ complete: false, completedAt: null, value: 2 });
+  });
+});
+
 describe("evaluateGraph — COUNT replaces distinctItems", () => {
   it("'N distinct uniques' is COUNT(N) over one single-name leaf per unique — a second claim on an already-complete leaf doesn't add a second distinct count", () => {
     const nodes = [composite("root", "COUNT", { minCount: 2 }), item("a", { itemName: "A" }), item("b", { itemName: "B" }), item("c", { itemName: "C" })];

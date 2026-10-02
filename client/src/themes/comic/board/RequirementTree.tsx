@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import type { RequirementNodeModel } from "../../../headless/types";
+import type { RequirementNodeModel, SumItemModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
 import { WikiItemLink } from "../../../core/ui/WikiItemLink";
@@ -85,19 +85,50 @@ function Progress({ node, colors }: { node: RequirementNodeModel; colors: ComicC
   );
 }
 
-/** A SUM over several items: one row per item with how many have been received, and no box per item, since no single item completes it on its own. */
-function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
-  return node.items.map((item) => (
-    <li key={item.name} className="text-sm leading-snug" style={{ color: node.dim || item.lockedBy ? colors.INK_SUBTLE : colors.INK_BODY }}>
-      <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
-      <WikiItemLink name={item.name} />
-      <CountsAs countsAs={item.countsAs} colors={colors} />
-      <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
-        ×{item.count}
-      </span>
-      {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
+/**
+ * An "any one of" group of Items inside a SUM: one row, its label then its pieces, each linked, with a tick once one of
+ * them is in (it then adds its 1, and its other pieces add nothing, so the row fades like a done item).
+ */
+function GroupRow({ node, group, colors }: { node: RequirementNodeModel; group: NonNullable<SumItemModel["group"]>; colors: ComicColors }) {
+  return (
+    <li className="text-sm leading-snug" style={{ color: node.dim || group.done ? colors.INK_SUBTLE : colors.INK_BODY }}>
+      {group.label ? `${group.label} (any one of: ` : "Any one of: "}
+      {group.pieces.map((piece, i) => (
+        <Fragment key={piece}>
+          {i > 0 && ", "}
+          <WikiItemLink name={piece} />
+        </Fragment>
+      ))}
+      {group.label && ")"}
+      {group.done && (
+        <span className="ml-1.5 inline-flex align-middle" style={{ color: colors.OK }}>
+          <CheckIcon size={12} aria-label="complete" />
+        </span>
+      )}
     </li>
-  ));
+  );
+}
+
+/**
+ * A SUM over several items: one row per item with how many have been received, and no box per item, since no single item
+ * completes it on its own (a group, which one piece does complete, is a GroupRow).
+ */
+function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+  return node.items.map((item) =>
+    item.group ? (
+      <GroupRow key={item.name} node={node} group={item.group} colors={colors} />
+    ) : (
+      <li key={item.name} className="text-sm leading-snug" style={{ color: node.dim || item.lockedBy ? colors.INK_SUBTLE : colors.INK_BODY }}>
+        <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
+        <WikiItemLink name={item.name} />
+        <CountsAs countsAs={item.countsAs} colors={colors} />
+        <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
+          ×{item.count}
+        </span>
+        {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
+      </li>
+    ),
+  );
 }
 
 /** "— OR —" between an ANY's direct options, in the heading font. */

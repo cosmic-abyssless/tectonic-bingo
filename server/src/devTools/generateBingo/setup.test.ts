@@ -1,5 +1,5 @@
-// setup.ts's weighAnItem: the Counts as a run gives one Item after the import, sent back the way the board editor
-// sends a Task, and written by the real board service.
+// setup.ts's weighAnItem and groupSomeItems: the Counts as and the "any one of" group a run gives the board after the
+// import, sent back the way the board editor sends a Task, and written by the real board service.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -7,7 +7,7 @@ import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { importBingo, weighAnItem, type Ctx } from "./setup";
+import { groupSomeItems, importBingo, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -71,6 +71,39 @@ describe("weighAnItem", () => {
     const { ctx, patches } = ctxFor(bingo, []);
     await weighAnItem(ctx, new Date());
     await weighAnItem(ctx, new Date());
+    expect(patches).toHaveLength(1);
+  });
+});
+
+describe("groupSomeItems", () => {
+  function seedUniques() {
+    const admin = db.insert(schema.users).values({ discordId: "admin", discordUsername: "admin" }).returning().get();
+    const bingo = db.insert(schema.bingos).values({ slug: "testdata-g", name: "G", boardRows: 1, boardCols: 1, createdByUserId: admin.id }).returning().get();
+    const tile = createTile(db, { bingoId: bingo.id, name: "Slayer bosses", boardRow: 0, boardCol: 0 });
+    const names = ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine", "Abyssal dagger", "Abyssal whip"];
+    const task = createTask(db, tile.id, { kind: "SUM", label: "Page 1", points: 40, quantity: 4, children: names.map((itemName): GraphNodeInput => ({ kind: "ITEM", itemName })) }, 0);
+    return { bingo, task };
+  }
+
+  it("puts the first three Items of the first SUM in an \"any one of\" group through the Task's PATCH, keeping their ids", async () => {
+    const { bingo, task } = seedUniques();
+    const log: string[] = [];
+    const { ctx, patches } = ctxFor(bingo, log);
+    await groupSomeItems(ctx, new Date());
+
+    expect(patches.map((p) => p.path)).toEqual([`/api/bingos/testdata-g/admin/tasks/${task.id}`]);
+    const after = getBoardTiles(db, bingo.id)[0]!.node.children[0]!;
+    expect(after.children.map((c) => [c.kind, c.label ?? c.itemName])).toEqual([["ANY", "Counted once"], ["ITEM", "Abyssal dagger"], ["ITEM", "Abyssal whip"]]);
+    expect(after.children[0]!.children.map((c) => c.id)).toEqual(task.children.slice(0, 3).map((c) => c.id));
+    expect([after.label, after.points, after.quantity]).toEqual(["Page 1", 40, 4]);
+    expect(log).toEqual(['Bludgeon axon, Bludgeon claw, Bludgeon spine count once together in "Page 1"']);
+  });
+
+  it("leaves a board that already has one alone", async () => {
+    const { bingo } = seedUniques();
+    const { ctx, patches } = ctxFor(bingo, []);
+    await groupSomeItems(ctx, new Date());
+    await groupSomeItems(ctx, new Date());
     expect(patches).toHaveLength(1);
   });
 });

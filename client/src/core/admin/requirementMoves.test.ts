@@ -62,11 +62,46 @@ describe("canMove", () => {
   it("refuses a condition into a SUM, which only adds up Items, but lets an Item in", () => {
     // ALL
     //   SUM (a)
-    //   ANY (b)
+    //   ALL (b)
     //   c
-    const withSum: GraphNodeInput = { kind: "ALL", children: [{ kind: "SUM", quantity: 2, children: [item("a")] }, { kind: "ANY", children: [item("b")] }, item("c")] };
+    const withSum: GraphNodeInput = { kind: "ALL", children: [{ kind: "SUM", quantity: 2, children: [item("a")] }, { kind: "ALL", children: [item("b")] }, item("c")] };
     expect(canMove(withSum, [1], [0], 1)).toBe(false);
     expect(canMove(withSum, [2], [0], 1)).toBe(true);
+  });
+
+  it("lets an \"any one of\" group of Items into a SUM, and only Items into such a group", () => {
+    // ALL
+    //   SUM (a, ANY (b))
+    //   ANY (c, d)
+    //   ALL (e)
+    //   COUNT (f)
+    //   SUM (g)
+    //   ANY (h, ALL (i))
+    //   j
+    const tree: GraphNodeInput = {
+      kind: "ALL",
+      children: [
+        { kind: "SUM", quantity: 2, children: [item("a"), { kind: "ANY", children: [item("b")] }] },
+        { kind: "ANY", children: [item("c"), item("d")] },
+        { kind: "ALL", children: [item("e")] },
+        { kind: "COUNT", minCount: 1, children: [item("f")] },
+        { kind: "SUM", quantity: 1, children: [item("g")] },
+        { kind: "ANY", children: [item("h"), { kind: "ALL", children: [item("i")] }] },
+        item("j"),
+      ],
+    };
+    expect(canMove(tree, [1], [0], 2)).toBe(true); // an ANY of Items
+    expect(canMove(tree, [2], [0], 2)).toBe(false); // an ALL
+    expect(canMove(tree, [3], [0], 2)).toBe(false); // a COUNT
+    expect(canMove(tree, [4], [0], 2)).toBe(false); // a SUM
+    expect(canMove(tree, [5], [0], 2)).toBe(false); // an ANY holding a condition
+    // Into the group inside the SUM: an Item, but no condition, not even another ANY of Items.
+    expect(canMove(tree, [6], [0, 1], 1)).toBe(true);
+    expect(canMove(tree, [1], [0, 1], 1)).toBe(false);
+    expect(canMove(tree, [5, 1], [0, 1], 1)).toBe(false);
+    // A group's Item can move out to the SUM itself, and the group out of the SUM.
+    expect(canMove(tree, [0, 1, 0], [0], 0)).toBe(true);
+    expect(canMove(tree, [0, 1], [], 7)).toBe(true);
   });
 
   it("refuses a condition into itself or anything inside it", () => {

@@ -3,7 +3,7 @@
 import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
-import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
+import { GROUP_LABEL, itemToWeigh, itemsToGroup, type BoardInfo, type PartModel } from "./board";
 import type { Player } from "./people";
 import type { Rng } from "./rng";
 import { HOUR, MINUTE, fmt, type Timeline } from "./timeline";
@@ -88,6 +88,26 @@ export async function weighAnItem(ctx: Ctx, at: Date): Promise<void> {
   const withWeight = (n: GraphNodeInput): GraphNodeInput => (n.id === pick.item.id ? { ...n, countsAs: pick.countsAs } : { ...n, children: n.children?.map(withWeight) });
   await ctx.api.as(ctx.admin).patch(path(ctx, `/admin/tasks/${pick.task.id}`), withWeight(asInput(pick.task)), { at });
   ctx.log(`${pick.item.itemName} counts as ${pick.countsAs} in "${pick.task.label}"`);
+}
+
+/**
+ * Puts a few Items inside a SUM into an "any one of" group (CONTEXT.md "Requirement Tree"), as an Admin would in the
+ * board editor, so every generated Bingo has one to show and play even when the board it was made from has none (see
+ * board.ts's itemsToGroup for which). The group takes the place of its first Item; the Items keep their ids.
+ */
+export async function groupSomeItems(ctx: Ctx, at: Date): Promise<void> {
+  const board = await fetchBoard(ctx);
+  const tasks = [...board.tiles].sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol).flatMap((t) => t.node.children);
+  const pick = itemsToGroup(tasks);
+  if (!pick) return;
+  const grouped = new Set(pick.items.map((i) => i.id));
+  const group: GraphNodeInput = { kind: "ANY", label: GROUP_LABEL, children: pick.items.map(asInput) };
+  const withGroup = (n: GraphNodeInput): GraphNodeInput =>
+    n.id === pick.sum.id
+      ? { ...n, children: n.children!.flatMap((c) => (c.id === pick.items[0]!.id ? [group] : grouped.has(c.id!) ? [] : [c])) }
+      : { ...n, children: n.children?.map(withGroup) };
+  await ctx.api.as(ctx.admin).patch(path(ctx, `/admin/tasks/${pick.task.id}`), withGroup(asInput(pick.task)), { at });
+  ctx.log(`${pick.items.map((i) => i.itemName).join(", ")} count once together in "${pick.task.label}"`);
 }
 
 /**

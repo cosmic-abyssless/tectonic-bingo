@@ -89,6 +89,34 @@ describe("creditAwards", () => {
     expect(credits[0]!.closedBy).toEqual(["u2"]);
   });
 
+  it("credits an ANY of Items inside a SUM to the first piece's Player, and nothing to a later piece", () => {
+    const g = graph([
+      { id: "uniques", kind: "SUM", quantity: 2, points: 20, children: ["bludgeon", "whip"] },
+      { id: "bludgeon", kind: "ANY", children: ["axon", "claw"] },
+      { id: "axon", kind: "ITEM" },
+      { id: "claw", kind: "ITEM" },
+      { id: "whip", kind: "ITEM" },
+    ]);
+    // u1's axon completes the group (1 of 2), u2's claw adds nothing, u3's whip makes 2.
+    const claims = [claim("axon", "u1", 1), claim("claw", "u2", 2), claim("whip", "u3", 3)];
+    const credits = creditAwards({ ...g, claims, awards: [{ nodeId: "uniques", points: 20 }], tileNodeIds: new Set(), lineNodeIds: new Set() });
+    expect(totals(credits)).toEqual({ u1: 10, u3: 10 });
+    expect(credits[0]!.shares.find((s) => s.userId === "u1")!.claims.map((c) => [c.nodeId, c.quantity])).toEqual([["axon", 1]]);
+    expect(credits[0]!.closedBy).toEqual(["u3"]);
+  });
+
+  it("gives an ANY of Items inside a SUM only what was still needed", () => {
+    const g = graph([
+      { id: "uniques", kind: "SUM", quantity: 2, points: 20, children: ["whip", "bludgeon"] },
+      { id: "bludgeon", kind: "ANY", children: ["axon"] },
+      { id: "axon", kind: "ITEM" },
+      { id: "whip", kind: "ITEM" },
+    ]);
+    // Two whips finish it; the piece approved after that earns nothing.
+    const credits = creditAwards({ ...g, claims: [claim("whip", "u1", 1, 2), claim("axon", "u2", 2)], awards: [{ nodeId: "uniques", points: 20 }], tileNodeIds: new Set(), lineNodeIds: new Set() });
+    expect(totals(credits)).toEqual({ u1: 20 });
+  });
+
   it("rounds a partly used weighted claim up to whole items", () => {
     const g = graph([
       { id: "pages", kind: "SUM", quantity: 30, points: 30, children: ["page", "garb"] },

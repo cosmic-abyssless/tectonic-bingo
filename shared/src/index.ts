@@ -274,6 +274,15 @@ export interface PastBingoParticipation {
 
 export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 
+/**
+ * Whether a node may sit inside a SUM ("N of any (dupes count)", CONTEXT.md "Requirement Tree"): an Item, or an ANY made
+ * only of Items, which adds 1 to the total once done. Anything else would count for nothing, so the server refuses it
+ * and the board editor never builds it.
+ */
+export function fitsInSum(node: { kind: NodeKind; children?: readonly { kind: NodeKind }[] | null }): boolean {
+  return node.kind === "ITEM" || (node.kind === "ANY" && (node.children ?? []).every((c) => c.kind === "ITEM"));
+}
+
 // One node in a bingo's DAG. Composite kinds (ALL/ANY/COUNT/SUM) fold their
 // children (see engine.ts); ITEM/MANUAL are leaves that claims attach to.
 // Any node may carry points, gated by pointsGateNodeId/submitGateNodeId.
@@ -281,7 +290,8 @@ export type NodeKind = "ALL" | "ANY" | "COUNT" | "SUM" | "ITEM" | "MANUAL";
 // ITEM is a single-name leaf: complete as soon as one approved claim targets
 // it. Quantity always lives one level up — SUM sums approved-claim
 // quantities across its ITEM children (each times the child's `countsAs`)
-// against its own `quantity` target;
+// against its own `quantity` target, plus 1 for each complete ANY-of-Items
+// child (see fitsInSum);
 // COUNT counts how many children are complete (also how "N distinct names"
 // is expressed — COUNT(N) over N single-name leaves — see
 // docs/item-quantity-model.md).

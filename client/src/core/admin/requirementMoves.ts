@@ -1,4 +1,4 @@
-import type { GraphNodeInput } from "@bingo/shared";
+import { fitsInSum, type GraphNodeInput } from "@bingo/shared";
 
 // Moving a row of a task's requirement tree by drag and drop (RequirementTreeEditor). A row is addressed by its path of
 // child indexes from the task's root; a drop spot by its parent's path and the index it inserts at (0 = before the
@@ -33,8 +33,10 @@ export function canMove(root: GraphNodeInput, from: Path, toParent: Path, toInde
   const node = nodeAt(root, from);
   const parent = nodeAt(root, toParent);
   if (!node || !parent || parent.kind === "ITEM") return false;
-  // A total ("N of any (dupes count)") only adds up Items: a condition dropped into one would count for nothing.
-  if (parent.kind === "SUM" && node.kind !== "ITEM") return false;
+  // A total ("N of any (dupes count)") only adds up Items and "any one of" groups of Items: anything else dropped into
+  // one would count for nothing, and so would a condition dropped into such a group.
+  if (parent.kind === "SUM" && !fitsInSum(node)) return false;
+  if (toParent.length > 0 && nodeAt(root, toParent.slice(0, -1))?.kind === "SUM" && node.kind !== "ITEM") return false;
   const fromParent = from.slice(0, -1);
   const fromIndex = from[from.length - 1]!;
   const sameParent = fromParent.length === toParent.length && startsWith(toParent, fromParent);

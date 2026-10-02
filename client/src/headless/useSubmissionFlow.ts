@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, proofRequirementFor, proofStatus, type ClaimInput, type GraphNode, type ScreenshotAnalysis, type SubmissionKind } from "@bingo/shared";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
-import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal } from "../core/board/taskClaims";
+import { buildLeafClaimMaps, itemLeafValue } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { lockReason } from "../core/board/exclusivity";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../core/board/tileProgress";
-import { getAvailableTasks } from "./submissionFlowLogic";
+import { getAvailableTasks, leafStillNeeded } from "./submissionFlowLogic";
 import { useBingoPageRaw } from "./BingoPageProvider";
 import type { SubmissionFlowModel } from "./types";
 
@@ -98,28 +98,20 @@ export function useSubmissionFlow({
   // Approved + already-staged-this-screenshot quantity for one leaf.
   const leafPendingValue = (nodeId: string) =>
     itemLeafValue(nodeId, claimMaps) + stagedClaims.filter((s) => s.claim.nodeId === nodeId).reduce((sum, s) => sum + (s.claim.quantity ?? 1), 0);
-  // Each item times what it counts as (CONTEXT.md "Counts as"), as the server totals it.
-  const sumStillOpen = (sum: GraphNode) => sumTotal(sum, leafPendingValue) < (sum.quantity ?? 1);
   // "Completed" here means server-confirmed (an approved claim already
   // satisfied it, and rescoring landed a teamNodeState row) — a still-pending
   // sibling claim doesn't hide the rest, since a mod could yet reject it.
-  const ancestorAlreadySatisfied = (ancestors: GraphNode[]) => ancestors.some((a) => statusByNodeId.get(a.id) === "completed");
+  const completed = (nodeId: string) => statusByNodeId.get(nodeId) === "completed";
 
   // Items the team already used somewhere else (exclusive items) can't be claimed here: they are left out of the
   // options and listed under the picker with why.
   const openLeaves: GraphNode[] = taskLeaves
     .filter(({ leaf }) => leaf.kind === "ITEM")
     .filter(({ leaf }) => !locks.has(leaf.id))
-    .filter(({ leaf, ancestors }) => {
-      // A submission may not claim the same node twice — a leaf already
-      // staged in this screenshot can't be offered again (adjust its
-      // quantity instead of staging a second claim on it).
-      if (stagedNodeIds.has(leaf.id)) return false;
-      if (ancestorAlreadySatisfied(ancestors)) return false;
-      const parent = ancestors[ancestors.length - 1];
-      if (parent?.kind === "SUM") return sumStillOpen(parent);
-      return !leafComplete(leaf.id, claimMaps);
-    })
+    // A submission may not claim the same node twice — a leaf already
+    // staged in this screenshot can't be offered again (adjust its
+    // quantity instead of staging a second claim on it).
+    .filter(({ leaf, ancestors }) => !stagedNodeIds.has(leaf.id) && leafStillNeeded(leaf, ancestors, completed, leafPendingValue))
     .map(({ leaf }) => leaf);
   const lockedLeaves: { label: string; reason: string }[] = taskLeaves
     .filter(({ leaf }) => leaf.kind === "ITEM" && locks.has(leaf.id))

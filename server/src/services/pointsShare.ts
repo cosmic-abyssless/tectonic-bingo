@@ -101,18 +101,35 @@ export function creditAwards(input: {
         break;
       }
       case "SUM": {
-        // Shared out in the SUM's own units: a claim adds its quantity times its Item's Counts as, so one Pyromancer
-        // garb (counts as 25) earns 25 of a 200-page SUM. What's shown as counted stays in real items, though (the
-        // Stats list the claim as "1× Pyromancer garb"), so the units used are turned back into whole items.
+        // Shared out in the SUM's own units, in approval order, up to its target: a claim adds its quantity times its
+        // Item's Counts as, so one Pyromancer garb (counts as 25) earns 25 of a 200-page SUM. What's shown as counted
+        // stays in real items, though (the Stats list the claim as "1× Pyromancer garb"), so the units used are turned
+        // back into whole items. An ANY child adds one unit when it completed, credited to the Claim that completed it;
+        // later Claims on its Items earn nothing here.
         const target = node.quantity ?? 1;
+        type Unit = { at: Date; units: number; credit: (used: number) => void };
+        const units = (childrenOf.get(nodeId) ?? []).flatMap((id): Unit[] => {
+          if (byId.get(id)?.kind === "ANY") {
+            const group = results.get(id);
+            if (!group?.complete || !group.completedAt) return [];
+            return [{ at: group.completedAt, units: 1, credit: (used) => addInto(out, deciding(id), used / target) }];
+          }
+          const weight = countsAsOf(byId.get(id));
+          return (claimsByNode.get(id) ?? []).map((c) => ({
+            at: c.reviewedAt,
+            units: c.quantity * weight,
+            credit: (used: number) => {
+              out.set(c.claimId, (out.get(c.claimId) ?? 0) + used / target);
+              count(c.claimId, Math.min(c.quantity, Math.ceil(used / weight)));
+            },
+          }));
+        });
         let needed = target;
-        for (const c of (childrenOf.get(nodeId) ?? []).flatMap((id) => claimsByNode.get(id) ?? []).sort(byReview)) {
+        for (const u of units.sort((a, b) => a.at.getTime() - b.at.getTime())) {
           if (needed <= 0) break;
-          const weight = countsAsOf(byId.get(c.nodeId));
-          const used = Math.min(c.quantity * weight, needed);
+          const used = Math.min(u.units, needed);
           needed -= used;
-          out.set(c.claimId, (out.get(c.claimId) ?? 0) + used / target);
-          count(c.claimId, Math.min(c.quantity, Math.ceil(used / weight)));
+          u.credit(used);
         }
         break;
       }

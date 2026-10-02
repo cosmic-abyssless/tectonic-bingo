@@ -8,7 +8,7 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, groupSomeItems, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
@@ -130,6 +130,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
 
   await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
+  await groupSomeItems(ctx, new Date(tl.createdAt.getTime() + 12 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   const feedbackQuestions = await ensureFeedbackQuestions(api, adminDiscordId, slug, new Date(tl.createdAt.getTime() + 25 * 60_000));
   log(`feedback questions: ${feedbackQuestions.length}, ${feedbackQuestions.filter((q) => q.audience === "captains").length} for Captains only`);

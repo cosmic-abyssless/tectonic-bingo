@@ -137,7 +137,7 @@ describe("replaceSubtree", () => {
   });
 });
 
-describe("a SUM holds only Items", () => {
+describe("a SUM holds only Items and \"any one of\" groups of Items", () => {
   const sumWithCondition: GraphNodeInput = {
     kind: "SUM",
     label: "Page 1",
@@ -156,6 +156,47 @@ describe("a SUM holds only Items", () => {
     const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "SUM", quantity: 3, children: [{ kind: "ITEM", itemName: "Magic fang" }] }));
     expect(() => db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, sumWithCondition))).toThrow(/can only be made of Items/);
     expect(getNodeTree(db, rootId)!.children.map((c) => c.kind)).toEqual(["ITEM"]);
+  });
+
+  it("allows an \"any one of\" group of Items beside the Items", () => {
+    const bingo = seedBingo();
+    const group: GraphNodeInput = { kind: "ANY", label: "Bludgeon piece", children: [{ kind: "ITEM", itemName: "Bludgeon axon" }, { kind: "ITEM", itemName: "Bludgeon claw" }] };
+    const rootId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "SUM", quantity: 3, children: [group, { kind: "ITEM", itemName: "Abyssal whip" }] }));
+    expect(getNodeTree(db, rootId)!.children.map((c) => [c.kind, c.children.length])).toEqual([["ANY", 2], ["ITEM", 0]]);
+    // And on an edit.
+    db.transaction((tx) => replaceSubtree(tx, rootId, bingo.id, { kind: "SUM", quantity: 3, children: [{ kind: "ITEM", itemName: "Abyssal whip" }, group] }));
+    expect(getNodeTree(db, rootId)!.children.map((c) => c.kind)).toEqual(["ITEM", "ANY"]);
+  });
+
+  it("refuses an ALL, a COUNT, a SUM, or an ANY holding a condition inside a SUM, saying what is allowed", () => {
+    const bingo = seedBingo();
+    const items: GraphNodeInput[] = [{ kind: "ITEM", itemName: "Bludgeon axon" }, { kind: "ITEM", itemName: "Bludgeon claw" }];
+    const inside: GraphNodeInput[] = [
+      { kind: "ALL", children: items },
+      { kind: "COUNT", minCount: 1, children: items },
+      { kind: "SUM", quantity: 1, children: items },
+      { kind: "ANY", children: [...items, { kind: "ALL", children: [{ kind: "ITEM", itemName: "Abyssal whip" }] }] },
+    ];
+    for (const child of inside) {
+      expect(() => db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "SUM", label: "Uniques", quantity: 3, children: [child] })), child.kind).toThrow(
+        /"Uniques" \("N of any \(dupes count\)"\) can only be made of Items and "any one of" groups of Items/,
+      );
+    }
+    expect(db.select().from(nodes).all()).toHaveLength(0);
+  });
+
+  it("refuses a condition added to a shared group through its other parent", () => {
+    const bingo = seedBingo();
+    const sumId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "SUM", label: "Uniques", quantity: 2, children: [{ kind: "ANY", children: [{ kind: "ITEM", itemName: "Bludgeon axon" }] }] }));
+    const group = getNodeTree(db, sumId)!.children[0]!;
+    const otherId = db.transaction((tx) => insertSubtree(tx, bingo.id, { kind: "ALL", children: [] }));
+    db.insert(nodeEdges).values({ parentId: otherId, childId: group.id, sortOrder: 0 }).run();
+    const withCondition: GraphNodeInput = {
+      kind: "ALL",
+      children: [{ id: group.id, kind: "ANY", children: [{ id: group.children[0]!.id, kind: "ITEM", itemName: "Bludgeon axon" }, { kind: "ALL", children: [{ kind: "ITEM", itemName: "Abyssal whip" }] }] }],
+    };
+    expect(() => db.transaction((tx) => replaceSubtree(tx, otherId, bingo.id, withCondition))).toThrow(/"Uniques" .* can only be made of Items and "any one of" groups of Items/);
+    expect(getNodeTree(db, sumId)!.children[0]!.children.map((c) => c.kind)).toEqual(["ITEM"]);
   });
 
   it("still allows a SUM of Items, including one nested in another condition", () => {

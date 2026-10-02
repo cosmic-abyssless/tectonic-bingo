@@ -11,7 +11,7 @@ export interface EngineNode {
   id: string;
   kind: NodeKind;
   minCount: number | null; // COUNT only
-  quantity: number | null; // SUM only — target total of children's claimed quantities
+  quantity: number | null; // SUM only — target total of its children (see the SUM case)
   itemName: string | null; // ITEM only — the single accepted name
   /** ITEM only (CONTEXT.md "Counts as"): what one of it adds to an enclosing SUM's total. 1 when absent. */
   countsAs?: number;
@@ -36,7 +36,8 @@ export interface NodeResult {
   completedAt: Date | null;
   /**
    * Total approved-claim quantity for this node — only ITEM and SUM produce one; a SUM reads it from its ITEM children,
-   * each claim's quantity times its Item's Counts as. An ITEM's own value is its real quantity.
+   * each claim's quantity times its Item's Counts as, plus 1 for each complete ANY child. An ITEM's own value is its
+   * real quantity.
    */
   value?: number;
 }
@@ -57,6 +58,18 @@ export function evaluateGraph(
   }
 
   const memo = new Map<string, NodeResult>();
+
+  // What each child of a SUM added to its total, and when: one entry per Claim on an Item, one per complete ANY.
+  function sumUnits(sumId: string): { reviewedAt: Date; units: number }[] {
+    return (childrenOf.get(sumId) ?? []).flatMap((id) => {
+      const child = byId.get(id);
+      if (child?.kind === "ANY") {
+        const group = evaluate(id);
+        return group.complete && group.completedAt ? [{ reviewedAt: group.completedAt, units: 1 }] : [];
+      }
+      return (claimsByNode.get(id) ?? []).map((c) => ({ reviewedAt: c.reviewedAt, units: c.quantity * countsAsOf(child) }));
+    });
+  }
 
   function evaluate(nodeId: string): NodeResult {
     const cached = memo.get(nodeId);
@@ -82,14 +95,11 @@ export function evaluateGraph(
         break;
       }
       case "SUM": {
-        // Children are always ITEM leaves (enforced on write) — pull their
-        // raw claims directly and merge chronologically, so completedAt is
-        // the claim that tipped the running total over node.quantity,
-        // regardless of which leaf it landed on. Each claim adds its
-        // quantity times its Item's Counts as.
-        const mine = (childrenOf.get(nodeId) ?? [])
-          .flatMap((id) => (claimsByNode.get(id) ?? []).map((c) => ({ reviewedAt: c.reviewedAt, units: c.quantity * countsAsOf(byId.get(id)) })))
-          .sort((a, b) => a.reviewedAt.getTime() - b.reviewedAt.getTime());
+        // Children are ITEM leaves, or ANYs made only of Items (enforced on write). An Item's raw claims are pulled
+        // directly, each adding its quantity times its Item's Counts as; an ANY adds 1 at the moment it completed (its
+        // first approved Claim), however many of its Items are claimed. Merged chronologically, so completedAt is the
+        // moment that tipped the running total over node.quantity, regardless of which child it landed on.
+        const mine = sumUnits(nodeId).sort((a, b) => a.reviewedAt.getTime() - b.reviewedAt.getTime());
         const target = node.quantity ?? 1;
         const value = mine.reduce((sum, c) => sum + c.units, 0);
         const complete = value >= target;

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Claim, ExclusivityConflict, GraphNode, SubmissionDetails } from "@bingo/shared";
 import { buildLeafClaimMaps, sumTotal } from "../core/board/taskClaims";
-import { countsAsLabel, sumQuantityHint } from "../core/board/labels";
+import { countsAsLabel, sumItemNames, sumQuantityHint } from "../core/board/labels";
 import { previewGraphNode, toGraphNodeInput } from "../core/board/requirementTree";
 import { buildRequirementTree } from "./boardModel";
+import { leafStillNeeded } from "./submissionFlowLogic";
 
 const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
   ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, countsAs: 1, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [], ...over }) as GraphNode;
@@ -96,6 +97,54 @@ describe("buildRequirementTree: Counts as", () => {
     expect(countsAsLabel(undefined)).toBeNull();
     expect(sumQuantityHint({ needed: 200, countsAs: 25 })).toBe("Each counts as 25 · 200 needed in total");
     expect(sumQuantityHint({ needed: 5, countsAs: 1 })).toBe("5 needed in total");
+  });
+});
+
+describe("an \"any one of\" group of Items inside a SUM", () => {
+  // Sire's uniques on a Slayer Page: one Bludgeon piece counts, beside the dagger and whip.
+  const pieces = [node({ id: "axon", kind: "ITEM", itemName: "Bludgeon axon" }), node({ id: "claw", kind: "ITEM", itemName: "Bludgeon claw" }), node({ id: "spine", kind: "ITEM", itemName: "Bludgeon spine" })];
+  const bludgeon = node({ id: "bludgeon", kind: "ANY", label: "Bludgeon piece", children: pieces });
+  const dagger = node({ id: "dagger", kind: "ITEM", itemName: "Abyssal dagger" });
+  const uniques = node({ id: "uniques", kind: "SUM", quantity: 3, children: [bludgeon, dagger] });
+
+  it("is one row naming its pieces, done and adding 1 once one piece is approved, and nothing more for a second", () => {
+    const before = buildRequirementTree(uniques, buildLeafClaimMaps([sub("s0", "pending", [{ nodeId: "claw", quantity: 1 }])]), new Map())!;
+    expect(before.items.map((i) => [i.name, i.count, i.group])).toEqual([
+      ["Bludgeon piece (any one of: Bludgeon axon, Bludgeon claw, Bludgeon spine)", 0, { label: "Bludgeon piece", pieces: ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"], done: false }],
+      ["Abyssal dagger", 0, null],
+    ]);
+    expect(before.submitted).toBe(true); // a piece in review counts as handed in
+
+    const maps = buildLeafClaimMaps([sub("s1", "approved", [{ nodeId: "claw", quantity: 1 }, { nodeId: "dagger", quantity: 1 }]), sub("s2", "approved", [{ nodeId: "spine", quantity: 1 }])]);
+    const tree = buildRequirementTree(uniques, maps, new Map())!;
+    expect(tree.items[0]!.group!.done).toBe(true);
+    expect(tree.items[0]!.count).toBe(1);
+    expect(tree.progress).toEqual({ current: 2, target: 3 });
+    expect(tree.complete).toBe(false);
+  });
+
+  it("makes the SUM a group of rows even when it is its only row, and is named by its pieces when it has no label", () => {
+    const tree = buildRequirementTree(node({ ...uniques, children: [{ ...bludgeon, label: null }] }), buildLeafClaimMaps([]), new Map())!;
+    expect([tree.isLeaf, tree.label]).toEqual([false, "3 of any (dupes count)"]);
+    expect(tree.items[0]!.name).toBe("Any one of: Bludgeon axon, Bludgeon claw, Bludgeon spine");
+    expect(sumItemNames(uniques)).toEqual(["Bludgeon piece", "Abyssal dagger"]);
+    expect(sumItemNames(node({ ...uniques, children: [{ ...bludgeon, label: null }] }))).toEqual(["Bludgeon axon or Bludgeon claw or Bludgeon spine"]);
+  });
+
+  it("counts once in the Submit flow's total, and isn't offered again once a piece is in", () => {
+    const approved: Record<string, number> = { axon: 1 };
+    expect(sumTotal(uniques, (id) => approved[id] ?? 0)).toBe(1);
+    const value = (id: string) => approved[id] ?? 0;
+    const notCompleted = () => false;
+    // Its other pieces are no longer needed; the dagger still is.
+    expect(leafStillNeeded(pieces[1]!, [uniques, bludgeon], notCompleted, value)).toBe(false);
+    expect(leafStillNeeded(dagger, [uniques], notCompleted, value)).toBe(true);
+    // Before any piece is in, each is; and a piece staged in this screenshot closes the rest just the same.
+    expect(leafStillNeeded(pieces[1]!, [uniques, bludgeon], notCompleted, () => 0)).toBe(true);
+    expect(leafStillNeeded(pieces[1]!, [uniques, bludgeon], notCompleted, (id) => (id === "spine" ? 1 : 0))).toBe(false);
+    // A finished SUM offers none of its pieces, nor does one the server has completed.
+    expect(leafStillNeeded(pieces[0]!, [uniques, bludgeon], notCompleted, (id) => (id === "dagger" ? 3 : 0))).toBe(false);
+    expect(leafStillNeeded(pieces[0]!, [uniques, bludgeon], (id) => id === "bludgeon", () => 0)).toBe(false);
   });
 });
 

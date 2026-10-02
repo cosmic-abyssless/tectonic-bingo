@@ -35,7 +35,8 @@ function toNode(n: ExportNode, written: Written): (HistoricalBundleNode & Keyed)
     case "MANUAL":
       return leaf({ ...base, kind: "MANUAL" });
     case "SUM": {
-      const children = n.children.map((c) => toNode(c, written)).filter((c): c is HistoricalBundleNode & Keyed => c?.kind === "ITEM");
+      // A bundle's SUM holds Items only: an "any one of" group in the board's is left out, its pieces unwritten.
+      const children = n.children.filter((c) => c.kind === "ITEM").map((c) => toNode(c, written)).filter((c): c is HistoricalBundleNode & Keyed => c?.kind === "ITEM");
       return children.length > 0 ? { ...base, kind: "SUM", quantity: Math.max(1, n.quantity ?? 1), children } : null;
     }
     default: {

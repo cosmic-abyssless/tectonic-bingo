@@ -91,6 +91,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
+   Unless the board already has an **"any one of" group of Items** inside a SUM (CONTEXT.md "Requirement Tree"), the
+   admin then makes one the same way: the first three Items that count as 1 of the first SUM over at least three of
+   them (two when it has only three) go into an ANY labelled "Counted once". Play draws the group like an Item: its
+   first piece adds 1, a second piece of it is posted too and adds nothing, and the group isn't drawn again.
    The admin also uploads **Wrapped art** (CONTEXT.md) through the Wrapped art manager's endpoints (`wrappedArt.ts`):
    four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
    Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
@@ -203,7 +207,8 @@ The server accepts the made-up Discord ids only in dev mode. `--progress` and `-
 The same, with the sections a rich bundle adds (`historicalRich.ts`), as the converter would read them off an old
 site that recorded its drops:
 - each Tile's Tasks with their requirement trees (a reused group is left out; a reused item or MANUAL stays shared;
-  an item's Valued as and Counts as come along),
+  an item's Valued as and Counts as come along; an "any one of" group inside a SUM is left out, as a bundle's SUM
+  holds items only),
   Freeze and Proof screenshot settings, the board's Lines, and "Withhold points until previous" where a Task's points
   wait on the one before;
 - an item that counts toward two Tasks, as an old site's drop could: unless the board already shares one, the first

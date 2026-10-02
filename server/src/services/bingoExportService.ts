@@ -31,7 +31,7 @@ import * as signupService from "./signupService";
 import * as superlativeService from "./superlativeService";
 import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
-import { setNodeGates } from "./graphService";
+import { assertTotalsHoldItems, setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { log } from "../log";
 
@@ -474,6 +474,8 @@ export function importBingo(
         tx.insert(nodeEdges).values({ parentId, childId, sortOrder: i }).run();
       });
     }
+    // Each Task was checked as it was created, but without the shared nodes linked in just now.
+    if (reordered.length > 0) assertTotalsHoldItems(tx, bingo.id);
 
     // Pass 2: every node now has a real id — resolve gates.
     for (const gate of pendingGates) {

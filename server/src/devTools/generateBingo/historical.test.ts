@@ -172,6 +172,16 @@ describe("a generated rich historical bundle", () => {
     expect(validateHistoricalBundle(bundle, { devDiscordIds: true }).problems).toEqual([]);
   });
 
+  it("leaves an \"any one of\" group out of a SUM, which a bundle holds Items in only", async () => {
+    const grouped = structuredClone(richDocument);
+    grouped.tiles[1]!.tasks[0]!.children.push(node(119, "ANY", { label: "A piece", children: [task(120, "Bludgeon axon", 0), task(121, "Bludgeon claw", 0)] }) as never);
+    const options = normalizeOptions({ stage: "historical-rich", slug: "testdata-rich", seed: 9, teams: 4, teamSize: 5 });
+    const bundle = await buildHistoricalBundle({ options, document: grouped, rng: new Rng(9), me: null, now });
+    const sum = bundle.tiles.find((t) => t.boardRow === 0 && t.boardCol === 1)!.tasks![0] as { children: { kind: string; item?: string }[] };
+    expect(sum.children.map((c) => [c.kind, c.item])).toEqual([["ITEM", "Tanzanite fang"], ["ITEM", "Magic fang"]]);
+    expect(validateHistoricalBundle(bundle, { devDiscordIds: true }).problems).toEqual([]);
+  });
+
   it("makes the same people as a sparse one, and is the same for a seed", async () => {
     const sparse = await bundleFor(11);
     const rich = await richBundleFor(11);
