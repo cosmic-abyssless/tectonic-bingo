@@ -5,7 +5,7 @@ import { WrappedCategoryArt } from "../../../../core/wrapped/WrappedParts";
 import { useComic } from "../../ui/useComic";
 import { FILL, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
 
-const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-40";
+const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-36!";
 
 /**
  * A Moderator's own reviews, as one comic page (#420): the splash with their count (their name captioned on the middle

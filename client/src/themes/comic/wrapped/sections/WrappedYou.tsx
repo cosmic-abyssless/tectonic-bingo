@@ -7,7 +7,7 @@ import { useComic } from "../../ui/useComic";
 import { Body, DropCard, FILL, headlineSize, InkStamp, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
 
 /** The art sits in the splash panel with less room around it than the default sections leave. */
-const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-36";
+const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-28!";
 
 /**
  * You, as two comic pages (#420). Page one is the numbers and the best drop: the splash with the Submission count, the
@@ -153,7 +153,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             </Reveal>
           )}
           {y.driestStreak && (
-            <Reveal step={driest} className={`${FILL} overflow-hidden`}>
+            <Reveal step={driest} className={`${FILL} flex-1 overflow-hidden`}>
               <PanelBody tone="orange" rays="10% 90%" gap={5}>
                 <Kicker tone="red" tilt={-1.5}>
                   Your driest streak
@@ -173,7 +173,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
       {b > 0 && (
         <WrappedScene steps={b} className="gap-2!">
           {y.firstLast && (
-            <div className={`grid gap-3 ${y.firstLast.last ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div className={`grid flex-1 gap-3 ${y.firstLast.last ? "grid-cols-2" : "grid-cols-1"}`}>
               <Reveal step={firstLast} className={FILL}>
                 <PanelBody align="start" gap={6}>
                   <Kicker tilt={-2}>Your first drop</Kicker>
@@ -194,7 +194,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.mostActiveDay && (
-            <div className="grid grid-cols-[0.8fr_1.4fr] gap-2">
+            <div className="grid flex-1 grid-cols-[0.8fr_1.4fr] gap-2">
               <Reveal step={dayHead} className={`${FILL} overflow-hidden`}>
                 <PanelBody tone="cyan" rays="50% 100%" gap={6} align="start">
                   <Kicker>Your biggest day</Kicker>
@@ -220,7 +220,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.titles.length > 0 && (
-            <Reveal step={titles} className={`${FILL} overflow-hidden`}>
+            <Reveal step={titles} className={`${FILL} flex-1 overflow-hidden`}>
               <PanelBody tone="orange" rays="50% 130%" gap={6}>
                 <Kicker tone="red">{y.titles.length === 1 ? "Your Title" : "Your Titles"}</Kicker>
                 <InkTitle size={headlineSize(titleNames, [44, 38, 32, 26])}>{titleNames}</InkTitle>
@@ -239,7 +239,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.achievements.length > 0 && (
-            <Reveal step={achievements} className={FILL}>
+            <Reveal step={achievements} className={`${FILL} flex-1`}>
               <PanelBody align="start" gap={8}>
                 <Kicker tone="green" tilt={-1.5}>
                   {y.achievements.length === 1 ? "Achievement unlocked" : `${y.achievements.length} Achievements unlocked`}
@@ -269,7 +269,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {(y.wom || y.draft) && (
-            <div className={`grid gap-3 ${y.wom && y.draft ? "grid-cols-[1.4fr_1fr]" : "grid-cols-1"}`}>
+            <div className={`grid flex-1 gap-3 ${y.wom && y.draft ? "grid-cols-[1.4fr_1fr]" : "grid-cols-1"}`}>
               {y.wom && (
                 <Reveal step={wom} className={`${FILL} overflow-hidden`}>
                   <PanelBody tone="blue" rays="50% 60%" gap={6}>

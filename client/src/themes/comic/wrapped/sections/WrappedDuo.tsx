@@ -5,7 +5,7 @@ import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { Body, DropCard, FILL, headlineSize, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
 
-const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-40";
+const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-36!";
 
 /**
  * Your Duo, as a comic page (#420), and a second for their best moments together when they have any. The splash names the

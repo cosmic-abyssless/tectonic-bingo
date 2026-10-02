@@ -5,7 +5,7 @@ import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { Body, FILL, InkStamp, InkTitle, Kicker, Lettering, PanelBody, PersonChip, Sfx } from "./sectionParts-you-duo-captain-moderator";
 
-const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-40";
+const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-36!";
 
 /**
  * Your Draft, as comic pages (#420): the splash and every pick against where it finished, and then the best Steal and the
@@ -100,9 +100,12 @@ export function WrappedCaptain({ section: c }: { section: WrappedCaptainModel })
                 <div className="flex items-center gap-4">
                   <div className="shrink-0">
                     <InkStamp color={gold ? colors.OK : colors.BLUE} size={13} tilt={-8} className="!px-3 !pb-2 !pt-1.5">
-                      <span className="block">Draft grade</span>
-                      <span className="block" style={{ fontSize: 76, lineHeight: 0.95, letterSpacing: 0 }}>
-                        {c.grade.letter}
+                      {/* The letter comes first, as the default section says it; the label is stamped above it. */}
+                      <span className="flex flex-col-reverse">
+                        <span className="block" style={{ fontSize: 76, lineHeight: 0.95, letterSpacing: 0 }}>
+                          {c.grade.letter}
+                        </span>
+                        <span className="block">Draft grade</span>
                       </span>
                     </InkStamp>
                   </div>
