@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { asyncHandler } from "../middleware/errorHandler";
-import { isAdminDiscordId, UPLOADS_DIR } from "../config";
+import { UPLOADS_DIR } from "../config";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
@@ -14,14 +14,20 @@ import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
 import * as mcpConnections from "../mcp/connections";
+import { userSiteRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { removeUploads } from "../services/uploadFiles";
 import { queryAuditLog } from "../audit/query";
 import { broadcast } from "../ws";
-import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, BingoExportDocument } from "@bingo/shared";
+import { can, type Action, type AuditAction, type AuditCategory, type AuditEntityType, type AuditLogFilters, type AuditVisibility, type BingoExportDocument } from "@bingo/shared";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
+
+/** Whether the viewer holds one of the Owner's Actions (OWNER_ACTIONS): every Admin is past requireAdmin already. */
+function ownerCan(req: Request, action: Action): boolean {
+  return can(userSiteRoles(req.user!), null, action).ok;
+}
 
 router.post(
   "/bingos",
@@ -87,18 +93,26 @@ router.delete(
   }),
 );
 
-// Only the admins listed in ADMIN_DISCORD_IDS may hand out site admin, so a
-// granted admin can't fan the role out further.
+// Only Owners (ADMIN_DISCORD_IDS) may grant or revoke site admin, so a granted admin can't fan the role out further
+// or take it from anyone. Nobody can revoke an Owner (userService.setUserAdmin).
 router.patch(
   "/users/:id",
   asyncHandler(async (req, res) => {
-    if (!isAdminDiscordId(req.user!.discordId)) throw new ServiceError(403, "Only admins listed in ADMIN_DISCORD_IDS can grant site admin");
+    if (!ownerCan(req, "manage_site_admins")) throw new ServiceError(403, "Only Owners can grant or revoke site admin");
     const { isAdmin } = req.body as { isAdmin?: boolean };
     if (typeof isAdmin !== "boolean") throw new ServiceError(400, "isAdmin must be a boolean");
     const user = userService.setUserAdmin(db, req.params.id as string, isAdmin);
     // Admin counts in every bingo and on the Site admin pages: their client refetches all of it.
     broadcast({ type: "access_changed", bingoId: null, payload: { userIds: [user.id] } });
     res.json({ user });
+  }),
+);
+
+// Site admin > Site admins: every Admin sees who the Owners and site admins are; only Owners get Grant and Revoke.
+router.get(
+  "/site-admins",
+  asyncHandler(async (_req, res) => {
+    res.json(userService.listSiteAdmins(db));
   }),
 );
 
@@ -111,7 +125,7 @@ router.get(
 );
 
 // Claude connections to the admin MCP server (#293). Every Admin sees and revokes their own ("Connected apps" in the
-// account menu); Site Admins (ADMIN_DISCORD_IDS) see and revoke everyone's.
+// account menu); Owners (ADMIN_DISCORD_IDS) see and revoke everyone's.
 router.get(
   "/mcp-connections/mine",
   asyncHandler(async (req, res) => {
@@ -122,7 +136,7 @@ router.get(
 router.get(
   "/mcp-connections",
   asyncHandler(async (req, res) => {
-    if (!isAdminDiscordId(req.user!.discordId)) throw new ServiceError(403, "Only admins listed in ADMIN_DISCORD_IDS can see everyone's connections");
+    if (!ownerCan(req, "manage_claude_connections")) throw new ServiceError(403, "Only Owners can see everyone's connections");
     res.json({ connections: mcpConnections.listConnections(db) });
   }),
 );
@@ -130,7 +144,7 @@ router.get(
 router.delete(
   "/mcp-connections/:id",
   asyncHandler(async (req, res) => {
-    mcpConnections.revokeConnection(db, req.params.id as string, { id: req.user!.id, isSiteAdmin: isAdminDiscordId(req.user!.discordId) });
+    mcpConnections.revokeConnection(db, req.params.id as string, { id: req.user!.id, isSiteAdmin: ownerCan(req, "manage_claude_connections") });
     res.status(204).end();
   }),
 );

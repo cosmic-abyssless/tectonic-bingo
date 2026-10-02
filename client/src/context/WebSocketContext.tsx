@@ -127,6 +127,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["signupRoster"]);
       break;
     case "access_changed":
+      // Someone's Admin flag: the Site admin pages' list of site admins, for every Admin who has it open.
+      if (event.bingoId === null) invalidate(["adminSiteAdmins"]);
       // Only the users named: their roles changed, and with them maybe their Actions and what the shell shows them.
       if (!viewerId || !event.payload.userIds.includes(viewerId)) break;
       invalidate(["permissions"]);
