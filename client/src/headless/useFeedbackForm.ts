@@ -50,9 +50,12 @@ export function useFeedbackForm(slug: string): FeedbackFormModel {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  // The viewer's own saved answers come first, then whatever they change: refilled whenever the server's copy changes
-  // (after saving, or the questions being edited).
-  useEffect(() => setAnswers(answersOf(form)), [form]);
+  // The viewer's own saved answers come first, then whatever they change: refilled when the saved answers change (after
+  // saving). Not when only the questions do (an Admin fixing a typo or reordering, which refetches the form): that must
+  // not throw away an answer they are halfway through typing.
+  const savedKey = JSON.stringify([form?.answers, form?.captainAnswers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `form` is read for the answers `savedKey` already stands for
+  useEffect(() => setAnswers(answersOf(form)), [savedKey]);
 
   const send = feedbackSubmission(general, captain, answers);
   const problem = (isFilled(general, answers) ? partProblem(general, answers) : null) ?? (isFilled(captain, answers) ? partProblem(captain, answers) : null);

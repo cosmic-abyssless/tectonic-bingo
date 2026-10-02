@@ -1,9 +1,9 @@
 import { now as clockNow } from "../clock";
-import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, ne, notInArray, or } from "drizzle-orm";
 import { can, canSeeAnswers, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, FEEDBACK_AUDIENCES, QUESTION_FORMS, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type FeedbackAudience, type PublicUser, type QuestionForm, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { feedbackAnswers, signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
+import { feedbackAnswers, feedbackResponses, signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs, getPendingOutgoingPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -195,6 +195,12 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
     const type = params.type ?? existing.type;
     assertChoiceSettings(type, params.allowOther, params.optionsJson ?? existing.optionsJson);
     assertFormSettings(existing.form, params.visibility, params.audience);
+    // Who answers a Feedback question can't change once it has answers: the results list each audience's answers apart,
+    // and a Player's next save only keeps the questions of their audience, so the old answers would vanish.
+    if (existing.form === "feedback" && params.audience !== undefined && params.audience !== existing.audience) {
+      const answered = tx.select({ n: count() }).from(feedbackAnswers).where(eq(feedbackAnswers.questionId, id)).get()!.n;
+      if (answered > 0) throw new ServiceError(409, "This question already has answers, so who it is asked of can't change. Delete it and add a new one instead.");
+    }
     const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : { ...params };
     // Other goes with the choices: a question that stops being a choice question stops allowing it.
     if (!isChoiceType(type) && existing.allowOther) set.allowOther = false;
@@ -252,6 +258,13 @@ export function deleteQuestion(db: Db, id: string): void {
     tx.delete(signupAnswers).where(eq(signupAnswers.questionId, id)).run();
     tx.delete(feedbackAnswers).where(eq(feedbackAnswers.questionId, id)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.id, id)).run();
+    // A response whose only answers were to this question has nothing left: drop it, so it isn't counted in the results
+    // and its Player isn't left "responded" with no way to clear it (they can answer afresh).
+    if (existing?.form === "feedback") {
+      tx.delete(feedbackResponses)
+        .where(and(eq(feedbackResponses.bingoId, existing.bingoId), notInArray(feedbackResponses.id, tx.select({ id: feedbackAnswers.responseId }).from(feedbackAnswers))))
+        .run();
+    }
     if (existing) {
       audit(tx, {
         action: "question.deleted",

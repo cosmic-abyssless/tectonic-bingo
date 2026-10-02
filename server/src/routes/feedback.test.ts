@@ -200,6 +200,34 @@ describe("Feedback questions (Admins)", () => {
     expect(JSON.parse(deleted.details!)).toMatchObject({ answersDeleted: 1, form: "feedback" });
   });
 
+  it("leave no empty response behind when deleting a question takes a response's last answer", async () => {
+    // Make the rating optional so a Player can answer only it.
+    expect((await call("admin", "PATCH", `/bingos/b1/admin/questions/${rating.id}`, { required: false })).status).toBe(200);
+    await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: rating.id, value: "Board" }] });
+    await call("otherPlayer", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "Fine" }, { questionId: rating.id, value: "Teams" }] });
+    expect(((await results("admin")).body as unknown as FeedbackResultsResponse).feedback.count).toBe(2);
+
+    await call("admin", "DELETE", `/bingos/b1/admin/questions/${rating.id}`);
+
+    // The Player whose only answer went has no response any more: not counted, and free to answer again.
+    expect(((await results("admin")).body as unknown as FeedbackResultsResponse).feedback.count).toBe(1);
+    expect(db.select().from(schema.feedbackResponses).all()).toHaveLength(1);
+    expect((await form("player")).responded).toBe(false);
+    expect((await form("otherPlayer")).responded).toBe(true);
+    expect((await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "Back again" }] })).status).toBe(200);
+  });
+
+  it("keep a question's audience once it has answers, and let it change before", async () => {
+    await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "Fine" }, { questionId: rating.id, value: "Board" }] });
+    const refused = await call("admin", "PATCH", `/bingos/b1/admin/questions/${general.id}`, { audience: "captains" });
+    expect(refused.status).toBe(409);
+    expect(db.select().from(schema.signupQuestions).where(eq(schema.signupQuestions.id, general.id)).get()?.audience).toBe("all");
+    expect(db.select().from(schema.feedbackAnswers).where(eq(schema.feedbackAnswers.questionId, general.id)).all()).toHaveLength(1);
+    // Saying the audience it already has is no change; and a question nobody answered can move.
+    expect((await call("admin", "PATCH", `/bingos/b1/admin/questions/${general.id}`, { audience: "all", prompt: "How was it, really?" })).status).toBe(200);
+    expect((await call("admin", "PATCH", `/bingos/b1/admin/questions/${captainsOnly.id}`, { audience: "all" })).status).toBe(200);
+  });
+
   it("can't be managed by a Moderator", async () => {
     expect((await call("mod", "POST", "/bingos/b1/admin/questions", { form: "feedback", prompt: "X", type: "text" })).status).toBe(403);
   });
