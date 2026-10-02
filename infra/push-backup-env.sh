@@ -30,13 +30,22 @@ while [ $# -gt 0 ]; do
   esac
 done
 box_init "$identity"
-[ "$(jq -r '.backup_env.value.staging // empty' <<<"$outputs")" ] || { echo "tofu has no backup_env output: has it been applied?" >&2; exit 1; }
+declare -A contents
+for environment in staging production; do
+  contents[$environment]="$(jq -r --arg e "$environment" '.backup_env.value[$e] // empty' <<<"$outputs")"
+  [ -n "${contents[$environment]}" ] || { echo "tofu has no backup_env for $environment: has it been applied?" >&2; exit 1; }
+  # State from before r2.tf stopped rendering a blank one: pushing it would blank the box's own BACKUP_PING_URL.
+  if grep -q '^BACKUP_PING_URL=' <<<"${contents[$environment]}"; then
+    echo "tofu's backup_env still renders BACKUP_PING_URL (state from before r2.tf stopped doing so): run tofu apply first" >&2
+    exit 1
+  fi
+done
 
 box_require_bootstrapped
 echo "== the box at $host ($mode)"
 
 for environment in staging production; do
-  box_sync "$mode" "$environment.backup.env" "$(jq -r --arg e "$environment" '.backup_env.value[$e]' <<<"$outputs")"
+  box_sync "$mode" "$environment.backup.env" "${contents[$environment]}"
 done
 
 if [ "$mode" = check ]; then

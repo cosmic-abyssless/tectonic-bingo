@@ -61,7 +61,9 @@ try {
 
     foreach ($environment in @("staging", "production")) {
         if ($Only -and $Only -ne $environment) { continue }
-        Sync-BoxFile -Mode $mode -Target "$environment.env" -Contents $outputs.app_env.value.$environment
+        $appEnv = $outputs.app_env.value.$environment
+        if (-not $appEnv) { throw "tofu has no app_env for $environment : run tofu apply first" }
+        Sync-BoxFile -Mode $mode -Target "$environment.env" -Contents $appEnv
 
         if ($environment -eq "staging") {
             $login = $outputs.staging_login.value

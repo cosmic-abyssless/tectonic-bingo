@@ -84,8 +84,11 @@ fi
 
 [ "$MODE" = write ] || exit 0
 
-# Nothing to change: the file, its mtime and the last .bak stay as they are.
-if [ -f "$file" ] && cmp -s "$work/desired" "$work/box"; then
+# Nothing to change: the file, its mtime and the last .bak stay as they are. Compared with the file itself, not the
+# CR-stripped copy, so a file that matches only once its carriage returns are gone is still rewritten without them (Compose
+# would hand a container each value with a trailing CR). Its mode is put right either way, which leaves the mtime alone.
+if [ -f "$file" ] && cmp -s "$work/desired" "$file"; then
+  chmod 640 "$file"
   echo "  unchanged: left $file as it is"
   exit 0
 fi

@@ -24,9 +24,6 @@
 .PARAMETER FromJson
   Read `tofu output -json` from this file instead of running tofu (for testing).
 
-.PARAMETER Directory
-  Where on the box the files are. Default: /srv/tectonic/env (a test can use a directory of its own).
-
 .PARAMETER SkipBucketCheck
   Skip the final write/read/delete test (for testing).
 #>
@@ -34,7 +31,6 @@ param(
     [switch]$Write,
     [string]$Identity = "$env:USERPROFILE\.ssh\tectonic_box",
     [string]$FromJson = "",
-    [string]$Directory = "/srv/tectonic/env",
     [switch]$SkipBucketCheck
 )
 $ErrorActionPreference = "Stop"
@@ -44,12 +40,17 @@ $mode = if ($Write) { "write" } else { "check" }
 Initialize-Box -Identity $Identity -FromJson $FromJson
 
 try {
-    if (-not $outputs.backup_env.value.staging) { throw "tofu has no backup_env output: has it been applied?" }
+    foreach ($environment in @("staging", "production")) {
+        $content = $outputs.backup_env.value.$environment
+        if (-not $content) { throw "tofu has no backup_env for $environment : has it been applied?" }
+        # State from before r2.tf stopped rendering a blank one: pushing it would blank the box's own BACKUP_PING_URL.
+        if ($content -match "(?m)^BACKUP_PING_URL=") { throw "tofu's backup_env still renders BACKUP_PING_URL (state from before r2.tf stopped doing so): run tofu apply first" }
+    }
     Assert-BoxBootstrapped
     Write-Host "== the box at $hostAddress ($mode)"
 
     foreach ($environment in @("staging", "production")) {
-        Sync-BoxFile -Mode $mode -Target "$environment.backup.env" -Contents $outputs.backup_env.value.$environment -Directory $Directory
+        Sync-BoxFile -Mode $mode -Target "$environment.backup.env" -Contents $outputs.backup_env.value.$environment
     }
 
     if (-not $Write) {

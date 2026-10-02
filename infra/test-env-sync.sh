@@ -98,15 +98,21 @@ expect "another hash changes" "$out" "staging.basic-auth: changes"
 
 # A file that would come out identical is left alone: no write, no new .bak, the same mtime.
 rm -f "$dir/staging.env.bak"
-touch -d '2001-01-01 00:00:00' "$dir/staging.env"
-before="$(stat -c %Y "$dir/staging.env")"
+# (POSIX touch -t and find -newer, so this runs on macOS too.)
+touch -t 200101010000 "$dir/staging.env"
+touch -t 200101010001 "$dir/marker"
 out="$(sync write staging.env "$v2")"
 expect "an identical file is unchanged" "$out" "unchanged: left $dir/staging.env as it is"
 refute "and not written" "$out" "wrote"
-[ "$(stat -c %Y "$dir/staging.env")" = "$before" ] && echo "ok   its mtime is the same" || { echo "FAIL the identical file was rewritten"; fails=$((fails + 1)); }
+[ -z "$(find "$dir/staging.env" -newer "$dir/marker")" ] && echo "ok   its mtime is the same" || { echo "FAIL the identical file was rewritten"; fails=$((fails + 1)); }
 [ ! -e "$dir/staging.env.bak" ] && echo "ok   no .bak for an unchanged file" || { echo "FAIL a .bak was made for an unchanged file"; fails=$((fails + 1)); }
 out="$(sync write staging.basic-auth 'team $2a$10$abc')"
 expect "an identical password file is unchanged too" "$out" "unchanged: left $dir/staging.basic-auth as it is"
+# Equal by value but not byte for byte (Windows line endings): written, without them.
+printf 'A=one\r\nSECRET=correct-horse\r\n' >"$dir/production.env"
+out="$(sync write production.env $'A=one\nSECRET=correct-horse')"
+expect "a CRLF file that matches by value is still rewritten" "$out" "wrote $dir/production.env"
+grep -q $'\r' "$dir/production.env" && { echo "FAIL its carriage returns were kept"; fails=$((fails + 1)); } || echo "ok   and loses its carriage returns"
 
 # The backup env files go through the same path, and a BACKUP_PING_URL set on the box (tofu renders none) is kept.
 b1=$'# Written by infra/push-backup-env\nBACKUP_BUCKET=bucket\nBACKUP_PREFIX=production\nBACKUP_SECRET_ACCESS_KEY=s3cret'

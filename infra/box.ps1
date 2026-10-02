@@ -8,8 +8,8 @@
 #   Invoke-Box COMMAND [INPUT]
 #                            runs a command on the box as the deploy user, INPUT on its standard input
 #   Assert-BoxBootstrapped   stops unless the box has finished its first boot
-#   Sync-BoxFile -Mode check|write -Target NAME -Contents TEXT [-Directory DIR]
-#                            runs env-sync.sh on the box for DIR/NAME (default /srv/tectonic/env)
+#   Sync-BoxFile -Mode check|write -Target NAME -Contents TEXT
+#                            runs env-sync.sh on the box for /srv/tectonic/env/NAME
 #   Close-Box                removes the temporary known_hosts file: call it in a finally block
 
 function Initialize-Box([string]$Identity, [string]$FromJson = "") {
@@ -44,9 +44,12 @@ function Invoke-Box([string]$Command, [string]$InputText = "") {
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $p = [System.Diagnostics.Process]::Start($psi)
+    # Standard error is read in the background while standard output is read here: read one after the other, a child that
+    # fills the stderr pipe before closing stdout would wait on us while we wait on it.
+    $stderrRead = $p.StandardError.ReadToEndAsync()
     if ($InputText) { $p.StandardInput.Write($InputText) }
     $p.StandardInput.Close()
-    $stdout = $p.StandardOutput.ReadToEnd(); $stderr = $p.StandardError.ReadToEnd()
+    $stdout = $p.StandardOutput.ReadToEnd(); $stderr = $stderrRead.Result
     $p.WaitForExit()
     [pscustomobject]@{ ExitCode = $p.ExitCode; Output = $stdout.TrimEnd(); Error = $stderr.Trim() }
 }
@@ -58,9 +61,9 @@ function Assert-BoxBootstrapped {
 
 # The variables in front of the script, all on standard input, so no secret is ever on a command line. sed removes any
 # byte-order mark (EF BB BF) and tr any carriage return that came along on the way.
-function Sync-BoxFile([string]$Mode, [string]$Target, [string]$Contents, [string]$Directory = "/srv/tectonic/env") {
+function Sync-BoxFile([ValidateSet("check", "write")][string]$Mode, [ValidatePattern('^[a-z.-]+$')][string]$Target, [string]$Contents) {
     $desired = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Contents -replace "`r`n", "`n")))
-    $payload = "MODE=$Mode ENV_DIR=$Directory TARGET=$Target DESIRED=$desired`n" + $script:boxSyncScript
+    $payload = "MODE=$Mode ENV_DIR=/srv/tectonic/env TARGET=$Target DESIRED=$desired`n" + $script:boxSyncScript
     $r = Invoke-Box "sed 's/\xEF\xBB\xBF//g' | tr -d '\015' | bash -s" $payload
     if ($r.Output) { Write-Host $r.Output }
     if ($r.ExitCode -ne 0) { throw "env-sync failed for $Target : $($r.Error)" }

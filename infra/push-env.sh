@@ -48,7 +48,9 @@ echo "== the box at $host ($mode)"
 
 for environment in staging production; do
   [ -z "$only" ] || [ "$only" = "$environment" ] || continue
-  box_sync "$mode" "$environment.env" "$(jq -r --arg e "$environment" '.app_env.value[$e]' <<<"$outputs")"
+  app_env="$(jq -r --arg e "$environment" '.app_env.value[$e] // empty' <<<"$outputs")"
+  [ -n "$app_env" ] || { echo "tofu has no app_env for $environment: run tofu apply first" >&2; exit 1; }
+  box_sync "$mode" "$environment.env" "$app_env"
 
   if [ "$environment" = staging ]; then
     # The password itself, against the live site: a 401 with it means Bitwarden's password is not the one staging uses.
