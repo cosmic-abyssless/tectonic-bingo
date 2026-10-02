@@ -1,12 +1,22 @@
 <#
 .SYNOPSIS
-  Puts the backup credentials tofu created onto the box, as staging.backup.env and production.backup.env.
+  Puts the backup credentials tofu created (r2.tf) onto the box, as staging.backup.env and production.backup.env. Checks only,
+  unless -Write.
 
 .DESCRIPTION
   The PowerShell twin of push-backup-env.sh (which needs bash and jq). Run it from a window where `. .\infra\env.ps1` has been run,
-  because it reads `tofu output`. It trusts the server by the SSH host key tofu generated (never by what the network answers), keeps
-  a BACKUP_PING_URL already set on the box, sends the secrets over ssh's standard input (never on a command line), and finishes by
-  checking the box can write to the bucket (a test object, removed again).
+  because it reads `tofu output`. The last step of a build or rebuild (infra/README.md), and safe to run again.
+
+  Like push-env, it only CHECKS by default: for each file it lists, by name and never by value, which settings are the same as the
+  box's, different, new or only on the box. Those are kept, so a BACKUP_PING_URL (or any optional setting) set on the box survives.
+  -Write then replaces the files, keeping each previous one as FILE.bak, and checks the box can write to the bucket (a test object,
+  removed again).
+
+  The comparing and writing happen on the box, in env-sync.sh, which box.ps1 sends over ssh's standard input with the new
+  contents base64-encoded: no secret is ever on a command line. It trusts the server by the SSH host key tofu generated.
+
+.PARAMETER Write
+  Replace the files. Without it, nothing on the box changes.
 
 .PARAMETER Identity
   The admin private key. Default: ~\.ssh\tectonic_box
@@ -15,70 +25,37 @@
   Read `tofu output -json` from this file instead of running tofu (for testing).
 
 .PARAMETER Directory
-  Where on the box to write the files. Default: /srv/tectonic/env (the test uses /tmp).
+  Where on the box the files are. Default: /srv/tectonic/env (a test can use a directory of its own).
 
 .PARAMETER SkipBucketCheck
   Skip the final write/read/delete test (for testing).
 #>
 param(
+    [switch]$Write,
     [string]$Identity = "$env:USERPROFILE\.ssh\tectonic_box",
     [string]$FromJson = "",
     [string]$Directory = "/srv/tectonic/env",
     [switch]$SkipBucketCheck
 )
 $ErrorActionPreference = "Stop"
+$mode = if ($Write) { "write" } else { "check" }
+. (Join-Path $PSScriptRoot "box.ps1")
 
-if (-not (Test-Path $Identity)) { throw "no private key at $Identity (-Identity FILE)" }
-if ($FromJson) {
-    $outputs = Get-Content $FromJson -Raw | ConvertFrom-Json
-} else {
-    if (-not (Get-Command tofu -ErrorAction SilentlyContinue)) { throw "tofu is not on the PATH (run . .\infra\env.ps1 first)" }
-    Push-Location $PSScriptRoot
-    try { $outputs = (tofu output -json) -join "`n" | ConvertFrom-Json } finally { Pop-Location }
-}
-$hostAddress = $outputs.server_ipv4.value
-if (-not $hostAddress) { throw "tofu has no server_ipv4 output: has it been applied?" }
-
-$knownHosts = Join-Path $env:TEMP ("tofu_known_hosts_" + [Guid]::NewGuid().ToString("N"))
-Set-Content -Path $knownHosts -Value $outputs.known_hosts_line.value -Encoding ascii
-
-# Runs a command on the box as the deploy user, sending $InputText (if any) on its standard input. Windows PowerShell's pipe and
-# .NET's stream writer both add a byte-order mark (and PowerShell may add Windows line endings), and this .NET version cannot be
-# told not to, so the receiving command strips them (see $write below): a secret must arrive byte for byte.
-function Invoke-Box([string]$Command, [string]$InputText = "") {
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "ssh"
-    $psi.Arguments = "-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=`"$knownHosts`" -i `"$Identity`" deploy@$hostAddress `"$($Command -replace '"','\"')`""
-    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-    $psi.UseShellExecute = $false
-    $p = [System.Diagnostics.Process]::Start($psi)
-    if ($InputText) { $p.StandardInput.Write($InputText) }
-    $p.StandardInput.Close()
-    $stdout = $p.StandardOutput.ReadToEnd(); $stderr = $p.StandardError.ReadToEnd()
-    $p.WaitForExit()
-    [pscustomobject]@{ ExitCode = $p.ExitCode; Output = $stdout.Trim(); Error = $stderr.Trim() }
-}
+Initialize-Box -Identity $Identity -FromJson $FromJson
 
 try {
-    Write-Host "checking the box at $hostAddress has finished its first boot"
-    $r = Invoke-Box "test -f /srv/tectonic/state/.bootstrapped && echo ready"
-    if ($r.Output -ne "ready") { throw "the box has not finished bootstrapping yet (or cloud-init failed: see /var/log/cloud-init-output.log on it). $($r.Error)" }
+    if (-not $outputs.backup_env.value.staging) { throw "tofu has no backup_env output: has it been applied?" }
+    Assert-BoxBootstrapped
+    Write-Host "== the box at $hostAddress ($mode)"
 
     foreach ($environment in @("staging", "production")) {
-        $content = $outputs.backup_env.value.$environment
-        if (-not $content) { throw "tofu has no backup_env for $environment" }
-        $target = "$Directory/$environment.backup.env"
+        Sync-BoxFile -Mode $mode -Target "$environment.backup.env" -Contents $outputs.backup_env.value.$environment -Directory $Directory
+    }
 
-        # Keep a ping URL someone set by hand: tofu does not know it.
-        $existing = (Invoke-Box "sed -n 's/^BACKUP_PING_URL=//p' $target 2>/dev/null; true").Output
-        if ($existing) { $content = $content -replace "(?m)^BACKUP_PING_URL=.*$", "BACKUP_PING_URL=$existing" }
-
-        # sed removes any byte-order mark (EF BB BF), tr any carriage return, whatever the client added on the way.
-        $write = "umask 077 && mkdir -p $Directory && sed 's/\xEF\xBB\xBF//g' | tr -d '\015' > $target.tmp && chmod 640 $target.tmp && mv $target.tmp $target"
-        $w = Invoke-Box $write (($content -replace "`r`n", "`n").TrimEnd() + "`n")
-        if ($w.ExitCode -ne 0) { throw "could not write $target : $($w.Error)" }
-        $kept = ""; if ($existing) { $kept = " (kept its BACKUP_PING_URL)" }
-        Write-Host "wrote $target$kept"
+    if (-not $Write) {
+        Write-Host ""
+        Write-Host "Nothing was changed. Run again with -Write to replace the files."
+        return
     }
 
     if (-not $SkipBucketCheck) {
@@ -96,5 +73,5 @@ done
     }
     Write-Host "done"
 } finally {
-    Remove-Item $knownHosts -Force -ErrorAction SilentlyContinue
+    Close-Box
 }

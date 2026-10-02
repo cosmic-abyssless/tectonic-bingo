@@ -16,12 +16,14 @@
 #                           staging.basic-auth yet gets it without this.
 #   --identity FILE         the admin private key (default ~/.ssh/tectonic_box)
 #
-# Run from a shell where infra/env.ps1's credentials are set (it reads `tofu output`). Needs jq and curl. Trusts the server by
-# the host key tofu generated, never by what the network answers, and sends every secret over ssh's standard input.
+# Run from a shell where infra/env.ps1's credentials are set (it reads `tofu output`). Needs jq and curl. Reaches the box
+# through box.sh, which trusts it by the host key tofu generated and sends every secret over ssh's standard input.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=infra/box.sh
+. "$here/box.sh"
 identity="$HOME/.ssh/tectonic_box"
 mode="check"
 only=""
@@ -37,32 +39,16 @@ while [ $# -gt 0 ]; do
   esac
 done
 case "$only" in "" | staging | production) ;; *) echo "--only is staging or production" >&2; exit 1 ;; esac
-command -v tofu >/dev/null || { echo "tofu is not installed" >&2; exit 1; }
-command -v jq >/dev/null || { echo "jq is required (it reads tofu's output)" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required (it checks the staging password)" >&2; exit 1; }
-[ -f "$identity" ] || { echo "no private key at $identity (--identity FILE)" >&2; exit 1; }
-
-outputs="$(cd "$here" && tofu output -json)"
-host="$(jq -r '.server_ipv4.value' <<<"$outputs")"
-[ -n "$host" ] && [ "$host" != null ] || { echo "tofu has no server_ipv4 output: has it been applied?" >&2; exit 1; }
+box_init "$identity"
 [ "$(jq -r '.app_env.value.staging // empty' <<<"$outputs")" ] || { echo "tofu has no app_env output: run tofu apply first (README.md, \"App settings and secrets\")" >&2; exit 1; }
 
-known_hosts="$(mktemp)"; trap 'rm -f "$known_hosts"' EXIT
-jq -r '.known_hosts_line.value' <<<"$outputs" >"$known_hosts"
-box() { ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -i "$identity" "deploy@$host" "$@"; }
-
-# One file through env-sync.sh on the box: the variables in front of the script, all on standard input.
-sync_file() { # target contents
-  local desired; desired="$(printf '%s' "$2" | base64 | tr -d '\n')"
-  { printf 'MODE=%q ENV_DIR=/srv/tectonic/env TARGET=%q DESIRED=%q\n' "$mode" "$1" "$desired"; cat "$here/env-sync.sh"; } | box 'bash -s'
-}
-
-box 'test -f /srv/tectonic/state/.bootstrapped' || { echo "the box at $host has not finished its first boot (see /var/log/cloud-init-output.log on it)" >&2; exit 1; }
+box_require_bootstrapped
 echo "== the box at $host ($mode)"
 
 for environment in staging production; do
   [ -z "$only" ] || [ "$only" = "$environment" ] || continue
-  sync_file "$environment.env" "$(jq -r --arg e "$environment" '.app_env.value[$e]' <<<"$outputs")"
+  box_sync "$mode" "$environment.env" "$(jq -r --arg e "$environment" '.app_env.value[$e]' <<<"$outputs")"
 
   if [ "$environment" = staging ]; then
     # The password itself, against the live site: a 401 with it means Bitwarden's password is not the one staging uses.
@@ -78,7 +64,7 @@ for environment in staging production; do
     has_auth=1
     box 'test -f /srv/tectonic/env/staging.basic-auth' || has_auth=0
     if [ "$mode" = check ] || [ "$login" = ok ] || [ "$has_auth" = 0 ] || [ "$new_password" = 1 ]; then
-      sync_file staging.basic-auth "$(jq -r '.staging_basic_auth.value' <<<"$outputs")"
+      box_sync "$mode" staging.basic-auth "$(jq -r '.staging_basic_auth.value' <<<"$outputs")"
     else
       echo "  left staging.basic-auth as it is (the password was not confirmed): pass --new-staging-password to change it on purpose"
     fi

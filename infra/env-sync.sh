@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# The box's half of infra/push-env.sh and push-env.ps1: compares one env file on the box with what OpenTofu renders, and
-# (in write mode) replaces it. It runs on the box, sent over ssh's standard input with these variables set in front of it,
+# The box's half of infra/push-env and push-backup-env (.sh and .ps1): compares one env file on the box with what OpenTofu
+# renders, and (in write mode) replaces it. It runs on the box, sent over ssh's standard input with these variables set in front of it,
 # so no secret is ever on a command line:
 #
 #   MODE      check (report only) or write
 #   ENV_DIR   the directory the file is in, normally /srv/tectonic/env
-#   TARGET    the file's name in it: staging.env, production.env or staging.basic-auth
+#   TARGET    the file's name in it: staging.env, production.env, staging.basic-auth, staging.backup.env or
+#             production.backup.env
 #   DESIRED   the new contents, base64-encoded
 #
 # For an env file it reports, by name only, never a value: keys that are the same, different, new (only in OpenTofu) or
 # kept (only on the box: written back at the end of the file, so a setting OpenTofu does not know yet is never lost). For
 # staging.basic-auth it reports whether the file changes (a new bcrypt hash is expected the first time, even for the same
-# password: push-env checks the password itself against the live site). Writing keeps the previous file as TARGET.bak.
+# password: push-env checks the password itself against the live site). Writing keeps the previous file as TARGET.bak, and
+# leaves a file that would come out identical as it is (no write, no .bak).
 #
 # Tested by infra/test-env-sync.sh, which runs it against a temporary directory.
 set -euo pipefail
 
 : "${MODE:?MODE is check or write}" "${ENV_DIR:?}" "${TARGET:?}" "${DESIRED:?}"
 case "$MODE" in check | write) ;; *) echo "ENV-SYNC FAILED: MODE must be check or write, not $MODE" >&2; exit 1 ;; esac
-case "$TARGET" in staging.env | production.env | staging.basic-auth) ;; *) echo "ENV-SYNC FAILED: will not touch $TARGET" >&2; exit 1 ;; esac
+case "$TARGET" in staging.env | production.env | staging.basic-auth | staging.backup.env | production.backup.env) ;; *) echo "ENV-SYNC FAILED: will not touch $TARGET" >&2; exit 1 ;; esac
 [ -d "$ENV_DIR" ] || { echo "ENV-SYNC FAILED: $ENV_DIR does not exist" >&2; exit 1; }
 
 file="$ENV_DIR/$TARGET"
@@ -74,13 +76,19 @@ else
   if [ -s "$work/kept" ]; then
     {
       echo
-      echo "# Only on the box, not in OpenTofu (infra/app-env.tf): kept as they were."
+      echo "# Only on the box, not in OpenTofu (infra/): kept as they were."
       sort "$work/kept"
     } >>"$work/desired"
   fi
 fi
 
 [ "$MODE" = write ] || exit 0
+
+# Nothing to change: the file, its mtime and the last .bak stay as they are.
+if [ -f "$file" ] && cmp -s "$work/desired" "$work/box"; then
+  echo "  unchanged: left $file as it is"
+  exit 0
+fi
 
 umask 027
 backup=""

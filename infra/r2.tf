@@ -54,13 +54,13 @@ locals {
   backup_env = {
     for env in ["staging", "production"] :
     env => join("\n", [
-      "# Written by infra/push-backup-env.sh from tofu's outputs; edit BACKUP_PING_URL and the optional settings, nothing else.",
+      "# Written by infra/push-backup-env from tofu's outputs. Add BACKUP_PING_URL and the optional settings",
+      "# (deploy/backup.env.example) on the box: push-backup-env keeps them. Change nothing else here.",
       "BACKUP_ENDPOINT=${local.backup_endpoint}",
       "BACKUP_BUCKET=${cloudflare_r2_bucket.backups.name}",
       "BACKUP_PREFIX=${env}",
       "BACKUP_ACCESS_KEY_ID=${local.backup_access_key}",
       "BACKUP_SECRET_ACCESS_KEY=${local.backup_secret_key}",
-      "BACKUP_PING_URL=",
       "BACKUP_S3_PROVIDER=Cloudflare",
       "",
     ])

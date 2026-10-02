@@ -96,6 +96,34 @@ expect "the same hash is same" "$out" "staging.basic-auth: same"
 out="$(sync check staging.basic-auth 'team $2a$10$xyz')"
 expect "another hash changes" "$out" "staging.basic-auth: changes"
 
+# A file that would come out identical is left alone: no write, no new .bak, the same mtime.
+rm -f "$dir/staging.env.bak"
+touch -d '2001-01-01 00:00:00' "$dir/staging.env"
+before="$(stat -c %Y "$dir/staging.env")"
+out="$(sync write staging.env "$v2")"
+expect "an identical file is unchanged" "$out" "unchanged: left $dir/staging.env as it is"
+refute "and not written" "$out" "wrote"
+[ "$(stat -c %Y "$dir/staging.env")" = "$before" ] && echo "ok   its mtime is the same" || { echo "FAIL the identical file was rewritten"; fails=$((fails + 1)); }
+[ ! -e "$dir/staging.env.bak" ] && echo "ok   no .bak for an unchanged file" || { echo "FAIL a .bak was made for an unchanged file"; fails=$((fails + 1)); }
+out="$(sync write staging.basic-auth 'team $2a$10$abc')"
+expect "an identical password file is unchanged too" "$out" "unchanged: left $dir/staging.basic-auth as it is"
+
+# The backup env files go through the same path, and a BACKUP_PING_URL set on the box (tofu renders none) is kept.
+b1=$'# Written by infra/push-backup-env\nBACKUP_BUCKET=bucket\nBACKUP_PREFIX=production\nBACKUP_SECRET_ACCESS_KEY=s3cret'
+printf 'BACKUP_BUCKET=bucket\nBACKUP_PREFIX=production\nBACKUP_SECRET_ACCESS_KEY=old\nBACKUP_PING_URL=https://hc.test/ping-id\n' >"$dir/production.backup.env"
+out="$(sync check production.backup.env "$b1")"
+expect "a backup env file is compared by key" "$out" "production.backup.env: 2 same, 1 different, 0 new, 1 only on the box"
+expect "its ping URL is kept" "$out" "only on the box (kept as they are): BACKUP_PING_URL"
+refute "no backup secret is printed" "$out" "s3cret"
+out="$(sync write production.backup.env "$b1")"
+expect "a backup env file is written with a backup" "$out" "the previous one is production.backup.env.bak"
+grep -q '^BACKUP_PING_URL=https://hc.test/ping-id$' "$dir/production.backup.env" && echo "ok   the ping URL survives the write" || { echo "FAIL the ping URL was lost"; fails=$((fails + 1)); }
+grep -q '^BACKUP_SECRET_ACCESS_KEY=s3cret$' "$dir/production.backup.env" && echo "ok   the new credential is written" || { echo "FAIL new credential missing"; fails=$((fails + 1)); }
+out="$(sync write production.backup.env "$b1")"
+expect "writing it again leaves it as it is" "$out" "unchanged: left $dir/production.backup.env as it is"
+out="$(sync check staging.backup.env "$b1")"
+expect "staging's backup env file is allowed too" "$out" "staging.backup.env: new file"
+
 # Anything else is refused.
 out="$(sync write ../etc/passwd 'x')"
 expect "an unknown file is refused" "$out" "will not touch"

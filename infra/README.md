@@ -19,8 +19,9 @@ and reach the box through OpenTofu ("App settings and secrets" below, and [`docs
 | `app-env.tf` | the app's settings and secrets: `staging.env`, `production.env` and `staging.basic-auth`, rendered |
 | `outputs.tf` | the address, the host key, the DNS records to ask for, the rendered env files (sensitive) |
 | `env.ps1` | sets the credentials and app secrets for one PowerShell window, from Bitwarden (or asks, hidden) |
-| `push-backup-env.ps1`, `push-backup-env.sh` | write the two `*.backup.env` files onto the box from tofu's outputs (PowerShell for Windows; bash + `jq` elsewhere) |
-| `push-env.ps1`, `push-env.sh` | check, then write, the app's env files and staging's password onto the box (`env-sync.sh` is their half that runs on the box; `test-env-sync.sh` tests it) |
+| `push-backup-env.ps1`, `push-backup-env.sh` | check, then write, the two `*.backup.env` files onto the box from tofu's outputs (PowerShell for Windows; bash + `jq` elsewhere) |
+| `push-env.ps1`, `push-env.sh` | check, then write, the app's env files and staging's password onto the box |
+| `box.ps1`, `box.sh` | what both push tools share: tofu's outputs, ssh to the box by tofu's host key, and `env-sync.sh`, their half that runs on the box (`test-env-sync.sh` tests it) |
 
 ## What you need once
 
@@ -95,6 +96,10 @@ a `FEEDBACK_SECRET` once a Feedback form has responses: that form takes no answe
 
 - **The `.bak` holds the old values.** Once the deploy is confirmed, delete it, above all after rotating a secret because it
   leaked: `ssh deploy@5.161.101.213 rm /srv/tectonic/env/production.env.bak` (or `staging.env.bak`, `staging.basic-auth.bak`).
+  A file that would come out identical is left alone ("unchanged"): no write, and no new `.bak`.
+- **The backup env files** (`*.backup.env`, from `r2.tf`) work the same way: `.\push-backup-env.ps1` checks, `-Write` writes and
+  then checks the box can reach the bucket. Settings only on the box, such as `BACKUP_PING_URL` and the optional ones in
+  `deploy/backup.env.example`, are kept.
 - **The staging password.** `push-env` writes `staging.basic-auth` only when the password in OpenTofu logs in to the live
   site, or when the box has none yet. When you change the password on purpose, the live site refuses the new one, so pass
   `-NewStagingPassword`. The same applies if staging can't be reached at the time.
@@ -167,7 +172,7 @@ This is the acceptance test for all of the above: a server no human configured, 
    failed, the log says which; fix it and re-run that command (all are idempotent).
 5. On your PC: `ssh-keygen -R 5.161.101.213` (the machine is new, but tofu gave it the same host key as before, so this
    normally prints nothing; run it anyway if ssh complains).
-6. `.\infra\push-backup-env.ps1`, then `.\infra\push-env.ps1 -Write` (on Linux or macOS, the `.sh` twins with `jq` and `curl`). On a new
+6. `.\infra\push-backup-env.ps1 -Write`, then `.\infra\push-env.ps1 -Write` (on Linux or macOS, the `.sh` twins with `jq` and `curl`). On a new
    box there's nothing to compare against, so it reports every setting as new, and staging's password check can't reach the site
    yet; both are expected.
 7. **Actions > Deploy > Run workflow** for staging. Then check: `https://staging.tectonic.bingo` asks for the password and loads,

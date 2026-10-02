@@ -219,8 +219,8 @@ The credentials, the state bucket and the commands are in [`infra/README.md`](..
    a stable address, the firewall, the CI, repository and host keys, the deploy key and the four `DEPLOY_*` secrets on GitHub,
    and the R2 bucket with its token. First boot runs `deploy/bootstrap-box.sh`, `deploy/init-env.sh` and `deploy/deploy.sh edge`
    by itself (progress: `/var/log/cloud-init-output.log`).
-2. `infra/push-backup-env.ps1` (Windows PowerShell; `infra/push-backup-env.sh` elsewhere) writes the two backup env files (the R2 credentials tofu derived) onto the box and checks it
-   can write to the bucket.
+2. `infra/push-backup-env.ps1 -Write` (Windows PowerShell; `infra/push-backup-env.sh --write` elsewhere) writes the two backup env
+   files (the R2 credentials tofu derived) onto the box and checks it can write to the bucket. Without `-Write` it only checks.
 3. `infra/push-env.ps1 -Write` (`infra/push-env.sh --write` elsewhere) writes the app's own env files and staging's password,
    rendered by `infra/app-env.tf` from the values in Bitwarden. An optional backup alert URL goes in `*.backup.env` by hand
    (`BACKUP_PING_URL`; `push-backup-env` keeps it).
