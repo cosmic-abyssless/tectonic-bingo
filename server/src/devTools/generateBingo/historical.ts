@@ -151,7 +151,7 @@ export async function runHistorical(input: HistoricalRunInput): Promise<void> {
     .as(input.adminDiscordId)
     .post<{ usersCreated: number; scoring: HistoricalImportScoring | null }>("/api/admin/historical-bingos", bundle);
   // The bundle has no theme (the old site had none): set it the way the Bingo's settings would.
-  if (input.options.theme !== DEFAULT_THEME) await input.api.as(input.adminDiscordId).patch(`/api/bingos/${bundle.bingo.slug}/admin/settings`, { theme: input.options.theme });
+  if (input.options.theme && input.options.theme !== DEFAULT_THEME) await input.api.as(input.adminDiscordId).patch(`/api/bingos/${bundle.bingo.slug}/admin/settings`, { theme: input.options.theme });
   input.log(`imported ${bundle.bingo.slug} through Site admin → Import historical Bingo (${usersCreated} new users)`);
   if (scoring) input.log(`scored by the engine: ${scoring.teams.map((t) => `${t.team} ${t.total}`).join(", ")}`);
   if (bundle.submissions) await uploadScreenshots(input, bundle.bingo.slug);

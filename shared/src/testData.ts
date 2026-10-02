@@ -37,8 +37,11 @@ export interface TestDataOptions {
   seed: number;
   /** Always starts with "testdata-". */
   slug: string;
-  /** The theme the Bingo is drawn in: one of THEME_KEYS (themes.ts). "default" unless asked. */
-  theme: string;
+  /**
+   * The theme the Bingo is drawn in: one of THEME_KEYS (themes.ts), or null to keep its board's own (the Bingo it's
+   * copied from, or the export's). A Historical Bingo's bundle has none, so null draws it in the default theme.
+   */
+  theme: string | null;
 }
 
 export interface TestDataLogLine {
