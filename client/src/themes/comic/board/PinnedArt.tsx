@@ -102,11 +102,11 @@ function Tack({ colors }: { colors: ComicColors }) {
 }
 
 /**
- * The artwork full size, over the book. Escape, the backdrop and the close
+ * The artwork full size, over the book (and, on the board, a Submission's screenshot: see screenshotViewer). Escape, the backdrop and the close
  * button only close this; focus then goes back to the picture (the caller's
  * `onClose` does that — it knows which one opened it).
  */
-export function ArtViewer({ imageUrl, name, isOpen, onClose, colors }: { imageUrl: string | null; name: string; isOpen: boolean; onClose: () => void; colors: ComicColors }) {
+export function ArtViewer({ imageUrl, name, label = `${name} artwork`, isOpen, onClose, colors }: { imageUrl: string | null; name: string; label?: string; isOpen: boolean; onClose: () => void; colors: ComicColors }) {
   return (
     <ModalOverlay
       data-art-viewer
@@ -117,7 +117,7 @@ export function ArtViewer({ imageUrl, name, isOpen, onClose, colors }: { imageUr
     >
       <ComicBackdrop />
       <AriaModal className="comic-panel-pop relative outline-none">
-        <AriaDialog aria-label={`${name} artwork`} className="relative outline-none">
+        <AriaDialog aria-label={label} className="relative outline-none">
           <img
             src={fullUrl(imageUrl)}
             alt={name}

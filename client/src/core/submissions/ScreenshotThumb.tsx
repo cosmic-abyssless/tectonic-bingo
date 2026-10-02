@@ -3,11 +3,12 @@ import type { CSSProperties, ReactNode } from "react";
 import { ImageIcon } from "../ui/icons";
 import { thumbUrl } from "../../api/imageVariants";
 import { TextTooltip, Tooltip } from "../ui/Tooltip";
+import { useViewScreenshot } from "./screenshotViewer";
 
 const SIZE = { sm: "size-12", md: "size-14" } as const;
 
 /**
- * Screenshot thumbnail that opens the full image in a new tab; placeholder when none. `pending`: a Historical Bingo's
+ * Screenshot thumbnail that opens the full image (see ScreenshotLink); placeholder when none. `pending`: a Historical Bingo's
  * screenshot still to be uploaded, which says so rather than showing a broken picture.
  */
 export function ScreenshotThumb({ url, size = "md", pending = false }: { url?: string; size?: keyof typeof SIZE; pending?: boolean }) {
@@ -31,8 +32,9 @@ export function ScreenshotThumb({ url, size = "md", pending = false }: { url?: s
 }
 
 /**
- * A screenshot (its `children`, drawn however the screen likes) that opens the full image in a new tab, with a tooltip
- * saying so. ScreenshotThumb is the standard small one; screens that show it bigger or in their theme's frame use this.
+ * A screenshot (its `children`, drawn however the screen likes) that opens the full image, with a tooltip saying so: in
+ * the page's picture viewer on the board (screenshotViewer), elsewhere in a new tab. ScreenshotThumb is the standard
+ * small one; screens that show it bigger or in their theme's frame use this.
  */
 export function ScreenshotLink({
   href,
@@ -47,6 +49,16 @@ export function ScreenshotLink({
   style?: CSSProperties;
   children: ReactNode;
 }) {
+  const view = useViewScreenshot();
+  if (view) {
+    return (
+      <TextTooltip text={tooltip}>
+        <button type="button" onClick={() => view(href)} className={className} style={style}>
+          {children}
+        </button>
+      </TextTooltip>
+    );
+  }
   return (
     <TextTooltip text={tooltip}>
       <a href={href} target="_blank" rel="noreferrer" className={className} style={style}>
