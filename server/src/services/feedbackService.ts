@@ -30,7 +30,7 @@ import { feedbackAnswers, feedbackResponses } from "../db/schema";
 import { log } from "../log";
 import { ServiceError } from "./errors";
 import { bingoRoles, assertCan } from "./permissions";
-import { getQuestions, normalizeAnswers } from "./signupService";
+import { getQuestions, normalizeAnswers, optionsOf } from "./signupService";
 import { withMemberNames } from "./memberPickService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -127,12 +127,19 @@ function answersOf(db: Db, bingo: Bingo, responseId: string | undefined): Feedba
 
 /**
  * Whether `user` can answer this Bingo's Feedback form right now: it's Finished (a reopened Bingo closes it) and they're
- * a Player. A Moderator who didn't play, a Cut or withdrawn signup and a non-member aren't Players.
+ * a Player. A Moderator who didn't play, a Cut or withdrawn signup and a non-member aren't Players, and a Historical
+ * Bingo (read-only, always Finished, its roster imported) has no Feedback form to answer.
  */
 function answerer(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }) {
   const roles = bingoRoles(db, bingo, user);
   const isPlayer = roles.includes("player");
-  return { roles, isPlayer, isCaptain: roles.includes("captain"), open: isPlayer && can(roles, bingo, "answer_feedback").ok };
+  return { roles, isPlayer, isCaptain: roles.includes("captain"), open: isPlayer && !bingo.historical && can(roles, bingo, "answer_feedback").ok };
+}
+
+/** Whether the form is open to `user`, and if so whether this server can take their answers: all the Member pick list needs of it. */
+export function feedbackOpenTo(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }): { open: boolean; unavailable: FeedbackUnavailable | null } {
+  if (!answerer(db, bingo, user).open) return { open: false, unavailable: null };
+  return { open: true, unavailable: feedbackUnavailable(db, bingo.id) };
 }
 
 const CLOSED: FeedbackFormResponse = { open: false, unavailable: null, isCaptain: false, questions: [], answers: [], captainAnswers: [], responded: false, respondedAsCaptain: false };
@@ -196,12 +203,20 @@ function checkAnswers(
   return kept;
 }
 
-function saveResponse(db: Db, bingoId: string, userId: string, kind: Kind, answers: FeedbackAnswer[]): void {
-  const existing = findResponse(db, bingoId, userId, kind);
+/** The user's saved response of this kind: its id (none if they haven't given one) and its answers as stored, the `previous` checkAnswers keeps valid. */
+function ownResponse(db: Db, bingoId: string, userId: string, kind: Kind): { id: string | undefined; previous: Map<string, string> } {
+  const response = findResponse(db, bingoId, userId, kind);
+  if (!response) return { id: undefined, previous: new Map() };
+  const rows = db.select({ questionId: feedbackAnswers.questionId, value: feedbackAnswers.value }).from(feedbackAnswers).where(eq(feedbackAnswers.responseId, response.id)).all();
+  return { id: response.id, previous: new Map(rows.map((r) => [r.questionId, r.value])) };
+}
+
+/** Replaces the response `existingId` (or creates one when there's none yet) with `answers`. */
+function saveResponse(db: Db, bingoId: string, userId: string, kind: Kind, existingId: string | undefined, answers: FeedbackAnswer[]): void {
   const responseId =
-    existing?.id ??
+    existingId ??
     db.insert(feedbackResponses).values({ bingoId, kind, respondentKey: respondentKey(userId, bingoId, kind), keyCheck: keyCheckOf(secretOrThrow()) }).returning({ id: feedbackResponses.id }).get().id;
-  if (existing) db.delete(feedbackAnswers).where(eq(feedbackAnswers.responseId, responseId)).run();
+  if (existingId) db.delete(feedbackAnswers).where(eq(feedbackAnswers.responseId, responseId)).run();
   for (const a of answers) db.insert(feedbackAnswers).values({ responseId, questionId: a.questionId, value: a.value }).run();
 }
 
@@ -222,16 +237,17 @@ export function submitFeedback(db: Db, bingo: Bingo, user: { id: string; isAdmin
     const all = getQuestions(tx, bingo.id, "feedback");
     const forEveryone = all.filter((q) => q.audience === "all");
     const forCaptains = all.filter((q) => q.audience === "captains");
-    const previous = (kind: Kind) => new Map(answersOf(tx, bingo, findResponse(tx, bingo.id, user.id, kind)?.id).map((a) => [a.questionId, a.value]));
     if (submission.answers === undefined && submission.captainAnswers === undefined) throw new ServiceError(400, "answers are required");
 
     if (submission.answers !== undefined) {
       if (forEveryone.length === 0) throw new ServiceError(400, "This Bingo has no questions for every Player");
-      saveResponse(tx, bingo.id, user.id, "player", checkAnswers(tx, user.id, forEveryone, submission.answers, previous("player"), "answers"));
+      const own = ownResponse(tx, bingo.id, user.id, "player");
+      saveResponse(tx, bingo.id, user.id, "player", own.id, checkAnswers(tx, user.id, forEveryone, submission.answers, own.previous, "answers"));
     }
     if (submission.captainAnswers !== undefined) {
       if (forCaptains.length === 0) throw new ServiceError(400, "This Bingo has no Captains-only questions");
-      saveResponse(tx, bingo.id, user.id, "captain", checkAnswers(tx, user.id, forCaptains, submission.captainAnswers, previous("captain"), "captainAnswers"));
+      const own = ownResponse(tx, bingo.id, user.id, "captain");
+      saveResponse(tx, bingo.id, user.id, "captain", own.id, checkAnswers(tx, user.id, forCaptains, submission.captainAnswers, own.previous, "captainAnswers"));
     }
   });
   return getFeedbackForm(db, bingo, user);
@@ -250,14 +266,7 @@ function totalsFor(question: SignupQuestion, answers: string[]): FeedbackOptionT
     ];
   }
   if (question.type !== "select" && question.type !== "multiselect") return null;
-  let options: string[] = [];
-  try {
-    const parsed: unknown = JSON.parse(question.optionsJson ?? "[]");
-    if (Array.isArray(parsed)) options = parsed.filter((o): o is string => typeof o === "string");
-  } catch {
-    // no options
-  }
-  const counts = new Map(options.map((o) => [o, 0]));
+  const counts = new Map(optionsOf(question.optionsJson).map((o) => [o, 0]));
   let other = 0;
   for (const value of answers) {
     const { choices, other: otherValue } = parseChoiceAnswer(value);

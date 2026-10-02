@@ -22,5 +22,5 @@ Anonymity is more than the missing user id, so the rest of what could line a res
 
 - The hash covers the response's kind (Feedback or Captain), so a Captain's two responses share no value, and neither stores a user id. Their ids are random.
 - The two response tables are `WITHOUT ROWID`, so rows are stored in id order and the order they came in (a Captain's two responses written one after the other, say) can't be read off the file. Results are listed by that same random id.
-- The routes where a Player answers are marked `auditSkip`, send no WebSocket event, and leave the user out of the request log line and the error report's user (`server/src/anonymousRoutes.ts`).
+- The routes where a Player answers are marked `auditSkip`, send no WebSocket event, and leave the user out of the request log line and the error report's user (`anonymous()` in `server/src/audit/middleware.ts`, mounted on everything under the form's path).
 - Anyone holding both the secret and the database can recompute the hash for any user and Bingo, so `FEEDBACK_SECRET` is kept like the session secret: never logged, exported or shared between environments. `key_check` is denied in the SQL tool too: it names no one, but it is made with the secret.

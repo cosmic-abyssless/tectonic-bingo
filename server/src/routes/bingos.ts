@@ -44,7 +44,7 @@ import { getPastParticipationsForUser } from "../services/pastWomCompetitionServ
 import { ServiceError } from "../services/errors";
 import { refreshPricesAndFill } from "../services/gpValueService";
 import { broadcast } from "../ws";
-import { auditSkip } from "../audit/middleware";
+import { anonymous, auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
 
 const upload = imageUpload(UPLOADS_DIR, { variants: true });
@@ -259,8 +259,9 @@ router.delete(
 );
 
 // The Feedback form (CONTEXT.md "Feedback form"; docs/adr/0002-anonymous-feedback.md): a Finished Bingo's Players
-// answer it anonymously. These routes are anonymous end to end (anonymousRoutes.ts: no user in the request log, no
-// actor in the audit context), write nothing to the audit log and tell no one over the WebSocket.
+// answer it anonymously. Everything under /feedback is anonymous end to end (anonymous(): no user in the request log,
+// no actor in the audit context), and the routes write nothing to the audit log and tell no one over the WebSocket.
+router.use("/:slug/feedback", anonymous());
 router.get(
   "/:slug/feedback",
   requireAuth,
@@ -281,9 +282,9 @@ router.get(
   requireBingoViewer,
   noStore,
   asyncHandler(async (req, res) => {
-    const form = feedbackService.getFeedbackForm(db, req.bingo!, req.user!);
-    if (form.unavailable) throw new ServiceError(503, feedbackService.UNAVAILABLE_MESSAGE[form.unavailable]);
-    if (!form.open) throw new ServiceError(403, "The Feedback form isn't open to you");
+    const { open, unavailable } = feedbackService.feedbackOpenTo(db, req.bingo!, req.user!);
+    if (unavailable) throw new ServiceError(503, feedbackService.UNAVAILABLE_MESSAGE[unavailable]);
+    if (!open) throw new ServiceError(403, "The Feedback form isn't open to you");
     res.json({ members: memberPickService.getPickableMembers(db, req.user!.id) });
   }),
 );

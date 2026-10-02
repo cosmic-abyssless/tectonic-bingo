@@ -235,7 +235,7 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
     { action: "submit" },
     { action: "react" },
     // Open from Finished (the rule below), and a Captain is a Player, so they hold it too.
-    { action: "answer_feedback", stages: ["complete"] },
+    { action: "answer_feedback" },
     { action: "view_bingo", stages: AFTER_PLANNING },
     { action: "view_team_stats", stages: ["live"] },
     { action: "view_draft_room", stages: ["captains", "draft", "reveal", "live", "complete"] },

@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
 import { ServiceError } from "./services/errors";
-import { isAnonymousRoute } from "./anonymousRoutes";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -83,8 +82,8 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     const status = res.statusCode;
     const err = res.locals.error as unknown;
     const level: LogLevel = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
-    // A Feedback response is anonymous: its request line names no user (anonymousRoutes.ts).
-    const anonymous = isAnonymousRoute(req.originalUrl || req.url);
+    // An anonymous route (the Feedback form's, see anonymous() in audit/middleware.ts) names no user in its request line.
+    const anonymous = req.audit?.anonymous === true;
     const fields: LogFields = {
       method: req.method,
       path,

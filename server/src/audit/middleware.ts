@@ -8,17 +8,15 @@ import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 import { log } from "../log";
 import { normalizeTimezone } from "../localTime";
-import { isAnonymousRoute } from "../anonymousRoutes";
+import * as Sentry from "@sentry/node";
 
 // Mount after passport.session() (so req.user is populated) and before the
 // routers, in server/src/index.ts.
 export function auditContext(req: Request, res: Response, next: NextFunction): void {
-  // The Feedback form's routes are anonymous: no actor, so nothing written during one could name the Player.
-  const anonymous = isAnonymousRoute(req.originalUrl);
   const ctx: AuditContext = {
     requestId: crypto.randomUUID(),
-    actorUserId: anonymous ? null : (req.user?.id ?? null),
-    actorType: req.user && !anonymous ? "user" : "system",
+    actorUserId: req.user?.id ?? null,
+    actorType: req.user ? "user" : "system",
     actorRole: req.user?.isAdmin ? "admin" : "player",
     recorded: 0,
     skip: null,
@@ -68,6 +66,27 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
   });
 
   runWithAuditContext(ctx, next);
+}
+
+/**
+ * Marks a route (or, with router.use, every route under a path) as anonymous, like the Feedback form's
+ * (docs/adr/0002-anonymous-feedback.md): nothing about the request may say who made it. The audit context loses its
+ * actor, the request log line carries no user id and no error report is tagged with the user. Mount it before anything
+ * that can fail or log (requireAuth, requireBingo), so even a refusal is anonymous. Carries `.anonymousRoute` for a
+ * test to recognize.
+ */
+export function anonymous(): RequestHandler {
+  const handler: RequestHandler = (req, _res, next) => {
+    if (req.audit) {
+      req.audit.actorUserId = null;
+      req.audit.actorType = "system";
+      req.audit.anonymous = true;
+    }
+    Sentry.setUser(null);
+    next();
+  };
+  (handler as RequestHandler & { anonymousRoute: true }).anonymousRoute = true;
+  return handler;
 }
 
 /** Marks a route as a deliberate audit no-op (e.g. a read-only analyze endpoint), so the fallback doesn't fire for it. Also carries `.auditSkipReason` for routeCoverage.test.ts to recognize. */

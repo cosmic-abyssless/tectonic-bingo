@@ -45,7 +45,7 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   rate_picks: { owner: NONE, admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
   rename_team: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: "ssss+ss", player: NONE },
   mark_buyins: { owner: NONE, admin: "x++++xx", moderator: "x++++xx", staff: "s++++ss", captain: NONE, player: NONE },
-  answer_feedback: { owner: NONE, admin: "xxxxxx+", moderator: NONE, staff: NONE, captain: NONE, player: "ssssss+" },
+  answer_feedback: { owner: NONE, admin: "xxxxxx+", moderator: NONE, staff: NONE, captain: NONE, player: "xxxxxx+" },
   manage_feedback_questions: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   view_bingo: { owner: FINISHED, admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: "s++++++" },
   view_hidden_board: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },

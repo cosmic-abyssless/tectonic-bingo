@@ -248,6 +248,12 @@ describe("answering", () => {
     expect(reopened.responded).toBe(true);
   });
 
+  it("isn't offered on a Historical Bingo, though its imported roster has Players", async () => {
+    db.update(schema.bingos).set({ historical: true }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(await form("player")).toMatchObject({ open: false, questions: [] });
+    expect((await call("player", "GET", "/bingos/b1/feedback/members")).status).toBe(403);
+  });
+
   it("lets a Player submit and later edit their response, and shows it back to them", async () => {
     const first = await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "Fine" }, { questionId: rating.id, value: "Board" }] });
     expect(first.status).toBe(200);
@@ -365,6 +371,22 @@ describe("anonymity", () => {
     expect(JSON.stringify(put.body)).not.toContain(people.player.id);
     const read = await results("mod");
     expect(JSON.stringify(read.body)).not.toContain(people.player.id);
+  });
+
+  it("keeps the user out of the request log even when the request is refused, and on any route under the form's path", async () => {
+    // Refused before the route's own handlers: an unknown Bingo, a Player of no Bingo's, and a path nothing serves.
+    expect((await call("player", "GET", "/bingos/nope/feedback")).status).toBe(404);
+    await call("bystander", "PUT", "/bingos/b1/feedback", { answers: [] });
+    actingAs = people.player;
+    expect((await fetch(`${base}/bingos/b1/feedback/not-a-route`)).status).toBe(404);
+    await settled();
+    const lines = logged.join("").split("\n").filter((l) => l.includes("/feedback"));
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    for (const line of lines) {
+      expect(line).not.toContain(people.player.id);
+      expect(line).not.toContain(people.bystander.id);
+      expect(JSON.parse(line)).not.toHaveProperty("userId");
+    }
   });
 
   it("finds a Player's response again by the HMAC; a different secret takes no answers rather than count anyone twice", async () => {

@@ -86,7 +86,7 @@ export interface CreateQuestionParams {
 const isChoiceType = (type: SignupQuestionType) => type === "select" || type === "multiselect";
 
 /** A question's options, or none when they're missing or malformed. */
-function optionsOf(optionsJson: string | null | undefined): string[] {
+export function optionsOf(optionsJson: string | null | undefined): string[] {
   try {
     const parsed: unknown = JSON.parse(optionsJson ?? "[]");
     return Array.isArray(parsed) ? parsed.filter((o): o is string => typeof o === "string") : [];

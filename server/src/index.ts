@@ -45,7 +45,6 @@ import { mountClientApp } from "./middleware/clientApp";
 import { readRuntimeConfig } from "./runtimeConfig";
 import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
-import { isAnonymousRoute } from "./anonymousRoutes";
 import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
 import { createMcpRouter } from "./mcp/router";
@@ -167,8 +166,8 @@ const sessionAuth = [sessionMiddleware, passport.initialize(), passport.session(
 app.use(...sessionAuth);
 // Which account hit an error, by internal id only (no name or Discord details).
 app.use((req, _res, next) => {
-  // Not on the Feedback form's routes: a response is anonymous (anonymousRoutes.ts).
-  if (req.user && !isAnonymousRoute(req.originalUrl)) Sentry.setUser({ id: req.user.id });
+  // An anonymous route (the Feedback form's) clears this again: anonymous() in audit/middleware.ts.
+  if (req.user) Sentry.setUser({ id: req.user.id });
   next();
 });
 
