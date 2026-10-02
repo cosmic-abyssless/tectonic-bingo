@@ -2,7 +2,7 @@
 // and what it recorded. A Historical Bingo is always Finished and read-only: requireBingo refuses every write to one,
 // and advanceStage refuses to move it. What it never recorded is decided per feature by whether the data is there
 // (getRecorded), so a rich import (Tier 2) that has Submissions or a Draft shows them without any change here.
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { NOT_RECORDED_HISTORICAL, type HistoricalBingoResponse, type HistoricalRecorded, type HistoricalStanding, type WomLeaderboard, type WomLeaderboardPlayer, type WomLeaderboardTeam } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -21,7 +21,7 @@ export function getRecorded(db: Db | Tx, bingoId: string): HistoricalRecorded {
   return {
     tasks: !!db.select({ id: nodeEdges.id }).from(nodeEdges).where(inArray(nodeEdges.parentId, tileNodeIds)).limit(1).get(),
     submissions: !!db.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds)).limit(1).get(),
-    signupRoster: !!db.select({ id: signupQuestions.id }).from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).limit(1).get(),
+    signupRoster: !!db.select({ id: signupQuestions.id }).from(signupQuestions).where(and(eq(signupQuestions.bingoId, bingoId), eq(signupQuestions.form, "signup"))).limit(1).get(),
     draft: !!db.select({ id: draftPicks.id }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).limit(1).get(),
     womSnapshots: !!db.select({ id: womSnapshots.id }).from(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).limit(1).get(),
   };

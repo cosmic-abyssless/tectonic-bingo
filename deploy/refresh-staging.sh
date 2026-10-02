@@ -10,7 +10,8 @@
 # It stops staging's api and backup services, restores production's database and uploads over staging's data (the same
 # deploy/restore.sh that proves the backups work), verifies the result, and starts back whatever was running. Production is
 # only ever READ: nothing here writes to its data or to its backups. Staging's own sessions become unusable (a different
-# SESSION_SECRET signs them), and staging's own backups start a new history from the restored database.
+# SESSION_SECRET signs them; likewise a restored Feedback response can be read but not edited by its Player, since staging's
+# FEEDBACK_SECRET differs), and staging's own backups start a new history from the restored database.
 #
 # Staging then holds real players' details. It is protected by Caddy's shared password, and dev-login lets anyone who passes
 # it act as any account, so keep that password to the people who already administer the site, and do not hand staging

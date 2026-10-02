@@ -6,6 +6,8 @@ export { BingoPageProvider } from "./BingoPageProvider";
 export { useBingoPage, useBoardModel, useTileModel, usePageEvent } from "./useBingoPage";
 export { useSignupForm } from "./useSignupForm";
 export type { SignupFormModel, SignupQuestionModel, SignupChoiceModel, SignupCaModel, SignupBlock } from "./useSignupForm";
+export { useFeedbackForm } from "./useFeedbackForm";
+export type { FeedbackFormModel } from "./useFeedbackForm";
 export { usePartnerPanel } from "./usePartnerPanel";
 export type { PartnerPanelModel } from "./usePartnerPanel";
 export { useBingoHeader, RULES_COME_LATER } from "./useBingoHeader";

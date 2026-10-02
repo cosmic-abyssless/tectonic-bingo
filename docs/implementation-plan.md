@@ -316,7 +316,7 @@ Separate bot token (`DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`); on a mod-triggered
 
 # 6. Env vars (v2)
 
-Required: `DATABASE_PATH`, `SESSION_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_CALLBACK_URL`, `CLIENT_URL`, `ADMIN_DISCORD_IDS`.
+Required: `DATABASE_PATH`, `SESSION_SECRET`, `FEEDBACK_SECRET` (keys anonymous Feedback responses to their Players, ADR 0002), `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_CALLBACK_URL`, `CLIENT_URL`, `ADMIN_DISCORD_IDS`.
 Optional: `ANTHROPIC_API_KEY` (AI analyze disabled without it), `DISCORD_GUILD_ID` (guild-nick display; later the bot), `DISCORD_BOT_TOKEN` (phase 9).
 Deleted: `MOD_ROLE_ID`, all `TEAM_ROLE_*`.
 

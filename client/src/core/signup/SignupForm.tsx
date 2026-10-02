@@ -110,7 +110,8 @@ function Required() {
   return <span className="ml-1 text-danger">*</span>;
 }
 
-function QuestionField({ question }: { question: SignupQuestionModel }) {
+/** One question's input, by its type: the signup form's and the Feedback form's alike. */
+export function QuestionField({ question }: { question: SignupQuestionModel }) {
   const label = (
     <>
       {question.prompt}

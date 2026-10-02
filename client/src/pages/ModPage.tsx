@@ -19,6 +19,7 @@ import { AchievementsManager } from "../core/admin/AchievementsManager";
 import { BoardEditor } from "../core/admin/BoardEditor";
 import { LineEditor } from "../core/admin/LineEditor";
 import { QuestionBuilder } from "../core/admin/QuestionBuilder";
+import { FeedbackResults } from "../core/feedback/FeedbackResults";
 import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
@@ -46,11 +47,15 @@ const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; unti
   { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
   { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
   { key: "audit", label: "Audit log", adminOnly: false },
+  // The Feedback form's results (CONTEXT.md "Feedback form"): the Bingo has to be Finished for there to be any.
+  { key: "feedback", label: "Feedback", adminOnly: false, from: "complete" },
   { key: "settings", label: "Settings", adminOnly: true },
   { key: "achievements", label: "Achievements", adminOnly: true },
   { key: "board", label: "Board", adminOnly: true, until: "reveal" },
   { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
   { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
+  // Feedback questions can be edited in any stage.
+  { key: "feedback-questions", label: "Feedback questions", adminOnly: true },
   { key: "superlatives", label: "Superlatives", adminOnly: true },
   { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
   { key: "permissions", label: "Permissions", adminOnly: true },
@@ -207,6 +212,11 @@ export function ModPage() {
                   <AuditLog slug={slug} />
                 </div>
               </TabPanel>
+              <TabPanel id="feedback">
+                <div className={NARROW}>
+                  <FeedbackResults slug={slug} />
+                </div>
+              </TabPanel>
               {/* Offered on a Historical Bingo too, where it recorded Tasks (the tab list above decides), and locked there. */}
               {canAdminister && (
                 <TabPanel id="board">
@@ -235,6 +245,11 @@ export function ModPage() {
                   <TabPanel id="questions">
                     <div className={NARROW}>
                       <QuestionBuilder slug={slug} />
+                    </div>
+                  </TabPanel>
+                  <TabPanel id="feedback-questions">
+                    <div className={NARROW}>
+                      <QuestionBuilder slug={slug} form="feedback" />
                     </div>
                   </TabPanel>
                   <TabPanel id="superlatives">

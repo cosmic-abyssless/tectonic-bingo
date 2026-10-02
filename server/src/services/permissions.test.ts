@@ -41,6 +41,8 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   rate_picks: { admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
   rename_team: { admin: ALL, moderator: NONE, staff: NONE, captain: "ssss+ss", player: NONE },
   mark_buyins: { admin: "x++++xx", moderator: "x++++xx", staff: "s++++ss", captain: NONE, player: NONE },
+  answer_feedback: { admin: "xxxxxx+", moderator: NONE, staff: NONE, captain: NONE, player: "ssssss+" },
+  manage_feedback_questions: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   view_bingo: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: "s++++++" },
   view_hidden_board: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
   view_other_teams: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
@@ -54,6 +56,7 @@ const TABLE: Record<Action, Record<Role, Row>> = {
   view_mod_questions: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
   view_admin_questions: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
   view_any_player: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_feedback_results: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
   view_buyins: { admin: ALL, moderator: ALL, staff: "s++++ss", captain: NONE, player: NONE },
 };
 

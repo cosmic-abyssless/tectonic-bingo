@@ -158,6 +158,20 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     visibility: q.visibility,
   }));
 
+  // Feedback questions (CONTEXT.md): their settings and audience, never any answers.
+  const feedbackQuestions = signupService.getQuestions(db, bingoId, "feedback").map((q) => ({
+    prompt: q.prompt,
+    helperText: q.helperText,
+    type: q.type,
+    optionsJson: q.optionsJson,
+    allowOther: q.allowOther,
+    multiplePicks: q.multiplePicks,
+    maxPicks: q.maxPicks,
+    required: q.required,
+    sortOrder: q.sortOrder,
+    audience: q.audience,
+  }));
+
   const superlativeCategories = superlativeService.getCategories(db, bingoId).map((c) => ({ name: c.name, sortOrder: c.sortOrder }));
 
   return {
@@ -185,6 +199,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     tiles,
     lines,
     signupQuestions,
+    feedbackQuestions,
     superlativeCategories,
     achievementKeys: achievementService.getEnabledAchievementKeys(db, bingoId),
     ...(options.uploadsDir ? { wrappedArt: exportWrappedArt(db, bingoId, options.uploadsDir) } : {}),
@@ -213,6 +228,9 @@ function assertValidDocument(doc: BingoExportDocument): void {
   }
   if (!Array.isArray(doc.categories) || !Array.isArray(doc.tiles) || !Array.isArray(doc.lines) || !Array.isArray(doc.signupQuestions)) {
     throw new ServiceError(400, "Malformed import file: expected categories/tiles/lines/signupQuestions arrays");
+  }
+  if (doc.feedbackQuestions !== undefined && !Array.isArray(doc.feedbackQuestions)) {
+    throw new ServiceError(400, "Malformed import file: feedbackQuestions must be an array");
   }
   if (doc.bingo.cutMode !== undefined && !(CUT_MODES as readonly string[]).includes(doc.bingo.cutMode)) {
     throw new ServiceError(400, "Malformed import file: unknown cut mode");
@@ -482,6 +500,11 @@ export function importBingo(
 
     for (const q of doc.signupQuestions) {
       signupService.createQuestion(tx, { bingoId: bingo.id, prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, visibility: q.visibility ?? "captains" });
+    }
+
+    // Feedback questions (CONTEXT.md): absent in older files, none to create. Never any answers.
+    for (const q of doc.feedbackQuestions ?? []) {
+      signupService.createQuestion(tx, { bingoId: bingo.id, form: "feedback", prompt: q.prompt, helperText: q.helperText ?? null, type: q.type, optionsJson: q.optionsJson, allowOther: q.allowOther ?? false, multiplePicks: q.multiplePicks ?? false, maxPicks: q.maxPicks ?? null, required: q.required, sortOrder: q.sortOrder, audience: q.audience ?? "all" });
     }
 
     // Superlative categories (CONTEXT.md): absent in older files, none to create. Votes never travel with an export. A

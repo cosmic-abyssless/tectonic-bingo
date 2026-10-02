@@ -173,7 +173,7 @@ Not done, in order. Each is small; the last is the acceptance test.
       generate-if-absent behaviour for the by-hand path. Test in the Ubuntu container the way the script's other steps were
       (see the git log for `bootstrap-box.sh`).
 - [x] **`deploy/init-env.sh`** (new, idempotent, run as `deploy`): copy the four templates into `/srv/tectonic/env/` with
-      mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` with `openssl rand -hex 32`
+      mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` and `FEEDBACK_SECRET` with `openssl rand -hex 32`
       where blank, and create `staging.basic-auth` (`team` + `caddy hash-password`) with a generated password printed once.
       This is what was run ad hoc on the first server; see the runbook section "Setting up the server" for the values.
 - [x] **`deploy/fill-secrets.sh`** (new): the interactive helper that exists on the first server as `~/fill-secrets.sh`

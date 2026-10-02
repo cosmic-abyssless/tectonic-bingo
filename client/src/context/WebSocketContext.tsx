@@ -48,6 +48,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["wrapped"]);
       // Voting opens with Live and closes on Finishing.
       invalidate(["superlatives"]);
+      // The Feedback form is open only while Finished.
+      invalidate(["feedback"]);
       break;
     case "wrapped_published":
       invalidate(["wrapped"]);
@@ -69,6 +71,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["teamSubmissions"]);
       invalidate(["adminLines"]);
       invalidate(["adminQuestions"]);
+      // The Feedback form's questions are edited there too.
+      invalidate(["feedback"]);
       invalidate(["adminMods"]);
       invalidate(["bingoMods"]);
       invalidate(["adminCaptainCandidates"]);

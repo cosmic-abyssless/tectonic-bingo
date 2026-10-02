@@ -8,14 +8,17 @@ import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 import { log } from "../log";
 import { normalizeTimezone } from "../localTime";
+import { isAnonymousRoute } from "../anonymousRoutes";
 
 // Mount after passport.session() (so req.user is populated) and before the
 // routers, in server/src/index.ts.
 export function auditContext(req: Request, res: Response, next: NextFunction): void {
+  // The Feedback form's routes are anonymous: no actor, so nothing written during one could name the Player.
+  const anonymous = isAnonymousRoute(req.originalUrl);
   const ctx: AuditContext = {
     requestId: crypto.randomUUID(),
-    actorUserId: req.user?.id ?? null,
-    actorType: req.user ? "user" : "system",
+    actorUserId: anonymous ? null : (req.user?.id ?? null),
+    actorType: req.user && !anonymous ? "user" : "system",
     actorRole: req.user?.isAdmin ? "admin" : "player",
     recorded: 0,
     skip: null,
