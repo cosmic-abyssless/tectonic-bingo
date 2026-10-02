@@ -39,19 +39,21 @@ function Read-Secret([string]$name, [string]$hint) {
     return $plain.Trim()
 }
 
+# Every bw call is --nointeraction: whatever bw would ask (a password it thinks it needs), it fails with a message instead.
+# Its prompts go to the same output this script captures, so an interactive bw here would wait, invisibly, for an answer.
 $useBitwarden = -not $Prompt -and (Get-Command bw -ErrorAction SilentlyContinue)
 if ($useBitwarden) {
-    $status = (bw status | ConvertFrom-Json).status
+    Write-Host "Bitwarden: checking the vault..."
+    $status = (bw status --nointeraction | ConvertFrom-Json).status
     if ($status -eq "unauthenticated") { throw "Bitwarden: run 'bw login' once on this machine first (or use -Prompt)" }
     if ($status -ne "unlocked") {
-        # Asked for here, not by bw: bw draws its prompt on the same output --raw's session key comes out on, so capturing
-        # that output would swallow the prompt and leave the window waiting for a password it never asked for. The password
-        # reaches bw through an environment variable that lives only for this one command.
+        # Asked for here, not by bw; the password reaches bw through an environment variable that lives only for this command.
         $env:BW_PASSWORD = Read-Secret "Bitwarden master password" "unlocks the vault for this window"
-        try { $env:BW_SESSION = bw unlock --passwordenv BW_PASSWORD --raw } finally { Remove-Item env:BW_PASSWORD -ErrorAction SilentlyContinue }
+        try { $env:BW_SESSION = bw unlock --passwordenv BW_PASSWORD --raw --nointeraction } finally { Remove-Item env:BW_PASSWORD -ErrorAction SilentlyContinue }
         if (-not $env:BW_SESSION) { throw "Bitwarden: could not unlock (wrong master password?)" }
     }
-    $null = bw sync
+    Write-Host "Bitwarden: syncing, then reading $($values.Count) items..."
+    $null = bw sync --nointeraction
 } elseif (-not $Prompt) {
     Write-Host "bw (the Bitwarden CLI) is not installed, so each value is asked for. https://bitwarden.com/help/cli/"
 }
@@ -60,7 +62,7 @@ $missing = @()
 foreach ($v in $values) {
     $value = $null
     if ($useBitwarden) {
-        $value = bw get password "tectonic-bingo/$($v.Name)" 2>$null
+        $value = bw get password "tectonic-bingo/$($v.Name)" --nointeraction 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $v.Name }
     }
     if (-not $value) { $value = Read-Secret $v.Name $v.Hint }
