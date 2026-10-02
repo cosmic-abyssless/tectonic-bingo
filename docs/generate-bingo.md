@@ -22,8 +22,8 @@ server works as it is, integrations and all.
 ## From the browser (local or staging)
 
 **Site admin > Test data** (the tab only appears on a dev-mode server). Pick the bingo whose board to copy (its
-tiles, lines, rules and signup questions; nothing else), where to leave the new bingo, and whether to put yourself on
-a team, then **Generate**. The log streams in underneath; a full live run takes about half a minute locally and a
+tiles, lines, rules and signup questions; nothing else), where to leave the new bingo, the theme to draw it in, and
+whether to put yourself on a team, then **Generate**. The log streams in underneath; a full live run takes about half a minute locally and a
 minute or two on staging. Generated bingos are listed below it with a **Tear down** button. **Do tear down**: a full
 run leaves 1,500-2,500 uploaded files (screenshots and their resized variants) and ~90 users behind otherwise.
 
@@ -71,13 +71,14 @@ The teardown script takes the same `--base` and `--basic-auth`.
 | `--admin` | first site admin | the admin the run acts as |
 | `--seed` | random (printed) | the same seed and options give the same people, choices and outcomes |
 | `--slug` | `testdata-<date>-<time>` | must start with `testdata-` |
+| `--theme` | `default` | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Set on the imported bingo, not copied from the board's source. For a Historical Bingo too |
 | `--base` | `http://localhost:3001` | the server |
 | `--from` | none | a bingo on the server to copy the board from |
 | `--export` | repo-root `tectonic-comics-bingo-export.json` | the board to send, when `--from` isn't given |
 | `--basic-auth` | `GENERATE_BINGO_BASIC_AUTH` | `user:password` for a server behind a shared password (staging) |
 | `--dry-run` | off | print the timeline and counts, send nothing |
 
-The Test data tab has the same settings (the admin is you, and the slug is always the default).
+The Test data tab has the same settings (the admin is you, and the slug is always the default). Its Theme select lists the same themes (`THEME_KEYS` in `shared/src/themes.ts`, which a new theme is added to).
 
 The dates follow from the stage. For `live --progress 0.5` on 9/19 with a 9-day event:
 it starts about 4.5 days ago and ends in 4.5, with the signup, captains, draft and

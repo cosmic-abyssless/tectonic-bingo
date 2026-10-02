@@ -162,6 +162,19 @@ of truth and will drift less than a doc copy. Broadly:
   screen) and `Reveal` (a line that fades up with the scroll, and just fades in under reduced
   motion); `WrappedParts` and `PointsChart` are there to reuse. `WrappedBanner` is the Board's
   way in: every `BoardPage` must draw it when `page.wrapped.canOpen`.
+- **A guided Wrapped page** (the comic theme's, #419): a `WrappedPage` that doesn't scroll holds a
+  `createWrappedProgressStore()`, wraps the sections in `WrappedProgressProvider` and, from its
+  camera, tells each Scene `store.setSceneState(id, { reached, current })`. A Scene is one page and
+  a `Reveal` step one panel on it; a step the section has no `Reveal` at is skipped. The provider's
+  `reveal` prop gives the page's own component to draw each `Reveal` (the comic's inked panel,
+  empty until the camera arrives, then painted in by a brush stroke), and a `Reveal` that brings its
+  own frame says `bare`. Scenes and Reveals carry `data-wrapped-scene` and `data-wrapped-step` for
+  the page to find them. The comic page lays every page out at a fixed 420px width (`wrapped/camera`'s
+  `WRAPPED_PAGE_WIDTH`, at least 2:3 tall, taller to fit its content) and frames it with a camera,
+  so a comic section is written for that one page width, with no viewport breakpoints. It paints the
+  default sections' `sm:` sizes back to their phone sizes meanwhile. The book adds its own contents
+  page, and the Outro's first Scene is the back cover (its other Scenes, the share cards, are pages
+  like any other: `WrappedShareCardItem` draws one with its buttons).
 - **Wrapped share cards** (#232, #314): `WrappedOutro` shows the viewer's cards (`section.cards`:
   a Player's Player and Team cards, none for anyone else) before its way out,
   drawn with `core/wrapped`'s `WrappedShareCards`, which previews each one scaled to fit and
@@ -177,6 +190,12 @@ of truth and will drift less than a doc copy. Broadly:
   calls `actions.outroReached()` once the viewer gets to the Outro and, when
   `outroReachedBefore` and the Outro has cards, offers a jump to them (`WRAPPED_CARDS_ID`).
   Only the default theme draws cards; others fall back to it.
+- **The comic's You, Duo, Captain and Moderator** (#420, in `themes/comic/wrapped/sections/`) are a
+  page or two each: You is two Scenes (the numbers and the best drop, then the rest of the story),
+  a Duo's best moments get a second, a Captain's Steal and grade a second. Each panel is one
+  `Reveal`, a part with nothing to say draws no panel, and the panels left fill its room (`FILL` in
+  `sectionParts-you-duo-captain-moderator` is the class string that makes a panel stretch to the
+  room its row gives it).
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.

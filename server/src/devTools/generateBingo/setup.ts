@@ -48,12 +48,13 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 }
 
 /** Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates. */
-export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string): Promise<void> {
+export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
   const { tl } = ctx;
   await ctx.api.as(ctx.admin).patch(
     path(ctx, "/admin/settings"),
     {
+      theme,
       signupOpensAt: tl.signupOpensAt.toISOString(),
       draftScheduledAt: tl.draftAt.toISOString(),
       revealScheduledAt: tl.revealAt.toISOString(),
@@ -62,7 +63,7 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
     },
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );
-  ctx.log(`imported ${ctx.slug} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
+  ctx.log(`imported ${ctx.slug} in the ${theme} theme (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
 }
 
 /** A Task as the board editor sends it back: every field and child as loaded, ids and all, so nothing else changes. */

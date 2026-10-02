@@ -162,6 +162,16 @@ describe("normalizeOptions", () => {
     expect(defaultSlug(now)).toBe("testdata-20260919-1432");
   });
 
+  it("draws in the default theme unless asked, and checks a theme against the known ones", () => {
+    expect(normalizeOptions({}, now).theme).toBe("default");
+    expect(normalizeOptions({ theme: "comic" }, now).theme).toBe("comic");
+    expect(normalizeOptions({ theme: " comic " }, now).theme).toBe("comic");
+    expect(normalizeOptions({ theme: "" }, now).theme).toBe("default");
+    expect(() => normalizeOptions({ theme: "neon" }, now)).toThrow(/theme must be one of default, comic/);
+    expect(() => normalizeOptions({ theme: "neon" }, now, { theme: "--theme" })).toThrow(/^--theme must be one of/);
+    expect(() => normalizeOptions({ theme: 3 }, now)).toThrow(OptionsError);
+  });
+
   it("takes numbers as numbers (a JSON body) or as text (the command line)", () => {
     expect(normalizeOptions({ stage: "draft", seed: 7, me: "123", teams: 4 }, now)).toMatchObject({ stage: "draft", seed: 7, me: "123", teams: 4 });
     expect(normalizeOptions({ seed: "7", teamSize: "10" }, now)).toMatchObject({ seed: 7, teamSize: 10 });
