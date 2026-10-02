@@ -404,7 +404,7 @@ A Draft pick who finished far higher in Points share than their pick number sugg
 
 ### Feedback form
 A Finished Bingo's questionnaire for its Players about how the Bingo went, set up by Admins with Feedback questions.
-- **Rules:** Open only while the Bingo is Finished, with no deadline; it closes, keeping its answers, if the Bingo is reopened. Only Players can answer, and only Moderators and Admins can read the results: each response in turn (see ADR 0002 for how they stay anonymous), plus totals for choice questions, and how many responded.
+- **Rules:** Open only while the Bingo is Finished, with no deadline; it closes, keeping its answers, if the Bingo is reopened. Only Players can answer, and only Moderators and Admins can read the results: each response in turn (see ADR 0002 for how they stay anonymous), plus totals for choice questions, and how many responded. A server that can't keep answers anonymous (it isn't set up for Feedback, or its Feedback key changed since answers were given) takes no answers until it can, and says so; nothing given is lost, and the results still show.
 
 ### Feedback question
 A question on a Feedback form, built like a signup question (same types, Other, helper text, required, order), but with no per-question visibility: Moderators and Admins read every answer. Exported and imported with the Bingo; the answers are not.

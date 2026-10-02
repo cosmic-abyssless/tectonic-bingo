@@ -293,12 +293,14 @@ describe("anonymity", () => {
       captainAnswers: [{ questionId: captainsOnly.id, value: "tense" }],
     });
     const responses = db.select().from(schema.feedbackResponses).all();
-    expect(Object.keys(responses[0]!).sort()).toEqual(["bingoId", "id", "kind", "respondentKey"]);
+    expect(Object.keys(responses[0]!).sort()).toEqual(["bingoId", "id", "keyCheck", "kind", "respondentKey"]);
     expect(Object.keys(db.select().from(schema.feedbackAnswers).get()!).sort()).toEqual(["id", "questionId", "responseId", "value"]);
     const [player, captain] = [responses.find((r) => r.kind === "player")!, responses.find((r) => r.kind === "captain")!];
     expect(player.respondentKey).not.toBe(captain.respondentKey);
-    // No value of one is in the other, and none contains the user.
-    for (const key of Object.keys(player) as (keyof typeof player)[]) if (key !== "bingoId" && key !== "kind") expect(player[key]).not.toBe(captain[key]);
+    // No value of one is in the other (keyCheck is the same for every response the secret keyed, so it links nothing), and
+    // none contains the user.
+    expect(player.keyCheck).toBe(captain.keyCheck);
+    for (const key of Object.keys(player) as (keyof typeof player)[]) if (key !== "bingoId" && key !== "kind" && key !== "keyCheck") expect(player[key]).not.toBe(captain[key]);
     const everything = JSON.stringify([responses, db.select().from(schema.feedbackAnswers).all()]);
     expect(everything).not.toContain(people.captain.id);
     expect(everything).not.toContain(people.captain.discordId);
@@ -337,25 +339,58 @@ describe("anonymity", () => {
     expect(JSON.stringify(read.body)).not.toContain(people.player.id);
   });
 
-  it("finds a Player's response again by the HMAC, so a different secret cuts them off but exposes no one", async () => {
-    await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "a" }, { questionId: rating.id, value: "Board" }] });
+  it("finds a Player's response again by the HMAC; a different secret takes no answers rather than count anyone twice", async () => {
+    const answers = [{ questionId: general.id, value: "a" }, { questionId: rating.id, value: "Board" }];
+    await call("player", "PUT", "/bingos/b1/feedback", { answers });
+    expect(db.select().from(schema.feedbackResponses).all()).toHaveLength(1);
     process.env.FEEDBACK_SECRET = "another-secret";
     try {
-      expect(await form("player")).toMatchObject({ open: true, responded: false, answers: [] });
+      // The form is closed to answers, says why, and shows nothing of anyone's response.
+      expect(await form("player")).toMatchObject({ open: false, unavailable: "key_changed", questions: [], answers: [], responded: false });
+      expect(await form("otherPlayer")).toMatchObject({ open: false, unavailable: "key_changed" });
+      // Answering again is refused, so no Player gets a second response.
+      const again = await call("player", "PUT", "/bingos/b1/feedback", { answers });
+      expect(again.status).toBe(503);
+      expect(again.body.error).toMatch(/different FEEDBACK_SECRET/);
+      expect((await call("otherPlayer", "PUT", "/bingos/b1/feedback", { answers })).status).toBe(503);
+      expect((await call("player", "GET", "/bingos/b1/feedback/members")).status).toBe(503);
+      expect(db.select().from(schema.feedbackResponses).all()).toHaveLength(1);
+      // The results are still there, with why Players can't answer.
+      const read = (await results("mod")).body as unknown as FeedbackResultsResponse;
+      expect(read).toMatchObject({ unavailable: "key_changed", feedback: { count: 1 } });
     } finally {
       process.env.FEEDBACK_SECRET = "test-feedback-secret";
     }
-    expect((await form("player")).responded).toBe(true);
+    // The original secret back: their response is theirs again, and the form open.
+    expect(await form("player")).toMatchObject({ open: true, unavailable: null, responded: true });
   });
 
-  it("fails clearly, without a secret", async () => {
+  it("takes no answers without a secret, and says so, while everything else works", async () => {
     delete process.env.FEEDBACK_SECRET;
     try {
+      expect(await form("player")).toMatchObject({ open: false, unavailable: "not_configured", questions: [] });
       const res = await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "a" }, { questionId: rating.id, value: "Board" }] });
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(503);
+      expect(res.body.error).toMatch(/FEEDBACK_SECRET isn't set/);
+      expect(db.select().from(schema.feedbackResponses).all()).toHaveLength(0);
+      const read = await results("mod");
+      expect(read.status).toBe(200);
+      expect(read.body).toMatchObject({ unavailable: "not_configured", feedback: { count: 0 } });
+      // Someone the form isn't open to sees it closed, as ever, not "unavailable".
+      expect(await form("mod")).toMatchObject({ open: false, unavailable: null });
     } finally {
       process.env.FEEDBACK_SECRET = "test-feedback-secret";
     }
+  });
+
+  it("records which secret keyed a response, the same for every response and naming no one", async () => {
+    await call("player", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "a" }, { questionId: rating.id, value: "Board" }] });
+    await call("otherPlayer", "PUT", "/bingos/b1/feedback", { answers: [{ questionId: general.id, value: "b" }, { questionId: rating.id, value: "Board" }] });
+    const rows = db.select().from(schema.feedbackResponses).all();
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.keyCheck)).size).toBe(1);
+    expect(rows[0]!.keyCheck).not.toContain(people.player.id);
+    expect((await form("player")).unavailable).toBeNull();
   });
 });
 

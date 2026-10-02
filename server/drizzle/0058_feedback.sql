@@ -16,6 +16,7 @@ CREATE TABLE `feedback_responses` (
 	`bingo_id` text NOT NULL,
 	`kind` text NOT NULL,
 	`respondent_key` text NOT NULL,
+	`key_check` text NOT NULL,
 	FOREIGN KEY (`bingo_id`) REFERENCES `bingos`(`id`) ON UPDATE no action ON DELETE no action
 ) WITHOUT ROWID;
 --> statement-breakpoint

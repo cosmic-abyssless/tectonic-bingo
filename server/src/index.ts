@@ -57,9 +57,6 @@ const REQUIRED_ENV = [
   "DISCORD_CALLBACK_URL",
   "DISCORD_GUILD_ID",
   "SESSION_SECRET",
-  // Keys Feedback responses to their Players without naming them (services/feedbackService.ts). Must never change while
-  // a Feedback form is open: a new one cuts every Player off from editing their response.
-  "FEEDBACK_SECRET",
   "CLIENT_URL",
 ] as const;
 
@@ -71,6 +68,16 @@ if (missing.length > 0) {
 
 if (getAdminDiscordIds().length === 0) {
   log.warn("ADMIN_DISCORD_IDS is not set — no user will bootstrap as a site admin");
+}
+
+// FEEDBACK_SECRET keys Feedback responses to their Players without naming them (services/feedbackService.ts). Only the
+// Feedback form needs it, so the server runs without it, with Feedback forms taking no answers. It must never change
+// while a form has responses: a form whose responses were keyed with another secret takes no answers either.
+const feedbackSecret = process.env.FEEDBACK_SECRET ?? "";
+if (feedbackSecret.trim() === "") {
+  log.warn("FEEDBACK_SECRET is not set — Feedback forms take no answers until it is");
+} else if (feedbackSecret.length < 32) {
+  log.warn("FEEDBACK_SECRET is shorter than 32 characters — use a long random value (openssl rand -hex 32)");
 }
 
 installProcessLogHandlers();

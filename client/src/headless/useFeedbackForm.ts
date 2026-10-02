@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { type FeedbackFormResponse } from "@bingo/shared";
+import { type FeedbackFormResponse, type FeedbackUnavailable } from "@bingo/shared";
 import { useFeedbackForm as useFeedbackFormQuery, useFeedbackMembers, useSaveFeedback } from "../api/queries";
 import { feedbackSubmission, isFilled, partProblem } from "./feedbackDraft";
 import { questionModel, type SignupQuestionModel } from "./useSignupForm";
@@ -9,8 +9,12 @@ import { questionModel, type SignupQuestionModel } from "./useSignupForm";
 // the Player is to anyone else: the server keeps no record of it (docs/adr/0002-anonymous-feedback.md).
 
 export interface FeedbackFormModel {
-  /** "closed": it isn't open to this viewer (the Bingo isn't Finished, or they aren't a Player of it). */
-  status: "loading" | "closed" | "ready";
+  /**
+   * "closed": it isn't open to this viewer (the Bingo isn't Finished, or they aren't a Player of it). "unavailable": it
+   * is, but this server can't take answers right now (`unavailable` says why).
+   */
+  status: "loading" | "closed" | "unavailable" | "ready";
+  unavailable: FeedbackUnavailable | null;
   /** They lead a Team, so they also answer the Captains-only questions. */
   isCaptain: boolean;
   /** The All Players questions (the Feedback response). */
@@ -77,7 +81,8 @@ export function useFeedbackForm(slug: string): FeedbackFormModel {
     );
 
   return {
-    status: isLoading ? "loading" : form?.open ? "ready" : "closed",
+    status: isLoading ? "loading" : form?.open ? "ready" : form?.unavailable ? "unavailable" : "closed",
+    unavailable: form?.unavailable ?? null,
     isCaptain: form?.isCaptain ?? false,
     general: general.map(model),
     captain: captain.map(model),

@@ -1727,6 +1727,13 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "key_check": {
+          "name": "key_check",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {

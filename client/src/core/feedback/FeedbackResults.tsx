@@ -121,6 +121,19 @@ function Loaded({ data, which, setWhich }: { data: FeedbackResultsResponse; whic
       <Notice tone="info" icon={<LockIcon size={14} />}>
         Feedback is anonymous: nobody can see who gave a response, and answering is never in the audit log.
       </Notice>
+      {data.unavailable && (
+        <Notice tone="warn">
+          {data.unavailable === "key_changed" ? (
+            <>
+              <strong>Players can't answer this form right now.</strong> Its responses were saved with a different <code>FEEDBACK_SECRET</code> than the server has now, so nobody's earlier answers could be found and every Player who answered would be counted twice. Restore the secret they were saved with.
+            </>
+          ) : (
+            <>
+              <strong>Players can't answer this form right now.</strong> The server has no <code>FEEDBACK_SECRET</code>, and answers can't be kept anonymous without it. The results below are unaffected.
+            </>
+          )}
+        </Notice>
+      )}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2" aria-label="Response counts">
         <p className="text-sm text-on-surface-muted">
           <span className="num text-lg font-semibold text-on-surface">{data.feedback.count}</span> Feedback response{data.feedback.count === 1 ? "" : "s"}

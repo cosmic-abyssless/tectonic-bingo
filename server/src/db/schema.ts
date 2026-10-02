@@ -363,6 +363,10 @@ export const feedbackResponses = sqliteTable('feedback_responses', {
   // 'player': the Feedback response (the All Players questions). 'captain': a Captain's Captain response.
   kind: text('kind', { enum: ['player', 'captain'] }).notNull(),
   respondentKey: text('respondent_key').notNull(),
+  // Which FEEDBACK_SECRET keyed this response: an HMAC of a fixed label with it, the same for every response keyed with the
+  // same secret, so it says nothing of whose a response is. A Bingo whose responses carry another value is refused new
+  // answers rather than given a second response from every Player who already answered (services/feedbackService.ts).
+  keyCheck: text('key_check').notNull(),
 }, (t) => [
   uniqueIndex('feedback_responses_respondent_key_unq').on(t.respondentKey),
   index('feedback_responses_bingo_idx').on(t.bingoId, t.kind),

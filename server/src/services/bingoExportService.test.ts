@@ -253,7 +253,7 @@ describe("importBingo", () => {
     const { bingo: source, admin } = seedFullBingo();
     const general = createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "How was it?", helperText: "Be kind", type: "textarea", sortOrder: 0 });
     createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "Draft?", type: "select", optionsJson: JSON.stringify(["good", "bad"]), allowOther: true, required: true, audience: "captains", sortOrder: 1 });
-    const response = db.insert(schema.feedbackResponses).values({ bingoId: source.id, kind: "player", respondentKey: "k" }).returning().get();
+    const response = db.insert(schema.feedbackResponses).values({ bingoId: source.id, kind: "player", respondentKey: "k", keyCheck: "c" }).returning().get();
     db.insert(schema.feedbackAnswers).values({ responseId: response.id, questionId: general.id, value: "Loved it" }).run();
 
     const doc = exportBingo(db, source.id);

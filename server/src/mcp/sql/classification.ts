@@ -183,6 +183,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       bingo_id: "",
       kind: "player or captain",
       respondent_key: deny("An HMAC of the respondent (user, Bingo, kind) made with FEEDBACK_SECRET, so a Player can find their own response to edit it. Anonymity is exactly that nobody can read this."),
+      key_check: deny("An HMAC of a fixed label made with the FEEDBACK_SECRET that keyed the response, so a changed secret is noticed. It names no one, but it is made with the secret, so it stays out of reach too."),
     },
   },
   feedback_answers: {

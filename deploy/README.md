@@ -259,8 +259,9 @@ steps; the rest is secrets and DNS, which only a person can do.
    app's own files are what `infra/app-env.tf` renders; without OpenTofu, write them by hand with the same keys:
    - `production.env`, `staging.env`: every key `infra/app-env.tf` sets for that environment. Use different `SESSION_SECRET`s
      and `FEEDBACK_SECRET`s (`openssl rand -hex 32`). `FEEDBACK_SECRET` keys the anonymous Feedback responses to their
-     Players (docs/adr/0002-anonymous-feedback.md): the server refuses to start without it, and it must never change while a
-     Feedback form is open (a new one cuts every Player off from editing their response; it exposes no one).
+     Players (docs/adr/0002-anonymous-feedback.md). Without it the site runs but Feedback forms take no answers, and it must
+     never change once a form has responses: a form whose responses were saved with another secret takes no answers until
+     the original is restored (it exposes no one).
    - `production.backup.env`, `staging.backup.env`: from `deploy/backup.env.example`, with **different `BACKUP_PREFIX`es**
      (`production`, `staging`). The R2 bucket and token are set up as described under "Backups and restoring".
    - `staging.basic-auth`: one line, a username, a space, then a bcrypt hash:

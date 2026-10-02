@@ -26,6 +26,19 @@ export function FeedbackForm({ slug }: { slug: string }) {
     );
   }
 
+  // Open to them, but this server can't take answers: no form that would only fail. Their earlier answers are safe.
+  if (form.status === "unavailable") {
+    return (
+      <div className="mx-auto max-w-lg px-3 py-6 sm:px-6">
+        <EmptyState icon={<AlertIcon size={20} />} title="Feedback can't be answered right now">
+          {form.unavailable === "key_changed"
+            ? "Something changed on the server since answers were given, so it can't take new ones yet. Nothing you answered is lost. Try again later, or let an Admin know."
+            : "This server isn't set up to keep Feedback anonymous yet, so it can't take answers. Try again later, or let an Admin know."}
+        </EmptyState>
+      </div>
+    );
+  }
+
   const answered = form.responded || form.respondedAsCaptain;
   const nothingToAsk = form.general.length === 0 && form.captain.length === 0;
 

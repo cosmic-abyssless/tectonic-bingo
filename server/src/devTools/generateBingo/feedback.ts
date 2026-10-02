@@ -111,6 +111,13 @@ export async function runFeedback(input: { api: Api; admin: string; slug: string
   const forEveryone = questions.filter((q) => q.audience === "all");
   const forCaptains = questions.filter((q) => q.audience === "captains");
   if (questions.length === 0) return run;
+  // A server that can't take answers (no FEEDBACK_SECRET, or one its earlier responses weren't keyed with) gets none: the
+  // rest of the Bingo is still generated, and the run says why there's no Feedback.
+  const { unavailable } = await api.as(admin).get<FeedbackResultsResponse>(`/api/bingos/${slug}/mod/feedback`);
+  if (unavailable) {
+    run.problems.push(`No Feedback responses were generated: the server can't take answers (${unavailable === "not_configured" ? "FEEDBACK_SECRET isn't set" : "its FEEDBACK_SECRET isn't the one earlier responses were saved with"})`);
+    return run;
+  }
   const everyone = players.flatMap((p) => (p.userId ? [p.userId] : []));
 
   for (const team of teams) {

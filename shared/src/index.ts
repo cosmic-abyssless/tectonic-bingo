@@ -826,14 +826,23 @@ export interface FeedbackAnswer {
 }
 
 /**
+ * Why a Feedback form that's open to someone can't take answers on this server: "not_configured", FEEDBACK_SECRET isn't
+ * set; "key_changed", the Bingo's responses were saved with a different FEEDBACK_SECRET, so nobody's earlier answers can be
+ * found and new ones would count Players twice (docs/adr/0002-anonymous-feedback.md).
+ */
+export type FeedbackUnavailable = "not_configured" | "key_changed";
+
+/**
  * GET /api/bingos/:slug/feedback: the Feedback form as the viewer sees it. `open` is whether they can answer right now:
  * the Bingo is Finished and they're a Player (a reopened Bingo closes it, keeping the answers). Closed, there are no
  * questions or answers. `questions` are the ones they answer, in order: every All Players question, and for a Captain
  * the Captains-only ones too (each has its `audience`). `answers` is their own Feedback response and `captainAnswers`
  * their Captain response (a Captain only); `responded` / `respondedAsCaptain` are whether they've given each.
+ * `unavailable` is set, with `open` false, when the form would be open to them but this server can't take answers.
  */
 export interface FeedbackFormResponse {
   open: boolean;
+  unavailable: FeedbackUnavailable | null;
   isCaptain: boolean;
   questions: SignupQuestion[];
   answers: FeedbackAnswer[];
@@ -866,9 +875,13 @@ export interface FeedbackResultList {
   totals: Record<string, FeedbackOptionTotal[]>;
 }
 
-/** GET /api/bingos/:slug/mod/feedback: the Feedback results (Moderators and Admins). */
+/**
+ * GET /api/bingos/:slug/mod/feedback: the Feedback results (Moderators and Admins). `unavailable`: why Players can't
+ * answer this form on this server right now, if they can't (results are shown either way).
+ */
 export interface FeedbackResultsResponse {
   questions: SignupQuestion[];
+  unavailable: FeedbackUnavailable | null;
   feedback: FeedbackResultList;
   captain: FeedbackResultList;
 }

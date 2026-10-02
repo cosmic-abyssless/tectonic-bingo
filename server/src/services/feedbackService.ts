@@ -7,8 +7,10 @@
 //    Feedback response's.
 //  - Responses and answers carry no timestamps, and nothing here writes to the audit log (the routes are auditSkip'd).
 //  - Results come out in a fixed shuffled order (by the responses' random ids), never the order they were given in.
+//  - Without FEEDBACK_SECRET, or with a different one than a Bingo's responses were keyed with, its form takes no
+//    answers (`feedbackUnavailable`): never a stand-in secret, which would either expose respondents or count them twice.
 import crypto from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
   can,
@@ -20,10 +22,12 @@ import {
   type FeedbackResultList,
   type FeedbackResultsResponse,
   type FeedbackSubmission,
+  type FeedbackUnavailable,
   type SignupQuestion,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { feedbackAnswers, feedbackResponses } from "../db/schema";
+import { log } from "../log";
 import { ServiceError } from "./errors";
 import { bingoRoles, assertCan } from "./permissions";
 import { getQuestions, normalizeAnswers } from "./signupService";
@@ -37,13 +41,69 @@ type Kind = "player" | "captain";
 export const MAX_FEEDBACK_TEXT = 5000;
 
 /**
+ * FEEDBACK_SECRET, or null when it isn't set. There is never a stand-in: a built-in default (this repository is public)
+ * would let anyone holding the database tell whose a response is, and a made-up one would differ on every restart, so
+ * every Player who had answered could answer again and be counted twice.
+ */
+function feedbackSecret(): string | null {
+  const secret = process.env.FEEDBACK_SECRET;
+  return secret && secret.trim() !== "" ? secret : null;
+}
+
+function secretOrThrow(): string {
+  const secret = feedbackSecret();
+  if (!secret) throw new ServiceError(503, UNAVAILABLE_MESSAGE.not_configured);
+  return secret;
+}
+
+/**
  * The key a response is stored under: an HMAC of (user id, Bingo id, kind) with FEEDBACK_SECRET, so the server can find
- * a Player's own response again without anything stored saying whose it is. Throws, clearly, without the secret.
+ * a Player's own response again without anything stored saying whose it is.
  */
 export function respondentKey(userId: string, bingoId: string, kind: Kind): string {
-  const secret = process.env.FEEDBACK_SECRET;
-  if (!secret) throw new ServiceError(500, "FEEDBACK_SECRET is not set: Feedback responses can't be kept anonymously without it");
-  return crypto.createHmac("sha256", secret).update(JSON.stringify([userId, bingoId, kind])).digest("hex");
+  return crypto.createHmac("sha256", secretOrThrow()).update(JSON.stringify([userId, bingoId, kind])).digest("hex");
+}
+
+// What a response's `key_check` is made from: with the secret, a value that is the same for every response the secret
+// keyed, and different for any other secret. It names no one.
+const KEY_CHECK_LABEL = "tectonic-bingo feedback key check v1";
+
+function keyCheckOf(secret: string): string {
+  return crypto.createHmac("sha256", secret).update(KEY_CHECK_LABEL).digest("hex");
+}
+
+/** What the API says when a form can't take answers (the client shows its own words). */
+export const UNAVAILABLE_MESSAGE: Record<FeedbackUnavailable, string> = {
+  not_configured: "Feedback can't be answered on this server: FEEDBACK_SECRET isn't set, and responses can't be kept anonymous without it",
+  key_changed:
+    "Feedback can't be answered for this Bingo: its responses were saved with a different FEEDBACK_SECRET, so nobody's earlier answers could be found and every Player who answered would be counted twice. Restore the secret they were saved with.",
+};
+
+// A changed secret is logged once per Bingo per process, not on every request.
+const warnedKeyChanged = new Set<string>();
+
+/**
+ * Why this Bingo's Feedback form can't take answers on this server, or null when it can:
+ *  - "not_configured": FEEDBACK_SECRET isn't set.
+ *  - "key_changed": its responses were keyed with a different FEEDBACK_SECRET (changed or lost since). The form is closed
+ *    to answers rather than letting every Player who answered add a second response, since theirs can't be found.
+ * Results don't need the secret, so they're shown either way.
+ */
+export function feedbackUnavailable(db: Db, bingoId: string): FeedbackUnavailable | null {
+  const secret = feedbackSecret();
+  if (!secret) return "not_configured";
+  const other = db
+    .select({ id: feedbackResponses.id })
+    .from(feedbackResponses)
+    .where(and(eq(feedbackResponses.bingoId, bingoId), ne(feedbackResponses.keyCheck, keyCheckOf(secret))))
+    .limit(1)
+    .get();
+  if (!other) return null;
+  if (!warnedKeyChanged.has(bingoId)) {
+    warnedKeyChanged.add(bingoId);
+    log.warn("feedback responses were keyed with a different FEEDBACK_SECRET: the form takes no answers until it is restored", { bingoId });
+  }
+  return "key_changed";
 }
 
 /** The questions a Player answers: every All Players one, and a Captain's Captains-only ones besides. */
@@ -75,14 +135,20 @@ function answerer(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }) 
   return { roles, isPlayer, isCaptain: roles.includes("captain"), open: isPlayer && can(roles, bingo, "answer_feedback").ok };
 }
 
+const CLOSED: FeedbackFormResponse = { open: false, unavailable: null, isCaptain: false, questions: [], answers: [], captainAnswers: [], responded: false, respondedAsCaptain: false };
+
 export function getFeedbackForm(db: Db, bingo: Bingo, user: { id: string; isAdmin: boolean }): FeedbackFormResponse {
   const { isCaptain, open } = answerer(db, bingo, user);
-  if (!open) return { open: false, isCaptain: false, questions: [], answers: [], captainAnswers: [], responded: false, respondedAsCaptain: false };
+  if (!open) return CLOSED;
+  // Open to them, but this server can't take their answers right now: say why rather than show a form that would fail.
+  const unavailable = feedbackUnavailable(db, bingo.id);
+  if (unavailable) return { ...CLOSED, unavailable };
   const questions = questionsFor(getQuestions(db, bingo.id, "feedback"), isCaptain);
   const own = findResponse(db, bingo.id, user.id, "player");
   const ownCaptain = isCaptain ? findResponse(db, bingo.id, user.id, "captain") : undefined;
   return {
     open: true,
+    unavailable: null,
     isCaptain,
     questions,
     answers: answersOf(db, bingo, own?.id),
@@ -132,7 +198,9 @@ function checkAnswers(
 
 function saveResponse(db: Db, bingoId: string, userId: string, kind: Kind, answers: FeedbackAnswer[]): void {
   const existing = findResponse(db, bingoId, userId, kind);
-  const responseId = existing?.id ?? db.insert(feedbackResponses).values({ bingoId, kind, respondentKey: respondentKey(userId, bingoId, kind) }).returning({ id: feedbackResponses.id }).get().id;
+  const responseId =
+    existing?.id ??
+    db.insert(feedbackResponses).values({ bingoId, kind, respondentKey: respondentKey(userId, bingoId, kind), keyCheck: keyCheckOf(secretOrThrow()) }).returning({ id: feedbackResponses.id }).get().id;
   if (existing) db.delete(feedbackAnswers).where(eq(feedbackAnswers.responseId, responseId)).run();
   for (const a of answers) db.insert(feedbackAnswers).values({ responseId, questionId: a.questionId, value: a.value }).run();
 }
@@ -147,6 +215,8 @@ export function submitFeedback(db: Db, bingo: Bingo, user: { id: string; isAdmin
   if (!isPlayer) throw new ServiceError(403, "Only Players of this Bingo can give feedback");
   assertCan(roles, bingo, "answer_feedback", { role: new ServiceError(403, "Only Players of this Bingo can give feedback") });
   if (submission.captainAnswers !== undefined && !isCaptain) throw new ServiceError(403, "Only Captains can answer the Captains-only questions");
+  const unavailable = feedbackUnavailable(db, bingo.id);
+  if (unavailable) throw new ServiceError(503, UNAVAILABLE_MESSAGE[unavailable]);
 
   db.transaction((tx) => {
     const all = getQuestions(tx, bingo.id, "feedback");
@@ -238,6 +308,7 @@ export function getFeedbackResults(db: Db, bingo: Bingo): FeedbackResultsRespons
   const questions = getQuestions(db, bingo.id, "feedback") as SignupQuestion[];
   return {
     questions,
+    unavailable: feedbackUnavailable(db, bingo.id),
     feedback: resultList(db, bingo, "player", questions.filter((q) => q.audience === "all")),
     captain: resultList(db, bingo, "captain", questions.filter((q) => q.audience === "captains")),
   };

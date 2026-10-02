@@ -37,7 +37,7 @@ function seedSource(file: string): string {
   const category = db.insert(superlativeCategories).values({ bingoId: bingo.id, name: "MVP" }).returning().get();
   db.insert(superlativeVotes).values({ categoryId: category.id, teamId: team.id, voterUserId: voter, nomineeUserId: alice }).run();
   const question = db.insert(signupQuestions).values({ bingoId: bingo.id, form: "feedback", prompt: "How was it?", type: "text" }).returning().get();
-  const response = db.insert(feedbackResponses).values({ bingoId: bingo.id, kind: "player", respondentKey: "feedback-key-SECRET" }).returning().get();
+  const response = db.insert(feedbackResponses).values({ bingoId: bingo.id, kind: "player", respondentKey: "feedback-key-SECRET", keyCheck: "key-check-SECRET" }).returning().get();
   db.insert(feedbackAnswers).values({ responseId: response.id, questionId: question.id, value: "Great" }).run();
   sqlite.prepare("INSERT INTO sessions (sid, sess, expire) VALUES (?, ?, ?)").run("session-SECRET", "{}", "2099-01-01");
   return saveTo(sqlite, file);

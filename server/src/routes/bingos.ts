@@ -281,7 +281,9 @@ router.get(
   requireBingoViewer,
   noStore,
   asyncHandler(async (req, res) => {
-    if (!feedbackService.getFeedbackForm(db, req.bingo!, req.user!).open) throw new ServiceError(403, "The Feedback form isn't open to you");
+    const form = feedbackService.getFeedbackForm(db, req.bingo!, req.user!);
+    if (form.unavailable) throw new ServiceError(503, feedbackService.UNAVAILABLE_MESSAGE[form.unavailable]);
+    if (!form.open) throw new ServiceError(403, "The Feedback form isn't open to you");
     res.json({ members: memberPickService.getPickableMembers(db, req.user!.id) });
   }),
 );
