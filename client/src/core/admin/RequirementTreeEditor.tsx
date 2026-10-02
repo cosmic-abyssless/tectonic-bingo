@@ -733,7 +733,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
         {exclusiveRules.length > 0 && (
           <TooltipSpan
-            text={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            text={`A team can use this item in one place only (${describeRules(exclusiveRules, name)}). Set in the bingo's settings, under Exclusive items.`}
             label="Exclusive"
             className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
           >

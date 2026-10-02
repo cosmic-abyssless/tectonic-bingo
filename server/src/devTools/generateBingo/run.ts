@@ -8,7 +8,7 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, groupSomeItems, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { addExclusiveGroup, createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, groupSomeItems, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
@@ -131,6 +131,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await groupSomeItems(ctx, new Date(tl.createdAt.getTime() + 12 * 60_000));
+  const groupPlay = await addExclusiveGroup(ctx, new Date(tl.createdAt.getTime() + 15 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   const feedbackQuestions = await ensureFeedbackQuestions(api, adminDiscordId, slug, new Date(tl.createdAt.getTime() + 25 * 60_000));
   log(`feedback questions: ${feedbackQuestions.length}, ${feedbackQuestions.filter((q) => q.audience === "captains").length} for Captains only`);
@@ -230,6 +231,24 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     });
   }
 
+  // The exclusive item group (addExclusiveGroup): early on, a Team claims one piece and is then refused the other
+  // piece on another Tile. The first Team (in a seeded order) that can still claim the first piece does it.
+  const groupCheck: { tried: boolean; claimed: boolean; refusal: string | null } = { tried: false, claimed: false, refusal: null };
+  if (groupPlay) {
+    const when = new Date(tl.startsAt.getTime() + 20 * 60_000);
+    const order = rng.fork("exclusive-group-play").shuffle(simTeams);
+    sim.at(when, async () => {
+      groupCheck.tried = true;
+      for (const team of order) {
+        const outcome = await sim.claimThenRefused(team, groupPlay.first, groupPlay.second, when);
+        if (!outcome.claimed) continue;
+        groupCheck.claimed = true;
+        groupCheck.refusal = outcome.refusal;
+        return;
+      }
+    });
+  }
+
   // Superlative votes, through Live (voting closes when the Bingo is Finished); any past the run's limit never happen.
   const votes = planVotes(teamRows.map((t) => ({ members: t.players })), categories, new Date(tl.startsAt.getTime() + 2 * HOUR), new Date(tl.endsAt.getTime() - 5 * 60_000), rng.fork("superlatives"));
   const voting = { cast: 0, voters: new Set<number>(), refused: 0 };
@@ -260,6 +279,12 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     const feedback = await runFeedback({ api, admin: adminDiscordId, slug, teams: teamRows.map((t) => ({ members: t.players, leads: leads(t.id) })), players, rng: rng.fork("feedback"), from: tl.completeAt });
     log(`feedback: ${feedback.responses} responses and ${feedback.captainResponses} Captain responses${options.me ? " (none from you, so your card is still there)" : ""}`);
     result.problems.push(...feedback.problems);
+  }
+  if (groupPlay && groupCheck.tried) {
+    if (!groupCheck.claimed) log(`exclusive item group: no Team could still claim ${groupPlay.first.itemName}, so nothing was refused`);
+    else if (groupCheck.refusal?.includes(`(${groupPlay.first.itemName})`)) log(`exclusive item group: ${groupPlay.first.itemName} claimed, then ${groupPlay.second.itemName} refused: ${groupCheck.refusal}`);
+    else if (groupCheck.refusal) result.problems.push(`${groupPlay.second.itemName} was refused, but not for its group: ${groupCheck.refusal}`);
+    else result.problems.push(`${groupPlay.second.itemName} was accepted on ${groupPlay.second.tileName} although ${groupPlay.first.itemName}, in the same group, was claimed`);
   }
   if (lateRename.tried) {
     if (lateRename.refusal) log(`a captain's rename during Live was refused: ${lateRename.refusal}`);

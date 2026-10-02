@@ -67,6 +67,22 @@ describe("lockedLeaves", () => {
     expect([...locks.keys()]).toEqual(["t2"]);
     expect(lockTag(locks.get("t2")!)).toBe("Used on SLAYER BOSSES · Page 1");
   });
+
+  it("locks every piece of a group on the other part, naming the piece used, and leaves the same part open", () => {
+    const pieces = ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"];
+    const slayerTiles = [
+      tile("slayer", "SLAYER BOSSES", [
+        part("s-p1", "Page 1", "SUM", [item("p1-axon", "Bludgeon axon"), item("p1-claw", "Bludgeon claw")]),
+        part("s-p2", "Page 2", "SUM", pieces.map((n, i) => item(`p2-${i}`, n))),
+      ]),
+    ];
+    const rule: ExclusivityRule = { id: "slayer", label: "Slayer", itemNames: pieces, scope: "part", groups: [{ label: "Bludgeon piece", itemNames: pieces }] };
+    const locks = lockedLeaves([rule], slayerTiles, [sub("s1", "approved", ["p1-axon"])]);
+    expect([...locks.keys()].sort()).toEqual(["p2-0", "p2-1", "p2-2"]);
+    for (const lock of locks.values()) expect(lockTag(lock)).toBe("Used on SLAYER BOSSES · Page 1 (Bludgeon axon)");
+    expect(lockReason(locks.get("p2-1")!)).toBe("used on SLAYER BOSSES · Page 1 (Bludgeon axon): Bludgeon piece can only be used on one part");
+    expect(lockedLeaves([rule], slayerTiles, [sub("s1", "rejected", ["p1-axon"])]).size).toBe(0);
+  });
 });
 
 describe("boardItemSources", () => {

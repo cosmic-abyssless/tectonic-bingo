@@ -242,6 +242,14 @@ see `docs/exclusive-items-plan.md`) stop a team using one drop twice. The genera
 the rules from the imported bingo, and a simulated team never plans or posts a claim the
 rules would refuse. It draws that part's plan again a few times, then leaves the part alone.
 
+Every generated Bingo also gets an exclusive item rule with a *group* (several item names
+sharing one lock), added by the Admin through the settings after the import: "Unique pieces",
+two Items with different names on two Tiles (submittable from the start, no Freeze Period,
+named by no other rule), grouped as one "Unique piece", one Tile. Twenty minutes into Live a
+Team claims the first piece, and the run then tries the second piece on the other Tile, which
+the server must refuse with "Used on <Tile> (<the first piece>)"; if it is let through, the run
+reports it as a failed sanity check. A board with no such pair gets no group (the log says so).
+
 ## Running against a private server (leave your dev database alone)
 
 The generator writes a lot. To keep it out of your normal dev database, run a second
