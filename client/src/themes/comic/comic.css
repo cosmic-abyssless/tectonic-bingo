@@ -342,10 +342,20 @@
 
 /* ---- Wrapped: the comic book (#419) ----------------------------------------------------------------------------- */
 
-/* The book is laid out at a fixed page width (wrapped/camera.ts's WRAPPED_PAGE_WIDTH, 420px) in its own coordinates and
-   put on screen by the camera's transform, which the page writes onto the world. Its page is a Scene: the Scenes of the
-   sections are stacked in the book, one visible at a time (two while a page turns), each as tall as its content, at least
-   the height of a 2:3 page. */
+/* The desk the book lies on: its colours come from the page (the scheme's), the book's own are always the printed paper's. */
+.wrapped-stage {
+  background-color: var(--wrapped-desk);
+  background-image:
+    radial-gradient(var(--wrapped-desk-dot) 1px, transparent 1.5px),
+    radial-gradient(ellipse at 50% 40%, var(--wrapped-desk) 30%, var(--wrapped-desk-deep) 100%);
+  background-size:
+    22px 22px,
+    100% 100%;
+}
+
+/* The desk, in its own coordinates, put on screen by the camera's transform, which the page writes onto the world. The
+   pages are the Scenes of the sections, each laid at a fixed page width (wrapped/camera.ts's WRAPPED_PAGE_WIDTH, 420px)
+   and placed on the desk by the book (BookController), which gives each its place in its spread and its spread's height. */
 .wrapped-world {
   position: absolute;
   left: 0;
@@ -354,8 +364,9 @@
   z-index: 1;
 }
 .wrapped-book {
-  position: relative;
-  min-height: 630px;
+  position: absolute;
+  left: 0;
+  top: 0;
   font-size: 16px;
   line-height: 1.4;
   color: var(--comic-ink);
@@ -363,126 +374,154 @@
 .wrapped-book[data-ready="false"] {
   visibility: hidden;
 }
-/* The sheets stacked under the page. */
-.wrapped-book::before,
-.wrapped-book::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--wrapped-paper-alt, var(--comic-paper));
-  border: 3px solid var(--comic-line);
-  pointer-events: none;
-}
-.wrapped-book::before {
-  transform: translate(9px, 9px);
-}
-.wrapped-book::after {
-  transform: translate(4.5px, 4.5px);
-}
-
 .wrapped-book [data-wrapped-scene] {
   position: absolute;
   left: 0;
   top: 0;
-  width: 100%;
+  width: var(--bw, 420px);
   box-sizing: border-box;
   min-height: 630px;
-  padding: 22px 18px 46px;
-  gap: 12px;
+  padding: 24px 22px 50px;
+  gap: 18px;
   align-items: stretch;
   justify-content: center;
+  transform-origin: 0 0;
   background-color: var(--comic-paper);
-  border: 3px solid var(--comic-line);
   color: var(--comic-ink);
-  overflow: hidden;
-  visibility: hidden;
+  overflow: visible;
+  box-shadow: 0 26px 50px -22px rgb(0 0 0 / 0.55);
 }
-/* The covers are printed edge to edge, in a thicker border; the back cover has no footer to leave room for. */
+/* A spread's two pages meet at the spine: each darkens toward it. */
+.wrapped-book [data-wrapped-scene][data-spread="left"] {
+  box-shadow:
+    inset -34px 0 40px -30px rgb(0 0 0 / 0.3),
+    0 26px 50px -22px rgb(0 0 0 / 0.55);
+}
+.wrapped-book [data-wrapped-scene][data-spread="right"] {
+  box-shadow:
+    inset 34px 0 40px -30px rgb(0 0 0 / 0.3),
+    0 26px 50px -22px rgb(0 0 0 / 0.55);
+}
 .wrapped-book [data-wrapped-scene][data-page-kind="cover"],
 .wrapped-book [data-wrapped-scene][data-page-kind="back"] {
   padding: 0;
-  border-width: 5px;
+  overflow: hidden;
+  outline: 5px solid var(--comic-line);
+  outline-offset: -5px;
 }
 .wrapped-book [data-wrapped-scene][data-page-kind="back"] {
   padding: 22px 18px;
   background-color: var(--comic-red);
 }
 
-/* A panel: an inked frame on the page. The page's Reveals are drawn in these; classes the section put on the Reveal lay it
-   out (and, in the utilities layer, beat these). */
+/* A panel. Its frame is a slanted quad the book clips it to (frames.ts), reaching a little past its box into the gutters
+   (--panel-bleed), so its paper and any tint the section printed behind it bleed out to the quad's edge. Its lines are
+   the pencil, while the camera hasn't reached it, then the ink (ComicReveal). Classes the section put on the Reveal lay it
+   out, and in the utilities layer beat these. */
 @layer components {
   .wrapped-panel {
     position: relative;
     box-sizing: border-box;
-    border: 3px solid var(--comic-line);
-    background: var(--comic-paper-raised);
-    box-shadow: 4px 4px 0 var(--comic-shadow);
+    isolation: isolate;
     padding: 14px;
-    transition:
-      opacity 0.3s ease-out,
-      filter 0.3s ease-out,
-      box-shadow 0.3s ease-out;
+    --panel-bleed: 14px;
   }
   .wrapped-panel-bare {
-    border: 0;
-    background: none;
-    box-shadow: none;
     padding: 0;
   }
+}
+/* Whatever clipped a panel's overflow at its box would clip the bleed: the quad does the clipping. */
+.wrapped-book .wrapped-panel:not(.wrapped-panel-bare) {
+  overflow: visible;
+}
+.wrapped-panel-paper {
+  position: absolute;
+  inset: calc(-1 * var(--panel-bleed));
+  z-index: -1;
+  background: var(--comic-paper-raised);
 }
 .wrapped-panel-content {
   height: 100%;
 }
-/* The panel the camera is on is lit; the others on its page are dimmed (a phone's camera is on the panel, so the rest are
-   only dimmed a little). */
-.wrapped-book [data-wrapped-scene-current="true"] .wrapped-panel:not(.wrapped-panel-bare):not([data-focused="true"]) {
-  opacity: 0.8;
+/* A colour printed behind a panel's content reaches its frame too: one laid straight in the panel (PanelBody's), or one
+   that marks itself as the panel's ground (PanelGround's, inside a splash). */
+.wrapped-panel-content > .absolute.inset-0[aria-hidden],
+.wrapped-panel .wrapped-panel-ground {
+  inset: calc(-1 * var(--panel-bleed));
 }
-.wrapped-book[data-mode="wide"] [data-wrapped-scene-current="true"] .wrapped-panel:not(.wrapped-panel-bare):not([data-focused="true"]) {
-  opacity: 0.45;
-  filter: saturate(0.6);
+/* A splash's title band, under its art: it reaches the frame at the sides and foot as the ground does. */
+.wrapped-panel .wrapped-panel-band {
+  isolation: isolate;
 }
-.wrapped-book .wrapped-panel[data-focused="true"]:not(.wrapped-panel-bare) {
-  box-shadow:
-    0 0 0 4px var(--comic-yellow),
-    7px 7px 0 4px var(--comic-shadow);
-}
-.wrapped-book[data-reduced="true"] .wrapped-panel {
-  transition: none;
-}
-
-/* The fold-back of a turning page, in a layer over the book that is two pages wide (the spine in its middle). */
-.wrapped-fold-layer {
+.wrapped-panel .wrapped-panel-band::before {
+  content: "";
   position: absolute;
-  top: 0;
-  left: -100%;
-  width: 200%;
+  inset: -3px calc(-1 * var(--panel-bleed)) calc(-1 * var(--panel-bleed));
+  z-index: -1;
+  background: inherit;
+  border-top: inherit;
+}
+.wrapped-panel-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
+  overflow: visible;
   pointer-events: none;
-  z-index: 20;
+  z-index: 5;
+}
+.wrapped-panel-frame polygon {
+  fill: none;
+  stroke-linejoin: round;
+}
+/* Clipped to the quad, half of each line shows: the ink is 3.5px, the pencil a light dashed blue. */
+.wrapped-panel-pencil {
+  stroke: #7fb8e8;
+  stroke-width: 3;
+  stroke-dasharray: 9 6;
+}
+.wrapped-panel-ink {
+  stroke: var(--comic-line);
+  stroke-width: 7;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.wrapped-panel[data-ink="inked"] .wrapped-panel-ink {
+  stroke-dashoffset: 0;
+}
+.wrapped-panel[data-ink="inked"] .wrapped-panel-pencil {
+  display: none;
 }
 
-/* The front cover swings open on its hinge, the spine side of the page; its inside faces the reader once it's open. */
-.wrapped-cover-hinge {
+/* A narration panel is set in as an inset: narrower, overlapping the foot of the panel before it, cut out with a ring of
+   paper (the book clips it a little outside its box). The panel it sits on keeps room at its foot so nothing is hidden. */
+.wrapped-book .wrapped-panel[data-emphasis="narration"] {
+  --panel-bleed: 0px;
+  width: 68%;
+  align-self: flex-end;
+  margin-top: -40px;
+  margin-right: -6px;
+  z-index: 2;
+  box-shadow: 0 0 0 7px var(--comic-paper);
+}
+.wrapped-book .wrapped-panel:has(+ .wrapped-panel[data-emphasis="narration"]) {
+  padding-bottom: 46px;
+}
+
+/* A share card in the book is a printed card laid on the page, not a rounded screen box. */
+.wrapped-book [data-share-card-frame] {
+  border: 3px solid var(--comic-line);
+  border-radius: 0;
+  box-shadow: 6px 6px 0 var(--comic-shadow);
+  rotate: -0.8deg;
+}
+
+/* The flash of a hard cut's impact (wrapped/Desk.tsx: CameraFx). */
+.wrapped-flash::before {
+  content: "";
   position: absolute;
   inset: 0;
-  transform-origin: 0 50%;
-  transform-style: preserve-3d;
-  z-index: 3;
-}
-.wrapped-cover-hinge > [data-wrapped-scene] {
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.wrapped-cover-inside {
-  position: absolute;
-  inset: 0;
-  transform: rotateY(180deg);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  background: var(--wrapped-paper-alt, var(--comic-paper));
-  border: 5px solid var(--comic-line);
-  box-sizing: border-box;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, #fff 0 3deg, transparent 3deg 11deg);
 }
 
 /* The default theme's sections, which the book reuses until the comic ones land, size themselves by the viewport (Tailwind's
@@ -543,7 +582,3 @@
   flex-wrap: wrap;
 }
 
-/* The open cover fades away at the end of its swing: what lies beside the page is the desk's (its stickers). */
-.wrapped-cover-hinge {
-  transition: opacity 0.3s ease-out;
-}

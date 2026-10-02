@@ -152,8 +152,8 @@ describe("the comic's You, Duo, Captain and Moderator pages", () => {
     for (const panel of root.querySelectorAll(".wrapped-panel")) expect(panel.textContent?.trim()).not.toBe("");
   });
 
-  it("splits You into two pages, and a Duo's moments onto a second", () => {
-    expect(draw(<WrappedYou section={fullYou} />, true).querySelectorAll("[data-wrapped-scene]")).toHaveLength(2);
+  it("splits You into four pages, and a Duo's moments onto a second", () => {
+    expect(draw(<WrappedYou section={fullYou} />, true).querySelectorAll("[data-wrapped-scene]")).toHaveLength(4);
     cleanup();
     expect(draw(<WrappedDuo section={fullDuo} />, true).querySelectorAll("[data-wrapped-scene]")).toHaveLength(2);
     cleanup();

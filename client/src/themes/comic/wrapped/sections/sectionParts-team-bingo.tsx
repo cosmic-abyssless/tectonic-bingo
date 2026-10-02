@@ -36,10 +36,10 @@ export function PanelGround({ accent, origin = "50% 100%" }: { accent: string; o
   const fade = "linear-gradient(to top, black, transparent 75%)";
   return (
     <>
-      <div aria-hidden className="absolute inset-0" style={{ background: accent, backgroundImage: `repeating-conic-gradient(from 0deg at ${origin}, rgb(255 255 255 / 0.18) 0deg 5deg, transparent 5deg 12deg)` }} />
+      <div aria-hidden className="wrapped-panel-ground absolute inset-0" style={{ background: accent, backgroundImage: `repeating-conic-gradient(from 0deg at ${origin}, rgb(255 255 255 / 0.18) 0deg 5deg, transparent 5deg 12deg)` }} />
       <div
         aria-hidden
-        className="absolute inset-0"
+        className="wrapped-panel-ground absolute inset-0"
         style={{ backgroundImage: "radial-gradient(rgb(0 0 0 / 0.24) 1.1px, transparent 1.8px)", backgroundSize: "6px 6px", maskImage: fade, WebkitMaskImage: fade }}
       />
     </>
@@ -51,7 +51,7 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
   const { colors } = useComic();
   const bg = fill ?? colors.YELLOW;
   return (
-    <p
+    <p data-beat="rise"
       className={`inline-flex max-w-full items-center gap-1.5 self-start border-2 px-2 pt-[3px] pb-px ${className}`}
       style={{ ...display(14, { letterSpacing: "0.08em" }), background: bg, color: onFill(colors, bg), borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}`, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
@@ -65,7 +65,7 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
 export function PanelHeading({ children, size = 32, className = "" }: { children: ReactNode; size?: number; className?: string }) {
   const { colors } = useComic();
   return (
-    <h2 className={`text-balance ${className}`} style={{ ...display(size), color: colors.INK, paddingRight: size / 14 }}>
+    <h2 data-beat="slam" className={`text-balance ${className}`} style={{ ...display(size), color: colors.INK, paddingRight: size / 14 }}>
       {children}
     </h2>
   );
@@ -77,7 +77,7 @@ export function PanelHeading({ children, size = 32, className = "" }: { children
  */
 export function Sfx({ children, size = 26, tilt = -8, className = "", style }: { children: ReactNode; size?: number; tilt?: number; className?: string; style?: CSSProperties }) {
   return (
-    <span
+    <span data-beat="pop"
       aria-hidden
       className={`pointer-events-none select-none ${className}`}
       style={{
@@ -101,7 +101,7 @@ export function InkBurst({ children, fill, tilt = -6, spikes = 14, className = "
   const { colors } = useComic();
   const points = burstPoints(spikes, 35, 50, 5);
   return (
-    <div className={`relative aspect-square shrink-0 select-none ${className}`} style={{ containerType: "inline-size", transform: `rotate(${tilt}deg)`, ...style }}>
+    <div data-beat="slam" className={`relative aspect-square shrink-0 select-none ${className}`} style={{ containerType: "inline-size", transform: `rotate(${tilt}deg)`, ...style }}>
       <svg viewBox="0 0 100 100" className="absolute inset-0 size-full overflow-visible" aria-hidden>
         <polygon points={points} fill={colors.SHADOW} transform="translate(2.5 3)" />
         <polygon points={points} fill={fill ?? colors.YELLOW} stroke={colors.LINE} strokeWidth={3} strokeLinejoin="round" />
@@ -123,7 +123,7 @@ export function burstFont(text: string, base = 24): string {
 export function StampLabel({ children, color, tilt = -6, size = 16, className = "" }: { children: ReactNode; color: string; tilt?: number; size?: number; className?: string }) {
   const { colors } = useComic();
   return (
-    <span
+    <span data-beat="pop"
       className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap border-[3px] px-1.5 pt-[3px] pb-px ${className}`}
       style={{ ...display(size, { letterSpacing: "0.06em" }), color, borderColor: color, background: colors.PAPER_RAISED, boxShadow: `0 0 0 2px ${colors.PAPER_RAISED}, 0 0 0 4px ${color}`, transform: `rotate(${tilt}deg)`, margin: 4 }}
     >
@@ -136,7 +136,7 @@ export function StampLabel({ children, color, tilt = -6, size = 16, className = 
 export function Tally({ value, label, size = 56, align = "center" }: { value: ReactNode; label: ReactNode; size?: number; align?: "center" | "start" }) {
   const { colors } = useComic();
   return (
-    <div className={align === "center" ? "text-center" : "text-left"}>
+    <div data-beat="slam" className={align === "center" ? "text-center" : "text-left"}>
       <div className="num whitespace-nowrap" style={{ ...display(size), color: colors.INK, textShadow: `${Math.max(2, size / 16)}px ${Math.max(2, size / 16)}px 0 ${colors.YELLOW}`, paddingRight: size / 14 }}>
         {value}
       </div>
@@ -147,8 +147,11 @@ export function Tally({ value, label, size = 56, align = "center" }: { value: Re
   );
 }
 
-/** A person as a comic cast member: a ringed avatar and a name (a quiet "You" beside the viewer's), with an optional line under it. */
-export function ComicPerson({ person, size = 36, detail, nameSize = 15, column = false }: { person: WrappedPersonModel; size?: number; detail?: ReactNode; nameSize?: number; column?: boolean }) {
+/**
+ * A person as a comic cast member: a ringed avatar and a name (a quiet "You" beside the viewer's), with an optional line
+ * under it. `lettered` letters the name like a title, for a person who is the panel's subject.
+ */
+export function ComicPerson({ person, size = 36, detail, nameSize = 15, column = false, lettered = false }: { person: WrappedPersonModel; size?: number; detail?: ReactNode; nameSize?: number; column?: boolean; lettered?: boolean }) {
   const { colors } = useComic();
   return (
     <span className={`inline-flex min-w-0 max-w-full gap-2 ${column ? "flex-col items-center text-center" : "items-center"}`}>
@@ -161,7 +164,7 @@ export function ComicPerson({ person, size = 36, detail, nameSize = 15, column =
       />
       <span className={`flex min-w-0 flex-col ${column ? "items-center" : "text-left"}`}>
         <span className="flex min-w-0 max-w-full items-center gap-1.5">
-          <span className="truncate font-bold leading-tight" style={{ fontSize: nameSize, color: colors.INK }}>
+          <span className={`truncate leading-tight ${lettered ? "" : "font-bold"}`} style={lettered ? { ...display(nameSize), color: colors.INK, paddingRight: nameSize / 10 } : { fontSize: nameSize, color: colors.INK }}>
             {person.name}
           </span>
           {person.isYou && (
@@ -190,7 +193,7 @@ export function ComicDrop({ drop, showPlayer = false, burst = false }: { drop: W
   const media = drop.thumbnailUrl && drop.screenshotUrl;
   const frame: CSSProperties = { border: `3px solid ${colors.LINE}`, boxShadow: `3px 3px 0 ${colors.SHADOW}`, background: colors.PAPER_ALT };
   return (
-    <div className="relative flex items-center gap-3 text-left">
+    <div data-beat="rise" className="relative flex items-center gap-3 text-left">
       <div className="relative shrink-0">
         {media ? (
           <ScreenshotLink href={drop.screenshotUrl!} className="block">
@@ -272,7 +275,7 @@ export function Splash({ art, accent, kicker, kickerDot, title, titleBig = 46, m
           <WrappedCategoryArt art={art} />
         </div>
       )}
-      <div className={hasArt ? "relative px-3.5 pt-2 pb-2.5" : "relative flex flex-1 flex-col justify-between px-3.5 pt-3.5 pb-4"} style={hasArt ? { background: colors.PAPER_RAISED, borderTop: `3px solid ${colors.LINE}` } : undefined}>
+      <div className={hasArt ? "wrapped-panel-band relative px-3.5 pt-2 pb-2.5" : "relative flex flex-1 flex-col justify-between px-3.5 pt-3.5 pb-4"} style={hasArt ? { background: colors.PAPER_RAISED, borderTop: `3px solid ${colors.LINE}` } : undefined}>
         <Kicker fill={COVER.YELLOW} dot={kickerDot}>
           {kicker}
         </Kicker>

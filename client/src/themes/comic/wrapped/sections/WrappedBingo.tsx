@@ -4,7 +4,8 @@ import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
-import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally, burstFont } from "./sectionParts-team-bingo";
+import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
+import { PanelBody } from "./sectionParts-you-duo-captain-moderator";
 
 /**
  * The comic Bingo section (#421): the Bingo-wide story, and for some viewers (a Moderator who didn't play) the only section,
@@ -37,7 +38,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
     <>
       <WrappedScene steps={3}>
         <div className="flex flex-1 flex-col gap-3">
-          <Reveal step={0} className={`flex-1 ${FULL_PANEL}`}>
+          <Reveal step={0} emphasis="splash" className={`flex-1 ${FULL_PANEL}`}>
             <Splash art={b.art} accent={COVER.ORANGE} kicker="The Bingo" title="Everyone, together" titleBig={44} />
           </Reveal>
           <Reveal step={1} className={FULL_PANEL}>
@@ -54,8 +55,9 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
           <div className="flex flex-1 flex-col justify-center gap-3">
             {b.race && (
               <Reveal step={at(highlights, 0)} className={PADDED_PANEL}>
-                <div className="relative -mx-1">
-                  <Sfx size={26} tilt={6} className="absolute -top-1 right-1 z-[1]">
+                {/* The sound effect rides above the chart, clear of the lines' finish at its top right. */}
+                <div className="relative -mx-1 pt-8">
+                  <Sfx size={26} tilt={6} className="absolute top-0 right-1 z-[1]">
                     Zoom!
                   </Sfx>
                   <PointsChart chart={b.race} label="Every Team's points over time" />
@@ -64,26 +66,30 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
             )}
             {b.rarestDrop && (
               <Reveal step={at(highlights, 1)} className={PADDED_PANEL}>
-                <Kicker>The rarest drop</Kicker>
-                <PanelHeading className="mt-2" size={30}>
-                  {b.rarestDrop.itemName}
-                </PanelHeading>
-                {b.rarestDrop.luck && (
-                  <CaptionBox tone="yellow" tilt={-0.6} className="mt-2.5 text-[14px]">
-                    {b.rarestDrop.luck.sentence}
-                  </CaptionBox>
-                )}
-                <div className="mt-3.5">
-                  <ComicDrop drop={b.rarestDrop} showPlayer />
-                </div>
+                <PanelBody tone="yellow" rays="88% 12%" align="start" gap={0}>
+                  <Kicker>The rarest drop</Kicker>
+                  <PanelHeading className="mt-2" size={30}>
+                    {b.rarestDrop.itemName}
+                  </PanelHeading>
+                  {b.rarestDrop.luck && (
+                    <CaptionBox tone="paper" tilt={-0.6} className="mt-2.5 text-[14px]">
+                      {b.rarestDrop.luck.sentence}
+                    </CaptionBox>
+                  )}
+                  <div className="mt-3.5">
+                    <ComicDrop drop={b.rarestDrop} showPlayer />
+                  </div>
+                </PanelBody>
               </Reveal>
             )}
             {b.mostReacted && (
               <Reveal step={at(highlights, 2)} className={PADDED_PANEL}>
-                <Kicker tilt={1.2}>The crowd favourite · {b.mostReacted.reactionsLabel}</Kicker>
-                <div className="mt-3">
-                  <ComicDrop drop={b.mostReacted.drop} showPlayer />
-                </div>
+                <PanelBody tone="orange" rays="10% 90%" align="start" gap={0}>
+                  <Kicker tilt={1.2}>The crowd favourite · {b.mostReacted.reactionsLabel}</Kicker>
+                  <div className="mt-3">
+                    <ComicDrop drop={b.mostReacted.drop} showPlayer />
+                  </div>
+                </PanelBody>
               </Reveal>
             )}
           </div>
@@ -118,28 +124,32 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         const first = page === 0;
         return (
           <WrappedScene key={page} steps={(reviewers ? 1 : 0) + (teams.length > 0 ? 1 : 0)}>
-            <div className="flex flex-1 flex-col justify-center gap-3">
+            <div className="flex flex-1 flex-col gap-3">
               {reviewers && m && (
                 <Reveal step={0} className={PADDED_PANEL}>
-                  <Reviewers m={m} />
+                  <PanelBody tone="red" rays="90% 10%" align="start" gap={0}>
+                    <Reviewers m={m} />
+                  </PanelBody>
                 </Reveal>
               )}
+              {/* The Superlatives' title is lettered on the page itself, over the Teams' panels. */}
+              {teams.length > 0 && first && (
+                <div className="pt-1">
+                  <Kicker>Superlatives</Kicker>
+                  <PanelHeading className="mt-2" size={32}>
+                    Every Team's picks
+                  </PanelHeading>
+                </div>
+              )}
+              {/* Each Team's picks a panel of its own, all at one step: the camera takes them in together. */}
               {teams.length > 0 && (
-                <Reveal step={reviewers ? 1 : 0} className={PADDED_PANEL}>
-                  {first && (
-                    <>
-                      <Kicker>Superlatives</Kicker>
-                      <PanelHeading className="mt-2" size={32}>
-                        Every Team's picks
-                      </PanelHeading>
-                    </>
-                  )}
-                  <div className={`${first ? "mt-3.5" : ""} grid ${teams.length === 1 ? "grid-cols-1" : "grid-cols-2"} items-start gap-3`}>
-                    {teams.map((t) => (
-                      <TeamPicks key={t.teamId} team={t} />
-                    ))}
-                  </div>
-                </Reveal>
+                <div className={`grid flex-1 auto-rows-fr gap-3 ${teams.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {teams.map((t) => (
+                    <Reveal key={t.teamId} step={reviewers ? 1 : 0} className={PADDED_PANEL}>
+                      <TeamPicks team={t} />
+                    </Reveal>
+                  ))}
+                </div>
               )}
             </div>
           </WrappedScene>
@@ -211,24 +221,24 @@ function Leaderboard({ b }: { b: WrappedBingoModel }) {
   );
 }
 
-/** The draft's best Steal, as a caption box over the Player who made it. */
+/** The draft's best Steal: the Player who made it, lettered on a printed ground, and how far they beat their pick in a caption. */
 function Steal({ steal }: { steal: NonNullable<WrappedBingoModel["steal"]> }) {
   const { colors } = useComic();
   return (
-    <>
+    <PanelBody tone="cyan" rays="88% 18%" align="start" gap={0}>
       <Kicker>Steal of the draft</Kicker>
-      <div className="relative mt-3 flex items-center gap-3">
-        <ComicPerson person={steal.person} size={56} nameSize={22} />
-        <Sfx size={30} tilt={9} className="absolute -top-2 right-0">
-          Steal!
-        </Sfx>
+      <Sfx size={30} tilt={9} className="absolute top-0 right-0">
+        Steal!
+      </Sfx>
+      <div className="mt-3 pr-20">
+        <ComicPerson person={steal.person} size={44} nameSize={30} lettered />
       </div>
-      <CaptionBox tone="paper" tilt={0.5} className="mt-3 text-[14px]">
+      <CaptionBox tone="yellow" tilt={-0.6} className="mt-3 text-[14px]">
         <span style={{ color: colors.INK_BODY }}>
           The {steal.positionLabel} Player drafted{steal.teamName && ` (by ${steal.teamName})`}, finished {steal.rankLabel} in Points share. {steal.placesBeatenLabel} better than their draft spot.
         </span>
       </CaptionBox>
-    </>
+    </PanelBody>
   );
 }
 
@@ -252,9 +262,9 @@ function Reviewers({ m }: { m: NonNullable<WrappedBingoModel["moderation"]> }) {
   return (
     <>
       <CaptionBox tone="yellow" tilt={-0.8} title="Who had to deal with the most nonsense" />
-      <ol className="mt-3.5 flex flex-col gap-2">
+      <ol className="mt-3 flex flex-col">
         {m.reviewers.map((r) => (
-          <li key={r.person.id} className="flex items-center justify-between gap-2 border-[2.5px] px-2 py-1.5" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED }}>
+          <li key={r.person.id} className="flex items-center justify-between gap-2 py-1.5" style={{ borderBottom: `2px dashed ${colors.RULE}` }}>
             <ComicPerson person={r.person} size={32} detail={r.reviewedLabel} nameSize={14} />
             <StampLabel color={colors.BAD} size={15} tilt={-5}>
               <span className="num">{r.rejectionLabel}</span>&nbsp;rejected
@@ -276,16 +286,16 @@ function Reviewers({ m }: { m: NonNullable<WrappedBingoModel["moderation"]> }) {
   );
 }
 
-/** One Team's Superlatives: a card headed by the Team, each category a label over its winners. */
+/** One Team's Superlatives, as a panel printed in the Team's colour: the Team lettered at its head, each category a label over its winners. */
 function TeamPicks({ team }: { team: WrappedBingoModel["teamSuperlatives"][number] }) {
   const { colors } = useComic();
   return (
-    <section className="min-w-0 border-[3px]" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
-      <h3 className="flex items-center gap-1.5 border-b-[3px] px-2 py-1.5" style={{ ...display(16), borderColor: colors.LINE, background: colors.YELLOW_TINT, color: colors.INK }}>
+    <PanelBody tone={team.color ? { color: team.color } : "yellow"} align="start" gap={0}>
+      <h3 data-beat="slam" className="flex items-center gap-1.5" style={{ ...display(19), color: colors.INK }}>
         {team.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: team.color, borderColor: colors.LINE }} />}
         <span className="min-w-0 break-words leading-none">{team.teamName}</span>
       </h3>
-      <ul className="flex flex-col gap-2 px-2 py-2">
+      <ul className="mt-2 flex flex-col gap-2">
         {team.superlatives.map((s) => (
           <li key={s.category}>
             <p style={{ ...display(12, { letterSpacing: "0.08em" }), color: colors.INK_SUBTLE }}>{s.category}</p>
@@ -297,6 +307,6 @@ function TeamPicks({ team }: { team: WrappedBingoModel["teamSuperlatives"][numbe
           </li>
         ))}
       </ul>
-    </section>
+    </PanelBody>
   );
 }

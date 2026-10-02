@@ -1,29 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { backCoverStart, buildPages, CONTENTS_SECTION, moveKind, nextStop, pageInSection, pageStart, panelPlace, prevStop, reachedAfter, sectionIds, sectionOfAnchor, sectionStart, type GuideScene } from "./guide";
+import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageInSection, pageStart, panelPlace, PULL, prevStop, pullsBack, reachedAfter, sectionIds, sectionOfAnchor, sectionStart, withGroups, type GuideScene, type Stop } from "./guide";
+import { deskGroups } from "./desk";
 
 const scene = (id: string, sectionId: string, panels: number[], steps = panels.length): GuideScene => ({ id, sectionId, steps, panels });
 
-// A book: the cover, the contents page, You (two pages, the first leaving step 1 out), Team, and an Outro of three pages.
+// A book: the cover, the contents page, You (two pages, the first leaving step 1 out), Team, and an Outro of three pages
+// (two share cards, then the back cover).
 const scenes: GuideScene[] = [
   scene("c", "intro", [0]),
   scene("t", CONTENTS_SECTION, [0]),
   scene("y1", "you", [0, 2], 3),
   scene("y2", "you", [0, 1]),
   scene("tm", "team", [0, 1, 2]),
-  scene("o1", "outro", [0, 1, 2]),
+  scene("o1", "outro", [0]),
   scene("o2", "outro", [0]),
-  scene("o3", "outro", [0]),
+  scene("o3", "outro", [0, 1, 2]),
 ];
 const labels = { you: "You", team: "Your Team", outro: "The end" };
 const pages = buildPages(scenes, labels);
 
 describe("buildPages", () => {
-  it("makes the Intro the front cover, adds the contents page, and the Outro's first page the back cover", () => {
-    expect(pages.map((p) => p.kind)).toEqual(["cover", "contents", "page", "page", "page", "back", "page", "page"]);
+  it("makes the Intro the front cover, adds the contents page, and the Outro's last page the back cover", () => {
+    expect(pages.map((p) => p.kind)).toEqual(["cover", "contents", "page", "page", "page", "page", "page", "back"]);
   });
 
   it("numbers the pages from the contents page, leaving the covers unnumbered", () => {
-    expect(pages.map((p) => p.no)).toEqual([null, 1, 2, 3, 4, null, 5, 6]);
+    expect(pages.map((p) => p.no)).toEqual([null, 1, 2, 3, 4, 5, 6, null]);
   });
 
   it("names each page for its footer", () => {
@@ -49,7 +51,8 @@ describe("moving through the book", () => {
       if (!next) break;
       at = next;
     }
-    expect(seen).toEqual(["0.0", "1.0", "2.0", "2.2", "3.0", "3.1", "4.0", "4.1", "4.2", "5.0", "5.1", "5.2", "6.0", "7.0"]);
+    // Each page alone (as on a phone), so a page of more than one panel ends in its pull-back (step -1).
+    expect(seen).toEqual(["0.0", "1.0", "2.0", "2.2", "2.-1", "3.0", "3.1", "3.-1", "4.0", "4.1", "4.2", "4.-1", "5.0", "6.0", "7.0", "7.1", "7.2", "7.-1"]);
   });
 
   it("skips the steps a page has no Reveal at (page 2 has none at step 1)", () => {
@@ -58,31 +61,81 @@ describe("moving through the book", () => {
   });
 
   it("goes back to the last panel of the page before, and stops at the start", () => {
-    expect(prevStop(pages, { page: 3, step: 0 })).toEqual({ page: 2, step: 2 });
+    expect(prevStop(pages, { page: 3, step: 0 })).toEqual({ page: 2, step: PULL });
+    expect(prevStop(pages, { page: 7, step: 0 })).toEqual({ page: 6, step: 0 });
     expect(prevStop(pages, { page: 1, step: 0 })).toEqual({ page: 0, step: 0 });
     expect(prevStop(pages, { page: 0, step: 0 })).toBeNull();
-    expect(nextStop(pages, { page: 7, step: 0 })).toBeNull();
+    expect(nextStop(pages, { page: 7, step: PULL })).toBeNull();
   });
 
-  it("finds a section's first panel and the back cover", () => {
+  it("finds a section's first panel", () => {
     expect(sectionStart(pages, "you")).toEqual({ page: 2, step: 0 });
     expect(sectionStart(pages, "team")).toEqual({ page: 4, step: 0 });
     expect(sectionStart(pages, CONTENTS_SECTION)).toEqual({ page: 1, step: 0 });
     expect(sectionStart(pages, "duo")).toBeNull();
-    expect(backCoverStart(pages)).toEqual({ page: 5, step: 0 });
-    expect(backCoverStart(buildPages([scene("a", "you", [0])], labels))).toBeNull();
+    expect(sectionStart(pages, "outro")).toEqual({ page: 5, step: 0 });
   });
 
-  it("says what a move is", () => {
-    expect(moveKind({ page: 2, step: 0 }, { page: 2, step: 0 })).toBe("none");
-    expect(moveKind({ page: 2, step: 0 }, { page: 2, step: 2 })).toBe("panel");
-    expect(moveKind({ page: 2, step: 2 }, { page: 3, step: 0 })).toBe("turn-forward");
-    expect(moveKind({ page: 5, step: 0 }, { page: 1, step: 0 })).toBe("turn-back");
+  it("says which of two stops comes later, the pull-back after every panel of its page", () => {
+    expect(isAfter({ page: 2, step: 2 }, { page: 2, step: 0 })).toBe(true);
+    expect(isAfter({ page: 2, step: 0 }, { page: 3, step: 0 })).toBe(false);
+    expect(isAfter({ page: 2, step: PULL }, { page: 2, step: 2 })).toBe(true);
+    expect(isAfter({ page: 2, step: 0 }, { page: 2, step: 0 })).toBe(false);
   });
 
   it("places a stop among its page's panels", () => {
     expect(panelPlace(pages, { page: 2, step: 2 })).toEqual({ index: 1, of: 2 });
     expect(panelPlace(pages, { page: 4, step: 0 })).toEqual({ index: 0, of: 3 });
+  });
+});
+
+describe("spreads on the desk", () => {
+  // On a wide screen: the cover alone, contents + y1, y2 + team, the two share card pages, the back cover alone.
+  const wide = withGroups(pages, deskGroups(pages.map((p) => p.kind), "wide"));
+  const walk = (from: Stop) => {
+    const seen: string[] = [];
+    let at: Stop | null = from;
+    while (at) {
+      seen.push(at.step === PULL ? `${at.page}.pull` : `${at.page}.${at.step}`);
+      at = nextStop(wide, at);
+    }
+    return seen;
+  };
+
+  it("pulls back to the whole spread after its last panel, but not on a cover that is one panel", () => {
+    expect(wide.map((p) => p.group)).toEqual([0, 1, 1, 2, 2, 3, 3, 4]);
+    expect(walk(pageStart(wide, 0)!)).toEqual(["0.0", "1.0", "2.0", "2.2", "2.pull", "3.0", "3.1", "4.0", "4.1", "4.2", "4.pull", "5.0", "6.0", "6.pull", "7.0", "7.1", "7.2", "7.pull"]);
+  });
+
+  it("goes back from a spread's first panel to the pull-back of the spread before", () => {
+    expect(prevStop(wide, { page: 3, step: 0 })).toEqual({ page: 2, step: PULL });
+    expect(prevStop(wide, { page: 2, step: PULL })).toEqual({ page: 2, step: 2 });
+    // The cover has no pull-back to go back to.
+    expect(prevStop(wide, { page: 1, step: 0 })).toEqual({ page: 0, step: 0 });
+  });
+
+  it("goes back through the book exactly the way it came", () => {
+    const forward = walk(pageStart(wide, 0)!);
+    const back: string[] = [];
+    let at: Stop | null = { page: 7, step: PULL };
+    while (at) {
+      back.push(at.step === PULL ? `${at.page}.pull` : `${at.page}.${at.step}`);
+      at = prevStop(wide, at);
+    }
+    expect(back.reverse()).toEqual(forward);
+  });
+
+  it("pulls back on a phone's page of more than one panel only", () => {
+    const phone = withGroups(pages, deskGroups(pages.map((p) => p.kind), "phone"));
+    expect(pullsBack(phone, 0)).toBe(false);
+    expect(pullsBack(phone, 2)).toBe(true);
+    expect(nextStop(phone, { page: 1, step: 0 })).toEqual({ page: 2, step: 0 });
+    expect(nextStop(phone, { page: 2, step: 2 })).toEqual({ page: 2, step: PULL });
+  });
+
+  it("counts the pull-back as past the page's last panel", () => {
+    expect(panelPlace(wide, { page: 2, step: PULL })).toEqual({ index: 1, of: 2 });
+    expect(reachedAfter([1, 1, 3], { page: 2, step: PULL })).toEqual([1, 1, 3]);
   });
 });
 

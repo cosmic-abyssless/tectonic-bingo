@@ -11,15 +11,26 @@ import { useComic } from "../ui/useComic";
 import { COVER, CoverCaption, CoverGround, CoverTitle, coverShadow } from "./coverParts";
 
 /**
- * The back cover (#419): the Outro, as the cover of the book's last page. A "That's a wrap" panel with the credits, then
- * Rewind and the Board as "next issue" teasers. The viewer's share cards follow it, a page each, each with its Copy image,
- * Download and Share buttons (and, in a Moderator's preview, the "Preview" watermark every card carries).
+ * The Outro (#419): first the viewer's share cards, a page each, each with its Copy image, Download and Share buttons
+ * (and, in a Moderator's preview, the "Preview" watermark every card carries), printed straight on the page rather than
+ * framed as a panel. Then the back cover, the book's last page: a "That's a wrap" panel with the credits, then Rewind and
+ * the Board as "next issue" teasers. The cards come first so that nobody stops at the back cover without seeing them.
  */
 export function WrappedOutro({ section, preview, onRewind, onBoard }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }) {
   const ShareCard = useSlot("WrappedShareCard");
   const hasCredits = section.art.credits.length > 0 || section.art.images.some((image) => image.name);
   return (
     <>
+      {section.cards.map((card) => (
+        <WrappedScene key={card.key} steps={1}>
+          <Reveal bare step={0} className="w-full">
+            <p className="mb-3 text-center uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 21, letterSpacing: "0.05em", color: "var(--comic-ink)" }}>
+              Share your {card.label}
+            </p>
+            <WrappedShareCardItem card={card} preview={preview} Card={ShareCard} />
+          </Reveal>
+        </WrappedScene>
+      ))}
       <WrappedScene steps={3} className="wrapped-back">
         <CoverGround accent={COVER.RED} rays="30% 40%" />
         <Reveal step={0} className="wrapped-back-panel">
@@ -45,16 +56,6 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
           <Teaser tag="Also in stores" title="The Board" blurb="Back to where it all happened." button="Back to the Board" onPress={onBoard} />
         </Reveal>
       </WrappedScene>
-      {section.cards.map((card) => (
-        <WrappedScene key={card.key} steps={1}>
-          <Reveal step={0} className="w-full">
-            <p className="mb-3 text-center uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 21, letterSpacing: "0.05em", color: "var(--comic-ink)" }}>
-              Share your {card.label}
-            </p>
-            <WrappedShareCardItem card={card} preview={preview} Card={ShareCard} />
-          </Reveal>
-        </WrappedScene>
-      ))}
     </>
   );
 }

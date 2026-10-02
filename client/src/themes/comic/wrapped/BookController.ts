@@ -2,11 +2,14 @@ import { animate } from "motion/react";
 import type { WrappedProgressStore, WrappedSceneInfo } from "../../../core/wrapped/sceneProgress";
 import {
   cameraTransform,
+  frameArea,
   mixCamera,
-  overviewCamera,
+  panCurve,
   panelCamera,
+  pullCurve,
+  sameCamera,
   stageMode,
-  unionRect,
+  whipCurve,
   WRAPPED_PAGE_MIN_HEIGHT,
   WRAPPED_PAGE_WIDTH,
   type Camera,
@@ -15,34 +18,31 @@ import {
   type Size,
   type StageMode,
 } from "./camera";
-import { backCoverStart, buildPages, CONTENTS_SECTION, moveKind, nextStop, pageStart, prevStop, reachedAfter, sameStop, sectionIds, sectionStart, type GuidePage, type Stop } from "./guide";
-import { drawPeel, findFoldDom, peelHeldAt, type PeelStyle } from "./pageTurn";
-import type { PanelFocus } from "./ComicReveal";
+import { deskGroups, deskLayout, type DeskGroup } from "./desk";
+import { panelFrames, quadClipPath, quadPoints, quadWithin, rectQuad } from "./frames";
+import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageStart, prevStop, PULL, reachedAfter, sameStop, sectionIds, sectionStart, withGroups, type GuidePage, type Stop } from "./guide";
 
-// The comic Wrapped's book, run: which page and panel the reader is on, the camera that frames it, the page turn, and what
-// each Scene is told (how many of its panels are reached, whether it is the current page). Imperative on purpose, like the
-// Tile book's: a camera glide and a page turn are animations written straight to the DOM every frame, with the React tree
-// only reading the result (BookSnapshot) for what it draws around them.
+// The comic Wrapped's book, run: the pages laid out on the desk (a spread at a time on a wide screen, a page at a time on
+// a phone, each group at its own slight angle), each panel's slanted frame, which page and panel the reader is on, the
+// camera that frames it, and what each Scene is told (how many of its panels are reached). Imperative on purpose, like
+// the Tile book's: the camera's moves are written straight to the DOM every frame, with the React tree only reading the
+// result (BookSnapshot) for what it draws around them.
+//
+// The camera's moves (camera.ts has their curves):
+//  - a whip from panel to panel on a spread, or a hard cut with an impact (a flash and a shake) onto the first panel of a
+//    spread worth one (a splash, a highlight), the first time it is reached;
+//  - a pull back to the whole spread after its last panel;
+//  - a pan across the desk to the next spread, a moment's hold on all of it, then in to its first panel.
 
-/** The page turn's pace: the Tile book's (board/TileModal's TURN_DURATION, TURN_EASE, COVER_SWING). */
-const TURN_SECONDS = 0.375;
-const COVER_SECONDS = 0.49;
-const TURN_EASE = [0.45, 0, 0.15, 1] as const;
-/** The camera's moves: pulling back to the whole page, and gliding to a panel. */
-const PULL_BACK_SECONDS = 0.4;
-const GLIDE_SECONDS = 0.55;
-const PAN_SECONDS = 0.5;
-const GLIDE_EASE = [0.4, 0, 0.2, 1] as const;
-/** How far through its glide the camera is "arrived" at a panel: the brush starts painting it. */
-const ARRIVED_AT = 0.45;
-/** Where along the edge a turn that nobody is holding is taken from (the lower corner), -1 top to 1 bottom. */
-const TURN_HELD_AT = 0.6;
-/** A drag turns the page if it gets this far across (of the page's width), or is let go this fast (px/ms) after this far (px). */
-export const DRAG_COMMIT = 0.35;
-export const DRAG_FLICK = 0.3;
-export const DRAG_FLICK_MIN = 30;
-/** A perspective for the cover's swing, as a multiple of the page's width. */
-const COVER_PERSPECTIVE = 4.5;
+const WHIP_SECONDS = 0.5;
+const PULL_SECONDS = 0.8;
+const PAN_SECONDS = 0.65;
+/** How long the camera holds on a spread it has panned to before it goes in on the first panel (ms). */
+const PAN_HOLD_MS = 260;
+/** The room (px, desk coordinates) the pull-back leaves around a spread: on a wide screen, the side images beside it. */
+const PULL_PAD: Record<StageMode, number> = { wide: 70, phone: 16 };
+/** The paper a narration inset is cut out with, round it (px). */
+const INSET_HALO = 7;
 
 export interface BookSnapshot {
   /** The Scenes have registered and the book is laid out. */
@@ -50,27 +50,26 @@ export interface BookSnapshot {
   pages: readonly GuidePage[];
   /** Where the reader is, or is going. */
   pos: Stop;
-  /** The panel that is lit: the one the camera has arrived at. */
-  focus: PanelFocus;
   mode: StageMode;
-  /** The height of the page being read (px, in page coordinates): the book is as tall as it. */
-  bookHeight: number;
-  /** The book is mid-turn (or being dragged): nothing else moves it. */
-  turning: boolean;
-  /** The pointer is dragging a page (the edge swipe). */
-  dragging: boolean;
+  /** The groups on the desk: where each lies, for what is drawn beside them (the side images). */
+  groups: readonly DeskGroup[];
+}
+
+/** What the camera's moves draw over the stage. */
+export interface CameraEffects {
+  /** The hard cut's impact: a flash and a shake. */
+  impact(): void;
 }
 
 export interface BookEnv {
   stage: HTMLElement;
   world: HTMLElement;
-  book: HTMLElement;
   store: WrappedProgressStore;
   /** The model's section labels (WrappedSectionKind → "Your Team"). */
   labels: Readonly<Record<string, string>>;
   reduceMotion: () => boolean;
   insets: (mode: StageMode) => Insets;
-  peelStyle: () => PeelStyle;
+  effects: CameraEffects;
   /** Where the anchor in the URL starts the book: one of the book's sections (given), or null. */
   startSection: (sections: string[]) => string | null;
   /** The reader has moved to a stop (the URL anchor follows the section). */
@@ -84,10 +83,10 @@ interface Tween {
   cancel(): void;
 }
 
-function tween(seconds: number, ease: readonly [number, number, number, number] | "linear", onUpdate: (t: number) => void): Tween {
+function tween(seconds: number, onUpdate: (t: number) => void): Tween {
   let resolve!: (completed: boolean) => void;
   const done = new Promise<boolean>((r) => (resolve = r));
-  const controls = animate(0, 1, { duration: seconds, ease: ease as never, onUpdate, onComplete: () => resolve(true) });
+  const controls = animate(0, 1, { duration: seconds, ease: "linear", onUpdate, onComplete: () => resolve(true) });
   return {
     done,
     cancel() {
@@ -97,7 +96,9 @@ function tween(seconds: number, ease: readonly [number, number, number, number] 
   };
 }
 
-/** An element's box in the coordinates of an ancestor, from layout alone (so neither the camera's scale nor a tilt counts). */
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** An element's box in the coordinates of an ancestor, from layout alone (so neither the camera nor a tilt counts). */
 export function offsetRectWithin(el: HTMLElement, ancestor: HTMLElement): Rect {
   let x = 0;
   let y = 0;
@@ -110,29 +111,40 @@ export function offsetRectWithin(el: HTMLElement, ancestor: HTMLElement): Rect {
   return { x, y, w: el.offsetWidth, h: el.offsetHeight };
 }
 
-/** How a turn is drawn between two pages: `set(0)` is the first page whole, `set(1)` the second. */
-interface Turner {
-  set(fraction: number, v: number): void;
-  end(): void;
+/** The smallest rect holding all of them; null for none. */
+export function unionRect(rects: readonly Rect[]): Rect | null {
+  if (!rects.length) return null;
+  const x1 = Math.min(...rects.map((r) => r.x));
+  const y1 = Math.min(...rects.map((r) => r.y));
+  const x2 = Math.max(...rects.map((r) => r.x + r.w));
+  const y2 = Math.max(...rects.map((r) => r.y + r.h));
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
 }
+
+const PANEL_SELECTOR = ".wrapped-panel[data-wrapped-step]";
+const stopKey = (s: Stop) => `${s.page}:${s.step}`;
 
 export class BookController {
   private env: BookEnv | null = null;
   private listeners = new Set<() => void>();
-  private snap: BookSnapshot = { ready: false, pages: [], pos: { page: 0, step: 0 }, focus: { sceneId: null, step: 0 }, mode: "wide", bookHeight: WRAPPED_PAGE_MIN_HEIGHT, turning: false, dragging: false };
+  private snap: BookSnapshot = { ready: false, pages: [], pos: { page: 0, step: 0 }, mode: "wide", groups: [] };
   private scenes: WrappedSceneInfo[] = [];
   private pageEls: HTMLElement[] = [];
+  /** The pages as the Scenes give them, before they are grouped for the desk (which depends on the stage's width). */
+  private basePages: GuidePage[] = [];
+  /** Each page's x in its group (px). */
+  private pageX: number[] = [];
+  /** The stops the camera cuts to with an impact: the first splash or highlight of each group. */
+  private impacts = new Set<string>();
   private reached: number[] = [];
-  private camera: Camera = { scale: 1, x: 0, y: 0 };
+  private camera: Camera = { scale: 1, x: 0, y: 0, angle: 0 };
   private camTween: Tween | null = null;
-  private turnTween: Tween | null = null;
   private token = 0;
-  private drag: { from: Stop; to: Stop; forward: boolean; turner: Turner; v: number } | null = null;
   private signature = "";
   private backReported = false;
-  private dragFraction = 0;
   private relayoutAfter = false;
   private observer: ResizeObserver | null = null;
+  private laidOut = "";
 
   // ---- external store ---------------------------------------------------------------------------------------------
 
@@ -156,7 +168,6 @@ export class BookController {
   detach() {
     this.token++;
     this.camTween?.cancel();
-    this.turnTween?.cancel();
     this.observer?.disconnect();
     this.observer = null;
     this.env = null;
@@ -181,38 +192,37 @@ export class BookController {
     this.signature = signature;
     this.scenes = sceneList;
     this.pageEls = sceneList.map((s) => s.element!);
-    const pages = buildPages(guide, env.labels);
+    this.basePages = buildPages(guide, env.labels);
     // What a page is, for the CSS that dresses it (covers have no margin to print a footer in).
     this.pageEls.forEach((el, i) => {
-      el.dataset.pageKind = pages[i]!.kind;
-      el.dataset.pageNo = pages[i]!.no === null ? "" : String(pages[i]!.no);
+      el.dataset.pageKind = this.basePages[i]!.kind;
+      el.dataset.pageNo = this.basePages[i]!.no === null ? "" : String(this.basePages[i]!.no);
     });
-    // A page's content changing size (an image arriving, the lettering font loading) re-frames the book.
+    // A page's content changing size (an image arriving, the lettering font loading) lays the book out again.
     this.observer?.disconnect();
     if (typeof ResizeObserver !== "undefined") {
       this.observer = new ResizeObserver(() => this.relayout());
       this.pageEls.forEach((el) => this.observer!.observe(el));
     }
-    this.reached = pages.map((_, i) => this.reached[i] ?? 0);
-    this.set({ pages });
+    this.reached = this.basePages.map((_, i) => this.reached[i] ?? 0);
+    this.laidOut = "";
+    this.layout();
     if (first) this.start();
     else this.relayout();
   }
 
-  /** The stage changed size (or a page's content did): frame the current panel again, without moving. */
+  /** The stage changed size (or a page's content did): lay the book out again and frame the current stop, without moving. */
   relayout() {
     const env = this.env;
     if (!env || !this.snap.ready) return;
-    const mode = stageMode(env.stage.clientWidth);
-    if (mode !== this.snap.mode) this.set({ mode });
-    if (this.snap.turning || this.drag) return;
-    // A glide in progress carries on to where it was going; the book is framed again as it lands.
+    // A move in progress carries on to where it was going; the book is laid out again as it lands.
     if (this.camTween) {
       this.relayoutAfter = true;
       return;
     }
-    this.layoutBook(this.snap.pos.page);
+    this.layout();
     this.applyCamera(this.cameraAt(this.snap.pos));
+    this.markCurrent(this.snap.pos);
   }
 
   // ---- reading ----------------------------------------------------------------------------------------------------
@@ -225,96 +235,66 @@ export class BookController {
     const to = prevStop(this.snap.pages, this.snap.pos);
     if (to) void this.go(to);
   }
-  /** Jump to a section's first panel (the contents page, "Skip to the back cover"). */
+  /** Jump to a section's first panel (the contents page, "Skip to the end"). */
   goToSection(sectionId: string) {
     const to = sectionStart(this.snap.pages, sectionId);
-    if (to) void this.go(to);
-  }
-  goToBackCover() {
-    const to = backCoverStart(this.snap.pages);
     if (to) void this.go(to);
   }
   goToContents() {
     this.goToSection(CONTENTS_SECTION);
   }
 
-  /** Move to a stop: a glide to another panel of the page, or a turn (with the camera pulling back first and going in after). */
+  /** Move to a stop: a whip (or an impact) to a panel of the spread, a pull back to it, or a pan across to another. */
   async go(to: Stop): Promise<void> {
     const env = this.env;
-    if (!env || !this.snap.ready || this.snap.turning) return;
+    if (!env || !this.snap.ready) return;
     const from = this.snap.pos;
-    const kind = moveKind(from, to);
-    if (kind === "none") return;
+    if (sameStop(from, to)) return;
     const token = ++this.token;
     this.camTween?.cancel();
     this.camTween = null;
     this.stopped(to);
+    const target = this.cameraAt(to);
 
     if (env.reduceMotion()) {
-      this.layoutBook(to.page);
-      this.showPages([to.page]);
-      this.applyOpenState(to.page);
-      this.applyCamera(this.cameraAt(to));
+      this.applyCamera(target);
       this.arrive(to);
       return;
     }
 
-    if (kind === "panel") {
-      await this.glide(to, PAN_SECONDS, token);
-      return;
-    }
+    const pages = this.snap.pages;
+    const forward = isAfter(to, from);
+    // An impact only the first time a panel is reached, going forward: back over it, it is just a panel.
+    const impact = forward && to.step !== PULL && this.impacts.has(stopKey(to)) && (this.reached[to.page] ?? 0) <= to.step;
+    const otherGroup = pages[to.page]!.group !== pages[from.page]!.group;
 
-    const forward = kind === "turn-forward";
-    this.set({ turning: true });
-    const hMax = Math.max(this.pageHeight(from.page), this.pageHeight(to.page));
-    this.layoutBook(Math.max(from.page, to.page), hMax);
-    // 1. Pull back to the whole page.
-    const overview = this.overview(hMax);
-    if (!(await this.moveCamera(overview, PULL_BACK_SECONDS, token))) return this.abandon();
-    // 2. Turn it.
-    this.showPages(forward ? [from.page, to.page] : [to.page, from.page]);
-    const turner = this.turnerFor(from.page, to.page, forward);
-    const swings = this.isSwing(from.page, to.page);
-    const turn = tween(swings ? COVER_SECONDS : TURN_SECONDS, TURN_EASE, (t) => turner.set(t, TURN_HELD_AT));
-    this.turnTween = turn;
-    const turned = await turn.done;
-    this.turnTween = null;
-    turner.end();
-    if (!turned || token !== this.token) return this.abandon();
-    this.showPages([to.page]);
-    this.applyOpenState(to.page);
-    this.layoutBook(to.page);
-    this.set({ turning: false });
-    // 3. Go in on the first panel.
-    await this.glide(to, GLIDE_SECONDS, token);
-  }
-
-  private abandon() {
-    this.set({ turning: false });
-  }
-
-  /** Glide the camera to a stop's panel; the panel is painted in once the camera has mostly arrived. */
-  private async glide(to: Stop, seconds: number, token: number) {
-    this.layoutBook(to.page);
-    const target = this.cameraAt(to);
-    let arrived = false;
-    const done = await this.moveCamera(target, seconds, token, (t) => {
-      if (!arrived && t >= ARRIVED_AT) {
-        arrived = true;
-        this.arrive(to);
+    if (otherGroup) {
+      const overview = this.groupCamera(pages[to.page]!.group);
+      // Panned to a spread, the camera holds on all of it, then goes in; a cover (all of it is the panel) needs no going in.
+      const goIn = !sameCamera(overview, target);
+      if (!(await this.move(goIn ? overview : target, PAN_SECONDS, panCurve, token))) return;
+      if (goIn) {
+        await wait(PAN_HOLD_MS);
+        if (token !== this.token) return;
+        if (impact) this.cut(target);
+        else if (!(await this.move(target, WHIP_SECONDS, whipCurve, token))) return;
       }
-    });
-    if (done && !arrived) this.arrive(to);
+    } else if (to.step === PULL) {
+      if (!(await this.move(target, PULL_SECONDS, pullCurve, token))) return;
+    } else if (impact) {
+      this.cut(target);
+    } else if (!(await this.move(target, WHIP_SECONDS, whipCurve, token))) return;
+
+    if (token === this.token) this.arrive(to);
   }
 
-  /** The reader has reached a stop's panel: it is lit, painted in, and (the back cover) reported. */
+  /** The reader has reached a stop: its panel is drawn in, and the back cover reported. */
   private arrive(to: Stop) {
     const env = this.env;
     if (!env) return;
     this.reached = reachedAfter(this.reached, to).slice(0, this.snap.pages.length);
     this.pushSceneStates(to);
     const page = this.snap.pages[to.page];
-    this.set({ focus: { sceneId: page?.sceneId ?? null, step: to.step } });
     if (page?.kind === "back" && !this.backReported) {
       this.backReported = true;
       env.onBackCover();
@@ -324,8 +304,17 @@ export class BookController {
   /** The position has changed (before it is reached): the HUD and the URL follow at once. */
   private stopped(to: Stop) {
     this.set({ pos: to });
+    this.markCurrent(to);
     const page = this.snap.pages[to.page];
     if (page) this.env?.onStop(to, page);
+  }
+
+  /** Only the spread being read can be reached with the keyboard (the contents page's links, the share cards' buttons). */
+  private markCurrent(at: Stop) {
+    const group = this.snap.pages[at.page]?.group;
+    this.pageEls.forEach((el, i) => {
+      el.inert = this.snap.pages[i]?.group !== group;
+    });
   }
 
   // ---- start ------------------------------------------------------------------------------------------------------
@@ -338,33 +327,91 @@ export class BookController {
     this.token++;
     // The panels start unreached (empty frames), except with reduced motion, where they all appear filled.
     if (env.reduceMotion()) this.reached = pages.map((p) => (p.panels[p.panels.length - 1] ?? 0) + 1);
-    this.layoutBook(at.page);
-    this.showPages([at.page]);
-    this.applyOpenState(at.page);
     this.applyCamera(this.cameraAt(at));
     this.set({ ready: true, pos: at });
+    this.markCurrent(at);
     const page = pages[at.page];
     if (page) env.onStop(at, page);
     this.pushSceneStates(at);
-    // One frame on, so the first panel is painted in as the book opens rather than being there at the first paint.
+    // One frame on, so the first panel is drawn in as the book opens rather than being there at the first paint.
     if (env.reduceMotion()) this.arrive(at);
     else requestAnimationFrame(() => (this.env === env ? this.arrive(at) : undefined));
   }
 
   // ---- layout -----------------------------------------------------------------------------------------------------
 
-  private pageHeight(i: number): number {
-    const el = this.pageEls[i];
-    return Math.max(WRAPPED_PAGE_MIN_HEIGHT, el?.offsetHeight ?? 0);
+  /**
+   * Lays the pages out on the desk, a group at a time, each page as tall as the tallest of its group, and draws every
+   * panel's frame. Only writes what changed, so the page's own resize observer settles after one pass.
+   */
+  private layout() {
+    const env = this.env;
+    if (!env || !this.pageEls.length) return;
+    const mode = stageMode(env.stage.clientWidth);
+    const groups = deskGroups(
+      this.basePages.map((p) => p.kind),
+      mode,
+    );
+    // Each page's own height: measured without the height its group gave it, all at once (one layout, not one a page).
+    this.pageEls.forEach((el) => (el.style.minHeight = ""));
+    const heights = this.pageEls.map((el) => Math.max(WRAPPED_PAGE_MIN_HEIGHT, el.offsetHeight));
+    const desk = deskLayout(groups, heights, mode);
+    this.pageX = [];
+    desk.forEach((g) =>
+      g.pages.forEach((i, n) => {
+        const el = this.pageEls[i]!;
+        const x = n * WRAPPED_PAGE_WIDTH;
+        this.pageX[i] = x;
+        el.style.minHeight = `${g.h}px`;
+        const transform = `translate(${g.place.x}px, ${g.place.y}px) rotate(${g.place.angle}deg) translate(${x}px, 0px)`;
+        if (el.style.transform !== transform) el.style.transform = transform;
+        el.dataset.spread = g.pages.length === 1 ? "single" : n === 0 ? "left" : "right";
+      }),
+    );
+    this.pageEls.forEach((el) => this.drawFrames(el));
+
+    const signature = `${mode}|${groups.map((g) => g.join(",")).join("/")}`;
+    const pages = signature === this.laidOut ? this.snap.pages : withGroups(this.basePages, groups);
+    this.laidOut = signature;
+    this.impacts = this.findImpacts(pages);
+    this.set({ pages, mode, groups: desk });
   }
 
-  /** The book is as tall as the page being read (or `height`, mid-turn). */
-  private layoutBook(page: number, height?: number) {
-    const env = this.env;
-    if (!env) return;
-    const h = height ?? this.pageHeight(page);
-    env.book.style.height = `${h}px`;
-    if (h !== this.snap.bookHeight) this.set({ bookHeight: h });
+  /** Each panel's frame on a page: the slanted quad it is clipped to and its ink and pencil lines drawn along. */
+  private drawFrames(pageEl: HTMLElement) {
+    const panels = [...pageEl.querySelectorAll<HTMLElement>(PANEL_SELECTOR)].filter((el) => el.dataset.bare !== "true" && el.offsetWidth > 0);
+    const rects = panels.map((el) => offsetRectWithin(el, pageEl));
+    const straight = panels.map((el) => el.dataset.emphasis === "narration");
+    const quads = panelFrames(
+      rects.map((rect, i) => ({ rect, straight: straight[i] })),
+      WRAPPED_PAGE_WIDTH,
+    );
+    panels.forEach((el, i) => {
+      const own = quadWithin(quads[i]!, rects[i]!);
+      // An inset is cut out with a little paper round it, so it stands off the panel it sits on.
+      const clip = quadClipPath(straight[i] ? rectQuad({ x: 0, y: 0, w: rects[i]!.w, h: rects[i]!.h }, INSET_HALO) : own);
+      if (el.style.clipPath !== clip) el.style.clipPath = clip;
+      const points = quadPoints(own);
+      el.querySelectorAll<SVGPolygonElement>(":scope > .wrapped-panel-frame polygon").forEach((p) => {
+        if (p.getAttribute("points") !== points) p.setAttribute("points", points);
+      });
+    });
+  }
+
+  /** The stops worth an impact: in each group, the first panel marked a splash or a highlight. */
+  private findImpacts(pages: readonly GuidePage[]): Set<string> {
+    const out = new Set<string>();
+    const seen = new Set<number>();
+    pages.forEach((page, i) => {
+      if (seen.has(page.group)) return;
+      const el = this.pageEls[i];
+      const marked = el ? [...el.querySelectorAll<HTMLElement>(`${PANEL_SELECTOR}[data-emphasis="splash"], ${PANEL_SELECTOR}[data-emphasis="highlight"]`)] : [];
+      const step = marked.map((p) => Number(p.dataset.wrappedStep)).sort((a, b) => a - b)[0];
+      if (step === undefined) return;
+      seen.add(page.group);
+      out.add(stopKey({ page: i, step }));
+    });
+    return out;
   }
 
   private stageSize(): Size {
@@ -372,30 +419,35 @@ export class BookController {
     return { w: stage.clientWidth, h: stage.clientHeight };
   }
 
-  private overview(height: number): Camera {
-    const mode = stageMode(this.stageSize().w);
-    return overviewCamera(this.stageSize(), { w: WRAPPED_PAGE_WIDTH, h: height }, this.env!.insets(mode));
+  private insets(): Insets {
+    return this.env!.insets(stageMode(this.stageSize().w));
   }
 
-  /** The camera that frames a stop: its panel on a phone, the whole page nudged toward it on a wide screen. */
+  /** The camera on a whole group, square to the screen. */
+  private groupCamera(group: number): Camera {
+    const g = this.snap.groups[group];
+    if (!g) return this.camera;
+    const pad = PULL_PAD[this.snap.mode];
+    return frameArea(this.stageSize(), this.insets(), g.place, { x: -pad, y: -pad, w: g.w + 2 * pad, h: g.h + 2 * pad });
+  }
+
+  /** The camera that frames a stop: its panel, or the whole spread for the pull-back. */
   private cameraAt(at: Stop): Camera {
-    const env = this.env!;
+    const page = this.snap.pages[at.page];
+    if (!page) return this.camera;
+    if (at.step === PULL) return this.groupCamera(page.group);
+    const g = this.snap.groups[page.group];
     const el = this.pageEls[at.page];
-    const h = this.pageHeight(at.page);
-    const page = { w: WRAPPED_PAGE_WIDTH, h };
-    const mode = stageMode(this.stageSize().w);
-    const insets = env.insets(mode);
-    const stage = this.stageSize();
-    const rect = el ? this.panelRect(el, at.step) : null;
-    return panelCamera({ stage, page, panel: rect ?? { x: 0, y: 0, w: page.w, h: page.h }, mode, insets });
+    if (!g || !el) return this.camera;
+    const x = this.pageX[at.page] ?? 0;
+    const rect = this.panelRect(el, at.step) ?? { x: 0, y: 0, w: WRAPPED_PAGE_WIDTH, h: g.h };
+    return panelCamera(this.stageSize(), this.insets(), g.place, { x: x + rect.x, y: rect.y, w: rect.w, h: rect.h });
   }
 
-  /** The panel of a step: all of the page's Reveals at that step, together (the whole page when it has none). */
+  /** The panel of a step: all of the page's Reveals at that step, together. */
   private panelRect(pageEl: HTMLElement, step: number): Rect | null {
     const panels = [...pageEl.querySelectorAll<HTMLElement>(`[data-wrapped-step="${step}"]`)];
-    // A cover is one panel that is the whole page.
-    const rects = panels.filter((p) => p.offsetWidth > 0).map((p) => offsetRectWithin(p, pageEl));
-    return unionRect(rects);
+    return unionRect(panels.filter((p) => p.offsetWidth > 0).map((p) => offsetRectWithin(p, pageEl)));
   }
 
   private applyCamera(camera: Camera) {
@@ -403,19 +455,21 @@ export class BookController {
     this.env!.world.style.transform = cameraTransform(camera);
   }
 
-  private async moveCamera(to: Camera, seconds: number, token: number, onProgress?: (t: number) => void): Promise<boolean> {
+  /** A hard cut to a panel, with the impact's flash and shake. */
+  private cut(to: Camera) {
+    this.applyCamera(to);
+    this.env!.effects.impact();
+  }
+
+  /** Moves the camera along a curve (camera.ts); false if it was overtaken by another move. */
+  private async move(to: Camera, seconds: number, curve: (t: number) => number, token: number): Promise<boolean> {
     this.camTween?.cancel();
     const from = this.camera;
-    const near = Math.abs(from.scale - to.scale) < 0.004 && Math.abs(from.x - to.x) < 1.5 && Math.abs(from.y - to.y) < 1.5;
-    if (near) {
+    if (sameCamera(from, to)) {
       this.applyCamera(to);
-      onProgress?.(1);
       return token === this.token;
     }
-    const move = tween(seconds, GLIDE_EASE, (t) => {
-      this.applyCamera(mixCamera(from, to, t));
-      onProgress?.(t);
-    });
+    const move = tween(seconds, (t) => this.applyCamera(mixCamera(from, to, curve(t))));
     this.camTween = move;
     const completed = await move.done;
     if (this.camTween === move) {
@@ -428,18 +482,6 @@ export class BookController {
     return completed && token === this.token;
   }
 
-  // ---- pages ------------------------------------------------------------------------------------------------------
-
-  /** Only these pages are seen (and can be reached with the keyboard); `[turning page, page beneath]` while one turns. */
-  private showPages(visible: number[]) {
-    this.pageEls.forEach((el, i) => {
-      const shown = visible.includes(i);
-      el.style.visibility = shown ? "visible" : "hidden";
-      el.inert = !shown;
-      el.style.zIndex = shown ? String(visible.length - visible.indexOf(i)) : "0";
-    });
-  }
-
   /** Tells every Scene how much of it is reached, and which is current. */
   private pushSceneStates(at: Stop) {
     const env = this.env!;
@@ -448,145 +490,6 @@ export class BookController {
       const reached = reduce ? scene.steps : Math.min(scene.steps, this.reached[i] ?? 0);
       env.store.setSceneState(scene.id, { reached, current: i === at.page });
     });
-  }
-
-  private hinge(): HTMLElement | null {
-    return this.env?.book.querySelector<HTMLElement>("[data-cover-hinge]") ?? null;
-  }
-
-  /** The cover lies open on the left once the reader is past it, and shut over the first page while they're on it. */
-  private applyOpenState(page: number) {
-    const hinge = this.hinge();
-    if (!hinge) return;
-    hinge.style.transform = `rotateY(${page > 0 ? -180 : 0}deg)`;
-    // Open, the cover fades away: what lies beside the page is the desk's (its stickers), and a phone has no desk.
-    hinge.style.opacity = page > 0 ? "0" : "1";
-    hinge.style.pointerEvents = page > 0 ? "none" : "";
-  }
-
-  private isSwing(a: number, b: number) {
-    const pages = this.snap.pages;
-    return pages[a]?.kind === "cover" || pages[b]?.kind === "cover";
-  }
-
-  /** How a turn between two pages is drawn: the cover swings on its hinge, any other page is peeled off the one beneath. */
-  private turnerFor(fromPage: number, toPage: number, forward: boolean): Turner {
-    const env = this.env!;
-    if (this.isSwing(fromPage, toPage)) {
-      const hinge = this.hinge();
-      const book = env.book;
-      book.style.perspective = `${WRAPPED_PAGE_WIDTH * COVER_PERSPECTIVE}px`;
-      book.style.perspectiveOrigin = "50% 50%";
-      // A cover that had faded away is back at once for its swing.
-      if (hinge) {
-        hinge.style.transition = "none";
-        hinge.style.opacity = "1";
-        void hinge.offsetWidth;
-        hinge.style.transition = "";
-      }
-      return {
-        set: (f) => {
-          if (hinge) hinge.style.transform = `rotateY(${(forward ? -180 * f : -180 * (1 - f)).toFixed(2)}deg)`;
-        },
-        end: () => {
-          book.style.perspective = "";
-          book.style.perspectiveOrigin = "";
-        },
-      };
-    }
-    const top = this.pageEls[forward ? fromPage : toPage]!;
-    const dom = findFoldDom(env.book);
-    const W = WRAPPED_PAGE_WIDTH;
-    const H = parseFloat(env.book.style.height) || this.pageHeight(fromPage);
-    return {
-      set: (f, v) => {
-        if (!dom) return;
-        const fraction = forward ? f : 1 - f;
-        drawPeel(dom, top, W, H, { fraction, v: v * (1 - fraction) }, env.peelStyle());
-      },
-      end: () => {
-        if (dom) drawPeel(dom, top, W, H, null, env.peelStyle());
-      },
-    };
-  }
-
-  // ---- the edge swipe ---------------------------------------------------------------------------------------------
-
-  /** Whether a page can be taken by its edge now: the book is at rest, and there is a page that way. */
-  canDrag(forward: boolean): boolean {
-    const env = this.env;
-    if (!env || !this.snap.ready || this.snap.turning || env.reduceMotion()) return false;
-    return !!pageStart(this.snap.pages, this.snap.pos.page + (forward ? 1 : -1));
-  }
-
-  /** A finger has started dragging a page's edge: pull back and let the page follow it. False when the book can't be turned now. */
-  beginDrag(forward: boolean): boolean {
-    if (!this.canDrag(forward)) return false;
-    const from = this.snap.pos;
-    const toPage = from.page + (forward ? 1 : -1);
-    const to = pageStart(this.snap.pages, toPage)!;
-    this.token++;
-    this.camTween?.cancel();
-    this.camTween = null;
-    const hMax = Math.max(this.pageHeight(from.page), this.pageHeight(toPage));
-    this.layoutBook(Math.max(from.page, toPage), hMax);
-    this.showPages(forward ? [from.page, toPage] : [toPage, from.page]);
-    const turner = this.turnerFor(from.page, toPage, forward);
-    this.drag = { from, to, forward, turner, v: 0 };
-    this.set({ turning: true, dragging: true });
-    const overview = this.overview(hMax);
-    const start = this.camera;
-    this.camTween = tween(0.3, GLIDE_EASE, (t) => this.applyCamera(mixCamera(start, overview, t)));
-    return true;
-  }
-
-  /** The finger has travelled `travel` px (screen) across, at `clientY` on the screen. */
-  dragTo(travel: number, clientY: number) {
-    const d = this.drag;
-    const env = this.env;
-    if (!d || !env) return;
-    const W = WRAPPED_PAGE_WIDTH;
-    const fraction = Math.max(0, Math.min(1, travel / this.camera.scale / (2 * W)));
-    const rect = env.book.getBoundingClientRect();
-    d.v = peelHeldAt(clientY, rect.top, rect.height);
-    d.turner.set(fraction, d.v);
-    this.dragFraction = fraction;
-  }
-
-  /** The finger has lifted: the page goes on over, or settles back. */
-  async endDrag({ travel, velocity, cancelled }: { travel: number; velocity: number; cancelled: boolean }) {
-    const d = this.drag;
-    const env = this.env;
-    if (!d || !env) return;
-    const W = WRAPPED_PAGE_WIDTH;
-    const pageTravel = travel / this.camera.scale;
-    const commit = !cancelled && (pageTravel >= W * DRAG_COMMIT || (velocity >= DRAG_FLICK && travel >= DRAG_FLICK_MIN));
-    const from = this.dragFraction;
-    const token = this.token;
-    this.drag = null;
-    this.set({ dragging: false });
-    const target = commit ? 1 : 0;
-    const settle = tween(Math.max(0.12, (commit ? 1 - from : from) * TURN_SECONDS), TURN_EASE, (t) => d.turner.set(from + (target - from) * t, d.v));
-    this.turnTween = settle;
-    await settle.done;
-    this.turnTween = null;
-    d.turner.end();
-    if (token !== this.token) return this.abandon();
-    if (commit) {
-      this.stopped(d.to);
-      this.showPages([d.to.page]);
-      this.applyOpenState(d.to.page);
-      this.layoutBook(d.to.page);
-      this.set({ turning: false });
-      await this.glide(d.to, GLIDE_SECONDS, token);
-    } else {
-      this.showPages([d.from.page]);
-      this.applyOpenState(d.from.page);
-      this.layoutBook(d.from.page);
-      this.set({ turning: false });
-      await this.glide(d.from, GLIDE_SECONDS, token);
-    }
-    this.dragFraction = 0;
   }
 
   /** Whether the reader is exactly here already. */

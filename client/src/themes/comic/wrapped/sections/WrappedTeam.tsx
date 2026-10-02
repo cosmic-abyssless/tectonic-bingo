@@ -21,7 +21,7 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
     <>
       <WrappedScene steps={hasStars ? 4 : 3}>
         <div className="flex flex-1 flex-col gap-3">
-          <Reveal step={0} className={`flex-1 ${FULL_PANEL}`}>
+          <Reveal step={0} emphasis="splash" className={`flex-1 ${FULL_PANEL}`}>
             <Splash art={t.art} accent={t.color ?? COVER.BLUE} kicker="Your Team" kickerDot={t.color} title={t.name} />
           </Reveal>
           <div className="grid grid-cols-2 gap-3">
