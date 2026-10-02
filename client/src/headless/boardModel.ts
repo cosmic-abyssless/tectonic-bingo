@@ -112,6 +112,7 @@ export function buildRequirementTree(
       progress: null,
       quantity: null,
       showHeading: false,
+      itemGroup: false,
       divider: null,
       children: [],
     };
@@ -159,6 +160,7 @@ export function buildRequirementTree(
       progress: { current: progress, target },
       quantity: !isGroup && target > 1 ? target : null,
       showHeading: isGroup,
+      itemGroup: false,
       divider: null,
       children: [],
     };
@@ -170,9 +172,17 @@ export function buildRequirementTree(
   const children = node.children
     .map((child) => {
       const model = buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks);
-      // A named "any one of" group of Items among a COUNT's options keeps its name ("Bludgeon pieces (any one of)"), as it
-      // does in a total.
-      if (model && node.kind === "COUNT" && child.label && isItemGroup(child)) return { ...model, label: `${child.label} (any one of)` };
+      // An "any one of" group of Items among a condition's options is one option: a row with its own box, its name kept
+      // ("Bludgeon pieces (any one of)", as in a total), and no "OR" between its pieces, which the heading already says.
+      if (model && isItemGroup(child)) {
+        return {
+          ...model,
+          label: child.label ? `${child.label} (any one of)` : model.label,
+          itemGroup: true,
+          dim: model.complete || childAncestorSatisfied,
+          divider: null,
+        };
+      }
       return model;
     })
     .filter((c): c is RequirementNodeModel => c !== null);
@@ -193,6 +203,7 @@ export function buildRequirementTree(
     progress: node.kind === "COUNT" ? { current: children.filter((c) => c.complete).length, target: node.minCount ?? 1 } : null,
     quantity: null,
     showHeading: true,
+    itemGroup: false,
     divider: node.kind === "ANY" ? { label: "OR", dim: childAncestorSatisfied } : null,
     children,
   };

@@ -16,14 +16,23 @@ function rowClass(dim: boolean, submitted: boolean, noStrike: boolean) {
   return `flex items-baseline gap-2 text-sm ${dim ? `text-on-surface-subtle ${noStrike ? "" : "line-through"}` : submitted ? "text-on-surface-muted" : "text-on-surface"}`;
 }
 
+// The line down a nested condition's options, with a branch to each, as the board editor draws it. Drawn per row (and
+// through the gaps between rows, which are each row's top padding), so it stops at the last option's branch. The branch
+// meets a row's first line: its padding, plus half a line.
+function branchClass(last: boolean, tick = true) {
+  const line = "relative pl-4 pt-1 before:absolute before:left-0 before:top-0 before:border-l before:border-outline-strong";
+  return `${line} ${last ? "before:h-3.5" : "before:bottom-0"} ${tick ? "after:absolute after:left-0 after:top-3.5 after:w-3 after:border-t after:border-outline-strong" : ""}`;
+}
+
 // A leaf row: an ITEM, or a SUM over a single item — the model already carries
 // dim/submitted/complete/progress precomputed (see headless/boardModel.ts's
-// buildRequirementTree), so this only renders them.
-function LeafRow({ node }: { node: RequirementNodeModel }) {
+// buildRequirementTree), so this only renders them. `bare`: a piece of an "any one of" group of Items, which has no
+// bullet of its own (the group's row has it). `className`: its branch, in a nested condition.
+function LeafRow({ node, bare, className }: { node: RequirementNodeModel; bare?: boolean; className?: string }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   return (
-    <li className={rowClass(node.dim, node.submitted, !!node.progress)}>
-      <span className="text-on-surface-subtle">·</span>
+    <li className={`${rowClass(node.dim, node.submitted, !!node.progress)} ${className ?? ""}`}>
+      {!bare && <span className="text-on-surface-subtle">·</span>}
       {node.progress && <Progress node={node} />}
       <span className={node.lockedBy ? "text-on-surface-subtle" : undefined}>
         <ItemIcon url={iconUrl} className={iconClass(node.dim)} />
@@ -32,7 +41,7 @@ function LeafRow({ node }: { node: RequirementNodeModel }) {
         {node.quantity && <span className="num ml-1.5 text-xs font-medium">×{node.quantity}</span>}
         {node.lockedBy && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
       </span>
-      {node.complete && <Check />}
+      {node.complete && !bare && <Check />}
     </li>
   );
 }
@@ -98,9 +107,9 @@ function SumItemRows({ node }: { node: RequirementNodeModel }) {
 }
 
 // Between an ANY's direct options, in the heading style.
-function OrDivider({ dim }: { dim: boolean }) {
+function OrDivider({ dim, className }: { dim: boolean; className?: string }) {
   return (
-    <li role="separator" className={`flex items-center gap-2 text-[11px] uppercase tracking-wide ${dim ? "text-on-surface-subtle opacity-60" : "text-on-surface-muted"}`}>
+    <li role="separator" className={`flex items-center gap-2 text-[11px] uppercase tracking-wide ${dim ? "text-on-surface-subtle opacity-60" : "text-on-surface-muted"} ${className ?? ""}`}>
       <span className="h-px w-4 bg-outline-strong" />
       or
       <span className="h-px w-4 bg-outline-strong" />
@@ -116,31 +125,42 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
       </ul>
     );
   }
+  // The root's options are a plain list; a nested condition's hang off its line, a branch to each (see branchClass).
+  const nested = !root && node.kind !== "SUM";
+  const last = node.children.length - 1;
   return (
-    <div className={root ? "" : "ml-2 border-l border-outline pl-3"}>
-      {node.showHeading && (
-        <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${node.complete ? "text-ok" : "text-on-surface-subtle"}`}>
-          {node.label}
-          {node.progress && (
-            <>
-              <span aria-hidden>·</span>
-              <Progress node={node} />
-            </>
-          )}
-          {node.complete && <Check />}
-        </span>
-      )}
-      <ul className="mt-1 space-y-1">
+    <div>
+      {node.showHeading &&
+        (node.itemGroup ? (
+          // One option of its parent: a row with its own bullet, and a tick once any piece is in.
+          <div className={rowClass(node.dim, false, true)}>
+            <span className="text-on-surface-subtle">·</span>
+            <span className="text-[11px] uppercase tracking-wide">{node.label}</span>
+            {node.complete && <Check />}
+          </div>
+        ) : (
+          <span className={`inline-flex items-center gap-1 text-[11px] uppercase tracking-wide ${node.complete ? "text-ok" : "text-on-surface-subtle"}`}>
+            {node.label}
+            {node.progress && (
+              <>
+                <span aria-hidden>·</span>
+                <Progress node={node} />
+              </>
+            )}
+            {node.complete && <Check />}
+          </span>
+        ))}
+      <ul className={nested ? "ml-0.5" : "mt-1 space-y-1"}>
         {node.kind === "SUM" ? (
           <SumItemRows node={node} />
         ) : (
           node.children.map((child, i) => (
             <Fragment key={child.id}>
-              {i > 0 && node.divider && <OrDivider dim={node.divider.dim} />}
+              {i > 0 && node.divider && <OrDivider dim={node.divider.dim} className={nested ? branchClass(false, false) : undefined} />}
               {child.isLeaf ? (
-                <LeafRow node={child} />
+                <LeafRow node={child} bare={node.itemGroup} className={nested ? branchClass(i === last) : undefined} />
               ) : (
-                <li>
+                <li className={nested ? branchClass(i === last) : undefined}>
                   <RequirementTree node={child} />
                 </li>
               )}

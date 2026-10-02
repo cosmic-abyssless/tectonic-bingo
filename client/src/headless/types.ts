@@ -119,6 +119,11 @@ export interface RequirementNodeModel {
   quantity: number | null;
   /** Whether the composite's own heading is rendered (always, for composites). */
   showHeading: boolean;
+  /**
+   * An "any one of" group of Items inside another condition ("Bludgeon pieces (any one of)"): one option, so its heading
+   * is drawn as a row with its own box (ticked once any piece is in), its pieces without one, and no "OR" between them.
+   */
+  itemGroup: boolean;
   /** ANY only: draw this divider between each pair of its direct children (never before the first or after the last). `dim` once the ANY is satisfied (or an enclosing ANY/COUNT is), along with the options that are no longer needed. */
   divider: { label: "OR"; dim: boolean } | null;
   children: RequirementNodeModel[];

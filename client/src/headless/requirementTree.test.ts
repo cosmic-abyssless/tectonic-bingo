@@ -217,6 +217,9 @@ describe("buildRequirementTree: nested condition layout", () => {
     expect(tree.progress).toEqual({ current: 1, target: 3 });
     const group = tree.children[1]!;
     expect(group.label).toBe("Bludgeon pieces (any one of)");
+    // One option with its own box, ticked, and no "OR" between its pieces (the heading says it).
+    expect(group).toMatchObject({ itemGroup: true, complete: true, dim: true, divider: null });
+    expect(tree.children[0]!.itemGroup).toBe(false);
     expect(group.children.map((c) => [c.label, c.dim])).toEqual([
       ["Bludgeon axon", true],
       ["Bludgeon claw", true],
