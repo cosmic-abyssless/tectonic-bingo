@@ -75,31 +75,13 @@ export interface UserModel {
   avatarUrl: string;
 }
 
-/**
- * One row of a SUM: an Item, or an "any one of" group of Items (CONTEXT.md "Requirement Tree"), which adds 1 to the
- * total once one of its Items is approved.
- */
-export interface SumItemModel {
-  /** The Item's name; for a group, groupLabel()'s whole row ("Bludgeon piece (any one of: Bludgeon axon, …)"). */
-  name: string;
-  iconUrl: string | null;
-  /** How many the team has had approved (duplicates count, real items); for a group, 1 once it's done and 0 before. */
-  count: number;
-  /** What one of it adds to the total (CONTEXT.md "Counts as"): 1 unless the Item counts as more. Always 1 for a group. */
-  countsAs: number;
-  /** The team has used the item elsewhere and a rule says it counts in one place only ("Used on DT2 ISSUE 1"). Null for a group. */
-  lockedBy: string | null;
-  /** Set for an "any one of" group: its own label (null when it has none), its Items (name and wiki icon), and whether it's done. */
-  group: { label: string | null; pieces: { name: string; iconUrl: string | null }[]; done: boolean } | null;
-}
-
 export interface RequirementNodeModel {
   id: string;
   kind: NodeKind;
-  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items, or holding a group, is a composite: "5 of any (dupes count)"). */
+  /** leafLabel() for leaves, conditionHeading() for composites (a SUM over several items is a composite: "5 of any (dupes count)"). */
   label: string;
-  /** SUM only: the rows that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own; see SumItemModel), with "counts as 25" shown when an Item's Counts as isn't 1. */
-  items: SumItemModel[];
+  /** SUM only: the items that count toward it (for a SUM over several items, the group's rows — no checkbox each, since no single item is done on its own) — each with how many the team has had approved (duplicates count, real items), what one of it adds to the total (`countsAs`, CONTEXT.md "Counts as": 1 unless the Item counts as more, shown as "counts as 25" when it isn't 1), and whether the team has used the item elsewhere (`lockedBy`, e.g. "Used on DT2 ISSUE 1"; see exclusive items). */
+  items: { name: string; iconUrl: string | null; count: number; countsAs: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
   /** ITEM leaves only: set when the team has used this item somewhere else and a rule says it counts in one place only, e.g. "Used on DT2 ISSUE 1". Not `dim`: it isn't done, it is unavailable. */

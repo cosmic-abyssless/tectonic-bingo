@@ -3,7 +3,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
-import { DIFFICULTY, GENERATED_GROUP_RULE_ID, buildBoard, chooseExclusiveGroup, deadlockedParts, difficultyOf, itemToWeigh, itemsToGroup, planSubmissions, type Claim, type PartModel } from "./board";
+import { DIFFICULTY, GENERATED_GROUP_RULE_ID, buildBoard, chooseExclusiveGroup, deadlockedParts, difficultyOf, itemToWeigh, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
 import { Rng } from "./rng";
@@ -316,48 +316,11 @@ describe.skipIf(!fs.existsSync(EXPORT_PATH))("the real board", () => {
   });
 });
 
-// A SUM's total from planned claims, each item's quantity times what it counts as, plus 1 per "any one of" group with a piece.
+// A SUM's total from planned claims, each item's quantity times what it counts as.
 function weightedTotal(sum: GraphNode, claims: Claim[]) {
   const weight = new Map(sum.children.map((c) => [c.id, c.countsAs]));
-  const groups = sum.children.filter((c) => c.kind === "ANY" && c.children.some((piece) => claims.some((cl) => cl.nodeId === piece.id))).length;
-  return groups + claims.filter((c) => weight.has(c.nodeId)).reduce((total, c) => total + (c.quantity ?? 1) * (weight.get(c.nodeId) ?? 1), 0);
+  return claims.reduce((total, c) => total + (c.quantity ?? 1) * (weight.get(c.nodeId) ?? 1), 0);
 }
-
-describe("an \"any one of\" group of Items inside a SUM", () => {
-  const item = (id: string, itemName: string, countsAs = 1): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
-  const group = (id: string, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "ANY", itemName: null, label: "Counted once", children });
-  const sum = (id: string, quantity: number, children: GraphNode[]): GraphNode => ({ ...item(id, ""), kind: "SUM", itemName: null, quantity, children });
-
-  it("plans just enough to reach the total, a piece of the group adding 1, and posts a second piece of it that adds nothing", () => {
-    const pieces = group("bludgeon", [item("axon", "Bludgeon axon"), item("claw", "Bludgeon claw"), item("spine", "Bludgeon spine")]);
-    const uniques = sum("uniques", 4, [pieces, item("dagger", "Abyssal dagger"), item("whip", "Abyssal whip")]);
-    let sawGroup = false;
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const claims = planSubmissions(uniques, new Rng(seed)).flat();
-      expect(weightedTotal(uniques, claims), `seed ${seed}`).toBe(4);
-      const onGroup = claims.filter((c) => pieces.children.some((p) => p.id === c.nodeId));
-      if (onGroup.length === 0) continue;
-      sawGroup = true;
-      expect(new Set(onGroup.map((c) => c.nodeId)).size).toBe(2);
-    }
-    expect(sawGroup).toBe(true);
-    // Only a group can't reach 2: it's planned once, and the plan stops there.
-    const groupOnly = sum("only", 2, [pieces]);
-    expect(planSubmissions(groupOnly, new Rng(1)).flat()).toHaveLength(2);
-  });
-
-  it("is made from the first three Items that count as 1 of the first SUM over three or more, unless the board already has one", () => {
-    const small = sum("small", 2, [item("a", "A"), item("b", "B")]);
-    const uniques = sum("uniques", 4, [item("axon", "Bludgeon axon"), item("whip", "Abyssal whip", 2), item("claw", "Bludgeon claw"), item("spine", "Bludgeon spine"), item("dagger", "Abyssal dagger")]);
-    const task = { ...sum("task", 1, []), kind: "ALL" as const, label: "Page 1", children: [small, uniques] };
-    const pick = itemsToGroup([item("lone", "Lone"), task])!;
-    expect([pick.task.id, pick.sum.id, pick.items.map((i) => i.id)]).toEqual(["task", "uniques", ["axon", "claw", "spine"]]);
-    // Three Items: two go in the group, one stays outside it.
-    expect(itemsToGroup([sum("three", 3, [item("a", "A"), item("b", "B"), item("c", "C")])])!.items.map((i) => i.id)).toEqual(["a", "b"]);
-    expect(itemsToGroup([small])).toBeNull();
-    expect(itemsToGroup([task, sum("grouped", 2, [group("g", [item("x", "X")]), item("y", "Y")])])).toBeNull();
-  });
-});
 
 describe("an Item that counts as more than one", () => {
   const item = (id: string, itemName: string, countsAs = 1): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });

@@ -1,7 +1,7 @@
 import { createContext, Fragment, useContext, useRef, useState, type ReactNode } from "react";
 import { DragPreview, mergeProps, useButton, useDrag, useDrop, type DragPreviewRenderer } from "react-aria";
 import { MenuTrigger } from "react-aria-components";
-import { describeValuedAs, fitsInSum, type ItemGroup, type NodeKind, type GraphNode, type GraphNodeInput, type ValuedAs } from "@bingo/shared";
+import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type GraphNodeInput, type ValuedAs } from "@bingo/shared";
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
@@ -93,8 +93,7 @@ function SplitAddButton({ primaryLabel, onPrimary, options }: { primaryLabel: st
 
 // Every composite kind a requirement can be, uniformly: ALL/ANY are plain
 // booleans over children, COUNT needs a minimum number of complete children,
-// SUM needs a summed quantity across ITEM children (an "any one of" group of
-// Items in it adding 1). One dropdown, one set of
+// SUM needs a summed quantity across ITEM children. One dropdown, one set of
 // children (items or nested composites) — no separate "item row" shape.
 // Worded so a condition's heading reads as its rule, with the number typed in
 // where it's read ("at least [2] of", "[3] of any (dupes count)", see RuleControls):
@@ -124,8 +123,6 @@ function appendChild(root: GraphNodeInput, path: Path, child: GraphNodeInput): G
 }
 
 const NEW_GROUP: GraphNodeInput = { kind: "ALL", children: [] };
-// The one condition a total ("N of any (dupes count)") holds: an "any one of" group of Items (CONTEXT.md "Requirement Tree").
-const NEW_TOTAL_GROUP: GraphNodeInput = { kind: "ANY", children: [] };
 
 // Drag and drop, to reorder a task's items and conditions or move one into another condition of the same task: every
 // row but the task's own has a handle (DragHandle), and there's a drop spot (DropGap) between rows, before the first
@@ -387,16 +384,11 @@ function GroupNode(props: NodeProps) {
   // same id as a second direct child of the same parent isn't meaningful.
   const childIds = new Set(children.map((c) => c.id).filter(Boolean));
   const pickableLeaves = (existingLeaves ?? []).filter((l) => !childIds.has(l.id));
-  // A total ("N of any (dupes count)") only adds up Items and "any one of" groups of Items, and such a group inside one
-  // holds only Items (the server refuses anything else too): so a total offers only that group as its condition, and the
-  // group offers none.
-  const isTotal = node.kind === "SUM";
-  const holdsConditions = props.parentKind !== "SUM";
   // "+ existing condition" references a whole ALL/ANY/COUNT/SUM block from a
   // sibling task as-is (its own kind/quantity/children, not decomposed into
   // items) — e.g. reuse Part A's "at least 2 of these 5 bosses" verbatim in
   // Part B, rather than rebuilding the same COUNT by hand.
-  const pickableConditions = (existingConditions ?? []).filter((c) => !childIds.has(c.id) && (!isTotal || fitsInSum(c.node)));
+  const pickableConditions = (existingConditions ?? []).filter((c) => !childIds.has(c.id));
 
   function addItem(name: string) {
     const trimmed = name.trim();
@@ -428,6 +420,9 @@ function GroupNode(props: NodeProps) {
     await onSaveAsGroup!(names);
   }
 
+  // A total ("N of any (dupes count)") only adds up Items, so it offers no conditions to add (the server refuses them too).
+  const holdsConditions = node.kind !== "SUM";
+
   // Heading row (the rule, with its number), then its children on a tree line (a branch to each, the line stopping at
   // the last), then the add row, indented with the children: the same order at every level, the task's own included.
   // The drag handle and the number sit in a gutter, so the rule's controls start where the item rows under it do. A
@@ -447,17 +442,14 @@ function GroupNode(props: NodeProps) {
             </TooltipSpan>
           )}
         </div>
-        <RuleControls node={node} path={path} update={update} parentKind={props.parentKind} />
-        {props.parentKind === "SUM" && <GroupNameInput label={node.label ?? null} onSave={(label) => update(path, (n) => ({ ...n, label }))} />}
+        <RuleControls node={node} path={path} update={update} />
         {isShared && <SharedMark tasks={sharedWithTasks} />}
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${conditionName}` : `Remove ${conditionName}`} what="condition" onPress={() => remove(path)} className="ml-auto" />}
       </div>
       {children.length === 0 ? (
         <div className={TREE_INDENT}>
           <DropGap parent={path} index={0} label={`Into ${conditionName}`}>
-            <p className="text-xs text-on-surface-subtle">
-              No requirements yet — add {!holdsConditions ? "an item" : isTotal ? 'an item or an "any one of" group of items' : "an item or a condition"}.
-            </p>
+            <p className="text-xs text-on-surface-subtle">No requirements yet — add {holdsConditions ? "an item or a condition" : "an item"}.</p>
           </DropGap>
         </div>
       ) : (
@@ -489,17 +481,9 @@ function GroupNode(props: NodeProps) {
         />
         {holdsConditions && (
           <div className="inline-flex shrink-0 overflow-hidden rounded-md border border-outline-strong">
-            {isTotal ? (
-              <TextTooltip text="A set of items that counts once toward the total: it adds 1 when any one of them is in, and more of them add nothing">
-                <Button variant="ghost" size="sm" onPress={() => add(path, NEW_TOTAL_GROUP)} aria-label={`Add an "any one of" group of items to ${conditionName}`} className="rounded-none border-0">
-                  <PlusIcon size={12} /> Any one of
-                </Button>
-              </TextTooltip>
-            ) : (
-              <Button variant="ghost" size="sm" onPress={() => add(path, NEW_GROUP)} aria-label={`Add a condition to ${conditionName}`} className="rounded-none border-0">
-                <PlusIcon size={12} /> Condition
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" onPress={() => add(path, NEW_GROUP)} aria-label={`Add a condition to ${conditionName}`} className="rounded-none border-0">
+              <PlusIcon size={12} /> Condition
+            </Button>
           </div>
         )}
         {canSaveAsGroup && (
@@ -570,14 +554,7 @@ function GroupNode(props: NodeProps) {
 
 // A condition's rule, the way its heading reads: "all of", "any one of", "at least [2] of", "[3] of any (dupes count)". The
 // dropdown changes the kind; the number is typed in where it's read.
-function RuleControls({ node, path, update, parentKind }: Pick<NodeProps, "node" | "path" | "update" | "parentKind">) {
-  // A total only adds up Items and "any one of" groups of Items (the server refuses anything else too): a condition
-  // inside one can only be such a group, and a condition holding anything else can't become a total until it's taken out.
-  const refusal = (k: NodeKind): string | null => {
-    if (parentKind === "SUM" && k !== "ANY") return 'only "any one of" goes in a total';
-    if (k === "SUM" && node.kind !== "SUM" && !(node.children ?? []).every(fitsInSum)) return 'Items or "any one of" Items only';
-    return null;
-  };
+function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | "update">) {
   const kind = (
     <Select
       aria-label="Requirement kind"
@@ -594,12 +571,12 @@ function RuleControls({ node, path, update, parentKind }: Pick<NodeProps, "node"
       }}
       size="sm"
       className="w-auto!"
-      options={GROUP_KINDS.map((k) => {
-        const refused = k.kind === node.kind ? null : refusal(k.kind);
-        return refused
-          ? { value: k.kind, label: `${k.label} (${refused})`, selectedLabel: k.selectedLabel, disabled: true }
-          : { value: k.kind, label: k.label, selectedLabel: k.selectedLabel };
-      })}
+      // A total only adds up Items: a condition holding other conditions can't become one until they're taken out.
+      options={GROUP_KINDS.map((k) =>
+        k.kind === "SUM" && node.kind !== "SUM" && (node.children ?? []).some((c) => c.kind !== "ITEM")
+          ? { value: k.kind, label: `${k.label} (Items only)`, selectedLabel: k.selectedLabel, disabled: true }
+          : { value: k.kind, label: k.label, selectedLabel: k.selectedLabel },
+      )}
     />
   );
   if (node.kind === "SUM") {
@@ -620,26 +597,6 @@ function RuleControls({ node, path, update, parentKind }: Pick<NodeProps, "node"
     );
   }
   return kind;
-}
-
-// The name of an "any one of" group inside a total, which Players see it by as one row with its items ("Bludgeon piece
-// (any one of: Bludgeon axon, …)"); without one, they see its items alone. Saves on blur (or Enter); empty clears it.
-function GroupNameInput({ label, onSave }: { label: string | null; onSave: (label: string | null) => void }) {
-  return (
-    <div className="w-40 shrink-0">
-      <Input
-        size="sm"
-        aria-label="Group name"
-        placeholder="Name (optional)"
-        defaultValue={label ?? ""}
-        onBlur={(e) => {
-          const next = e.target.value.trim() || null;
-          if (next !== label) onSave(next);
-        }}
-        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      />
-    </div>
-  );
 }
 
 // Saves on blur (or Enter), at least 1.

@@ -4,6 +4,6 @@ import type { RequirementNodeModel } from "./types";
 export function itemNameOf(node: RequirementNodeModel): string | null {
   // An ITEM leaf's label is its item name; iconUrl is set only when it has one (not the "(no item)" placeholder).
   if (node.kind === "ITEM") return node.iconUrl ? node.label : null;
-  if (node.kind === "SUM" && node.items.length === 1 && !node.items[0]!.group) return node.items[0]!.name;
+  if (node.kind === "SUM" && node.items.length === 1) return node.items[0]!.name;
   return null;
 }

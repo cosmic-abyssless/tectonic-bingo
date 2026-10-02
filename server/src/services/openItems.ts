@@ -6,8 +6,7 @@ import { evaluateGraph, type ApprovedClaim, type EngineNode } from "./engine";
 
 /**
  * Every node's open Items, given the Claims approved by `at` (item names, as on the Board). A complete node has
- * none. An incomplete ITEM is open. A SUM short of its total keeps all its Items open, and the Items of each ANY in it
- * that isn't done yet (a done one adds nothing more). ALL, ANY and COUNT are open
+ * none. An incomplete ITEM is open. A SUM short of its total keeps all its Items open. ALL, ANY and COUNT are open
  * through their incomplete children: the missing ones, any one, and the ones not yet counted.
  */
 export function openItems(
@@ -28,7 +27,7 @@ export function openItems(
     const cached = memo.get(nodeId);
     if (cached) return cached;
     const node = byId.get(nodeId);
-    const items = new Set<string>();
+    let items = new Set<string>();
     if (node && !results.get(nodeId)?.complete) {
       const children = childrenOf.get(nodeId) ?? [];
       switch (node.kind) {
@@ -38,13 +37,7 @@ export function openItems(
         case "MANUAL":
           break;
         case "SUM":
-          for (const child of children) {
-            const childNode = byId.get(child);
-            // An Item stays open however many it has (dupes count); an ANY only until it's done.
-            if (childNode?.kind === "ITEM") {
-              if (childNode.itemName) items.add(childNode.itemName);
-            } else for (const item of open(child)) items.add(item);
-          }
+          items = new Set(children.map((id) => byId.get(id)?.itemName).filter((n): n is string => !!n));
           break;
         case "ALL":
         case "ANY":

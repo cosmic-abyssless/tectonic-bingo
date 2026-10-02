@@ -36,16 +36,10 @@ export function itemLeafValue(nodeId: string, maps: LeafClaimMaps): number {
 
 /**
  * A SUM's running total, mirroring the server's engine: each child Item's quantity (from `valueOf`, the real number of
- * items) times what it counts as (CONTEXT.md "Counts as"), so one Pyromancer garb adds 25 to "200 burnt pages"; and 1
- * for each "any one of" group of Items in it that has one of its Items (see groupDone).
+ * items) times what it counts as (CONTEXT.md "Counts as"), so one Pyromancer garb adds 25 to "200 burnt pages".
  */
 export function sumTotal(sum: Pick<GraphNode, "children">, valueOf: (nodeId: string) => number): number {
-  return sum.children.reduce((total, child) => total + (child.kind === "ANY" ? (groupDone(child, valueOf) ? 1 : 0) : valueOf(child.id) * (child.countsAs ?? 1)), 0);
-}
-
-/** Whether an "any one of" group of Items (an ANY inside a SUM) has one of its Items, by `valueOf`: it then adds its 1. */
-export function groupDone(group: Pick<GraphNode, "children">, valueOf: (nodeId: string) => number): boolean {
-  return group.children.some((piece) => valueOf(piece.id) >= 1);
+  return sum.children.reduce((total, child) => total + valueOf(child.id) * (child.countsAs ?? 1), 0);
 }
 
 /** Whether an ITEM/MANUAL leaf has at least one approved claim — mirrors the engine's `value >= 1`. */

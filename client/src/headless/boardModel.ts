@@ -3,15 +3,15 @@
 // providers and (if ever wanted) tests. See docs/headless-theming-plan.md §2.
 import { isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
-import { buildLeafClaimMaps, groupDone, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
+import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
 import { collectLeaves, conditionHeading, isItemGroup } from "../core/board/requirementTree";
-import { groupLabel, groupPieces, leafLabel } from "../core/board/labels";
+import { leafLabel } from "../core/board/labels";
 import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
 import { wikiIconUrl } from "../api/wikiIcons";
 import { submissionSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
-import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, SumItemModel, TaskModel, TeamModel, TileModel } from "./types";
+import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
 import type { CanCheck } from "./permissionCheck";
 
 // Moved from BoardGrid.tsx, unchanged.
@@ -122,28 +122,11 @@ export function buildRequirementTree(
     const target = node.quantity ?? 1;
     const progress = sumTotal(node, (id) => itemLeafValue(id, maps));
     const complete = progress >= target;
-    const items = node.children.flatMap((child): SumItemModel[] => {
-      // An "any one of" group of Items: one row naming its pieces, done (and adding its 1) once one is approved.
-      if (child.kind === "ANY") {
-        const pieces = groupPieces(child);
-        const done = groupDone(child, (id) => itemLeafValue(id, maps));
-        return [
-          {
-            name: groupLabel(child.label, pieces),
-            iconUrl: null,
-            count: done ? 1 : 0,
-            countsAs: 1,
-            lockedBy: null,
-            group: { label: child.label, pieces: pieces.map((name) => ({ name, iconUrl: wikiIconUrl(name) ?? null })), done },
-          },
-        ];
-      }
-      if (!child.itemName) return [];
-      return [{ name: child.itemName, iconUrl: wikiIconUrl(child.itemName) ?? null, count: itemLeafValue(child.id, maps), countsAs: child.countsAs ?? 1, lockedBy: lockOf(child.id), group: null }];
-    });
-    // Over several items, or holding a group, it's a group ("5 of any (dupes count)", one row each); over one item it
-    // stays a single row.
-    const isGroup = items.length > 1 || items.some((item) => item.group);
+    const items = node.children
+      .filter((child) => !!child.itemName)
+      .map((child) => ({ name: child.itemName!, iconUrl: wikiIconUrl(child.itemName!) ?? null, count: itemLeafValue(child.id, maps), countsAs: child.countsAs ?? 1, lockedBy: lockOf(child.id) }));
+    // Over several items it's a group ("5 of any (dupes count)", one row per item); over one it stays a single row.
+    const isGroup = items.length > 1;
     return {
       id: node.id,
       kind: node.kind,
@@ -154,7 +137,7 @@ export function buildRequirementTree(
       isLeaf: !isGroup,
       status: statusByNodeId.get(node.id) ?? "not_started",
       complete,
-      submitted: collectLeaves(node).some((leaf) => maps.submittedNodeIds.has(leaf.id)),
+      submitted: node.children.some((child) => maps.submittedNodeIds.has(child.id)),
       notNeeded: ancestorSatisfied,
       dim: complete || ancestorSatisfied,
       progress: { current: progress, target },
@@ -173,7 +156,7 @@ export function buildRequirementTree(
     .map((child) => {
       const model = buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks);
       // An "any one of" group of Items among a condition's options is one option: a row with its own box, its name kept
-      // ("Bludgeon pieces (any one of)", as in a total), and no "OR" between its pieces, which the heading already says.
+      // ("Bludgeon pieces (any one of)"), and no "OR" between its pieces, which the heading already says.
       if (model && isItemGroup(child)) {
         return {
           ...model,

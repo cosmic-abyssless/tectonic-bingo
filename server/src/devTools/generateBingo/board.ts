@@ -249,22 +249,14 @@ export function planSubmissions(node: GraphNode, rng: Rng): Claim[][] {
     }
     case "SUM": {
       // Counted in the SUM's own units: an Item that counts as N (CONTEXT.md "Counts as") is N of them per drop, so
-      // it takes fewer drops; the claim still says how many items were really dropped. An "any one of" group of Items
-      // adds 1 at its first piece and is then done, so it isn't drawn again; a second piece of it is posted too, as a
-      // Player who got one would, and adds nothing.
+      // it takes fewer drops; the claim still says how many items were really dropped.
       const target = node.quantity ?? 1;
-      const options = node.children.filter((c) => c.kind === "ITEM" || (c.kind === "ANY" && c.children.length > 0));
+      const items = node.children.filter((c) => c.kind === "ITEM");
+      if (items.length === 0) return [];
       const units: Claim[][] = [];
       let remaining = target;
       while (remaining > 0) {
-        const open = options.filter((c) => c.kind === "ITEM" || !units.some((u) => c.children.some((piece) => piece.id === u[0]!.nodeId)));
-        if (open.length === 0) break;
-        const item = rng.pick(open);
-        if (item.kind === "ANY") {
-          for (const piece of rng.shuffle(item.children).slice(0, 2)) units.push([{ nodeId: piece.id, itemName: piece.itemName ?? undefined, quantity: 1 }]);
-          remaining -= 1;
-          continue;
-        }
+        const item = rng.pick(items);
         const weight = Math.max(1, item.countsAs ?? 1);
         const stillNeeded = Math.ceil(remaining / weight);
         // Stackables come in bunches now and then.
@@ -290,24 +282,6 @@ export function itemToWeigh(tasks: GraphNode[]): { task: GraphNode; item: GraphN
     const items = node.children.filter((c) => c.kind === "ITEM");
     if (node.kind !== "SUM" || items.length < 2 || (node.quantity ?? 1) < 3) continue;
     return { task, item: items[items.length - 1]!, countsAs: Math.min(25, Math.max(2, Math.floor((node.quantity ?? 1) / 4))) };
-  }
-  return null;
-}
-
-/**
- * Items to put in an "any one of" group inside their SUM (CONTEXT.md "Requirement Tree"), so a generated Bingo shows one
- * even when its board has none, as an Admin capping a set of pieces would ("only 1 Bludgeon piece will be counted"):
- * the first three Items that count as 1 of the first SUM over at least three of them, leaving one or more outside the
- * group. Null when the board already has such a group, or has no such SUM. `tasks`: every Task on the board, in board order.
- */
-export function itemsToGroup(tasks: GraphNode[]): { task: GraphNode; sum: GraphNode; items: GraphNode[] } | null {
-  const walk = (n: GraphNode): GraphNode[] => [n, ...n.children.flatMap(walk)];
-  const nodes = tasks.flatMap((task) => walk(task).map((node) => ({ task, node })));
-  if (nodes.some(({ node }) => node.kind === "SUM" && node.children.some((c) => c.kind === "ANY"))) return null;
-  for (const { task, node } of nodes) {
-    const items = node.children.filter((c) => c.kind === "ITEM" && (c.countsAs ?? 1) === 1);
-    if (node.kind !== "SUM" || items.length < 3) continue;
-    return { task, sum: node, items: items.slice(0, Math.min(3, node.children.length - 1)) };
   }
   return null;
 }
@@ -350,9 +324,6 @@ export function chooseExclusiveGroup(tiles: Tile[], rules: readonly ExclusivityR
   }
   return null;
 }
-
-/** The label a generated "any one of" group gets (see itemsToGroup): what it tells Players about it. */
-export const GROUP_LABEL = "Counted once";
 
 /** Sometimes two drops land in one screenshot: merges neighbours on different items into one submission. */
 function bundle(units: Claim[][], rng: Rng): Claim[][] {

@@ -55,13 +55,6 @@ describe("openItems", () => {
     expect(names(openItems(g.nodes, g.childrenOf, [...seven, claim("garb", 8)], at(8)).get("sum"))).toEqual([]);
   });
 
-  it("keeps an \"any one of\" group's Items in a SUM open until one is in, and the SUM's own Items open however many it has", () => {
-    const g = graph([{ id: "sum", kind: "SUM", quantity: 3, children: ["group", "whip"] }, { id: "group", kind: "ANY", children: ["axon", "claw"] }, item("axon"), item("claw"), item("whip")]);
-    const claims = [claim("claw", 1), claim("whip", 2)];
-    expect(names(openItems(g.nodes, g.childrenOf, claims, at(0)).get("sum"))).toEqual(["axon", "claw", "whip"]);
-    expect(names(openItems(g.nodes, g.childrenOf, claims, at(2)).get("sum"))).toEqual(["whip"]);
-  });
-
   it("rolls open Items up through nested conditions to the Tile", () => {
     const g = graph([
       { id: "tile", kind: "ALL", children: ["part1", "part2"] },

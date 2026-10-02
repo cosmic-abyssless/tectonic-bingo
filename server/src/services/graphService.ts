@@ -1,6 +1,6 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { fitsInSum, type GraphNode, type GraphNodeInput } from "@bingo/shared";
+import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, nodes, submissions, teamNodeState, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -189,20 +189,13 @@ export function leafDescendants(rootId: string, childrenOf: Map<string, string[]
 
 type NodeRow = typeof nodes.$inferInsert;
 
-// A SUM's children must each be an ITEM, or an ANY made only of Items (fitsInSum): the engine adds up its Items' claimed
-// quantities and 1 per done ANY, so any other condition inside a SUM would silently count for nothing. Enforced here, on
-// every node written (fresh or reconciled), because the editor once let one through, and again over the stored graph
-// (assertTotalsHoldItems) for what a written tree doesn't show: a shared node linked in from elsewhere. ITEM/MANUAL
-// having no children is still only a documented invariant: nothing builds that shape.
-const TOTAL_SHAPE = `can only be made of Items and "any one of" groups of Items`;
-
-function totalName(label: string | null | undefined): string {
-  return label ? `"${label}"` : "A total";
-}
-
+// SUM's children must all be ITEM kind: the engine only adds up its Items' claimed quantities, so a condition inside a
+// SUM would silently count for nothing. Enforced here, on every node written (fresh or reconciled), because the editor
+// once let one through. ITEM/MANUAL having no children is still only a documented invariant: nothing builds that shape.
 function nodeFields(bingoId: string, input: GraphNodeInput): Omit<NodeRow, "id"> {
-  if (input.kind === "SUM" && !(input.children ?? []).every(fitsInSum)) {
-    throw new ServiceError(400, `${totalName(input.label)} ("N of any (dupes count)") ${TOTAL_SHAPE}. Take the other condition out of it first.`);
+  if (input.kind === "SUM" && (input.children ?? []).some((c) => c.kind !== "ITEM")) {
+    const name = input.label ? `"${input.label}"` : "A total";
+    throw new ServiceError(400, `${name} ("N of any (dupes count)") can only be made of Items. Take the condition out of it first.`);
   }
   return {
     bingoId,
@@ -388,29 +381,6 @@ export function replaceSubtree(tx: Tx, rootNodeId: string, bingoId: string, inpu
   for (const id of before) {
     if (id === rootNodeId || touched.has(id)) continue;
     deleteNodeIfOrphaned(tx, id);
-  }
-  assertTotalsHoldItems(tx, bingoId, touched);
-}
-
-// The SUM rule (see nodeFields) over a bingo's stored graph, for the writes that link a node in by id rather than
-// writing it out under its parent: an import's shared nodes, or a shared ANY edited from its other parent. With
-// `written`, only the SUMs among those nodes or right above one are checked, so an older total elsewhere on the
-// board never blocks an unrelated edit.
-export function assertTotalsHoldItems(db: Queryable, bingoId: string, written?: ReadonlySet<string>): void {
-  const rows = db.select({ id: nodes.id, kind: nodes.kind, label: nodes.label }).from(nodes).where(eq(nodes.bingoId, bingoId)).all();
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  if (!rows.some((r) => r.kind === "SUM")) return;
-  const edges = db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).where(inArray(nodeEdges.parentId, rows.map((r) => r.id))).all();
-  const inScope = (id: string) => !written || written.has(id) || edges.some((e) => e.parentId === id && written.has(e.childId));
-  const sums = rows.filter((r) => r.kind === "SUM" && inScope(r.id));
-  const childrenOf = new Map<string, typeof rows>();
-  for (const e of edges) {
-    const child = byId.get(e.childId);
-    if (child) childrenOf.set(e.parentId, [...(childrenOf.get(e.parentId) ?? []), child]);
-  }
-  for (const sum of sums) {
-    const children = (childrenOf.get(sum.id) ?? []).map((c) => ({ kind: c.kind, children: childrenOf.get(c.id) ?? [] }));
-    if (!children.every(fitsInSum)) throw new ServiceError(400, `${totalName(sum.label)} ("N of any (dupes count)") ${TOTAL_SHAPE}.`);
   }
 }
 

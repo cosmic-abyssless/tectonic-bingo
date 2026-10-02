@@ -1,22 +1,8 @@
 import type { GraphNode } from "@bingo/shared";
 
-/**
- * The names under a SUM, in order — what its label joins with " / ". An "any one of" group of Items in it is named by
- * its label, or by its pieces ("Bludgeon axon or Bludgeon claw") when it has none.
- */
+/** The item names under a SUM, in order — what its label joins with " / ". */
 export function sumItemNames(node: GraphNode): string[] {
-  return node.children.map((c) => (c.kind === "ANY" ? c.label || groupPieces(c).join(" or ") : c.itemName)).filter((n): n is string => !!n);
-}
-
-/** The item names of an "any one of" group of Items inside a SUM, in order. */
-export function groupPieces(group: Pick<GraphNode, "children">): string[] {
-  return group.children.map((c) => c.itemName).filter((n): n is string => !!n);
-}
-
-/** An "any one of" group of Items inside a SUM, as its row reads: "Bludgeon piece (any one of: Bludgeon axon, Bludgeon claw)". */
-export function groupLabel(label: string | null, pieces: string[]): string {
-  const list = `any one of: ${pieces.join(", ") || "(no items)"}`;
-  return label ? `${label} (${list})` : `A${list.slice(1)}`;
+  return node.children.map((c) => c.itemName).filter((n): n is string => !!n);
 }
 
 /** For an ITEM leaf, just its name. For a SUM, its children's names joined — the SUM is what carries the quantity/target now. */

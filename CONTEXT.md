@@ -192,14 +192,14 @@ The recursive structure inside a Part or Task defining how objectives combine:
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
   - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5). Over Items only it reads "N of any (no dupes)": each Item is done at one drop, so the same item twice still counts once. An "any one of" group of Items among them is one more option, done at any one of its pieces, so it still reads "no dupes" (Slayer Bosses: "only 1 Bludgeon piece will be counted").
-  - `SUM` — "N of any (dupes count)" (e.g., 500 total kill count or secondary ingredients): every drop adds to the total, the same item again included. An Item in it can count as more than one (see Counts as). Besides Items, it may hold an `ANY` made only of Items, for a set of pieces that counts once ("only 1 Bludgeon piece will be counted"): that ANY adds 1 to the total once it's done, and more of its Items add nothing. Nothing else goes in a SUM.
+  - `SUM` — "N of any (dupes count)" (e.g., 500 total kill count or secondary ingredients): every drop adds to the total, the same item again included. An Item in it can count as more than one (see Counts as).
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.
   - `MANUAL` — An objective manually judged/verified by a Moderator.
 
 ### Counts as
 How much one of an Item adds to the total of the SUM ("N of any (dupes count)") it's in, when it's worth more than one of what's being totalled.
-- **Rules:** A whole number from 1; 1 unless set. It only matters for an Item directly inside a SUM: in ALL, ANY or COUNT (an ANY inside a SUM included, which adds 1 whichever of its Items completes it), or as a Task on its own, an Item is done at one, whatever it counts as. The Submit flow still asks for the real number of items, and the SUM's progress counts each of them as that many. An Item shared by two parents counts as the same everywhere. Drop value, Stats and Achievements use the real quantity. Shown to Players next to the Item when it isn't 1 ("Pyromancer garb · counts as 25").
+- **Rules:** A whole number from 1; 1 unless set. It only matters inside a SUM: in ALL, ANY or COUNT, or as a Task on its own, an Item is done at one, whatever it counts as. The Submit flow still asks for the real number of items, and the SUM's progress counts each of them as that many. An Item shared by two parents counts as the same everywhere. Drop value, Stats and Achievements use the real quantity. Shown to Players next to the Item when it isn't 1 ("Pyromancer garb · counts as 25").
 - **Example:** Wintertodt's "200 burnt pages" is a SUM reading "200 of any (dupes count)" over Burnt page (counts as 1) and the Pyromancer pieces, Bruma torch and Tome of fire (each counts as 25). One Pyromancer garb is submitted as 1 and adds 25 to the 200.
 - **Not:** A Drop value or Valued as. Counts as changes how far a drop moves a Task, never what it's worth in GP.
 

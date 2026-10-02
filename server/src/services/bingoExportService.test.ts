@@ -16,9 +16,7 @@ import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoServi
 import * as achievementService from "./achievementService";
 import { additionalCredits, setAdditionalCredits } from "./wrappedArtService";
 import { ServiceError } from "./errors";
-import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument, type ExportNode, type GraphNode } from "@bingo/shared";
-import { getFullGraph } from "./graphService";
-import { evaluateGraph, type ApprovedClaim } from "./engine";
+import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument } from "@bingo/shared";
 import { placeLeaves } from "./exclusivityService";
 
 let sqlite: Database.Database;
@@ -583,84 +581,6 @@ describe("Counts as", () => {
     doc.tiles.find((t) => t.name === "Tile B")!.tasks.find((t) => t.label === "Pages")!.children[1]!.countsAs = 0;
     expect(() => importBingo(db, doc, { slug: "bad-weight", createdByUserId: admin.id })).toThrow(/Counts as/);
     expect(getBingoBySlug(db, "bad-weight")).toBeUndefined();
-  });
-});
-
-describe("an \"any one of\" group of Items inside a total", () => {
-  // The Slayer Page shape: a SUM holding a capped group of pieces beside plain Items, one of which counts as 2.
-  function withGroup() {
-    const seeded = seedFullBingo();
-    createTask(db, seeded.tileB.id, {
-      kind: "SUM", label: "Sire uniques", points: 30, quantity: 3,
-      children: [
-        { kind: "ANY", label: "Bludgeon piece", children: [{ kind: "ITEM", itemName: "Bludgeon axon" }, { kind: "ITEM", itemName: "Bludgeon claw" }, { kind: "ITEM", itemName: "Bludgeon spine" }] },
-        { kind: "ITEM", itemName: "Abyssal dagger" },
-        { kind: "ITEM", itemName: "Abyssal whip", countsAs: 2 },
-      ],
-    }, 1);
-    return seeded;
-  }
-  type Shape = { kind: string; label: string | null; itemName: string | null; quantity: number | null; countsAs?: number; children: Shape[] };
-  const shape = (n: Shape): unknown => ({ kind: n.kind, label: n.label, itemName: n.itemName, quantity: n.quantity, countsAs: n.countsAs ?? 1, children: n.children.map(shape) });
-  const uniques = <T extends { label: string | null }>(tasks: T[]) => tasks.find((t) => t.label === "Sire uniques")!;
-
-  it("round-trips through export and import unchanged, and scores the same on the copy", () => {
-    const { bingo, admin } = withGroup();
-    const sourceTask = uniques(getBoardTiles(db, bingo.id).find((t) => t.name === "Tile B")!.node.children);
-    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
-    const exported = uniques(doc.tiles.find((t) => t.name === "Tile B")!.tasks);
-    expect(exported.children.map((c) => c.kind)).toEqual(["ANY", "ITEM", "ITEM"]);
-
-    const imported = importBingo(db, doc, { slug: "group-target", createdByUserId: admin.id });
-    const task = uniques(getBoardTiles(db, imported.id).find((t) => t.name === "Tile B")!.node.children);
-    expect(shape(task)).toEqual(shape(sourceTask));
-    expect(shape(task)).toMatchObject({
-      kind: "SUM", quantity: 3,
-      children: [
-        { kind: "ANY", label: "Bludgeon piece", children: [{ itemName: "Bludgeon axon" }, { itemName: "Bludgeon claw" }, { itemName: "Bludgeon spine" }] },
-        { itemName: "Abyssal dagger", countsAs: 1 },
-        { itemName: "Abyssal whip", countsAs: 2 },
-      ],
-    });
-
-    // On the copy: a piece adds 1, a second piece nothing, and the whip's 2 makes 3.
-    const { engineNodes, childrenOf } = getFullGraph(db, imported.id);
-    const [group, , whip] = task.children as [GraphNode, GraphNode, GraphNode];
-    const at = (minute: number) => new Date(Date.UTC(2026, 0, 1, 0, minute));
-    const approved = (nodeId: string, minute: number): ApprovedClaim => ({ nodeId, itemName: null, quantity: 1, reviewedAt: at(minute) });
-    const twoPieces = [approved(group.children[0]!.id, 1), approved(group.children[2]!.id, 2)];
-    expect(evaluateGraph(engineNodes, childrenOf, twoPieces).get(task.id)).toEqual({ complete: false, completedAt: null, value: 1 });
-    expect(evaluateGraph(engineNodes, childrenOf, [...twoPieces, approved(whip.id, 3)]).get(task.id)).toEqual({ complete: true, completedAt: at(3), value: 3 });
-  });
-
-  it("refuses any other condition inside a total, with a readable message, leaving no partial bingo", () => {
-    const { bingo, admin } = withGroup();
-    const cases: [string, (group: ExportNode) => void][] = [
-      ["an ALL", (group) => (group.kind = "ALL")],
-      ["a COUNT", (group) => Object.assign(group, { kind: "COUNT", minCount: 1 })],
-      ["a SUM", (group) => Object.assign(group, { kind: "SUM", quantity: 1 })],
-      ["an ANY holding a condition", (group) => group.children.push({ ...group.children[0]!, localId: 9_999, kind: "ALL", itemName: null, children: [] })],
-    ];
-    for (const [what, change] of cases) {
-      const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
-      change(uniques(doc.tiles.find((t) => t.name === "Tile B")!.tasks).children[0]!);
-      const slug = `bad-total-${cases.findIndex(([w]) => w === what)}`;
-      expect(() => importBingo(db, doc, { slug, createdByUserId: admin.id }), what).toThrow(/"Sire uniques" \("N of any \(dupes count\)"\) can only be made of Items and "any one of" groups of Items/);
-      expect(getBingoBySlug(db, slug), what).toBeUndefined();
-    }
-  });
-
-  it("refuses a condition linked into a total as a shared node, which no Task's own tree shows", () => {
-    const { bingo, admin } = withGroup();
-    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
-    // Tile D's "Shared block" ANY holds Items, so linking it in is fine; its Task "One", an ALL, is not.
-    const tileD = doc.tiles.find((t) => t.name === "Tile D")!;
-    const block = tileD.tasks[0]!.children.find((n) => n.label === "Shared block")!;
-    uniques(doc.tiles.find((t) => t.name === "Tile B")!.tasks).children.push({ ...block, reuse: true, children: [] });
-    expect(() => importBingo(db, doc, { slug: "linked-group", createdByUserId: admin.id })).not.toThrow();
-    uniques(doc.tiles.find((t) => t.name === "Tile B")!.tasks).children.push({ ...tileD.tasks[0]!, reuse: true, children: [] });
-    expect(() => importBingo(db, doc, { slug: "linked-all", createdByUserId: admin.id })).toThrow(/can only be made of Items and "any one of" groups of Items/);
-    expect(getBingoBySlug(db, "linked-all")).toBeUndefined();
   });
 });
 
