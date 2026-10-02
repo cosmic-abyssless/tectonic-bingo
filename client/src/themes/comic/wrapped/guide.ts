@@ -9,7 +9,7 @@
 /** The section id the book gives its own contents page. The model's own sections are WrappedSectionKind. */
 export const CONTENTS_SECTION = "contents";
 
-export type PageKind = "cover" | "contents" | "page" | "back";
+export type PageKind = "cover" | "contents" | "page" | "credits" | "back";
 
 export interface GuideScene {
   id: string;
@@ -22,6 +22,8 @@ export interface GuideScene {
   panels: readonly number[];
   /** The section the Scene is in (WrappedSectionKind, or CONTENTS_SECTION). */
   sectionId: string;
+  /** An Outro Scene printed as a cover of its own (the credits), lying apart from the pages like the back cover. */
+  credits?: boolean;
 }
 
 export interface GuidePage {
@@ -62,8 +64,9 @@ export function buildPages(scenes: readonly GuideScene[], labels: Readonly<Recor
   return scenes.map((scene, index) => {
     let kind: PageKind = scene.sectionId === CONTENTS_SECTION ? "contents" : "page";
     if (scene.sectionId === "intro") kind = "cover";
+    if (scene.sectionId === "outro" && scene.credits) kind = "credits";
     if (index === back) kind = "back";
-    const printed = kind === "cover" || kind === "back" ? null : ++no;
+    const printed = kind === "page" || kind === "contents" ? ++no : null;
     const role = kind === "contents" ? "In this issue" : (labels[scene.sectionId] ?? scene.sectionId);
     const panels = [...new Set(scene.panels)].sort((a, b) => a - b);
     return { sceneId: scene.id, sectionId: scene.sectionId, panels: panels.length ? panels : [0], kind, no: printed, role, group: index };

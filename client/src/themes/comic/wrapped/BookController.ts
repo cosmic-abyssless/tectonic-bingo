@@ -19,7 +19,7 @@ import {
   type StageMode,
 } from "./camera";
 import { deskGroups, deskLayout, type DeskGroup } from "./deskLayout";
-import { panelFrames, quadClipPath, quadPoints, quadWithin, rectQuad } from "./frames";
+import { panelFrames, quadClipPath, quadCuts, quadPoints, quadWithin, rectQuad } from "./frames";
 import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageStart, prevStop, PULL, reachedAfter, sameStop, sectionIds, sectionStart, withGroups, type GuidePage, type Stop } from "./guide";
 
 // The comic Wrapped's book, run: the pages laid out on the desk (a spread at a time on a wide screen, a page at a time on
@@ -185,6 +185,7 @@ export class BookController {
       // The Reveal steps the Scene has a Reveal at: a section may leave a step out, and there's nothing to go to there.
       panels: [...s.element!.querySelectorAll<HTMLElement>("[data-wrapped-step]")].map((el) => Number(el.dataset.wrappedStep)),
       sectionId: s.element!.closest("[data-wrapped-section]")?.getAttribute("data-wrapped-section") ?? "page",
+      credits: s.element!.classList.contains("wrapped-credits"),
     }));
     const signature = guide.map((g) => `${g.id}:${g.steps}:${g.panels.join(",")}:${g.sectionId}`).join("|");
     if (signature === this.signature) return;
@@ -403,6 +404,12 @@ export class BookController {
       // An inset is cut out with a little paper round it, so it stands off the panel it sits on.
       const clip = quadClipPath(straight[i] ? rectQuad({ x: 0, y: 0, w: rects[i]!.w, h: rects[i]!.h }, INSET_HALO) : own);
       if (el.style.clipPath !== clip) el.style.clipPath = clip;
+      // How far the slant cuts into each side, for the content to keep clear of (comic.css).
+      const cuts = quadCuts(own, rects[i]!.w, rects[i]!.h);
+      for (const side of ["top", "right", "bottom", "left"] as const) {
+        const value = `${Math.round(cuts[side])}px`;
+        if (el.style.getPropertyValue(`--panel-cut-${side}`) !== value) el.style.setProperty(`--panel-cut-${side}`, value);
+      }
       const points = quadPoints(own);
       el.querySelectorAll<SVGPolygonElement>(":scope > .wrapped-panel-frame polygon").forEach((p) => {
         if (p.getAttribute("points") !== points) p.setAttribute("points", points);

@@ -929,6 +929,8 @@ export interface WrappedTeamModel {
   linesCompleted: number;
   mvp: { person: WrappedPersonModel; shareLabel: string } | null;
   topGpEarner: { person: WrappedPersonModel; gpLabel: string } | null;
+  /** The Team's Drop value (CONTEXT.md); null with none, or on a Wrapped published before it was stored. */
+  dropValueLabel: string | null;
   biggestDrop: WrappedDropModel | null;
   /** Their points over time; null with fewer than two points to draw. */
   chart: WrappedChartModel | null;
@@ -968,6 +970,8 @@ export interface WrappedBingoModel {
     fastestLabel: string | null;
     withinHourLabel: string | null;
     busiestHourLabel: string | null;
+    /** The busiest hour's day ("Sat 12 Oct"); null on a Wrapped published before it was stored, where the hour is the busiest hour of any day. */
+    busiestHourDayLabel: string | null;
     topReviewer: { person: WrappedPersonModel; reviewedLabel: string } | null;
     /** Highest rejection rate first: "who had to deal with the most nonsense". */
     reviewers: { person: WrappedPersonModel; rejectionLabel: string; reviewedLabel: string }[];

@@ -310,6 +310,8 @@ describe("computeWrapped", () => {
       [fx.mod2.id, 1, 0, 0, 120 * MIN],
     ]);
     expect(moderation.busiestHour!.reviews).toBeGreaterThanOrEqual(1);
+    expect(moderation.busiestClockHour!.reviews).toBeGreaterThanOrEqual(1);
+    expect(new Date(moderation.busiestClockHour!.at).getUTCMinutes()).toBe(0);
   });
 
   it("ranks every Player's Points share across the whole Bingo, ties sharing a rank and a Duo's halves ranked apart", () => {

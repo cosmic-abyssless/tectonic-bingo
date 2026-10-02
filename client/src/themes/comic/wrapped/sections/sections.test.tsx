@@ -38,6 +38,7 @@ const team = (over: Partial<WrappedTeamModel> = {}): WrappedTeamModel => ({
   linesCompleted: 3,
   mvp: { person: person(1, true), shareLabel: "42%" },
   topGpEarner: { person: person(2), gpLabel: "255m" },
+  dropValueLabel: "1.2b",
   biggestDrop: drop("d1", "Twisted bow"),
   chart: chart(),
   superlatives: [{ category: "Team MVP", winners: [person(3), person(4)] }, { category: "The Grinder", winners: [person(5)] }],
@@ -64,6 +65,7 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
     fastestLabel: "6 min",
     withinHourLabel: "27%",
     busiestHourLabel: "4 AM",
+    busiestHourDayLabel: "Sat 12 Oct",
     topReviewer: { person: person(7), reviewedLabel: "40 reviews" },
     reviewers: [{ person: person(7), rejectionLabel: "13%", reviewedLabel: "40 reviews" }, { person: person(8), rejectionLabel: "25%", reviewedLabel: "24 reviews" }],
     banter: "Somebody had to deal with the nonsense.",
@@ -110,8 +112,8 @@ describe("the comic Team section keeps the default's lines, in order", () => {
     ["no art, no colour", team({ art: art(0), color: null })],
     ["no MVP or top drop value", team({ mvp: null, topGpEarner: null })],
     ["only a top drop value", team({ mvp: null })],
-    ["no biggest drop, chart or superlatives", team({ biggestDrop: null, chart: null, superlatives: [] })],
-    ["only the climb", team({ biggestDrop: null, superlatives: [] })],
+    ["no biggest drop, drop value, chart or superlatives", team({ biggestDrop: null, dropValueLabel: null, chart: null, superlatives: [] })],
+    ["only the climb", team({ biggestDrop: null, dropValueLabel: null, superlatives: [] })],
     ["a last-place Team with one Tile and one Line", team({ placement: 4, placementLabel: "4th of 4", tilesCompleted: 1, linesCompleted: 1 })],
   ];
   for (const [name, model] of cases) {

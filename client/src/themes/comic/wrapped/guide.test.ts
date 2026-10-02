@@ -24,6 +24,12 @@ describe("buildPages", () => {
     expect(pages.map((p) => p.kind)).toEqual(["cover", "contents", "page", "page", "page", "page", "page", "back"]);
   });
 
+  it("makes an Outro Scene marked as the credits a cover of its own, unnumbered, before the back cover", () => {
+    const withCredits = buildPages([...scenes.slice(0, -1), { ...scene("cr", "outro", [0]), credits: true }, scene("o3", "outro", [0, 1])], labels);
+    expect(withCredits.map((p) => p.kind).slice(-3)).toEqual(["page", "credits", "back"]);
+    expect(withCredits.map((p) => p.no).slice(-3)).toEqual([6, null, null]);
+  });
+
   it("numbers the pages from the contents page, leaving the covers unnumbered", () => {
     expect(pages.map((p) => p.no)).toEqual([null, 1, 2, 3, 4, 5, 6, null]);
   });

@@ -5,7 +5,7 @@ import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
 import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
-import { PanelBody } from "./sectionParts-you-duo-captain-moderator";
+import { Gp, PanelBody } from "./sectionParts-you-duo-captain-moderator";
 
 /**
  * The comic Bingo section (#421): the Bingo-wide story, and for some viewers (a Moderator who didn't play) the only section,
@@ -19,7 +19,7 @@ import { PanelBody } from "./sectionParts-you-duo-captain-moderator";
  */
 export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
   const m = b.moderation;
-  const minis = m ? [m.medianLabel && ["median wait", m.medianLabel], m.fastestLabel && ["fastest review", m.fastestLabel], m.withinHourLabel && ["within an hour", m.withinHourLabel], m.busiestHourLabel && ["busiest hour", m.busiestHourLabel]].filter((x): x is string[] => !!x) : [];
+  const minis = m ? [m.medianLabel && ["median wait", m.medianLabel], m.fastestLabel && ["fastest review", m.fastestLabel], m.withinHourLabel && ["within an hour", m.withinHourLabel], m.busiestHourLabel && [m.busiestHourDayLabel ? `busiest hour, ${m.busiestHourDayLabel}` : "busiest hour", m.busiestHourLabel]].filter((x): x is string[] => !!x) : [];
   // Each later page's panels, in the default section's order; a panel's step is how many of its page's panels come first.
   const highlights = [!!b.race, !!b.rarestDrop, !!b.mostReacted];
   const backstage = [!!b.steal, !!m, !!m && minis.length > 0];
@@ -169,7 +169,7 @@ function Totals({ b }: { b: WrappedBingoModel }) {
       </div>
       <div aria-hidden className="w-[3px] shrink-0" style={{ background: colors.LINE }} />
       <div className="flex flex-1 flex-col items-center justify-center px-2 py-4">
-        <Tally value={b.totalGpLabel} label="GP in drops" size={52} />
+        <Tally value={<Gp label={b.totalGpLabel} />} label="GP in drops" size={52} />
       </div>
     </div>
   );

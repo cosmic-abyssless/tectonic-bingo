@@ -40,7 +40,7 @@ export function ContentsPage() {
               const page = pageOf(s.id);
               // The Outro opens on the share cards when the viewer has any, and is only the back cover when not.
               const isBack = s.id === "outro";
-              const backLabel = page?.kind === "back" ? "The back cover" : "Share cards & back cover";
+              const backLabel = page?.kind === "back" ? "The back cover" : page?.kind === "credits" ? "Credits & back cover" : "Share cards & back cover";
               return (
                 <li key={s.id}>
                   <button

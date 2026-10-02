@@ -190,6 +190,8 @@ export interface WrappedReviewStats {
   withinHourFraction: number | null;
   /** The UTC hour of day (0–23) with the most reviews, and how many. */
   busiestHour: { hour: number; reviews: number } | null;
+  /** The one clock hour (its start) with the most reviews, and how many. Missing from Wrapped published before it was stored. */
+  busiestClockHour?: { at: string; reviews: number } | null;
   topReviewer: { user: AvatarUser; reviewed: number } | null;
   /**
    * Every Moderator or Admin who reviewed any, highest rejection rate first: "who had to deal with the most nonsense".

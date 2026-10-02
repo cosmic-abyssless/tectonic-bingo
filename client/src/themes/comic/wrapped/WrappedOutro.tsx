@@ -13,8 +13,8 @@ import { COVER, CoverCaption, CoverGround, CoverTitle, coverShadow } from "./cov
 /**
  * The Outro (#419): first the viewer's share cards, a page each, each with its Copy image, Download and Share buttons
  * (and, in a Moderator's preview, the "Preview" watermark every card carries), printed straight on the page rather than
- * framed as a panel. Then the back cover, the book's last page: a "That's a wrap" panel with the credits, then Rewind and
- * the Board as "next issue" teasers. The cards come first so that nobody stops at the back cover without seeing them.
+ * framed as a panel. Then the credits, a cover of their own ("That's a wrap"), and the back cover, the book's last page:
+ * Rewind and the Board as "next issue" teasers. The cards come first so that nobody stops at the back cover without seeing them.
  */
 export function WrappedOutro({ section, preview, onRewind, onBoard }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }) {
   const ShareCard = useSlot("WrappedShareCard");
@@ -31,8 +31,9 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
           </Reveal>
         </WrappedScene>
       ))}
-      <WrappedScene steps={3} className="wrapped-back">
-        <CoverGround accent={COVER.RED} rays="30% 40%" />
+      {/* The credits, a cover of their own that lies apart on the desk, like an issue's back cover. */}
+      <WrappedScene steps={1} className="wrapped-credits">
+        <CoverGround accent={COVER.RED} rays="70% 30%" />
         <Reveal step={0} className="wrapped-back-panel">
           <div className="text-center">
             {hasCredits && (
@@ -49,10 +50,14 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
             </p>
           </div>
         </Reveal>
-        <Reveal step={1} className="wrapped-back-panel">
+      </WrappedScene>
+      {/* The back cover: where to go from here. */}
+      <WrappedScene steps={2} className="wrapped-back">
+        <CoverGround accent={COVER.RED} rays="30% 40%" />
+        <Reveal step={0} className="wrapped-back-panel">
           <Teaser tag="Next issue" title="The replay" blurb="Watch the whole Bingo play out again, hour by hour." button="Watch the replay" icon={<RewindIcon />} variant="primary" onPress={onRewind} />
         </Reveal>
-        <Reveal step={2} className="wrapped-back-panel">
+        <Reveal step={1} className="wrapped-back-panel">
           <Teaser tag="Also in stores" title="The Board" blurb="Back to where it all happened." button="Back to the Board" onPress={onBoard} />
         </Reveal>
       </WrappedScene>

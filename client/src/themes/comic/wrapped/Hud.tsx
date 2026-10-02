@@ -9,6 +9,7 @@ export function whereLabel(pages: readonly GuidePage[], pos: Stop): string {
   const page = pages[pos.page];
   if (!page) return "";
   if (page.kind === "cover") return "Front cover";
+  if (page.kind === "credits") return "Credits";
   if (page.kind === "back") return "Back cover";
   const within = pageInSection(pages, pos.page);
   return `Page ${page.no} · ${page.role}${within ? ` (${within.n} of ${within.of})` : ""}`;

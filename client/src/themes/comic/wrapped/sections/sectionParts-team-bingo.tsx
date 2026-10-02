@@ -4,11 +4,12 @@ import { WrappedCategoryArt } from "../../../../core/wrapped/WrappedParts";
 import { ScreenshotLink } from "../../../../core/submissions/ScreenshotThumb";
 import { WikiIcon } from "../../../../core/ui/ItemIcon";
 import { TooltipSpan } from "../../../../core/ui/Tooltip";
-import { COMIC_FONT } from "../../font";
+import { COMIC_FIGURES_FONT, COMIC_FONT } from "../../font";
 import { burstPoints } from "../../ui/Burst";
 import { onFill } from "../../ui/tones";
 import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
+import { Gp } from "./sectionParts-you-duo-captain-moderator";
 
 // The pieces the comic Wrapped's Team and The Bingo sections (#421) are drawn from. A section is a few pages; a page is a
 // Scene, each of its panels a Reveal. The Reveal brings the frame (the book's panel); everything here is what goes inside:
@@ -19,7 +20,7 @@ import { COVER } from "../coverParts";
  * Classes for a Reveal whose panel the section fills edge to edge itself: no padding, and the panel's content stretches to
  * the panel (a splash that grows to fill its page, a cell of a row that is as tall as its neighbour).
  */
-export const FULL_PANEL = "flex flex-col overflow-hidden p-0 [&>.wrapped-panel-content]:flex [&>.wrapped-panel-content]:flex-1 [&>.wrapped-panel-content]:flex-col";
+export const FULL_PANEL = "wrapped-panel-full flex flex-col overflow-hidden p-0 [&>.wrapped-panel-content]:flex [&>.wrapped-panel-content]:flex-1 [&>.wrapped-panel-content]:flex-col";
 /** The same, for a panel with the usual padding. */
 export const PADDED_PANEL = "flex flex-col [&>.wrapped-panel-content]:flex [&>.wrapped-panel-content]:flex-1 [&>.wrapped-panel-content]:flex-col";
 
@@ -220,26 +221,26 @@ export function ComicDrop({ drop, showPlayer = false, burst = false }: { drop: W
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {drop.gpLabel && !burst && (
             <span className="num border-2 px-1.5 pt-[3px] pb-px" style={{ ...display(15), background: colors.GREEN_TINT, borderColor: colors.LINE, color: colors.INK }}>
-              {drop.gpLabel}
+              <Gp label={drop.gpLabel} />
             </span>
           )}
           {/* In the text's order, but set at the panel's right edge, the text leaving room for it. */}
           {drop.gpLabel && burst && (
             <div className="absolute top-1/2 right-0 w-[78px] -translate-y-1/2">
               <InkBurst fill={colors.YELLOW} tilt={9} className="w-full">
-                <span className="num" style={{ fontSize: burstFont(drop.gpLabel, 22) }}>
-                  {drop.gpLabel}
+                <span className="num" style={{ fontSize: burstFont(`${drop.gpLabel}_`, 22) }}>
+                  <Gp label={drop.gpLabel} />
                 </span>
               </InkBurst>
             </div>
           )}
           {drop.luck && (
-            <TooltipSpan text={drop.luck.sentence} label={drop.luck.shortLabel} className="num text-[13px] font-semibold" style={{ color: colors.INK_BODY }}>
+            <TooltipSpan text={drop.luck.sentence} label={drop.luck.shortLabel} className="num text-[14px] font-bold" style={{ color: colors.INK_BODY, fontFamily: COMIC_FIGURES_FONT }}>
               {drop.luck.shortLabel}
             </TooltipSpan>
           )}
         </div>
-        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]" style={{ color: colors.INK_SUBTLE }}>
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] font-bold" style={{ color: colors.INK_SUBTLE, fontFamily: COMIC_FIGURES_FONT }}>
           {showPlayer && drop.player && <ComicPerson person={drop.player} size={20} nameSize={13} />}
           {showPlayer && drop.team && (
             <span className="inline-flex shrink-0 items-center gap-1">

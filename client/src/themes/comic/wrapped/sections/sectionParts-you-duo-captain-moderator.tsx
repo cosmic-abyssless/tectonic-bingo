@@ -3,7 +3,7 @@ import type { WrappedDropModel, WrappedPersonModel } from "../../../../headless/
 import { ScreenshotLink } from "../../../../core/submissions/ScreenshotThumb";
 import { WikiIcon } from "../../../../core/ui/ItemIcon";
 import { TooltipSpan } from "../../../../core/ui/Tooltip";
-import { COMIC_FONT } from "../../font";
+import { COMIC_FIGURES_FONT, COMIC_FONT } from "../../font";
 import { burstPoints } from "../../ui/Burst";
 import { onFill, PrintedShade, toneColors, type Tone, type ToneOrColor } from "../../ui/tones";
 import { useComic } from "../../ui/useComic";
@@ -122,11 +122,12 @@ export function Sfx({ children, size = 34, tilt = -8, fill, className = "", styl
  * A number in a starburst, its label under it. The lettering is sized to its length so a long figure still sits inside
  * the points; the burst is `size` px across.
  */
-export function StatBurst({ value, label, size = 150, fill, tilt = -6, spikes = 15, className = "" }: { value: string; label?: ReactNode; size?: number; fill?: string; tilt?: number; spikes?: number; className?: string }) {
+export function StatBurst({ value, label, size = 150, fill, tilt = -6, spikes = 15, coins = false, className = "" }: { value: string; label?: ReactNode; size?: number; fill?: string; tilt?: number; spikes?: number; coins?: boolean; className?: string }) {
   const { colors } = useComic();
   const paint = fill ?? colors.YELLOW;
   const points = burstPoints(spikes, 36, 50, 5);
-  const font = Math.min(size * 0.34, (size * 0.62) / (Math.max(3, value.length) * 0.46));
+  // The Coins icon takes about a character's room.
+  const font = Math.min(size * 0.34, (size * 0.62) / (Math.max(3, value.length + (coins ? 1 : 0)) * 0.46));
   return (
     <div data-beat="slam" className={`flex shrink-0 flex-col items-center ${className}`}>
       <div className="relative" style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}>
@@ -135,7 +136,7 @@ export function StatBurst({ value, label, size = 150, fill, tilt = -6, spikes = 
           <polygon points={points} fill={paint} stroke={colors.LINE} strokeWidth={2.5} strokeLinejoin="round" />
         </svg>
         <div className="num absolute inset-0 flex items-center justify-center whitespace-nowrap uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: font, letterSpacing: "0.01em", color: onFill(colors, paint), paddingRight: font / 12 }}>
-          {value}
+          {coins ? <Gp label={value} /> : value}
         </div>
       </div>
       {label && (
@@ -220,13 +221,9 @@ export function DropCard({ drop, showPlayer = false, showTeam = showPlayer, stac
           {drop.quantityLabel && <span className="num shrink-0 text-[13px] font-semibold">{drop.quantityLabel}</span>}
         </div>
         {/* On a wide card the time rides on the figures' line, so the card stays two lines tall. */}
-        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 text-[12.5px] leading-tight">
-          <span className="flex min-w-0 flex-wrap gap-x-2.5">
-            {drop.gpLabel && (
-              <span className="num font-bold" style={{ color: colors.INK }}>
-                {drop.gpLabel}
-              </span>
-            )}
+        <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 text-[13px] font-bold leading-tight" style={{ fontFamily: COMIC_FIGURES_FONT }}>
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
+            {drop.gpLabel && <Gp label={drop.gpLabel} className="num self-center" style={{ color: colors.INK }} />}
             {drop.luck && (
               <TooltipSpan text={drop.luck.sentence} label={drop.luck.shortLabel} className="num" style={{ color: colors.INK_SUBTLE }}>
                 {drop.luck.shortLabel}
@@ -234,13 +231,13 @@ export function DropCard({ drop, showPlayer = false, showTeam = showPlayer, stac
             )}
           </span>
           {!stacked && !showPlayer && !showTeam && (
-            <span className="shrink-0 text-[11.5px]" style={{ color: colors.INK_SUBTLE }}>
+            <span className="shrink-0 text-[12px]" style={{ color: colors.INK_SUBTLE }}>
               {drop.whenLabel}
             </span>
           )}
         </div>
         {(stacked || showPlayer || showTeam) && (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-[11.5px] leading-tight" style={{ color: colors.INK_SUBTLE }}>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-[12px] font-bold leading-tight" style={{ color: colors.INK_SUBTLE, fontFamily: COMIC_FIGURES_FONT }}>
             {showPlayer && drop.player && <PersonChip person={drop.player} size={16} nameSize={14} />}
             {showTeam && drop.team && (
               <span className="inline-flex shrink-0 items-center gap-1">
@@ -253,6 +250,16 @@ export function DropCard({ drop, showPlayer = false, showTeam = showPlayer, stac
         )}
       </div>
     </div>
+  );
+}
+
+/** A GP figure with the OSRS Coins icon before it, the icon sized to the figure's lettering. */
+export function Gp({ label, className = "", style }: { label: string; className?: string; style?: CSSProperties }) {
+  return (
+    <span className={`inline-flex items-center gap-[0.15em] whitespace-nowrap ${className}`} style={style}>
+      <WikiIcon name="Coins 10000" className="size-[0.95em]! [image-rendering:pixelated]" />
+      {label}
+    </span>
   );
 }
 

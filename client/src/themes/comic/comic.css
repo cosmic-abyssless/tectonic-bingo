@@ -403,12 +403,14 @@
     0 26px 50px -22px rgb(0 0 0 / 0.55);
 }
 .wrapped-book [data-wrapped-scene][data-page-kind="cover"],
+.wrapped-book [data-wrapped-scene][data-page-kind="credits"],
 .wrapped-book [data-wrapped-scene][data-page-kind="back"] {
   padding: 0;
   overflow: hidden;
   outline: 5px solid var(--comic-line);
   outline-offset: -5px;
 }
+.wrapped-book [data-wrapped-scene][data-page-kind="credits"],
 .wrapped-book [data-wrapped-scene][data-page-kind="back"] {
   padding: 22px 18px;
   background-color: var(--comic-red);
@@ -442,6 +444,12 @@
 }
 .wrapped-panel-content {
   height: 100%;
+}
+/* A gutter's slant cuts into a panel at one end of each side it sits on (the book measures how far: --panel-cut-*), so the
+   content keeps that much clear, and a kicker in a corner isn't run through by the frame. A panel the section fills edge
+   to edge itself (FULL_PANEL) is drawn to be cut. */
+.wrapped-book .wrapped-panel:not(.wrapped-panel-full) > .wrapped-panel-content {
+  padding: var(--panel-cut-top, 0px) var(--panel-cut-right, 0px) var(--panel-cut-bottom, 0px) var(--panel-cut-left, 0px);
 }
 /* A colour printed behind a panel's content reaches its frame too: one laid straight in the panel (PanelBody's), or one
    that marks itself as the panel's ground (PanelGround's, inside a splash). */
@@ -580,5 +588,16 @@
 }
 .wrapped-book .sm\:flex-nowrap {
   flex-wrap: wrap;
+}
+/* ...and the phone's even rows with it: four Category images two by two, five or more three to a row, not left to wrap
+   at their own widths (three and an orphan). */
+.wrapped-book .sm\:basis-auto.basis-\[calc\(50\%-0\.5rem\)\] {
+  flex-basis: calc(50% - 0.5rem);
+}
+.wrapped-book .sm\:basis-auto.basis-\[calc\(33\.333\%-0\.5rem\)\] {
+  flex-basis: calc(33.333% - 0.5rem);
+}
+.wrapped-book .sm\:gap-x-4 {
+  column-gap: 0.5rem;
 }
 

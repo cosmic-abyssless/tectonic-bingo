@@ -10,6 +10,10 @@ describe("the desk", () => {
     expect(deskGroups(kinds, "wide")).toEqual([[0], [1, 2], [3, 4], [5], [6, 7]]);
   });
 
+  it("lays the credits alone too, between the share cards and the back cover", () => {
+    expect(deskGroups(["cover", "contents", "page", "page", "credits", "back"], "wide")).toEqual([[0], [1, 2], [3], [4], [5]]);
+  });
+
   it("lays a phone's book out a page at a time", () => {
     expect(deskGroups(kinds, "phone")).toEqual(kinds.map((_, i) => [i]));
   });

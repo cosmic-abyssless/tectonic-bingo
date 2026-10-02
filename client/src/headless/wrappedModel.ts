@@ -88,6 +88,9 @@ function hourLabel(utcHour: number): string {
   return d.toLocaleTimeString(undefined, { hour: "numeric" });
 }
 
+/** The busiest review hour's day, in the viewer's time zone: "Sat 12 Oct". */
+const clockDayLabel = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+
 /** Banter on a rejection rate (0–1), for "who had to deal with the most nonsense". */
 export function rejectionBanter(rate: number): string {
   if (rate === 0) return "Not a single rejection. Too soft, or was everyone just that honest?";
@@ -373,6 +376,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
       linesCompleted: myTeam.linesCompleted,
       mvp: myTeam.mvp ? { person: person(myTeam.mvp.player), shareLabel: share(myTeam.mvp.pointsShare) } : null,
       topGpEarner: myTeam.topGpEarner ? { person: person(myTeam.topGpEarner.player), gpLabel: formatGp(myTeam.topGpEarner.gpGained) } : null,
+      dropValueLabel: myTeam.dropValue ? formatGp(myTeam.dropValue) : null,
       biggestDrop: myTeam.biggestDrop ? drop(myTeam.biggestDrop) : null,
       chart: chartOf([myTeam]),
       superlatives: (myTeam.superlatives ?? []).map((s) => ({ category: s.category, winners: s.winners.map(person) })),
@@ -408,7 +412,8 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
             medianLabel: mod.medianReviewMs !== null ? shortDuration(mod.medianReviewMs) : null,
             fastestLabel: mod.fastestReviewMs !== null ? shortDuration(mod.fastestReviewMs) : null,
             withinHourLabel: mod.withinHourFraction !== null ? percent(mod.withinHourFraction) : null,
-            busiestHourLabel: mod.busiestHour ? hourLabel(mod.busiestHour.hour) : null,
+            busiestHourLabel: mod.busiestClockHour ? new Date(mod.busiestClockHour.at).toLocaleTimeString(undefined, { hour: "numeric" }) : mod.busiestHour ? hourLabel(mod.busiestHour.hour) : null,
+            busiestHourDayLabel: mod.busiestClockHour ? clockDayLabel(mod.busiestClockHour.at) : null,
             topReviewer: mod.topReviewer ? { person: person(mod.topReviewer.user), reviewedLabel: plural(mod.topReviewer.reviewed, "review") } : null,
             reviewers: mod.reviewers.map((r) => ({ person: person(r.user), rejectionLabel: percent(r.rejectionRate), reviewedLabel: plural(r.reviewed, "review") })),
             banter: mod.reviewers.length > 1 ? rejectionBanter(mod.reviewers[0]!.rejectionRate) : null,

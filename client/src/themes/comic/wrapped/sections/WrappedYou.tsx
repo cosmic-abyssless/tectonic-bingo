@@ -2,6 +2,8 @@ import type { WrappedYouModel } from "../../../../headless/types";
 import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { WrappedCategoryArt } from "../../../../core/wrapped/WrappedParts";
 import { WikiIcon } from "../../../../core/ui/ItemIcon";
+import { InfoIcon } from "../../../../core/ui/icons";
+import { TooltipSpan } from "../../../../core/ui/Tooltip";
 import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { Body, DropCard, FILL, headlineSize, InkStamp, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
@@ -107,7 +109,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             <Reveal step={gp} className={FILL}>
               <PanelBody tone="green" rays="18% 50%">
                 <div className="flex items-center gap-3">
-                  <StatBurst value={y.gp.gainedLabel} size={112} fill={colors.YELLOW} tilt={-7} />
+                  <StatBurst value={y.gp.gainedLabel} coins size={112} fill={colors.YELLOW} tilt={-7} />
                   <div className="relative flex min-w-0 flex-1 flex-col gap-2">
                     <Lettering size={24}>Total drop value</Lettering>
                     {y.gp.buyInLabel && y.gp.coveredBuyIn !== null && (
@@ -203,15 +205,18 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             </div>
           )}
 
+          {/* The day over its drops, one panel on the other: side by side, neither had the width for the drops' names. */}
           {y.mostActiveDay && (
-            <div className="grid flex-1 grid-cols-[0.8fr_1.4fr] gap-2">
+            <>
               <Reveal step={dayHead} className={`${FILL} overflow-hidden`}>
-                <PanelBody tone="cyan" rays="50% 100%" gap={6}>
+                <PanelBody tone="cyan" rays="88% 100%" align="start" gap={6}>
                   <Kicker>Your biggest day</Kicker>
-                  <InkTitle size={23}>{y.mostActiveDay.dateLabel}</InkTitle>
-                  <Body size={14} className="font-semibold">
-                    {y.mostActiveDay.submissionsLabel} in one day.
-                  </Body>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <InkTitle size={23}>{y.mostActiveDay.dateLabel}</InkTitle>
+                    <Body size={14} className="font-semibold">
+                      {y.mostActiveDay.submissionsLabel} in one day.
+                    </Body>
+                  </div>
                 </PanelBody>
               </Reveal>
               <Reveal step={dayDrops} className={FILL}>
@@ -226,7 +231,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
                   )}
                 </PanelBody>
               </Reveal>
-            </div>
+            </>
           )}
 
           {y.titles.length > 0 && (
@@ -265,17 +270,20 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
                     <li key={ach.key} data-beat="rise" className="flex min-w-0 items-start gap-1.5">
                       <WikiIcon name={ach.itemName} className="mt-0.5 size-7 shrink-0 [image-rendering:pixelated]" />
                       <span className="min-w-0 flex-1">
-                        <Lettering size={16} className="block truncate" style={{ lineHeight: 1.2 }}>
-                          {ach.name}
-                        </Lettering>
+                        {/* How to earn it is behind the info mark, so the grid is names and dates. */}
+                        <span className="flex min-w-0 items-center gap-1">
+                          <Lettering size={16} className="block min-w-0 truncate" style={{ lineHeight: 1.2 }}>
+                            {ach.name}
+                          </Lettering>
+                          {ach.description && (
+                            <TooltipSpan text={ach.description} label={`How to earn ${ach.name}`} className="inline-flex shrink-0 cursor-help rounded-full" style={{ color: colors.INK_SUBTLE }}>
+                              <InfoIcon size={14} />
+                            </TooltipSpan>
+                          )}
+                        </span>
                         <span className="block text-[11px] leading-tight" style={{ color: colors.INK_SUBTLE }}>
                           {ach.earnedLabel}
                         </span>
-                        {ach.description && (
-                          <span className="mt-0.5 block text-[11.5px] leading-tight" style={{ color: colors.INK_BODY }}>
-                            {ach.description}
-                          </span>
-                        )}
                       </span>
                     </li>
                   ))}

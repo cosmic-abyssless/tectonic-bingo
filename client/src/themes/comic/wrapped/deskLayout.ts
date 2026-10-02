@@ -13,7 +13,7 @@ const DRIFT: Record<StageMode, number> = { wide: 150, phone: 70 };
 const TILT: Record<StageMode, number> = { wide: 3.2, phone: 2.2 };
 
 /**
- * Which pages lie together, as runs of page indexes. Wide: the covers each alone, the pages between them in pairs (a
+ * Which pages lie together, as runs of page indexes. Wide: the covers (and the credits) each alone, the pages between them in pairs (a
  * spread, left then right). Phone: every page alone.
  */
 export function deskGroups(kinds: readonly PageKind[], mode: StageMode): number[][] {
@@ -25,7 +25,7 @@ export function deskGroups(kinds: readonly PageKind[], mode: StageMode): number[
     run = [];
   };
   kinds.forEach((kind, i) => {
-    if (kind === "cover" || kind === "back") {
+    if (kind === "cover" || kind === "credits" || kind === "back") {
       flush();
       groups.push([i]);
     } else run.push(i);

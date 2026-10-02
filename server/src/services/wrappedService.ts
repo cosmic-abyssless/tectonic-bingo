@@ -149,6 +149,13 @@ function reviewStats(reviews: { reviewerId: string; status: string; submittedAt:
   const byHour = new Map<number, number>();
   for (const r of reviews) byHour.set(r.reviewedAt.getUTCHours(), (byHour.get(r.reviewedAt.getUTCHours()) ?? 0) + 1);
   const busiest = [...byHour].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  // The one clock hour (on its day) with the most reviews: "Sat 12 Oct, 9 pm".
+  const byClockHour = new Map<number, number>();
+  for (const r of reviews) {
+    const start = Math.floor(r.reviewedAt.getTime() / HOUR_MS) * HOUR_MS;
+    byClockHour.set(start, (byClockHour.get(start) ?? 0) + 1);
+  }
+  const busiestAt = [...byClockHour].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
 
   const perReviewer = new Map<string, { reviewed: number; rejected: number }>();
   for (const r of reviews) {
@@ -174,6 +181,7 @@ function reviewStats(reviews: { reviewerId: string; status: string; submittedAt:
     fastestReviewMs: waits.length ? Math.min(...waits) : null,
     withinHourFraction: waits.length ? waits.filter((w) => w <= HOUR_MS).length / waits.length : null,
     busiestHour: busiest ? { hour: busiest[0], reviews: busiest[1] } : null,
+    busiestClockHour: busiestAt ? { at: new Date(busiestAt[0]).toISOString(), reviews: busiestAt[1] } : null,
     topReviewer: top ? { user: top.user, reviewed: top.reviewed } : null,
     reviewers: reviewers.sort((a, b) => b.rejectionRate - a.rejectionRate || b.reviewed - a.reviewed),
   };

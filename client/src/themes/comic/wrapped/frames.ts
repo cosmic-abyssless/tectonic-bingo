@@ -96,6 +96,18 @@ export function panelFrames(panels: readonly FramePanel[], pageWidth: number, sl
 /** A quad moved into a box's own coordinates (the box's top left at 0, 0). */
 export const quadWithin = (quad: Quad, box: Rect): Quad => quad.map((p) => ({ x: p.x - box.x, y: p.y - box.y })) as Quad;
 
+/** How far a quad (in its box's own coordinates) cuts into a box of `w` × `h` on each side, at its deepest: the room a
+ *  panel's content keeps clear so the slant of a gutter doesn't run through it. A side the quad reaches past cuts 0. */
+export function quadCuts(quad: Quad, w: number, h: number): { top: number; right: number; bottom: number; left: number } {
+  const [tl, tr, br, bl] = quad;
+  return {
+    top: Math.max(0, tl.y, tr.y),
+    right: Math.max(0, w - tr.x, w - br.x),
+    bottom: Math.max(0, h - br.y, h - bl.y),
+    left: Math.max(0, tl.x, bl.x),
+  };
+}
+
 /** A quad as a CSS clip-path. */
 export const quadClipPath = (quad: Quad) => `polygon(${quad.map((p) => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(", ")})`;
 

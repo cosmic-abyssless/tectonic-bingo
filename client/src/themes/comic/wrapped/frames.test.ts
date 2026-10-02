@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GUTTER_SLANT, panelFrames, quadClipPath, quadWithin, type Quad } from "./frames";
+import { GUTTER_SLANT, panelFrames, quadClipPath, quadCuts, quadWithin, type Quad } from "./frames";
 
 const W = 420;
 // A page: a splash across the top, two panels side by side under it, and one across the foot.
@@ -61,5 +61,15 @@ describe("panel frames", () => {
     const own = quadWithin(s!, splash);
     expect(own[0]).toEqual({ x: 0, y: 0 });
     expect(quadClipPath(own)).toMatch(/^polygon\(0\.0px 0\.0px, 380\.0px 0\.0px, /);
+  });
+
+  it("measures how deep the slant cuts into each side of a panel, a straight side not at all", () => {
+    const cuts = quadCuts(quadWithin(l!, left), left.w, left.h);
+    // Its top and right sit on gutters, tipped in at one end; its left is the page's margin.
+    expect(cuts.top).toBeGreaterThan(0);
+    expect(cuts.top).toBeLessThanOrEqual(GUTTER_SLANT + 1);
+    expect(cuts.right).toBeGreaterThan(0);
+    expect(cuts.left).toBe(0);
+    expect(quadCuts(quadWithin(s!, splash), splash.w, splash.h).top).toBe(0);
   });
 });

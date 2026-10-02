@@ -135,13 +135,22 @@ const CASES: { name: string; comic: ReactElement; reference: ReactElement }[] = 
 describe("the comic's You, Duo, Captain and Moderator pages", () => {
   for (const { name, comic, reference } of CASES) {
     it(`${name} says every line of the default section, in its order`, () => {
-      const expected = lines(draw(reference, false));
+      // How to earn an Achievement is the comic's tooltip on its info mark, not a line on the page.
+      const tooltips = new Set(fullYou.achievements.map((a) => a.description));
+      const expected = lines(draw(reference, false)).filter((line) => !tooltips.has(line));
       cleanup();
       const got = lines(draw(comic, true));
       const missing = inOrder(expected, got.join("\n"));
       expect(missing, `missing or out of order: ${missing}`).toBeNull();
     });
   }
+
+  it("keeps how to earn an Achievement behind its info mark", () => {
+    const root = draw(<WrappedYou section={fullYou} />, true);
+    expect(root.querySelector('[aria-label="How to earn First Blood"]')).not.toBeNull();
+    // Night Owl has no description, so no mark.
+    expect(root.querySelector('[aria-label="How to earn Night Owl"]')).toBeNull();
+  });
 
   it("draws a panel only for a part with something to say", () => {
     const sparse: WrappedYouModel = { ...fullYou, art: NO_ART, submissions: { countLabel: "1 Submission", comparison: null }, points: null, gp: null, topDrops: [], luckiestDrop: null, driestStreak: null, firstLast: null, mostActiveDay: null, titles: [], achievements: [], wom: null, draft: null };

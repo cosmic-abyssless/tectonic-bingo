@@ -4,16 +4,17 @@ import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
 import { ComicDrop, ComicPerson, display, FULL_PANEL, InkBurst, Kicker, burstFont, PADDED_PANEL, PanelHeading, Splash, Sfx, Tally } from "./sectionParts-team-bingo";
+import { Gp } from "./sectionParts-you-duo-captain-moderator";
 
 /**
  * The comic Team section (#421): two pages. The first opens on a splash with the Team's Category images and name, then the
  * placement in a burst beside the Tiles and Lines, then the MVP and the top drop value as a two-cell panel. The second holds
- * the biggest drop, the climb, and the Superlatives. Each Reveal is one panel; a field the Team has no data for leaves its
+ * the biggest drop and the Team's whole Drop value, the climb, and the Superlatives. Each Reveal is one panel; a field the Team has no data for leaves its
  * panel out, and a page left with none is not drawn, so nothing is left as a gap.
  */
 export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
   const hasStars = !!(t.mvp || t.topGpEarner);
-  const second = [!!t.biggestDrop, !!t.chart, t.superlatives.length > 0];
+  const second = [!!t.biggestDrop, !!t.dropValueLabel, !!t.chart, t.superlatives.length > 0];
   const { colors } = useComic();
   const secondSteps = second.filter(Boolean).length;
   const secondStep = (i: number) => second.slice(0, i).filter(Boolean).length;
@@ -51,8 +52,15 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
                 </div>
               </Reveal>
             )}
+            {t.dropValueLabel && (
+              <Reveal step={secondStep(1)} className={FULL_PANEL}>
+                <div className="flex flex-1 items-center justify-center px-2 py-4" style={{ background: colors.PAPER_RAISED }}>
+                  <Tally value={<Gp label={t.dropValueLabel} />} label="the Team's drop value, all told" size={46} />
+                </div>
+              </Reveal>
+            )}
             {t.chart && (
-              <Reveal step={secondStep(1)} className={PADDED_PANEL}>
+              <Reveal step={secondStep(2)} className={PADDED_PANEL}>
                 <ClimbHeading t={t} />
                 <div className="mt-3 -mx-1">
                   <PointsChart chart={t.chart} label={`${t.name}'s points over time`} />
@@ -60,7 +68,7 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
               </Reveal>
             )}
             {t.superlatives.length > 0 && (
-              <Reveal step={secondStep(2)} className={PADDED_PANEL}>
+              <Reveal step={secondStep(3)} className={PADDED_PANEL}>
                 <Kicker>Superlatives</Kicker>
                 <PanelHeading className="mt-1.5" size={28}>
                   Your Team decided
@@ -112,7 +120,7 @@ function Placement({ t }: { t: WrappedTeamModel }) {
     <div className="relative flex flex-1 flex-col items-center justify-center gap-2 px-2 py-3" style={{ background: colors.PAPER_RAISED }}>
       <div
         aria-hidden
-        className="absolute inset-0"
+        className="wrapped-panel-ground absolute inset-0"
         style={{ backgroundImage: "radial-gradient(" + colors.RULE + " 1.1px, transparent 1.8px)", backgroundSize: "7px 7px", maskImage: "linear-gradient(to bottom, transparent 45%, black)", WebkitMaskImage: "linear-gradient(to bottom, transparent 45%, black)" }}
       />
       {sfx && <Sfx size={22} tilt={-9} className="absolute top-1.5 left-2 z-[1]">{sfx}</Sfx>}
@@ -172,8 +180,8 @@ function Stars({ t }: { t: WrappedTeamModel }) {
           </Kicker>
           <ComicPerson person={t.topGpEarner.person} size={44} column nameSize={15} />
           <p className="text-[13px] leading-tight" style={{ color: colors.INK_BODY }}>
-            <span className="num block" style={{ ...display(26), color: colors.INK, textShadow: `2px 2px 0 ${colors.GREEN_TINT}` }}>
-              {t.topGpEarner.gpLabel}
+            <span className="num flex justify-center" style={{ ...display(26), color: colors.INK, textShadow: `2px 2px 0 ${colors.GREEN_TINT}` }}>
+              <Gp label={t.topGpEarner.gpLabel} />
             </span>
             drop value
           </p>
