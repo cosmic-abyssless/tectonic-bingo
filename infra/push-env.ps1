@@ -12,8 +12,8 @@
   site. -Write then replaces the files, keeping each previous one as FILE.bak. The containers read these files when they start, so
   a written change reaches the app with each environment's next deploy; nothing running is touched.
 
-  The comparing and writing happen on the box, in env-sync.sh, which is sent over ssh's standard input with the new contents
-  base64-encoded: no secret is ever on a command line. It trusts the server by the SSH host key tofu generated.
+  The comparing and writing happen on the box, in env-sync.sh, which box.ps1 sends over ssh's standard input with the new
+  contents base64-encoded: no secret is ever on a command line. It trusts the server by the SSH host key tofu generated.
 
 .PARAMETER Write
   Replace the files. Without it, nothing on the box changes.
@@ -36,43 +36,9 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $mode = if ($Write) { "write" } else { "check" }
+. (Join-Path $PSScriptRoot "box.ps1")
 
-if (-not (Test-Path $Identity)) { throw "no private key at $Identity (-Identity FILE)" }
-if (-not (Get-Command tofu -ErrorAction SilentlyContinue)) { throw "tofu is not on the PATH (run . .\infra\env.ps1 first)" }
-Push-Location $PSScriptRoot
-try { $outputs = (tofu output -json) -join "`n" | ConvertFrom-Json } finally { Pop-Location }
-$hostAddress = $outputs.server_ipv4.value
-if (-not $hostAddress) { throw "tofu has no server_ipv4 output: has it been applied?" }
-if (-not $outputs.app_env.value.staging) { throw "tofu has no app_env output: run tofu apply first (README.md, `"App settings and secrets`")" }
-$syncScript = (Get-Content (Join-Path $PSScriptRoot "env-sync.sh") -Raw) -replace "`r`n", "`n"
-
-$knownHosts = Join-Path $env:TEMP ("tofu_known_hosts_" + [Guid]::NewGuid().ToString("N"))
-Set-Content -Path $knownHosts -Value $outputs.known_hosts_line.value -Encoding ascii
-
-# Runs a command on the box as the deploy user, sending $InputText on its standard input (see push-backup-env.ps1: Windows
-# PowerShell adds a byte-order mark and may add carriage returns, which the receiving command strips).
-function Invoke-Box([string]$Command, [string]$InputText = "") {
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "ssh"
-    $psi.Arguments = "-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=`"$knownHosts`" -i `"$Identity`" deploy@$hostAddress `"$($Command -replace '"','\"')`""
-    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-    $psi.UseShellExecute = $false
-    $p = [System.Diagnostics.Process]::Start($psi)
-    if ($InputText) { $p.StandardInput.Write($InputText) }
-    $p.StandardInput.Close()
-    $stdout = $p.StandardOutput.ReadToEnd(); $stderr = $p.StandardError.ReadToEnd()
-    $p.WaitForExit()
-    [pscustomobject]@{ ExitCode = $p.ExitCode; Output = $stdout.TrimEnd(); Error = $stderr.Trim() }
-}
-
-# One file through env-sync.sh on the box: the variables in front of the script, all on standard input.
-function Sync-File([string]$Target, [string]$Contents) {
-    $desired = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($Contents -replace "`r`n", "`n")))
-    $payload = "MODE=$mode ENV_DIR=/srv/tectonic/env TARGET=$Target DESIRED=$desired`n" + $syncScript
-    $r = Invoke-Box "sed 's/\xEF\xBB\xBF//g' | tr -d '\015' | bash -s" $payload
-    if ($r.Output) { Write-Host $r.Output }
-    if ($r.ExitCode -ne 0) { throw "env-sync failed for $Target : $($r.Error)" }
-}
+Initialize-Box -Identity $Identity
 
 # Whether the password logs in to the live site: "ok", "wrong" (a 401) or "unknown".
 function Test-StagingLogin($Login) {
@@ -89,13 +55,15 @@ function Test-StagingLogin($Login) {
 }
 
 try {
-    $r = Invoke-Box "test -f /srv/tectonic/state/.bootstrapped && echo ready"
-    if ($r.Output -ne "ready") { throw "the box at $hostAddress has not finished its first boot (see /var/log/cloud-init-output.log on it). $($r.Error)" }
+    if (-not $outputs.app_env.value.staging) { throw "tofu has no app_env output: run tofu apply first (README.md, `"App settings and secrets`")" }
+    Assert-BoxBootstrapped
     Write-Host "== the box at $hostAddress ($mode)"
 
     foreach ($environment in @("staging", "production")) {
         if ($Only -and $Only -ne $environment) { continue }
-        Sync-File "$environment.env" $outputs.app_env.value.$environment
+        $appEnv = $outputs.app_env.value.$environment
+        if (-not $appEnv) { throw "tofu has no app_env for $environment : run tofu apply first" }
+        Sync-BoxFile -Mode $mode -Target "$environment.env" -Contents $appEnv
 
         if ($environment -eq "staging") {
             $login = $outputs.staging_login.value
@@ -109,7 +77,7 @@ try {
             # is being changed on purpose; never on a guess, since a site that cannot be reached proves nothing about a typo.
             $hasAuth = (Invoke-Box "test -f /srv/tectonic/env/staging.basic-auth && echo yes").Output -eq "yes"
             if (-not $Write -or $result -eq "ok" -or -not $hasAuth -or $NewStagingPassword) {
-                Sync-File "staging.basic-auth" $outputs.staging_basic_auth.value
+                Sync-BoxFile -Mode $mode -Target "staging.basic-auth" -Contents $outputs.staging_basic_auth.value
             } else {
                 Write-Host "  left staging.basic-auth as it is (the password was not confirmed): pass -NewStagingPassword to change it on purpose"
             }
@@ -120,5 +88,5 @@ try {
     if ($Write) { Write-Host "Each environment's containers pick these up at its next deploy." }
     else { Write-Host "Nothing was changed. Run again with -Write to replace the files." }
 } finally {
-    Remove-Item $knownHosts -Force -ErrorAction SilentlyContinue
+    Close-Box
 }
