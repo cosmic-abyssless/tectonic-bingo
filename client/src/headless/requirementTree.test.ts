@@ -175,6 +175,13 @@ describe("buildRequirementTree: nested condition layout", () => {
       ["Bludgeon axon", true],
       ["Bludgeon claw", true],
     ]);
+    // Locked as one (an Exclusive Item group used on another Part), the group says so once, on its own row.
+    const conflict = (nodeId: string) => ({ nodeId, itemName: nodeId, rule: { id: "r", label: "Slayer", itemNames: [], scope: "part" }, usedOn: "SLAYER BOSSES · Page 1 (Bludgeon axon)", group: "Bludgeon piece" }) as ExclusivityConflict;
+    const locked = buildRequirementTree(count, buildLeafClaimMaps([]), new Map(), false, new Map([["axon", conflict("axon")], ["claw", conflict("claw")]]))!;
+    expect(locked.children[1]!.lockedBy).toBe("Used on SLAYER BOSSES · Page 1 (Bludgeon axon)");
+    // Only some pieces locked: each says so itself.
+    const partly = buildRequirementTree(count, buildLeafClaimMaps([]), new Map(), false, new Map([["axon", conflict("axon")]]))!;
+    expect([partly.children[1]!.lockedBy, partly.children[1]!.children[0]!.lockedBy]).toEqual([null, "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)"]);
     // An unnamed group keeps the plain heading.
     const unnamed = node({ ...count, children: [item("whip"), node({ ...pieces, label: null })] });
     expect(buildRequirementTree(unnamed, buildLeafClaimMaps([]), new Map())!.children[1]!.label).toBe("Complete any one of");
