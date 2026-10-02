@@ -127,7 +127,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     },
   };
 
-  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`);
+  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   await setStage(ctx, "signup", tl.signupOpensAt);

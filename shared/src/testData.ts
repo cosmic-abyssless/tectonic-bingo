@@ -37,6 +37,8 @@ export interface TestDataOptions {
   seed: number;
   /** Always starts with "testdata-". */
   slug: string;
+  /** The theme the Bingo is drawn in: one of THEME_KEYS (themes.ts). "default" unless asked. */
+  theme: string;
 }
 
 export interface TestDataLogLine {

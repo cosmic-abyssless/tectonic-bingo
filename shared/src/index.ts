@@ -1496,5 +1496,6 @@ export * from "./superlative.ts";
 export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";
+export * from "./themes.ts";
 export * from "./timezone.ts";
 export * from "./titles.ts";
