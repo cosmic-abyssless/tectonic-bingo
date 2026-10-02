@@ -18,7 +18,7 @@ import {
   type Size,
   type StageMode,
 } from "./camera";
-import { deskGroups, deskLayout, type DeskGroup } from "./desk";
+import { deskGroups, deskLayout, type DeskGroup } from "./deskLayout";
 import { panelFrames, quadClipPath, quadPoints, quadWithin, rectQuad } from "./frames";
 import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageStart, prevStop, PULL, reachedAfter, sameStop, sectionIds, sectionStart, withGroups, type GuidePage, type Stop } from "./guide";
 
@@ -254,6 +254,9 @@ export class BookController {
     this.camTween?.cancel();
     this.camTween = null;
     this.stopped(to);
+    // The panel is drawn in as the camera sets off, not when it lands: snappier, and a reader moving on before it lands
+    // still sees every panel they pass drawn.
+    this.reach(to);
     const target = this.cameraAt(to);
 
     if (env.reduceMotion()) {
@@ -288,12 +291,17 @@ export class BookController {
     if (token === this.token) this.arrive(to);
   }
 
-  /** The reader has reached a stop: its panel is drawn in, and the back cover reported. */
+  /** The reader is going to a stop: its panel is drawn in. */
+  private reach(to: Stop) {
+    if (!this.env) return;
+    this.reached = reachedAfter(this.reached, to).slice(0, this.snap.pages.length);
+    this.pushSceneStates(to);
+  }
+
+  /** The camera has landed on a stop: the back cover is reported. */
   private arrive(to: Stop) {
     const env = this.env;
     if (!env) return;
-    this.reached = reachedAfter(this.reached, to).slice(0, this.snap.pages.length);
-    this.pushSceneStates(to);
     const page = this.snap.pages[to.page];
     if (page?.kind === "back" && !this.backReported) {
       this.backReported = true;
@@ -334,8 +342,12 @@ export class BookController {
     if (page) env.onStop(at, page);
     this.pushSceneStates(at);
     // One frame on, so the first panel is drawn in as the book opens rather than being there at the first paint.
-    if (env.reduceMotion()) this.arrive(at);
-    else requestAnimationFrame(() => (this.env === env ? this.arrive(at) : undefined));
+    const open = () => {
+      this.reach(at);
+      this.arrive(at);
+    };
+    if (env.reduceMotion()) open();
+    else requestAnimationFrame(() => (this.env === env ? open() : undefined));
   }
 
   // ---- layout -----------------------------------------------------------------------------------------------------
