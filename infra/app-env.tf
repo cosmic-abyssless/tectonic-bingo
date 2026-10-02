@@ -34,6 +34,18 @@ variable "production_session_secret" {
   sensitive   = true
 }
 
+variable "staging_feedback_secret" {
+  description = "Keys staging's anonymous Feedback responses to their Players (docs/adr/0002-anonymous-feedback.md). Different from production's; never change it once a form has responses, or that form takes no answers until it's restored."
+  type        = string
+  sensitive   = true
+}
+
+variable "production_feedback_secret" {
+  description = "Keys production's anonymous Feedback responses to their Players (docs/adr/0002-anonymous-feedback.md). Different from staging's; never change it once a form has responses, or that form takes no answers until it's restored."
+  type        = string
+  sensitive   = true
+}
+
 variable "staging_password" {
   description = "The shared password Caddy asks for on all of staging except /health (username: team)."
   type        = string
@@ -171,6 +183,7 @@ locals {
       CLIENT_URL                    = "https://staging.tectonic.bingo"
       DISCORD_CALLBACK_URL          = "https://staging.tectonic.bingo/auth/discord/callback"
       SESSION_SECRET                = var.staging_session_secret
+      FEEDBACK_SECRET               = var.staging_feedback_secret
       TECTONIC_API_URL              = var.tectonic_api_url
       TECTONIC_API_KEY              = var.tectonic_api_key
       TECTONIC_GUILD_ID             = var.tectonic_guild_id
@@ -187,6 +200,7 @@ locals {
       CLIENT_URL           = "https://tectonic.bingo"
       DISCORD_CALLBACK_URL = "https://tectonic.bingo/auth/discord/callback"
       SESSION_SECRET       = var.production_session_secret
+      FEEDBACK_SECRET      = var.production_feedback_secret
       TECTONIC_API_URL     = var.tectonic_api_url
       TECTONIC_API_KEY     = var.tectonic_api_key
       TECTONIC_GUILD_ID    = var.tectonic_guild_id

@@ -181,9 +181,10 @@ pass). Treat the key as access to production data. It is **not** root on the mac
 or other environments' data except by deploying to them. Closing the rest would need images the box can verify came from
 `main` (building on the box, which spends the site's CPU on every merge, or signed images); that is a known limit, not an
 oversight. If the key leaks: delete it from the deploy user's `authorized_keys`, rotate it in GitHub, and rotate
-production's secrets (`SESSION_SECRET`, the Discord and API keys: in Bitwarden, then "Changing a value" in
-[`infra/README.md`](../infra/README.md), including deleting the `.bak` that still holds the leaked ones) and treat the
-data as read.
+production's secrets (`SESSION_SECRET`, `FEEDBACK_SECRET`, the Discord and API keys: in Bitwarden, then "Changing a value"
+in [`infra/README.md`](../infra/README.md), including deleting the `.bak` that still holds the leaked ones) and treat the
+data as read. With `FEEDBACK_SECRET` and the database anyone can tell whose a Feedback response is, so treat that as read
+too.
 
 `deploy/test-ssh-entry.sh` tests every allowed shape, 24 requests that must be refused, and `sync-deploy` against a real git
 repository (a commit that is not on `main`, a made-up commit, a symlink in `deploy/`, a script that does not parse). It runs
@@ -257,7 +258,10 @@ steps; the rest is secrets and DNS, which only a person can do.
    in Bitwarden). `deploy/init-env.sh` creates the backup env files from their template and never overwrites a file. The
    app's own files are what `infra/app-env.tf` renders; without OpenTofu, write them by hand with the same keys:
    - `production.env`, `staging.env`: every key `infra/app-env.tf` sets for that environment. Use different `SESSION_SECRET`s
-     (`openssl rand -hex 32`).
+     and `FEEDBACK_SECRET`s (`openssl rand -hex 32`). `FEEDBACK_SECRET` keys the anonymous Feedback responses to their
+     Players (docs/adr/0002-anonymous-feedback.md). Without it the site runs but Feedback forms take no answers, and it must
+     never change once a form has responses: a form whose responses were saved with another secret takes no answers until
+     the original is restored (it exposes no one).
    - `production.backup.env`, `staging.backup.env`: from `deploy/backup.env.example`, with **different `BACKUP_PREFIX`es**
      (`production`, `staging`). The R2 bucket and token are set up as described under "Backups and restoring".
    - `staging.basic-auth`: one line, a username, a space, then a bcrypt hash:

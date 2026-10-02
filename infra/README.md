@@ -70,7 +70,7 @@ The app's own files on the box, `/srv/tectonic/env/staging.env`, `production.env
 
 | Value | Its home |
 | --- | --- |
-| Secrets (Discord client secret, both `SESSION_SECRET`s, the staging password, the clan, WOM and RuneProfile API keys) | Bitwarden, one item each, read by `env.ps1` as `TF_VAR_*` |
+| Secrets (Discord client secret, both `SESSION_SECRET`s and `FEEDBACK_SECRET`s, the staging password, the clan, WOM and RuneProfile API keys) | Bitwarden, one item each, read by `env.ps1` as `TF_VAR_*` |
 | Settings that aren't secret but stay out of this public repository (Discord ids, the clan API's address and guild, the User-Agent contact) | `terraform.tfvars` |
 | Everything else (addresses, `NODE_ENV`, which integrations each environment switches on, Sentry) | `app-env.tf`, reviewed like code |
 
@@ -89,7 +89,9 @@ tofu apply
 .\push-env.ps1 -Write             # write (each old file is kept as FILE.bak)
 ```
 
-Then deploy the environment (Actions > Deploy). Changing a `SESSION_SECRET` signs everyone out of that environment.
+Then deploy the environment (Actions > Deploy). Changing a `SESSION_SECRET` signs everyone out of that environment. Never change
+a `FEEDBACK_SECRET` once a Feedback form has responses: that form takes no answers until the original is restored
+(docs/adr/0002-anonymous-feedback.md).
 
 - **The `.bak` holds the old values.** Once the deploy is confirmed, delete it, above all after rotating a secret because it
   leaked: `ssh deploy@5.161.101.213 rm /srv/tectonic/env/production.env.bak` (or `staging.env.bak`, `staging.basic-auth.bak`).
@@ -110,7 +112,7 @@ anything reaches the box. A setting that isn't secret is just a line in `app-env
 
 **Bitwarden, once per machine:** install the CLI (`winget install Bitwarden.CLI`, or `npm i -g @bitwarden/cli`) and run
 `bw login`. Each value is an item named `tectonic-bingo/<NAME>`, holding the value as its password, for every name in
-`env.ps1`'s list. Those are the six login values above plus the seven app secrets. `env.ps1` asks for the master password once
+`env.ps1`'s list. Those are the six login values above plus the nine app secrets. `env.ps1` asks for the master password once
 (`bw unlock`); it asks for any item it can't find by hand, and says which. Run `bw lock` when you're done.
 
 ### Moving the box onto this (once)

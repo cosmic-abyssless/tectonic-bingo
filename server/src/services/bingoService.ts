@@ -21,6 +21,8 @@ import {
   pickRatings,
   nodeEdges,
   nodes,
+  feedbackAnswers,
+  feedbackResponses,
   signupAnswers,
   signupPairings,
   signupQuestions,
@@ -390,6 +392,9 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
     tx.delete(signupPairings).where(eq(signupPairings.bingoId, bingoId)).run();
+    const feedbackResponseIds = tx.select({ id: feedbackResponses.id }).from(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId));
+    tx.delete(feedbackAnswers).where(inArray(feedbackAnswers.responseId, feedbackResponseIds)).run();
+    tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();

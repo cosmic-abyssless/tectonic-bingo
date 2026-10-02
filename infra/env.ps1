@@ -25,6 +25,8 @@ $values = @(
     @{ Name = "TF_VAR_discord_client_secret"; Hint = "Discord application > OAuth2 > client secret" },
     @{ Name = "TF_VAR_staging_session_secret"; Hint = "staging's SESSION_SECRET" },
     @{ Name = "TF_VAR_production_session_secret"; Hint = "production's SESSION_SECRET" },
+    @{ Name = "TF_VAR_staging_feedback_secret"; Hint = "staging's FEEDBACK_SECRET" },
+    @{ Name = "TF_VAR_production_feedback_secret"; Hint = "production's FEEDBACK_SECRET" },
     @{ Name = "TF_VAR_staging_password"; Hint = "the staging site's password (username: team)" },
     @{ Name = "TF_VAR_tectonic_api_key"; Hint = "the clan API key" },
     @{ Name = "TF_VAR_wom_api_key"; Hint = "the Wise Old Man API key" },

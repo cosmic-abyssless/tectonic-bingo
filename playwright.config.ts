@@ -47,6 +47,7 @@ export default defineConfig({
         DISCORD_CALLBACK_URL: `${BASE_URL}/auth/discord/callback`,
         DISCORD_GUILD_ID: "e2e",
         SESSION_SECRET: "e2e-secret",
+        FEEDBACK_SECRET: "e2e-feedback-secret",
         CLIENT_URL: BASE_URL,
         // Blank, not omitted — dotenv never overrides an already-set env
         // var, so an empty string here beats a real value in the root

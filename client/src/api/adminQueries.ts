@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AppliedCutChange, ApplyCutReviewResponse, AuditLogFilters, AuditLogResponse, CutChange, ScoreCutReviewResponse } from "@bingo/shared";
+import type { AppliedCutChange, ApplyCutReviewResponse, AuditLogFilters, AuditLogResponse, CutChange, QuestionForm, ScoreCutReviewResponse } from "@bingo/shared";
 import { useDebouncedValue } from "../headless/useDebouncedValue";
 import { api } from "./client";
 import { auditLogQueryString, queryKeys } from "./queries";
@@ -9,7 +9,8 @@ export const adminQueryKeys = {
   mods: (slug: string) => ["adminMods", slug] as const,
   staff: (slug: string) => ["adminStaff", slug] as const,
   lines: (slug: string) => ["adminLines", slug] as const,
-  questions: (slug: string) => ["adminQuestions", slug] as const,
+  // Under the signup form's key (WebSocketContext invalidates ["adminQuestions"]), so one refresh covers both forms.
+  questions: (slug: string, form: QuestionForm = "signup") => (form === "feedback" ? (["adminQuestions", slug, "feedback"] as const) : (["adminQuestions", slug] as const)),
   superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
   userSearch: (scope: string, q: string) => ["adminUserSearch", scope, q] as const,
   captainCandidates: (slug: string) => ["adminCaptainCandidates", slug] as const,
@@ -85,8 +86,8 @@ export function useLines(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.lines(slug), queryFn: () => adminApi.getLines(slug) });
 }
 
-export function useQuestions(slug: string) {
-  return useQuery({ queryKey: adminQueryKeys.questions(slug), queryFn: () => adminApi.getQuestions(slug) });
+export function useQuestions(slug: string, form: QuestionForm = "signup") {
+  return useQuery({ queryKey: adminQueryKeys.questions(slug, form), queryFn: () => adminApi.getQuestions(slug, form) });
 }
 
 export function useSuperlativeCategories(slug: string) {

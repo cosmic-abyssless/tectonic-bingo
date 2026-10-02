@@ -17,7 +17,7 @@
 // server/src/services/bingoExportService.ts's importBingo() rejects a
 // document whose formatVersion is newer than this build understands, but
 // must keep reading every older version forever.
-import type { CutMode, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
+import type { CutMode, FeedbackAudience, LeftoverMode, NodeKind, QuestionVisibility, SignupMode, SignupQuestionType } from "./index.ts";
 import type { ExclusivityRule } from "./exclusivity.ts";
 import type { AchievementKey } from "./achievements.ts";
 import type { WrappedArtCredits, WrappedArtKeying, WrappedCredit } from "./wrapped.ts";
@@ -137,6 +137,15 @@ export interface ExportSignupQuestion {
   visibility?: QuestionVisibility;
 }
 
+/**
+ * A Feedback question (CONTEXT.md): a signup question's settings without visibility, and with its audience. The answers
+ * never travel with an export.
+ */
+export interface ExportFeedbackQuestion extends Omit<ExportSignupQuestion, "visibility"> {
+  /** Absent reads as "all" (every Player). */
+  audience?: FeedbackAudience;
+}
+
 /** A Superlative category (CONTEXT.md); votes themselves never travel with an export. */
 export interface ExportSuperlativeCategory {
   name: string;
@@ -180,6 +189,8 @@ export interface BingoExportDocument {
   tiles: ExportTile[];
   lines: ExportLine[];
   signupQuestions: ExportSignupQuestion[];
+  /** Absent in files exported before Feedback questions: none. */
+  feedbackQuestions?: ExportFeedbackQuestion[];
   /** Absent in older files: no Superlative categories. */
   superlativeCategories?: ExportSuperlativeCategory[];
   /**

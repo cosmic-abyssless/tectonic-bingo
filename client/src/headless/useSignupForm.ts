@@ -168,7 +168,8 @@ function memberPickModel(question: SignupQuestion, value: string, set: (v: strin
   };
 }
 
-function questionModel(question: SignupQuestion, value: string, set: (v: string) => void, members: PickableMember[] | undefined): SignupQuestionModel {
+/** One question as the form draws it, with its answer so far: the signup form's, and the Feedback form's (useFeedbackForm). */
+export function questionModel(question: SignupQuestion, value: string, set: (v: string) => void, members: PickableMember[] | undefined): SignupQuestionModel {
   // A question limited to mods/admins says so, so players know who reads what they write there.
   const privacy = question.visibility === "admins" ? "Only admins see your answer." : question.visibility === "mods" ? "Only mods and admins see your answer." : null;
   const hint = [question.helperText, privacy].filter(Boolean).join(" ") || undefined;

@@ -15,6 +15,7 @@ import { DraftPage } from "./pages/DraftPage";
 import { StatsPage } from "./pages/StatsPage";
 import { RewindPage } from "./pages/RewindPage";
 import { WrappedPage } from "./pages/WrappedPage";
+import { FeedbackPage } from "./pages/FeedbackPage";
 import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
@@ -125,6 +126,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <WrappedPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/b/:slug/feedback"
+              element={
+                <ProtectedRoute>
+                  <FeedbackPage />
                 </ProtectedRoute>
               }
             />

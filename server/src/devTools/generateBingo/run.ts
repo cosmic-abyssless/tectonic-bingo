@@ -11,6 +11,7 @@ import { Rng, clamp } from "./rng";
 import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
+import { ensureFeedbackQuestions, runFeedback } from "./feedback";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
@@ -130,6 +131,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
+  const feedbackQuestions = await ensureFeedbackQuestions(api, adminDiscordId, slug, new Date(tl.createdAt.getTime() + 25 * 60_000));
+  log(`feedback questions: ${feedbackQuestions.length}, ${feedbackQuestions.filter((q) => q.audience === "captains").length} for Captains only`);
   await setStage(ctx, "signup", tl.signupOpensAt);
   const staff = await grantStaff(ctx);
   await runSignups(ctx, players, pairs);
@@ -250,6 +253,13 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`made-up Wise Old Man snapshots: ${wom.snapshots} for ${wom.players} players`);
   log(`superlative votes: ${voting.cast} cast by ${voting.voters.size} players${voting.refused ? `, ${voting.refused} refused` : ""}`);
   if (voting.refused > 0) result.problems.push(`${voting.refused} superlative votes were refused`);
+  // A Finished Bingo's Players answer its Feedback form (anonymously: the run only counts what it sent).
+  if (options.stage === "complete") {
+    const leads = (teamId: string) => seeds.filter((s) => s.teamId === teamId).flatMap((s) => (s.coCaptain ? [s.captain, s.coCaptain] : [s.captain]));
+    const feedback = await runFeedback({ api, admin: adminDiscordId, slug, teams: teamRows.map((t) => ({ members: t.players, leads: leads(t.id) })), players, rng: rng.fork("feedback"), from: tl.completeAt });
+    log(`feedback: ${feedback.responses} responses and ${feedback.captainResponses} Captain responses${options.me ? " (none from you, so your card is still there)" : ""}`);
+    result.problems.push(...feedback.problems);
+  }
   if (lateRename.tried) {
     if (lateRename.refusal) log(`a captain's rename during Live was refused: ${lateRename.refusal}`);
     else result.problems.push("a captain renamed their team during Live");

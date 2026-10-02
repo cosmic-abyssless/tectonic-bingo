@@ -35,9 +35,22 @@ import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, Audi
 import { repriceSubmission } from "../services/gpRepriceService";
 import * as wrappedService from "../services/wrappedService";
 import * as superlativeService from "../services/superlativeService";
+import * as feedbackService from "../services/feedbackService";
+import { noStore } from "../middleware/cacheControl";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireBingoMod);
+
+// The Feedback results (CONTEXT.md "Feedback form"): how many responded, each response and the totals. Never who gave a
+// response: nothing stored says (docs/adr/0002-anonymous-feedback.md).
+router.get(
+  "/feedback",
+  noStore,
+  asyncHandler(async (req, res) => {
+    assertUserCan(db, req.bingo!, req.user!, "view_feedback_results", { role: new ServiceError(403, "Moderator access required for this bingo") });
+    res.json(feedbackService.getFeedbackResults(db, req.bingo!));
+  }),
+);
 
 router.get(
   "/pending-count",

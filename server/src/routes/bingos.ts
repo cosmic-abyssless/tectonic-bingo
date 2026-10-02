@@ -1,8 +1,8 @@
 import { devSkipsOcr } from "../devMode";
-import { privateRevalidate } from "../middleware/cacheControl";
+import { noStore, privateRevalidate } from "../middleware/cacheControl";
 import { Router, type Request } from "express";
 import fs from "fs";
-import type { AccountTypesResponse, Action, AuditLogResponse, BingoPermissionsResponse, ClaimInput, PlayerProfile } from "@bingo/shared";
+import type { AccountTypesResponse, Action, AuditLogResponse, BingoPermissionsResponse, ClaimInput, FeedbackSubmission, PlayerProfile } from "@bingo/shared";
 import { can, isAchievementKey, passesRules, resolvePermissions } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import * as achievementService from "../services/achievementService";
@@ -30,6 +30,7 @@ import * as statsService from "../services/statsService";
 import * as rewindService from "../services/rewindService";
 import * as wrappedService from "../services/wrappedService";
 import * as superlativeService from "../services/superlativeService";
+import * as feedbackService from "../services/feedbackService";
 import * as historicalService from "../services/historicalService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
@@ -43,7 +44,7 @@ import { getPastParticipationsForUser } from "../services/pastWomCompetitionServ
 import { ServiceError } from "../services/errors";
 import { refreshPricesAndFill } from "../services/gpValueService";
 import { broadcast } from "../ws";
-import { auditSkip } from "../audit/middleware";
+import { anonymous, auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
 
 const upload = imageUpload(UPLOADS_DIR, { variants: true });
@@ -254,6 +255,48 @@ router.delete(
     superlativeService.clearVote(db, req.bingo!, { categoryId: req.params.categoryId as string, voterUserId: req.user!.id });
     broadcast({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
     res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
+  }),
+);
+
+// The Feedback form (CONTEXT.md "Feedback form"; docs/adr/0002-anonymous-feedback.md): a Finished Bingo's Players
+// answer it anonymously. Everything under /feedback is anonymous end to end (anonymous(): no user in the request log,
+// no actor in the audit context), and the routes write nothing to the audit log and tell no one over the WebSocket.
+router.use("/:slug/feedback", anonymous());
+router.get(
+  "/:slug/feedback",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  noStore,
+  asyncHandler(async (req, res) => {
+    res.json(feedbackService.getFeedbackForm(db, req.bingo!, req.user!));
+  }),
+);
+
+// Who a Member pick question on the Feedback form can pick: every clan member who has logged in, except the asker. Only
+// for someone the form is open to.
+router.get(
+  "/:slug/feedback/members",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  noStore,
+  asyncHandler(async (req, res) => {
+    const { open, unavailable } = feedbackService.feedbackOpenTo(db, req.bingo!, req.user!);
+    if (unavailable) throw new ServiceError(503, feedbackService.UNAVAILABLE_MESSAGE[unavailable]);
+    if (!open) throw new ServiceError(403, "The Feedback form isn't open to you");
+    res.json({ members: memberPickService.getPickableMembers(db, req.user!.id) });
+  }),
+);
+
+router.put(
+  "/:slug/feedback",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("Feedback responses are anonymous — nothing records that, or who, someone answered (ADR 0002)"),
+  asyncHandler(async (req, res) => {
+    res.json(feedbackService.submitFeedback(db, req.bingo!, req.user!, req.body as Partial<FeedbackSubmission>));
   }),
 );
 

@@ -54,6 +54,14 @@ output "app_env" {
     error_message = "A SESSION_SECRET should be at least 32 characters (openssl rand -hex 32)."
   }
   precondition {
+    condition     = var.staging_feedback_secret != var.production_feedback_secret
+    error_message = "Staging and production must not share a FEEDBACK_SECRET."
+  }
+  precondition {
+    condition     = length(var.staging_feedback_secret) >= 32 && length(var.production_feedback_secret) >= 32
+    error_message = "A FEEDBACK_SECRET should be at least 32 characters (openssl rand -hex 32)."
+  }
+  precondition {
     condition     = alltrue([for settings in values(local.app_settings) : alltrue([for value in values(settings) : !can(regex("[\r\n]", value))])])
     error_message = "A value contains a line break, which would split it across lines of the env file."
   }

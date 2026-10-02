@@ -376,6 +376,12 @@ export interface BingoPageModel {
    */
   wrapped: { canOpen: boolean; preview: boolean };
   /**
+   * The Feedback form (CONTEXT.md "Feedback form"), for a Finished Bingo's Player while it has questions for them: the
+   * Board draws a card inviting them to answer it until `responded`, then a link to edit their answers. Never says
+   * anything about anyone else's.
+   */
+  feedback: { canOpen: boolean; responded: boolean };
+  /**
    * Scouting (CONTEXT.md): Team leads and mods may browse the draft room before the draft stage, and every Player may
    * once Signups are closed. Only leads rate signups (canRatePicks).
    */
@@ -424,7 +430,7 @@ export interface BingoPageModel {
     hide(): void;
   };
   /** logout lives in core AppHeader's own ☰ menu, not here. */
-  actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToMod(): void; goToDraft(): void };
+  actions: { goHome(): void; goToStats(): void; goToRewind(): void; goToWrapped(): void; goToFeedback(): void; goToMod(): void; goToDraft(): void };
   /** Raise/lower the viewer's hand for one part (task) of a tile on their own team. No-op unless task.interest.canToggle. */
   tileInterest: { toggle(tileId: string, taskId: string): void };
   /**

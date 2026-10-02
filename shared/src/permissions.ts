@@ -38,6 +38,10 @@ export const ACTIONS = [
   "rename_team",
   /** Marking a signup's Buy-in received, or not, and who collected it. */
   "mark_buyins",
+  /** Answering a Finished Bingo's Feedback form (CONTEXT.md "Feedback response"); the Captains-only questions need being a Captain on top. */
+  "answer_feedback",
+  /** Adding, editing, reordering and deleting a Bingo's Feedback questions, at any stage. */
+  "manage_feedback_questions",
 
   // What a user can see. Everyone who can't see a Bingo still gets its name and stage, and its signup form while
   // Signups are open.
@@ -67,6 +71,8 @@ export const ACTIONS = [
   "view_admin_questions",
   /** The card of anyone in the clan, not only of those in the Bingo. */
   "view_any_player",
+  /** A Bingo's Feedback results: how many responded, each response in turn, and the totals. */
+  "view_feedback_results",
   /** The Buy-ins page: each signup's RSN, Discord name and Buy-in, who collected it and who recorded it. Nothing else of theirs. */
   "view_buyins",
 ] as const;
@@ -206,6 +212,7 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
     { action: "view_any_player" },
     { action: "mark_buyins" },
     { action: "view_buyins" },
+    { action: "view_feedback_results" },
   ],
   // Clan leadership collecting the Buy-ins: those, while they're collected, and nothing else (CONTEXT.md "Staff").
   staff: [
@@ -227,6 +234,8 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
   player: [
     { action: "submit" },
     { action: "react" },
+    // Open from Finished (the rule below), and a Captain is a Player, so they hold it too.
+    { action: "answer_feedback" },
     { action: "view_bingo", stages: AFTER_PLANNING },
     { action: "view_team_stats", stages: ["live"] },
     { action: "view_draft_room", stages: ["captains", "draft", "reveal", "live", "complete"] },
@@ -260,6 +269,8 @@ export const ACTION_INFO: { readonly [A in Action]: { label: string; description
   rate_picks: { label: "Rate picks", description: "Signups on their Team's scouting list." },
   rename_team: { label: "Rename their Team", description: "From the Team dialog. Renaming any Team from the mod panel is running the Bingo." },
   mark_buyins: { label: "Mark Buy-ins", description: "A signup's Buy-in received or not, and who collected it." },
+  answer_feedback: { label: "Give feedback", description: "Answer the Feedback form, anonymously, once the Bingo is Finished.", onlyIn: ["complete"] },
+  manage_feedback_questions: { label: "Feedback questions", description: "Add, edit, reorder and delete the Feedback form's questions, at any stage." },
   view_bingo: { label: "The Bingo", description: "Its Board, Teams, rules, players and the pages under it." },
   view_hidden_board: { label: "The hidden Board", description: "The Board before Board revealed, and sealed Tiles in full: rules text, exclusive item lists, Task interest." },
   view_other_teams: { label: "Other Teams", description: "Their progress, Submissions and activity, and every Team's stats." },
@@ -273,6 +284,7 @@ export const ACTION_INFO: { readonly [A in Action]: { label: string; description
   view_mod_questions: { label: "Mod-only answers", description: "Answers to signup questions only Moderators may see." },
   view_admin_questions: { label: "Admin-only answers", description: "Answers to signup questions only Admins may see." },
   view_any_player: { label: "Anyone's player card", description: "Of anyone in the clan, not only those in the Bingo." },
+  view_feedback_results: { label: "Feedback results", description: "How many Players and Captains responded, each response in turn (never who gave it), and the totals." },
   view_buyins: { label: "Buy-ins", description: "Each signup's RSN, Discord name and Buy-in, who collected it and who recorded it." },
 };
 
@@ -285,6 +297,8 @@ export const RULES: { readonly [A in Action]?: (bingo: PermissionBingo) => boole
   run_draft: (bingo) => bingo.stage === "draft",
   rate_picks: (bingo) => BEFORE_LIVE.includes(bingo.stage),
   mark_buyins: (bingo) => BUYINS.includes(bingo.stage),
+  // The Feedback form is open only while the Bingo is Finished: it closes, keeping its answers, if the Bingo is reopened.
+  answer_feedback: (bingo) => bingo.stage === "complete",
 };
 
 /**
@@ -363,6 +377,7 @@ export const UNAVAILABLE_REASONS: { readonly [A in Action]?: (bingo: PermissionB
   rate_picks: () => "Ratings are locked once the bingo is live",
   rename_team: (bingo) => (BEFORE_REVEAL.includes(bingo.stage) ? "Team names can be changed once the Board is revealed" : "Team names are locked once the Bingo is Live"),
   mark_buyins: () => "Buy-ins can only be marked from Signups open until the Bingo is Live",
+  answer_feedback: () => "Feedback is open once the Bingo is Finished",
   view_buyins: () => "Buy-ins are only collected from Signups open until the Bingo is Live",
   view_team_stats: () => "Stats aren't visible until the bingo is complete",
   view_draft_room: (bingo) =>

@@ -4,6 +4,8 @@ import { DARK_PALETTE } from "./darkPalettes";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
+import { FeedbackPageLayout } from "./page/FeedbackPageLayout";
+import { FeedbackBanner } from "./feedback/FeedbackBanner";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
 import { AchievementRow } from "./achievements/AchievementRow";
@@ -149,6 +151,8 @@ const comicTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    FeedbackPage: FeedbackPageLayout,
+    FeedbackBanner,
     DraftPickBurst,
     AchievementUnlockCard,
     AchievementRow,

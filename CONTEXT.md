@@ -397,3 +397,25 @@ A scrolling story of a Finished Bingo, told from one Player's point of view: You
 A Draft pick who finished far higher in Points share than their pick number suggested: a late pick near the top. A Duo counts as one pick.
 - **Rules:** Wrapped names steals, never the opposite: an early pick who scored low is not singled out.
 - **Title:** The Overperformer Title goes to the Player who beat their draft position by the most, which is the Bingo's biggest Steal among eligible Players. In a Duo, only the higher scorer can hold it.
+
+---
+
+## Feedback
+
+### Feedback form
+A Finished Bingo's questionnaire for its Players about how the Bingo went, set up by Admins with Feedback questions.
+- **Rules:** Open only while the Bingo is Finished, with no deadline; it closes, keeping its answers, if the Bingo is reopened. Only Players can answer, and only Moderators and Admins can read the results: each response in turn (see ADR 0002 for how they stay anonymous), plus totals for choice questions, and how many responded. A server that can't keep answers anonymous (it isn't set up for Feedback, or its Feedback key changed since answers were given) takes no answers until it can, and says so; nothing given is lost, and the results still show.
+
+### Feedback question
+A question on a Feedback form, built like a signup question (same types, Other, helper text, required, order), but with no per-question visibility: Moderators and Admins read every answer. Exported and imported with the Bingo; the answers are not.
+- **Audience:** All Players (the default) or Captains only. Both halves of a Duo leading a Team count as Captains.
+- **Not:** Visibility, which on a signup question is who *reads* an answer; audience is who *answers*.
+
+### Feedback response
+One Player's anonymous answers to a Feedback form, which they can edit at any time while it is open.
+- **Anonymity:** Nobody, Moderators and Admins included, can see who gave a response, and nothing about answering is written to the audit log. The form tells the Player so.
+- **Avoid:** "a Player's feedback" in the UI; a response is never attributed.
+
+### Captain response
+A Captain's anonymous answers to the captain-only Feedback questions, kept apart from, and not linked to, their Feedback response, so their general answers stay among every other Player's.
+- **Rules:** Results list Captain responses separately, with their own count and totals. With so few Captains, the form warns that these answers may be recognisable.

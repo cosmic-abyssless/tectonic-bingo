@@ -12,6 +12,15 @@ describe("settings audit label", () => {
   });
 });
 
+describe("question audit labels", () => {
+  it("name the form a question is on: signup unless it says feedback", () => {
+    expect(label("question.created", { prompt: "Role?", type: "select", required: false })).toBe('Mod added the signup question "Role?"');
+    expect(label("question.created", { prompt: "How was it?", type: "text", required: false, form: "feedback" })).toBe('Mod added the feedback question "How was it?"');
+    expect(label("question.deleted", { prompt: "How was it?", type: "text", required: false, answersDeleted: 2, form: "feedback" })).toBe('Mod deleted the feedback question "How was it?" and 2 answers to it');
+    expect(label("question.reordered", { order: [], form: "feedback" })).toBe("Mod reordered the feedback questions");
+  });
+});
+
 describe("point audit labels", () => {
   const base = { nodeId: "n", submissionId: "s", points: 20 };
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { QuestionVisibility, SignupQuestion, SignupQuestionType } from "@bingo/shared";
+import type { FeedbackAudience, QuestionForm, QuestionVisibility, SignupQuestion, SignupQuestionType } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useQuestions } from "../../api/adminQueries";
@@ -48,6 +48,25 @@ function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: Ques
         <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as QuestionVisibility)} size="sm" className="w-auto!" options={VISIBILITIES} />
       </label>
       <p className="mt-0.5 text-xs text-on-surface-subtle">This role and up, and the player</p>
+    </div>
+  );
+}
+
+// Feedback questions only: who answers. Captains only questions are answered as a separate Captain response, which the
+// form tells the Captain may be recognisable.
+const AUDIENCES: { value: FeedbackAudience; label: string }[] = [
+  { value: "all", label: "All Players" },
+  { value: "captains", label: "Captains only" },
+];
+
+function AudienceSelect(props: { value: FeedbackAudience; onChange: (v: FeedbackAudience) => void; "aria-label": string }) {
+  return (
+    <div className="shrink-0">
+      <label className="flex items-center gap-1.5 text-xs text-on-surface-muted">
+        Asked of
+        <Select aria-label={props["aria-label"]} value={props.value} onChange={(v) => props.onChange(v as FeedbackAudience)} size="sm" className="w-auto!" options={AUDIENCES} />
+      </label>
+      <p className="mt-0.5 text-xs text-on-surface-subtle">Moderators and Admins read every answer</p>
     </div>
   );
 }
@@ -117,8 +136,14 @@ function TypeSelect(props: { value: SignupQuestionType; onChange: (t: SignupQues
   );
 }
 
-export function QuestionBuilder({ slug }: { slug: string }) {
-  const { data } = useQuestions(slug);
+/**
+ * The question builder of the signup form, or (`form` "feedback") of the Feedback form (CONTEXT.md "Feedback question"):
+ * the same settings, but a Feedback question has an audience instead of a visibility, and its questions can be edited
+ * in any stage.
+ */
+export function QuestionBuilder({ slug, form = "signup" }: { slug: string; form?: QuestionForm }) {
+  const feedback = form === "feedback";
+  const { data } = useQuestions(slug, form);
   const questions = data?.questions ?? [];
   const answerCounts = data?.answerCounts ?? {};
   const queryClient = useQueryClient();
@@ -130,11 +155,13 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   const [newAllowOther, setNewAllowOther] = useState(false);
   const [newPicks, setNewPicks] = useState<{ multiplePicks: boolean; maxPicks: number | null }>({ multiplePicks: false, maxPicks: null });
   const [newVisibility, setNewVisibility] = useState<QuestionVisibility>("captains");
+  const [newAudience, setNewAudience] = useState<FeedbackAudience>("all");
   const [error, setError] = useState<string | null>(null);
   // The question waiting on "delete it and its answers?" — only asked when players have answered it.
   const [confirmingDelete, setConfirmingDelete] = useState<SignupQuestion | null>(null);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.questions(slug) });
+  const queryKey = adminQueryKeys.questions(slug, form);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey });
 
   async function add() {
     if (!newPrompt.trim()) return;
@@ -154,7 +181,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
         optionsJson: isChoice(newType) ? JSON.stringify(options) : undefined,
         allowOther: isChoice(newType) && newAllowOther,
         ...(newType === "member" ? newPicks : {}),
-        visibility: newVisibility,
+        ...(feedback ? { form, audience: newAudience } : { visibility: newVisibility }),
       });
       setNewPrompt("");
       setNewOptions("");
@@ -163,6 +190,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
       setNewAllowOther(false);
       setNewPicks({ multiplePicks: false, maxPicks: null });
       setNewVisibility("captains");
+      setNewAudience("all");
       invalidate();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to add question");
@@ -175,7 +203,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
   function remove(id: string) {
     return optimisticUpdate<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(
       queryClient,
-      adminQueryKeys.questions(slug),
+      queryKey,
       (d) => ({ ...d, questions: d.questions.filter((q) => q.id !== id) }),
       () => adminApi.deleteQuestion(slug, id),
     );
@@ -190,20 +218,20 @@ export function QuestionBuilder({ slug }: { slug: string }) {
     reordered.splice(index + dir, 0, item);
     return optimisticUpdate<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(
       queryClient,
-      adminQueryKeys.questions(slug),
+      queryKey,
       (d) => ({ ...d, questions: reordered }),
-      () => adminApi.reorderQuestions(slug, reordered.map((q) => q.id)),
+      () => adminApi.reorderQuestions(slug, reordered.map((q) => q.id), form),
     );
   }
 
   return (
     <div className="max-w-2xl space-y-4">
       {questions.length === 0 ? (
-        <EmptyState icon={<ListIcon />} title="No signup questions">
-          Players only enter their RSN. Add questions below if you need more from them.
+        <EmptyState icon={<ListIcon />} title={feedback ? "No feedback questions" : "No signup questions"}>
+          {feedback ? "Players see no Feedback form once the Bingo is Finished. Add questions below to ask them how it went." : "Players only enter their RSN. Add questions below if you need more from them."}
         </EmptyState>
       ) : (
-        <div role="list" aria-label="Signup questions" className="space-y-2">
+        <div role="list" aria-label={feedback ? "Feedback questions" : "Signup questions"} className="space-y-2">
           {questions.map((q, i) => (
             <Card key={q.id} role="listitem" className="space-y-2 p-3">
               <div className="flex items-center gap-2">
@@ -234,7 +262,11 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                   size="sm"
                   className="min-w-0 flex-1"
                 />
-                <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
+                {feedback ? (
+                  <AudienceSelect aria-label="Question asked of" value={q.audience} onChange={(audience) => patch(q.id, { audience })} />
+                ) : (
+                  <VisibilitySelect aria-label="Answers visible to" value={q.visibility} onChange={(visibility) => patch(q.id, { visibility })} />
+                )}
               </div>
               {isChoice(q.type) && (
                 <div className="flex items-start gap-2">
@@ -283,7 +315,11 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             size="sm"
             className="min-w-0 flex-1"
           />
-          <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
+          {feedback ? (
+            <AudienceSelect aria-label="New question asked of" value={newAudience} onChange={setNewAudience} />
+          ) : (
+            <VisibilitySelect aria-label="New question answers visible to" value={newVisibility} onChange={setNewVisibility} />
+          )}
         </div>
         {isChoice(newType) && (
           <div className="flex items-start gap-2">
@@ -304,6 +340,7 @@ export function QuestionBuilder({ slug }: { slug: string }) {
       </Card>
 
       <DeleteQuestionDialog
+        feedback={feedback}
         question={confirmingDelete}
         answerCount={confirmingDelete ? (answerCounts[confirmingDelete.id] ?? 0) : 0}
         onClose={() => setConfirmingDelete(null)}
@@ -317,11 +354,13 @@ export function QuestionBuilder({ slug }: { slug: string }) {
 }
 
 function DeleteQuestionDialog({
+  feedback,
   question,
   answerCount,
   onClose,
   onConfirm,
 }: {
+  feedback: boolean;
   question: SignupQuestion | null;
   answerCount: number;
   onClose: () => void;
@@ -339,7 +378,7 @@ function DeleteQuestionDialog({
           <span className="font-medium text-on-surface">“{q?.prompt}”</span> has <span className="num text-on-surface">{n}</span> answer{n === 1 ? "" : "s"} from
           players. Deleting the question deletes {n === 1 ? "that answer" : "those answers"} too, and it can't be undone.
         </p>
-        <p>To keep a copy, use Copy as CSV on the Signups tab first.</p>
+        {!feedback && <p>To keep a copy, use Copy as CSV on the Signups tab first.</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onPress={onClose}>
             Cancel

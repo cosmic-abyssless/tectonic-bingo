@@ -1,9 +1,9 @@
 import { now as clockNow } from "../clock";
-import { and, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { can, canSeeAnswers, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type PublicUser, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
+import { and, count, eq, inArray, isNotNull, ne, notInArray, or } from "drizzle-orm";
+import { can, canSeeAnswers, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, FEEDBACK_AUDIENCES, QUESTION_FORMS, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type FeedbackAudience, type PublicUser, type QuestionForm, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
+import { feedbackAnswers, feedbackResponses, signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs, getPendingOutgoingPairs } from "./pairingService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
@@ -46,8 +46,18 @@ const SIGNUP_CA_COLS = {
   womDataJson: signups.womDataJson,
 };
 
-export function getQuestions(db: Db, bingoId: string) {
-  return db.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).orderBy(signupQuestions.sortOrder).all();
+/** A Bingo's questions on one form (the signup form unless asked for the Feedback form), in order. */
+export function getQuestions(db: Db, bingoId: string, form: QuestionForm = "signup") {
+  return db
+    .select()
+    .from(signupQuestions)
+    .where(and(eq(signupQuestions.bingoId, bingoId), eq(signupQuestions.form, form)))
+    .orderBy(signupQuestions.sortOrder)
+    .all();
+}
+
+export function getQuestionById(db: Db, id: string) {
+  return db.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
 }
 
 export interface CreateQuestionParams {
@@ -65,13 +75,18 @@ export interface CreateQuestionParams {
   maxPicks?: number | null;
   required?: boolean;
   sortOrder?: number;
+  /** Signup questions only. */
   visibility?: QuestionVisibility;
+  /** The form it's on; the signup form when absent. */
+  form?: QuestionForm;
+  /** Feedback questions only: who answers it. "all" when absent. */
+  audience?: FeedbackAudience;
 }
 
 const isChoiceType = (type: SignupQuestionType) => type === "select" || type === "multiselect";
 
 /** A question's options, or none when they're missing or malformed. */
-function optionsOf(optionsJson: string | null | undefined): string[] {
+export function optionsOf(optionsJson: string | null | undefined): string[] {
   try {
     const parsed: unknown = JSON.parse(optionsJson ?? "[]");
     return Array.isArray(parsed) ? parsed.filter((o): o is string => typeof o === "string") : [];
@@ -119,6 +134,19 @@ function assertVisibility(value: unknown): void {
 }
 
 /**
+ * Checks the settings that belong to one form only: visibility is for signup questions (a Feedback question has none:
+ * Moderators and Admins read every answer) and audience for Feedback questions (a signup question's is always "all").
+ */
+function assertFormSettings(form: QuestionForm, visibility: unknown, audience: unknown): void {
+  assertVisibility(visibility);
+  if (audience !== undefined && !(FEEDBACK_AUDIENCES as readonly unknown[]).includes(audience)) {
+    throw new ServiceError(400, `audience must be one of ${FEEDBACK_AUDIENCES.join(", ")}`);
+  }
+  if (form === "feedback" && visibility !== undefined) throw new ServiceError(400, "A feedback question has no visibility setting");
+  if (form === "signup" && audience !== undefined && audience !== "all") throw new ServiceError(400, "Only a feedback question has an audience");
+}
+
+/**
  * The level someone holding `roles` sees answers from: a site admin's (view_admin_questions), else a bingo mod's
  * (view_mod_questions), else (a team lead) a captain's.
  */
@@ -129,37 +157,50 @@ export function answerViewerFor(roles: readonly Role[], bingo: PermissionBingo):
 
 /** The ids of a bingo's questions whose answers `viewer` may see (their own answers aside, which they always can). */
 export function visibleQuestionIds(db: Db, bingoId: string, viewer: AnswerViewer): Set<string> {
-  const questions = db.select({ id: signupQuestions.id, visibility: signupQuestions.visibility }).from(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).all();
+  const questions = db
+    .select({ id: signupQuestions.id, visibility: signupQuestions.visibility })
+    .from(signupQuestions)
+    .where(and(eq(signupQuestions.bingoId, bingoId), eq(signupQuestions.form, "signup")))
+    .all();
   return new Set(questions.filter((q) => canSeeAnswers(q.visibility, viewer)).map((q) => q.id));
 }
 
 export function createQuestion(db: Db, params: CreateQuestionParams) {
+  if (params.form !== undefined && !(QUESTION_FORMS as readonly unknown[]).includes(params.form)) throw new ServiceError(400, `form must be one of ${QUESTION_FORMS.join(", ")}`);
+  const form = params.form ?? "signup";
   if ((params.type === "select" || params.type === "multiselect") && !params.optionsJson) {
     throw new ServiceError(400, "optionsJson is required for a choice question");
   }
   assertChoiceSettings(params.type, params.allowOther, params.optionsJson);
   assertMemberSettings(params.type, params.multiplePicks ?? false, params.maxPicks ?? null);
-  assertVisibility(params.visibility);
-  const values = { ...params, helperText: normalizeHelperText(params.helperText) };
+  assertFormSettings(form, params.visibility, params.audience);
+  const values = { ...params, form, helperText: normalizeHelperText(params.helperText) };
   return db.transaction((tx) => {
     const question = tx.insert(signupQuestions).values(values).returning().get();
     audit(tx, {
       action: "question.created",
       bingoId: params.bingoId,
       entity: { type: "question", id: question.id, label: question.prompt },
-      details: { prompt: question.prompt, type: question.type, required: question.required },
+      details: { prompt: question.prompt, type: question.type, required: question.required, ...(form === "feedback" ? { form } : {}) },
     });
     return question;
   });
 }
 
-export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQuestionParams, "bingoId">>) {
+export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQuestionParams, "bingoId" | "form">>) {
   return db.transaction((tx) => {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     if (!existing) throw new ServiceError(404, "Question not found");
+    if ("form" in params) throw new ServiceError(400, "A question can't move to the other form");
     const type = params.type ?? existing.type;
     assertChoiceSettings(type, params.allowOther, params.optionsJson ?? existing.optionsJson);
-    assertVisibility(params.visibility);
+    assertFormSettings(existing.form, params.visibility, params.audience);
+    // Who answers a Feedback question can't change once it has answers: the results list each audience's answers apart,
+    // and a Player's next save only keeps the questions of their audience, so the old answers would vanish.
+    if (existing.form === "feedback" && params.audience !== undefined && params.audience !== existing.audience) {
+      const answered = tx.select({ n: count() }).from(feedbackAnswers).where(eq(feedbackAnswers.questionId, id)).get()!.n;
+      if (answered > 0) throw new ServiceError(409, "This question already has answers, so who it is asked of can't change. Delete it and add a new one instead.");
+    }
     const set = "helperText" in params ? { ...params, helperText: normalizeHelperText(params.helperText) } : { ...params };
     // Other goes with the choices: a question that stops being a choice question stops allowing it.
     if (!isChoiceType(type) && existing.allowOther) set.allowOther = false;
@@ -179,7 +220,7 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
         action: "question.updated",
         bingoId: existing.bingoId,
         entity: { type: "question", id, label: existing.prompt },
-        details: { changes: changes as never },
+        details: { changes: changes as never, ...(existing.form === "feedback" ? { form: "feedback" as const } : {}) },
       });
     } else {
       markAuditedNoop();
@@ -189,16 +230,23 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
 }
 
 // How many (non-blank) answers each of a bingo's questions has — what deleting it would throw away, for the mod UI's
-// confirmation.
+// confirmation. A signup question's answers are signups', a Feedback question's are anonymous responses'.
 export function getAnswerCounts(db: Db, bingoId: string): Record<string, number> {
-  const rows = db
+  const signupRows = db
     .select({ questionId: signupAnswers.questionId, answers: count() })
     .from(signupAnswers)
     .innerJoin(signupQuestions, eq(signupAnswers.questionId, signupQuestions.id))
     .where(and(eq(signupQuestions.bingoId, bingoId), ne(signupAnswers.value, "")))
     .groupBy(signupAnswers.questionId)
     .all();
-  return Object.fromEntries(rows.map((r) => [r.questionId, r.answers]));
+  const feedbackRows = db
+    .select({ questionId: feedbackAnswers.questionId, answers: count() })
+    .from(feedbackAnswers)
+    .innerJoin(signupQuestions, eq(feedbackAnswers.questionId, signupQuestions.id))
+    .where(and(eq(signupQuestions.bingoId, bingoId), ne(feedbackAnswers.value, "")))
+    .groupBy(feedbackAnswers.questionId)
+    .all();
+  return Object.fromEntries([...signupRows, ...feedbackRows].map((r) => [r.questionId, r.answers]));
 }
 
 // Deletes the question and every answer to it (they can't outlive it: signup_answers references the question). The
@@ -208,13 +256,21 @@ export function deleteQuestion(db: Db, id: string): void {
     const existing = tx.select().from(signupQuestions).where(eq(signupQuestions.id, id)).get();
     const answersDeleted = existing ? (getAnswerCounts(tx, existing.bingoId)[id] ?? 0) : 0;
     tx.delete(signupAnswers).where(eq(signupAnswers.questionId, id)).run();
+    tx.delete(feedbackAnswers).where(eq(feedbackAnswers.questionId, id)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.id, id)).run();
+    // A response whose only answers were to this question has nothing left: drop it, so it isn't counted in the results
+    // and its Player isn't left "responded" with no way to clear it (they can answer afresh).
+    if (existing?.form === "feedback") {
+      tx.delete(feedbackResponses)
+        .where(and(eq(feedbackResponses.bingoId, existing.bingoId), notInArray(feedbackResponses.id, tx.select({ id: feedbackAnswers.responseId }).from(feedbackAnswers))))
+        .run();
+    }
     if (existing) {
       audit(tx, {
         action: "question.deleted",
         bingoId: existing.bingoId,
         entity: { type: "question", id, label: existing.prompt },
-        details: { prompt: existing.prompt, type: existing.type, required: existing.required, answersDeleted },
+        details: { prompt: existing.prompt, type: existing.type, required: existing.required, answersDeleted, ...(existing.form === "feedback" ? { form: "feedback" as const } : {}) },
       });
     } else {
       markAuditedNoop();
@@ -222,20 +278,20 @@ export function deleteQuestion(db: Db, id: string): void {
   });
 }
 
-// Bulk-reorders questions by the given id order (0-based sortOrder assigned by position).
-export function reorderQuestions(db: Db, bingoId: string, orderedIds: string[]): void {
+// Bulk-reorders one form's questions by the given id order (0-based sortOrder assigned by position).
+export function reorderQuestions(db: Db, bingoId: string, orderedIds: string[], form: QuestionForm = "signup"): void {
   db.transaction((tx) => {
     for (const [index, id] of orderedIds.entries()) {
       tx.update(signupQuestions)
         .set({ sortOrder: index })
-        .where(and(eq(signupQuestions.id, id), eq(signupQuestions.bingoId, bingoId)))
+        .where(and(eq(signupQuestions.id, id), eq(signupQuestions.bingoId, bingoId), eq(signupQuestions.form, form)))
         .run();
     }
     audit(tx, {
       action: "question.reordered",
       bingoId,
       entity: { type: "question", id: null },
-      details: { order: orderedIds },
+      details: { order: orderedIds, ...(form === "feedback" ? { form: "feedback" as const } : {}) },
     });
   });
 }
@@ -288,7 +344,7 @@ export interface CreateSignupParams {
   rsnVerified?: boolean;
 }
 
-type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: string | null; allowOther: boolean; multiplePicks: boolean; maxPicks: number | null };
+export type AnsweredQuestion = { id: string; type: SignupQuestionType; optionsJson: string | null; allowOther: boolean; multiplePicks: boolean; maxPicks: number | null };
 
 /**
  * A Member pick answer in its stored form: a list of user ids, each an existing user in the clan right now who isn't
@@ -326,7 +382,7 @@ function normalizeMemberPicks(db: Db, question: AnsweredQuestion, value: unknown
  * has edited the options or turned Other off. A multiple-choice answer is stored as a cleaned JSON list (trimmed, no
  * blanks or repeats); text and yes/no answers are stored as given.
  */
-function normalizeAnswers<T extends { questionId: string; value: string }>(db: Db, answererUserId: string, questions: AnsweredQuestion[], answers: T[], previous: ReadonlyMap<string, string> = new Map()): T[] {
+export function normalizeAnswers<T extends { questionId: string; value: string }>(db: Db, answererUserId: string, questions: AnsweredQuestion[], answers: T[], previous: ReadonlyMap<string, string> = new Map()): T[] {
   const questionById = new Map(questions.map((q) => [q.id, q]));
   return answers.map((a) => {
     const question = questionById.get(a.questionId);
@@ -388,7 +444,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
     const existing = tx.select().from(signups).where(and(eq(signups.bingoId, params.bingoId), eq(signups.userId, params.userId))).get();
     if (existing?.status === "active") throw new ServiceError(409, "You've already signed up for this bingo");
 
-    const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, params.bingoId)).all();
+    const questions = getQuestions(tx, params.bingoId);
     const answers = normalizeAnswers(tx, params.userId, questions, params.answers, savedAnswers(tx, existing?.id));
     const answerById = new Map(answers.map((a) => [a.questionId, a.value]));
     const missingRequired = questions.some((q) => q.required && isBlankAnswer(q.type, answerById.get(q.id)));
@@ -548,7 +604,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
         after.Timezone = timezone;
       }
     }
-    const questions = tx.select().from(signupQuestions).where(eq(signupQuestions.bingoId, bingo.id)).all();
+    const questions = getQuestions(tx, bingo.id);
     const questionById = new Map(questions.map((q) => [q.id, q]));
     const shown = (type: SignupQuestionType, value: string) => formatSignupAnswer(type, type === "member" ? nameMemberPicks(tx, bingo.id, value) : value) || "—";
     for (const a of normalizeAnswers(tx, existing.userId, questions, params.answers ?? [], savedAnswers(tx, signupId))) {

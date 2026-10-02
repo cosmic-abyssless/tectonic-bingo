@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { CUT_MODES, isAchievementKey, type AchievementKey, type AppliedCutChange, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
 import * as achievementService from "../services/achievementService";
 import path from "path";
@@ -15,6 +15,8 @@ import * as boardService from "../services/boardService";
 import * as wrappedArtService from "../services/wrappedArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
+import { assertUserCan } from "../services/permissions";
+import { QUESTION_FORMS, type QuestionForm } from "@bingo/shared";
 import * as superlativeService from "../services/superlativeService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
@@ -481,34 +483,57 @@ router.delete(
 // Signup questions
 // ---------------------------------------------------------------------------
 
+// The signup form's questions, and (with form "feedback") the Feedback form's, built the same way (CONTEXT.md "Feedback
+// question"). Signup questions are locked once play starts; Feedback questions can be edited at any stage.
+
+/** The form a request is about: `value` ("signup" when absent), refused if it isn't one. */
+function formOf(value: unknown): QuestionForm {
+  if (value === undefined) return "signup";
+  if (!(QUESTION_FORMS as readonly unknown[]).includes(value)) throw new ServiceError(400, `form must be one of ${QUESTION_FORMS.join(", ")}`);
+  return value as QuestionForm;
+}
+
+/** Whether this question's form may be edited now: Feedback questions always (by whoever may manage them), signup questions until play starts. */
+function assertQuestionsOpen(req: Request, form: QuestionForm): void {
+  if (form === "feedback") assertUserCan(db, req.bingo!, req.user!, "manage_feedback_questions", { role: new ServiceError(403, "Admin access required") });
+  else bingoService.assertQuestionsEditable(req.bingo!);
+}
+
 router.get(
   "/questions",
   asyncHandler(async (req, res) => {
-    res.json({ questions: signupService.getQuestions(db, req.bingo!.id), answerCounts: signupService.getAnswerCounts(db, req.bingo!.id) });
+    const form = formOf(req.query.form);
+    if (form === "feedback") assertQuestionsOpen(req, form);
+    res.json({ questions: signupService.getQuestions(db, req.bingo!.id, form), answerCounts: signupService.getAnswerCounts(db, req.bingo!.id) });
   }),
 );
 router.post(
   "/questions",
   asyncHandler(async (req, res) => {
-    bingoService.assertQuestionsEditable(req.bingo!);
+    const form = formOf((req.body as { form?: unknown }).form);
+    assertQuestionsOpen(req, form);
     const { prompt, type } = req.body as { prompt?: string; type?: string };
     if (!prompt || !type) throw new ServiceError(400, "prompt and type are required");
-    const question = signupService.createQuestion(db, { bingoId: req.bingo!.id, ...req.body });
+    const question = signupService.createQuestion(db, { bingoId: req.bingo!.id, ...req.body, form });
     res.status(201).json({ question });
   }),
 );
 router.patch(
   "/questions/:id",
   asyncHandler(async (req, res) => {
-    bingoService.assertQuestionsEditable(req.bingo!);
-    const question = signupService.updateQuestion(db, req.params.id as string, req.body);
+    const existing = signupService.getQuestionById(db, req.params.id as string);
+    if (!existing || existing.bingoId !== req.bingo!.id) throw new ServiceError(404, "Question not found");
+    assertQuestionsOpen(req, existing.form);
+    const question = signupService.updateQuestion(db, existing.id, req.body);
     res.json({ question });
   }),
 );
 router.delete(
   "/questions/:id",
   asyncHandler(async (req, res) => {
-    bingoService.assertQuestionsEditable(req.bingo!);
+    const existing = signupService.getQuestionById(db, req.params.id as string);
+    if (existing && existing.bingoId !== req.bingo!.id) throw new ServiceError(404, "Question not found");
+    assertQuestionsOpen(req, existing?.form ?? "signup");
     signupService.deleteQuestion(db, req.params.id as string);
     res.status(204).end();
   }),
@@ -516,11 +541,12 @@ router.delete(
 router.post(
   "/questions/reorder",
   asyncHandler(async (req, res) => {
-    bingoService.assertQuestionsEditable(req.bingo!);
+    const form = formOf((req.body as { form?: unknown }).form);
+    assertQuestionsOpen(req, form);
     const { orderedIds } = req.body as { orderedIds?: string[] };
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
-    signupService.reorderQuestions(db, req.bingo!.id, orderedIds);
-    res.json({ questions: signupService.getQuestions(db, req.bingo!.id) });
+    signupService.reorderQuestions(db, req.bingo!.id, orderedIds, form);
+    res.json({ questions: signupService.getQuestions(db, req.bingo!.id, form) });
   }),
 );
 

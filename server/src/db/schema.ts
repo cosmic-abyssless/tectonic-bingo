@@ -280,10 +280,15 @@ export const auditLog = sqliteTable('audit_log', {
 // SIGNUP & DRAFT
 // ---------------------------------------------------------------------------
 
-// Admin-authored signup questions, per bingo. Rendered on the signup form.
+// Admin-authored questions, per bingo, on one of its two forms: the signup form, or the Feedback form of a Finished
+// Bingo (CONTEXT.md "Feedback form"). Both are built from the same settings, so they share this table and its builder.
 export const signupQuestions = sqliteTable('signup_questions', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  // Which form it's on. `visibility` is signup-only and `audience` feedback-only (the other keeps its default).
+  form: text('form', { enum: ['signup', 'feedback'] }).notNull().default('signup'),
+  // Feedback questions only: who answers it. 'captains' is a Captain's separate Captain response.
+  audience: text('audience', { enum: ['all', 'captains'] }).notNull().default('all'),
   prompt: text('prompt').notNull(),
   // Optional plain-text note shown under the question on the signup form.
   helperText: text('helper_text'),
@@ -345,6 +350,35 @@ export const signupAnswers = sqliteTable('signup_answers', {
   value: text('value').notNull(), // booleans stored as "true"/"false"
 }, (t) => [
   uniqueIndex('signup_answers_signup_question_unq').on(t.signupId, t.questionId),
+]);
+
+// A Finished Bingo's Feedback form answers (CONTEXT.md "Feedback response", docs/adr/0002-anonymous-feedback.md).
+// Anonymous to everyone, the database's readers included: a response stores no user id, no timestamp, and nothing that
+// links a Player's Feedback response to their Captain response. Its Player finds it again by `respondentKey`, an HMAC
+// of (user id, Bingo id, kind) made with FEEDBACK_SECRET (services/feedbackService.ts). Both tables are WITHOUT ROWID
+// (the migration), so rows sit in primary-key (random id) order and their storage order says nothing of when they came.
+export const feedbackResponses = sqliteTable('feedback_responses', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  // 'player': the Feedback response (the All Players questions). 'captain': a Captain's Captain response.
+  kind: text('kind', { enum: ['player', 'captain'] }).notNull(),
+  respondentKey: text('respondent_key').notNull(),
+  // Which FEEDBACK_SECRET keyed this response: an HMAC of a fixed label with it, the same for every response keyed with the
+  // same secret, so it says nothing of whose a response is. A Bingo whose responses carry another value is refused new
+  // answers rather than given a second response from every Player who already answered (services/feedbackService.ts).
+  keyCheck: text('key_check').notNull(),
+}, (t) => [
+  uniqueIndex('feedback_responses_respondent_key_unq').on(t.respondentKey),
+  index('feedback_responses_bingo_idx').on(t.bingoId, t.kind),
+]);
+
+export const feedbackAnswers = sqliteTable('feedback_answers', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  responseId: text('response_id').notNull().references(() => feedbackResponses.id),
+  questionId: text('question_id').notNull().references(() => signupQuestions.id),
+  value: text('value').notNull(), // the signup answer format (shared/src/signupAnswers.ts); booleans as "true"/"false"
+}, (t) => [
+  uniqueIndex('feedback_answers_response_question_unq').on(t.responseId, t.questionId),
 ]);
 
 // Duo-mode partner requests. The target is keyed by Discord id because a
