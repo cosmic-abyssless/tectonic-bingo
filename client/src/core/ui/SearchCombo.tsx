@@ -187,7 +187,9 @@ export function SearchCombo<T>({
       onSelectionChange={pick}
       // Choosing, the list opens on focus and on typing (below), but not when a pick puts the chosen text in the box.
       menuTrigger={choosing ? "manual" : "input"}
-      allowsEmptyCollection={hasNote}
+      // Also while there are rows to show: react-aria builds its list a render behind, so when a search's results arrive
+      // (and "Searching…" goes) it still sees the empty list for a moment, and would close for good.
+      allowsEmptyCollection={hasNote || shown.length > 0}
       isReadOnly={readOnly}
     >
       <StateRef stateRef={stateRef} />
