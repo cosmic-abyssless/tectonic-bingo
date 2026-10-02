@@ -829,4 +829,29 @@ describe("exclusive items when scoring", () => {
     }
     expect(findState(fx.teamId, part.id)?.pointsAwarded).toBe(20); // SUM(2): both Barons counted
   });
+
+  it("with a group, counts only the earliest claim's tile for every piece of it", () => {
+    const fx = seedBaseFixture();
+    const bingoId = db.select().from(schema.bingos).get()!.id;
+    const other = createTile(db, { bingoId, name: "ABYSSAL SIRE", boardRow: 0, boardCol: 1 });
+    const axonPart = itemTask(fx.tileId, { points: 20 }, "Bludgeon axon");
+    const clawPart = itemTask(other.id, { points: 30 }, "Bludgeon claw");
+    const onAxon = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: axonPart.id, itemName: "Bludgeon axon" }]);
+    const onClaw = submitAndReturn(fx.teamId, fx.memberUserId, [{ nodeId: clawPart.id, itemName: "Bludgeon claw" }]);
+    approveSubmission(db, { submissionId: onAxon.id, reviewedByUserId: fx.modUserId });
+    approveSubmission(db, { submissionId: onClaw.id, reviewedByUserId: fx.modUserId });
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-02T10:00:00Z") }).where(eq(schema.submissions.id, onAxon.id)).run();
+    db.update(schema.submissions).set({ reviewedAt: new Date("2026-03-01T10:00:00Z") }).where(eq(schema.submissions.id, onClaw.id)).run();
+
+    const pieces = ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"];
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "slayer", label: "Slayer", itemNames: pieces, scope: "tile" }] });
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, axonPart.id)).toBeDefined(); // different names, no group: both count
+    expect(findState(fx.teamId, clawPart.id)).toBeDefined();
+
+    updateBingoSettings(db, bingoId, { exclusivityRules: [{ id: "slayer", label: "Slayer", itemNames: pieces, scope: "tile", groups: [{ label: "Bludgeon piece", itemNames: pieces }] }] });
+    rescoreBingo(db, bingoId);
+    expect(findState(fx.teamId, clawPart.id)?.pointsAwarded).toBe(30); // the claw was approved first
+    expect(findState(fx.teamId, axonPart.id)).toBeUndefined();
+  });
 });

@@ -1,6 +1,6 @@
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
@@ -46,6 +46,9 @@ export const queryKeys = {
   stats: (slug: string) => ["stats", slug] as const,
   historical: (slug: string) => ["historical", slug] as const,
   rewind: (slug: string) => ["rewind", slug] as const,
+  // Both under "feedback" (WebSocketContext): the form closes and reopens with the stage, and with the questions.
+  feedbackForm: (slug: string) => ["feedback", "form", slug] as const,
+  feedbackResults: (slug: string) => ["feedback", "results", slug] as const,
   wrappedState: (slug: string) => ["wrapped", "state", slug] as const,
   myWrapped: (slug: string) => ["wrapped", "me", slug] as const,
   mySuperlativeBallot: (slug: string) => ["superlatives", "me", slug] as const,
@@ -418,7 +421,11 @@ export function useApplyRestriction(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: { userId: string; action: string; reason: string }) => api.post<{ restriction: RestrictionEntry }>(`/api/bingos/${slug}/mod/restrictions`, params),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+    onSuccess: () => {
+      // The roster"s Restrictions column, and the player card"s Permissions tab.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["playerProfile", slug] });
+    },
   });
 }
 
@@ -426,7 +433,11 @@ export function useLiftRestriction(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (restrictionId: string) => api.delete<void>(`/api/bingos/${slug}/mod/restrictions/${restrictionId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+    onSuccess: () => {
+      // The roster"s Restrictions column, and the player card"s Permissions tab.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["playerProfile", slug] });
+    },
   });
 }
 
@@ -674,6 +685,46 @@ export function useRewind(slug: string | undefined, enabled = true) {
     enabled: !!slug && enabled,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * The Feedback form as the viewer sees it (CONTEXT.md "Feedback form"): open only while the Bingo is Finished and they're
+ * a Player, with their own current answers. Never cached by the server or kept in the browser.
+ */
+export function useFeedbackForm(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.feedbackForm(slug ?? ""),
+    queryFn: () => api.get<FeedbackFormResponse>(`/api/bingos/${slug}/feedback`),
+    enabled: !!slug && enabled,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Who a Member pick question on the Feedback form can pick (the same list as the signup form's, open while the form is). */
+export function useFeedbackMembers(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["feedback", "members", slug ?? ""] as const,
+    queryFn: () => api.get<PickableMembersResponse>(`/api/bingos/${slug}/feedback/members`),
+    enabled: !!slug && enabled,
+  });
+}
+
+/** Saves the Player's Feedback response (and a Captain's Captain response); the answer is the form as it now stands. */
+export function useSaveFeedback(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (submission: FeedbackSubmission) => api.put<FeedbackFormResponse>(`/api/bingos/${slug}/feedback`, submission),
+    onSuccess: (form) => queryClient.setQueryData(queryKeys.feedbackForm(slug), form),
+  });
+}
+
+/** The Feedback results (Moderators and Admins): how many responded, each response and the totals. */
+export function useFeedbackResults(slug: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.feedbackResults(slug ?? ""),
+    queryFn: () => api.get<FeedbackResultsResponse>(`/api/bingos/${slug}/mod/feedback`),
+    enabled: !!slug && enabled,
   });
 }
 

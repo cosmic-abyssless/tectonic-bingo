@@ -5,7 +5,7 @@ import path from "path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { createTestDb } from "../../testUtils/testDb";
-import { bingos, oauthClients, oauthTokens, phoneLoginLinks, pickRatings, signups, superlativeCategories, superlativeVotes, teams, users } from "../../db/schema";
+import { bingos, feedbackAnswers, feedbackResponses, oauthClients, oauthTokens, phoneLoginLinks, pickRatings, signups, signupQuestions, superlativeCategories, superlativeVotes, teams, users } from "../../db/schema";
 import { McpToolError } from "../tool";
 import { runSqlQuery, SQL_LIMITS } from "../tools/runSql";
 import { describeSchema } from "../tools/describeSchema";
@@ -13,7 +13,7 @@ import { buildReplica, currentReplica, resetReplica } from "./replica";
 import { ChildQueryError, runInChild } from "./child";
 import { addSessionStore, saveTo, tempDir } from "../../testUtils/mcpSql";
 
-const SECRETS = ["wom-verification-SECRET", "session-SECRET", "token-hash-SECRET", "rating-note-SECRET", "oauth-client-SECRET", "access-hash-SECRET"];
+const SECRETS = ["wom-verification-SECRET", "session-SECRET", "token-hash-SECRET", "rating-note-SECRET", "oauth-client-SECRET", "access-hash-SECRET", "feedback-key-SECRET"];
 
 let tmp: ReturnType<typeof tempDir>;
 let source: string;
@@ -36,6 +36,9 @@ function seedSource(file: string): string {
   db.insert(oauthTokens).values({ accessTokenHash: "access-hash-SECRET", refreshTokenHash: "r", userId: admin, clientId: "c1", scope: "s", resource: "r", accessExpiresAt: new Date(), lastUsedAt: new Date() }).run();
   const category = db.insert(superlativeCategories).values({ bingoId: bingo.id, name: "MVP" }).returning().get();
   db.insert(superlativeVotes).values({ categoryId: category.id, teamId: team.id, voterUserId: voter, nomineeUserId: alice }).run();
+  const question = db.insert(signupQuestions).values({ bingoId: bingo.id, form: "feedback", prompt: "How was it?", type: "text" }).returning().get();
+  const response = db.insert(feedbackResponses).values({ bingoId: bingo.id, kind: "player", respondentKey: "feedback-key-SECRET", keyCheck: "key-check-SECRET" }).returning().get();
+  db.insert(feedbackAnswers).values({ responseId: response.id, questionId: question.id, value: "Great" }).run();
   sqlite.prepare("INSERT INTO sessions (sid, sess, expire) VALUES (?, ?, ?)").run("session-SECRET", "{}", "2099-01-01");
   return saveTo(sqlite, file);
 }
@@ -62,6 +65,9 @@ describe("replica", () => {
     expect(bingoColumns).toContain("slug");
     expect(replica.prepare("SELECT name FROM pragma_table_info('superlative_votes')").pluck().all()).not.toContain("voter_user_id");
 
+    // Feedback is anonymous: the key that finds a response again is denied, though its answers are readable.
+    expect(replica.prepare("SELECT name FROM pragma_table_info('feedback_responses')").pluck().all()).not.toContain("respondent_key");
+    expect(replica.prepare("SELECT value FROM feedback_answers").pluck().all()).toEqual(["Great"]);
     expect(replica.prepare("SELECT slug, name FROM bingos").all()).toEqual([{ slug: "summer", name: "Summer Bingo" }]);
     expect(replica.prepare("SELECT rsn FROM signups").pluck().all()).toEqual(["Alice RSN"]);
     expect(replica.prepare("SELECT count(*) FROM superlative_votes").pluck().get()).toBe(1);

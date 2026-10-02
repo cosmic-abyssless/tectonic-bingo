@@ -191,7 +191,7 @@ The recursive structure inside a Part or Task defining how objectives combine:
 - **Condition Types:**
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
-  - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5). Over Items only it reads "N of any (no dupes)": each Item is done at one drop, so the same item twice still counts once.
+  - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5). Over Items only it reads "N of any (no dupes)": each Item is done at one drop, so the same item twice still counts once. An "any one of" group of Items among them is one more option, done at any one of its pieces, so it still reads "no dupes" (Slayer Bosses: "only 1 Bludgeon piece will be counted").
   - `SUM` — "N of any (dupes count)" (e.g., 500 total kill count or secondary ingredients): every drop adds to the total, the same item again included. An Item in it can count as more than one (see Counts as).
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.
@@ -274,6 +274,7 @@ An Item a Team may use in **one place only**: a Claim on it locks the same Item 
 - **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
 - **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
 - **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
+- **Groups:** A rule can name a group of its items that count as one Item for locking (not an Item Group, which only starts a rule), e.g. "Bludgeon piece": the axon, claw and spine. A Claim on any member locks every member elsewhere in the rule's scope, shown with the piece used: "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)". Several members in the same place stay allowed, and a rejection frees the group. An item is in at most one group per rule, and a group belongs to its rule. Whether several members in one place all *count* is up to the Requirement Tree.
 - **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 
 ### Point Adjustment
@@ -397,3 +398,25 @@ A scrolling story of a Finished Bingo, told from one Player's point of view: You
 A Draft pick who finished far higher in Points share than their pick number suggested: a late pick near the top. A Duo counts as one pick.
 - **Rules:** Wrapped names steals, never the opposite: an early pick who scored low is not singled out.
 - **Title:** The Overperformer Title goes to the Player who beat their draft position by the most, which is the Bingo's biggest Steal among eligible Players. In a Duo, only the higher scorer can hold it.
+
+---
+
+## Feedback
+
+### Feedback form
+A Finished Bingo's questionnaire for its Players about how the Bingo went, set up by Admins with Feedback questions.
+- **Rules:** Open only while the Bingo is Finished, with no deadline; it closes, keeping its answers, if the Bingo is reopened. Only Players can answer, and only Moderators and Admins can read the results: each response in turn (see ADR 0002 for how they stay anonymous), plus totals for choice questions, and how many responded. A server that can't keep answers anonymous (it isn't set up for Feedback, or its Feedback key changed since answers were given) takes no answers until it can, and says so; nothing given is lost, and the results still show.
+
+### Feedback question
+A question on a Feedback form, built like a signup question (same types, Other, helper text, required, order), but with no per-question visibility: Moderators and Admins read every answer. Exported and imported with the Bingo; the answers are not.
+- **Audience:** All Players (the default) or Captains only. Both halves of a Duo leading a Team count as Captains.
+- **Not:** Visibility, which on a signup question is who *reads* an answer; audience is who *answers*.
+
+### Feedback response
+One Player's anonymous answers to a Feedback form, which they can edit at any time while it is open.
+- **Anonymity:** Nobody, Moderators and Admins included, can see who gave a response, and nothing about answering is written to the audit log. The form tells the Player so.
+- **Avoid:** "a Player's feedback" in the UI; a response is never attributed.
+
+### Captain response
+A Captain's anonymous answers to the captain-only Feedback questions, kept apart from, and not linked to, their Feedback response, so their general answers stay among every other Player's.
+- **Rules:** Results list Captain responses separately, with their own count and totals. With so few Captains, the form warns that these answers may be recognisable.

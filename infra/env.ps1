@@ -1,12 +1,38 @@
-# Sets the credentials a `tofu` run needs, for THIS PowerShell window only. Dot-source it (note the leading dot):
+# Sets the credentials and app secrets a `tofu` run needs, for THIS PowerShell window only. Dot-source it (note the leading dot):
 #
 #     Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass     # once per window: Windows blocks scripts by default
-#     . .\infra\env.ps1
+#     . .\infra\env.ps1                                              # from Bitwarden (one unlock)
+#     . .\infra\env.ps1 -Prompt                                      # or type each value in
 #
 # (`-Scope Process` lasts only until the window is closed; nothing about the machine's settings changes.)
 #
-# It asks for each value with hidden input, so nothing is echoed, saved in history, or written to a file. Get the values from
-# the team's password manager; infra/README.md says where each one is created. Close the window afterwards.
+# Every value comes from Bitwarden, through its CLI (`bw`, https://bitwarden.com/help/cli/): one item per value, named
+# "tectonic-bingo/<NAME>" with the value as the item's password (the list is below). The first time on a machine, `bw login`;
+# after that this script asks for the master password once (bw unlock) and reads them all. An item it cannot find, or every
+# value with -Prompt (or without bw), it asks for with hidden input instead. Nothing is echoed, saved in history, or written to
+# a file. infra/README.md says where each value is created. Run `bw lock` and close the window afterwards.
+param([switch]$Prompt)
+
+$values = @(
+    # What tofu logs in with.
+    @{ Name = "HCLOUD_TOKEN"; Hint = "Hetzner Cloud API token, read & write" },
+    @{ Name = "CLOUDFLARE_API_TOKEN"; Hint = "Cloudflare user token: R2 edit + API tokens edit" },
+    @{ Name = "GITHUB_TOKEN"; Hint = "GitHub fine-grained token for this repository: administration + secrets" },
+    @{ Name = "AWS_ACCESS_KEY_ID"; Hint = "R2 access key id for the tofu STATE bucket" },
+    @{ Name = "AWS_SECRET_ACCESS_KEY"; Hint = "R2 secret access key for the tofu STATE bucket" },
+    @{ Name = "TF_VAR_state_passphrase"; Hint = "the state encryption passphrase (16+ characters)" },
+    # The app's secrets (app-env.tf).
+    @{ Name = "TF_VAR_discord_client_secret"; Hint = "Discord application > OAuth2 > client secret" },
+    @{ Name = "TF_VAR_staging_session_secret"; Hint = "staging's SESSION_SECRET" },
+    @{ Name = "TF_VAR_production_session_secret"; Hint = "production's SESSION_SECRET" },
+    @{ Name = "TF_VAR_staging_feedback_secret"; Hint = "staging's FEEDBACK_SECRET" },
+    @{ Name = "TF_VAR_production_feedback_secret"; Hint = "production's FEEDBACK_SECRET" },
+    @{ Name = "TF_VAR_staging_password"; Hint = "the staging site's password (username: team)" },
+    @{ Name = "TF_VAR_tectonic_api_key"; Hint = "the clan API key" },
+    @{ Name = "TF_VAR_wom_api_key"; Hint = "the Wise Old Man API key" },
+    @{ Name = "TF_VAR_runeprofile_api_key"; Hint = "the RuneProfile API key" }
+)
+
 function Read-Secret([string]$name, [string]$hint) {
     $secure = Read-Host -AsSecureString "$name  ($hint)"
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
@@ -15,12 +41,47 @@ function Read-Secret([string]$name, [string]$hint) {
     return $plain.Trim()
 }
 
-$env:HCLOUD_TOKEN = Read-Secret "HCLOUD_TOKEN" "Hetzner Cloud API token, read & write"
-$env:CLOUDFLARE_API_TOKEN = Read-Secret "CLOUDFLARE_API_TOKEN" "Cloudflare user token: R2 edit + API tokens edit"
-$env:GITHUB_TOKEN = Read-Secret "GITHUB_TOKEN" "GitHub fine-grained token for this repository: administration + secrets"
-$env:AWS_ACCESS_KEY_ID = Read-Secret "AWS_ACCESS_KEY_ID" "R2 access key id for the tofu STATE bucket"
-$env:AWS_SECRET_ACCESS_KEY = Read-Secret "AWS_SECRET_ACCESS_KEY" "R2 secret access key for the tofu STATE bucket"
-$env:TF_VAR_state_passphrase = Read-Secret "TF_VAR_state_passphrase" "the state encryption passphrase (16+ characters)"
+# Every bw call is --nointeraction: whatever bw would ask (a password it thinks it needs), it fails with a message instead.
+# Its prompts go to the same output this script captures, so an interactive bw here would wait, invisibly, for an answer.
+$useBitwarden = -not $Prompt -and (Get-Command bw -ErrorAction SilentlyContinue)
+if ($useBitwarden) {
+    Write-Host "Bitwarden: checking the vault..."
+    $status = (bw status --nointeraction | ConvertFrom-Json).status
+    if ($status -eq "unauthenticated") { throw "Bitwarden: run 'bw login' once on this machine first (or use -Prompt)" }
+    if ($status -ne "unlocked") {
+        # Asked for here, not by bw; the password reaches bw through an environment variable that lives only for this command.
+        $env:BW_PASSWORD = Read-Secret "Bitwarden master password" "unlocks the vault for this window"
+        try { $env:BW_SESSION = bw unlock --passwordenv BW_PASSWORD --raw --nointeraction } finally { Remove-Item env:BW_PASSWORD -ErrorAction SilentlyContinue }
+        if (-not $env:BW_SESSION) { throw "Bitwarden: could not unlock (wrong master password?)" }
+    }
+    Write-Host "Bitwarden: syncing..."
+    $null = bw sync --nointeraction
+    # One call for every item (each bw call starts Node and decrypts the vault, seconds apiece on Windows), kept in memory only.
+    Write-Host "Bitwarden: reading the tectonic-bingo/ items..."
+    $items = @{}
+    $listed = (bw list items --search "tectonic-bingo/" --nointeraction) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Bitwarden: could not list the items (bw list items failed)" }
+    foreach ($item in ($listed | ConvertFrom-Json)) { if ($item.login.password) { $items[$item.name] = $item.login.password } }
+    Remove-Variable listed
+} elseif (-not $Prompt) {
+    Write-Host "bw (the Bitwarden CLI) is not installed, so each value is asked for. https://bitwarden.com/help/cli/"
+}
+
+$missing = @()
+foreach ($v in $values) {
+    $value = $null
+    if ($useBitwarden) {
+        $value = $items["tectonic-bingo/$($v.Name)"]
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $v.Name }
+    }
+    if (-not $value) { $value = Read-Secret $v.Name $v.Hint }
+    Set-Item -Path "env:$($v.Name)" -Value ($value.Trim())
+}
+# This script is dot-sourced, so its variables would outlive it in the window: only the environment variables should.
+Remove-Variable value, items, item -ErrorAction SilentlyContinue
+if ($missing.Count -gt 0) {
+    Write-Host "Not in Bitwarden (asked for instead): $($missing -join ', '). Add them as items named tectonic-bingo/<NAME>."
+}
 
 # OpenTofu, if this window predates its installation.
 if (-not (Get-Command tofu -ErrorAction SilentlyContinue)) {

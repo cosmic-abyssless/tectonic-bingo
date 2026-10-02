@@ -241,7 +241,7 @@ fi
 [ -n "$image" ] || die "which image? (deploy.sh $env IMAGE, or --rollback)"
 
 docker image inspect "$image" >/dev/null 2>&1 || die "$image is not on this machine (CI loads it before calling this; or build it here)"
-[ -f "$env_file" ] || die "missing $env_file (see deploy/env/$env.env.example)"
+[ -f "$env_file" ] || die "missing $env_file: write it with infra/push-env (see \"App settings and secrets\" in infra/README.md)"
 [ -d "$data_dir/sqlite" ] && [ -d "$data_dir/uploads" ] || die "missing $data_dir/sqlite and $data_dir/uploads (deploy/bootstrap-box.sh creates them)"
 if [ "$TB_BACKUP" = 1 ]; then
   [ -f "$backup_env_file" ] || die "$env is set to be backed up but $backup_env_file is missing (see deploy/backup.env.example). Backups are not optional for production."

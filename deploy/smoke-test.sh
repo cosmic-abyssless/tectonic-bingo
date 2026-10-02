@@ -36,6 +36,7 @@ fail() {
 docker run -d --name "$name" \
   -v "$volume:/data" \
   -e SESSION_SECRET=smoke-test \
+  -e FEEDBACK_SECRET=smoke-test-feedback \
   -e DISCORD_CLIENT_ID=smoke \
   -e DISCORD_CLIENT_SECRET=smoke \
   -e DISCORD_GUILD_ID=smoke \

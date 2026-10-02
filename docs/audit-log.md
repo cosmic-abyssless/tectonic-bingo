@@ -108,6 +108,17 @@ silently; it is not a substitute for proper instrumentation (no semantic
 `details`, no correct `entityType`), and `routeCoverage.test.ts` should catch
 it before it ships anyway.
 
+## Deliberately unaudited: Feedback responses
+
+A Player's answers to a Finished Bingo's Feedback form are anonymous (CONTEXT.md "Feedback response",
+`docs/adr/0002-anonymous-feedback.md`), so answering writes **nothing**: no `feedback.*` entry, and not even an
+anonymous "someone answered" (its time could be lined up with who was online). The routes (`GET/PUT
+/api/bingos/:slug/feedback`, `.../feedback/members`) are `auditSkip()`'d, send no WebSocket event, and
+`anonymous()` (`audit/middleware.ts`, mounted on everything under `/:slug/feedback`) keeps the user out of their request log line, their error report's user and the audit
+context's actor. Do not add an audit action for them; `routes/feedback.test.ts` fails if answering adds a row.
+Changes to the Feedback *questions* are audited like signup question changes: the same `question.*` actions, with
+`form: "feedback"` in their details.
+
 ## Visibility
 
 Each row's `visibility` is `"mods"`, `"team"`, or `"public"`, set by the

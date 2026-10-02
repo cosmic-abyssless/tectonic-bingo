@@ -561,11 +561,12 @@ function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | 
       value={node.kind}
       onChange={(value) => {
         const kind = value as NodeKind;
+        // Between "at least N of" and "N of any (dupes count)" the N carries over ("3 of any" either way).
         update(path, (n) => ({
           ...n,
           kind,
-          minCount: kind === "COUNT" ? n.minCount ?? 1 : undefined,
-          quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
+          minCount: kind === "COUNT" ? (n.minCount ?? n.quantity ?? 1) : undefined,
+          quantity: kind === "SUM" ? (n.quantity ?? n.minCount ?? 1) : undefined,
         }));
       }}
       size="sm"
@@ -690,7 +691,7 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         <span className="flex-1 truncate text-xs text-on-surface">{name}</span>
         {exclusiveRules.length > 0 && (
           <TooltipSpan
-            text={`A team can use this item in one place only (${describeRules(exclusiveRules)}). Set in the bingo's settings, under Exclusive items.`}
+            text={`A team can use this item in one place only (${describeRules(exclusiveRules, name)}). Set in the bingo's settings, under Exclusive items.`}
             label="Exclusive"
             className="shrink-0 rounded border border-outline px-1 text-[10px] uppercase tracking-wide text-on-surface-subtle"
           >

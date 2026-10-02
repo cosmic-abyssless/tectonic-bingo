@@ -49,6 +49,7 @@ export default defineRailway(() => {
       NODE_ENV: preserve(),
       RUNEPROFILE_API_KEY: preserve(),
       SESSION_SECRET: preserve(),
+      FEEDBACK_SECRET: preserve(),
       TECTONIC_API_KEY: preserve(),
       TECTONIC_API_URL: preserve(),
       TECTONIC_GUILD_ID: preserve(),

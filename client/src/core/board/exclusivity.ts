@@ -27,11 +27,12 @@ export function lockedLeaves(rules: readonly ExclusivityRule[], tiles: Tile[], t
   return locks;
 }
 
-/** Short tag for a locked item: "Used on DT2 ISSUE 1". */
+/** Short tag for a locked item: "Used on DT2 ISSUE 1", or for a group "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)". */
 export const lockTag = (c: ExclusivityConflict): string => `Used on ${c.usedOn}`;
 
 /** The full sentence, for the submission picker. */
-export const lockReason = (c: ExclusivityConflict): string => `used on ${c.usedOn} (${c.rule.label} can only be used on one ${c.rule.scope})`;
+export const lockReason = (c: ExclusivityConflict): string =>
+  c.group ? `used on ${c.usedOn}: ${c.group} can only be used on one ${c.rule.scope}` : `used on ${c.usedOn} (${c.rule.label} can only be used on one ${c.rule.scope})`;
 
 /** A board tile, or one of its parts, as a source of item names for a rule. */
 export interface ItemSource {

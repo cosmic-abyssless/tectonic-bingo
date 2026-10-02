@@ -31,7 +31,7 @@ had infrastructure in code for Railway (`.railway/`), so the habit is establishe
 | R2 API token scoped to the bucket | yes | `cloudflare_api_token`; the S3 access key id is the token's id and the secret is the SHA-256 of the token value (Cloudflare documents this), so tofu can derive both |
 | `*.backup.env` on the box | yes | a small script pushes tofu's outputs over SSH (see "Secrets") |
 | `staging.tectonic.bingo`, and later the production records | yes, optional | `cloudflare_dns_record`, **only if Mico issues a Cloudflare API token scoped to the `tectonic.bingo` zone** (the zone is already on Cloudflare) |
-| The app's secrets (`production.env`, `staging.env`, `staging.basic-auth`) | **no, by design** | entered once from the password manager with `deploy/fill-secrets.sh` (see "Secrets") |
+| The app's secrets (`production.env`, `staging.env`, `staging.basic-auth`) | yes, since [`docs/secrets-plan.md`](secrets-plan.md) | `infra/app-env.tf` renders them from Bitwarden values (sensitive `TF_VAR_*`); `infra/push-env` writes them over SSH (see "Secrets") |
 | Discord redirect URIs, the terms/privacy URLs | no | there is no Discord provider; two minutes in the developer portal, documented |
 | healthchecks.io check, Sentry uptime monitor | no, for now | providers exist for both; not worth the extra tokens yet |
 
@@ -69,16 +69,16 @@ Three kinds, handled three ways.
 2. **Secrets tofu needs to log in** (a Hetzner API token, a Cloudflare API token, a GitHub token, optionally Mico's zone
    token) are **environment variables** set from the password manager for the duration of a `tofu` run
    (`HCLOUD_TOKEN`, `CLOUDFLARE_API_TOKEN`, `GITHUB_TOKEN`). They are never in a file.
-3. **The app's secrets** (Discord, the clan APIs, session secrets, the staging password) **stay out of tofu
-   entirely.** Putting them in state or in cloud-init would make two more places to leak from (cloud-init user data is
-   readable from the machine's metadata service by any process on the box, containers included). Instead
-   `deploy/init-env.sh` creates the env files from the templates, generates the session secrets and the staging password
-   on the box, and `deploy/fill-secrets.sh` asks for the rest, one value at a time, hidden as you type. Both scripts
-   already exist in ad-hoc form from the first setup and become part of the repository.
+3. **The app's secrets** (Discord, the clan APIs, session secrets, the staging password) were first kept out of tofu
+   entirely, typed in on the box. [`docs/secrets-plan.md`](secrets-plan.md) changed that: they now live in Bitwarden,
+   enter tofu as sensitive variables (so they sit in the encrypted state, like kind 1), and `infra/push-env` writes the
+   rendered files over SSH, as below. They still never go into cloud-init, whose user data is readable from the machine's
+   metadata service by any process on the box, containers included.
 
-The one crossing point is the backup credentials: tofu derives them (kind 1) but the box needs them in `*.backup.env`
-(kind 3's file). `infra/push-backup-env.sh` reads `tofu output -json` and writes the two files over SSH with the admin
-key. It is idempotent and is the last step of a rebuild.
+The backup credentials cross over the same way: tofu derives them (kind 1) but the box needs them in `*.backup.env`.
+`infra/push-backup-env.sh` reads `tofu output -json` and writes the two files over SSH with the admin key, and
+`infra/push-env` does the same for the app's files (checking first, by name, what would change). Both are idempotent and
+are the last steps of a rebuild.
 
 ## First boot (cloud-init)
 
@@ -90,11 +90,10 @@ The server's `user_data` is small and holds no application secret:
 3. Run `deploy/bootstrap-box.sh` from the clone with `--ci-public-key`, `--admin-key-file`, `--repo-url` and a new
    `--repo-key FILE` option (install this key rather than generate one). Bootstrap already copies the scripts into place,
    creates the deploy user and directories, pins the CI key, and hardens SSH.
-4. Run `deploy/init-env.sh` (templates, session secrets, staging password: it prints the password once into the
-   cloud-init log, which only root can read, and the runbook says to move it to the password manager and clear the log).
+4. Run `deploy/init-env.sh` (the backup env files from their template; the app's files come from `push-env`).
 5. Start the front door: `deploy/deploy.sh edge`.
 
-Then, from your machine: `infra/push-backup-env.sh`, `deploy/fill-secrets.sh` over SSH, and the Deploy workflow for
+Then, from your machine: `infra/push-backup-env.sh`, `infra/push-env.sh --write`, and the Deploy workflow for
 staging. Bootstrap changes needed for this: the `--repo-key` option, and skipping the interactive parts (it has none
 today; the "log in from a second terminal" advice becomes a runbook line).
 
@@ -173,7 +172,7 @@ Not done, in order. Each is small; the last is the acceptance test.
       generate-if-absent behaviour for the by-hand path. Test in the Ubuntu container the way the script's other steps were
       (see the git log for `bootstrap-box.sh`).
 - [x] **`deploy/init-env.sh`** (new, idempotent, run as `deploy`): copy the four templates into `/srv/tectonic/env/` with
-      mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` with `openssl rand -hex 32`
+      mode 640 (skip any that exist), set `BACKUP_PREFIX` per file, generate `SESSION_SECRET` and `FEEDBACK_SECRET` with `openssl rand -hex 32`
       where blank, and create `staging.basic-auth` (`team` + `caddy hash-password`) with a generated password printed once.
       This is what was run ad hoc on the first server; see the runbook section "Setting up the server" for the values.
 - [x] **`deploy/fill-secrets.sh`** (new): the interactive helper that exists on the first server as `~/fill-secrets.sh`

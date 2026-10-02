@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSetUrlParams } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
-import { useBingo, useBoard, useDraftState, usePendingCount, usePermissions, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
+import { useBingo, useBoard, useDraftState, useFeedbackForm, usePendingCount, usePermissions, useRecordAchievementOpened, useSetSubmissionReaction, useSetTileInterest, useTeamProgress, useTeamSubmissions } from "../api/queries";
 import { useAuth } from "../context/AuthContext";
 import { displayName, avatarUrl } from "../core/ui/user";
 import { useHasPassed } from "../core/ui/useHasPassed";
@@ -82,6 +82,8 @@ export function BingoPageProvider({
 
   const can = useBingoCan(slug);
   const { data: permissions, dataUpdatedAt: permissionsAt } = usePermissions(slug);
+  // The Feedback form (CONTEXT.md), for the card inviting a Player to answer it: asked for only of a Finished Bingo.
+  const { data: feedbackForm } = useFeedbackForm(slug, shell?.bingo.stage === "complete" && !shell.historical && can("answer_feedback").allowed);
 
   // The open Tile, the viewed Team and the open dialog live in the URL (#389), so a link reopens them. What the viewer
   // can't see, or what doesn't exist, isn't opened, and its param is dropped quietly once that's known.
@@ -283,6 +285,8 @@ export function BingoPageProvider({
     canRewind: canRewindOf(shell),
     // Wrapped is made at the end of a Bingo, never recorded: not for a Historical one.
     wrapped: { canOpen: bingo.stage === "complete" && !bingo.historical && (shell.wrappedPublished || can("view_wrapped_preview").allowed), preview: !shell.wrappedPublished },
+    // The Feedback form is open to a Finished Bingo's Players while it has questions for them (the server says who).
+    feedback: { canOpen: !!feedbackForm?.open && feedbackForm.questions.length > 0, responded: !!(feedbackForm?.responded || feedbackForm?.respondedAsCaptain) },
     canScout,
     draft: { state: draftState ?? null, isLoading: draftLoading },
     viewing: {
@@ -324,6 +328,7 @@ export function BingoPageProvider({
       goToStats: () => navigate(`/b/${slug}/stats`),
       goToRewind: () => navigate(`/b/${slug}/rewind`),
       goToWrapped: () => navigate(`/b/${slug}/wrapped`),
+      goToFeedback: () => navigate(`/b/${slug}/feedback`),
       goToMod: () => navigate(`/b/${slug}/mod`),
       goToDraft: () => navigate(`/b/${slug}/draft`),
     },

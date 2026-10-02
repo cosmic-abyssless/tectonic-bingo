@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import sharp from "sharp";
-import { count, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -16,7 +16,8 @@ import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoServi
 import * as achievementService from "./achievementService";
 import { additionalCredits, setAdditionalCredits } from "./wrappedArtService";
 import { ServiceError } from "./errors";
-import { ACHIEVEMENT_KEYS, type BingoExportDocument } from "@bingo/shared";
+import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument } from "@bingo/shared";
+import { placeLeaves } from "./exclusivityService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -170,6 +171,42 @@ describe("importBingo", () => {
     expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
   });
 
+  it("carries a rule's groups over exactly, as a file, and the imported copy locks the same way", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const rule = {
+      id: "r1",
+      label: "Uniques",
+      itemNames: ["Own item", "Vorki", "Cerberus drop"],
+      scope: "tile" as const,
+      groups: [{ label: "Boss piece", itemNames: ["Vorki", "Cerberus drop"] }],
+    };
+    const plain = { id: "r2", label: "Pets", itemNames: ["Block a"], scope: "part" as const };
+    updateBingoSettings(db, source.id, { exclusivityRules: [rule, plain] });
+    // Through JSON, as the downloaded file is.
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, source.id))) as BingoExportDocument;
+    expect(doc.bingo.exclusivityRules).toEqual([rule, plain]);
+
+    const imported = importBingo(db, doc, { slug: "with-groups", name: "With groups", createdByUserId: admin.id });
+    const rules = toPublicBingo(getBingoBySlug(db, "with-groups")!).exclusivityRules;
+    expect(rules).toEqual([rule, plain]);
+    expect(rules[1]).not.toHaveProperty("groups"); // a rule without groups stays as it was
+
+    // A Claim on one piece (Vorki, Tile A) locks the other piece (Cerberus drop) on Tile B of the imported copy.
+    const itemNode = (name: string) => db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, imported.id), eq(schema.nodes.itemName, name))).get()!.id;
+    const leaves = placeLeaves(db, imported.id);
+    const [conflict] = exclusivityConflicts(rules, leaves, [itemNode("Vorki")], [itemNode("Cerberus drop")]);
+    expect(conflict).toMatchObject({ itemName: "Cerberus drop", usedOn: "Tile A (Vorki)", group: "Boss piece" });
+    expect(exclusivityConflicts(rules, leaves, [itemNode("Vorki")], [itemNode("Own item")])).toEqual([]);
+  });
+
+  it("refuses a file whose groups can't work, leaving no partial bingo", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    const twice = [{ id: "x", label: "Pets", itemNames: ["Vorki"], scope: "tile" as const, groups: [{ label: "A", itemNames: ["Vorki"] }, { label: "B", itemNames: ["vorki"] }] }];
+    expect(() => importBingo(db, { ...doc, bingo: { ...doc.bingo, exclusivityRules: twice } }, { slug: "broken", name: "Broken", createdByUserId: admin.id })).toThrow(/in two groups/);
+    expect(getBingoBySlug(db, "broken")).toBeUndefined();
+  });
+
   it("carries each category's additional credits over, and an older file without them keeps what a new bingo starts with (#281)", () => {
     const { bingo: source, admin } = seedFullBingo();
     setAdditionalCredits(db, source, "moderators", [{ name: " Zezima ", role: "Head mod" }, { name: "Woox", role: "" }]);
@@ -247,6 +284,34 @@ describe("importBingo", () => {
 
     const superlatives = getSuperlativeCategories(db, imported.id);
     expect(superlatives.map((c) => c.name)).toEqual(["Team MVP", "Team Spirit"]);
+  });
+
+  it("carries Feedback questions with their audience, never their answers, and reads a file from before them", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const general = createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "How was it?", helperText: "Be kind", type: "textarea", sortOrder: 0 });
+    createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "Draft?", type: "select", optionsJson: JSON.stringify(["good", "bad"]), allowOther: true, required: true, audience: "captains", sortOrder: 1 });
+    const response = db.insert(schema.feedbackResponses).values({ bingoId: source.id, kind: "player", respondentKey: "k", keyCheck: "c" }).returning().get();
+    db.insert(schema.feedbackAnswers).values({ responseId: response.id, questionId: general.id, value: "Loved it" }).run();
+
+    const doc = exportBingo(db, source.id);
+    expect(doc.signupQuestions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Who would you like to play with?", "Willing to captain?"]);
+    expect(doc.feedbackQuestions).toEqual([
+      expect.objectContaining({ prompt: "How was it?", helperText: "Be kind", type: "textarea", audience: "all" }),
+      expect.objectContaining({ prompt: "Draft?", type: "select", allowOther: true, required: true, audience: "captains" }),
+    ]);
+    expect(doc.feedbackQuestions![0]).not.toHaveProperty("visibility");
+    expect(JSON.stringify(doc)).not.toContain("Loved it");
+
+    const imported = importBingo(db, JSON.parse(JSON.stringify(doc)) as BingoExportDocument, { slug: "with-feedback", createdByUserId: admin.id });
+    const restored = db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, imported.id), eq(schema.signupQuestions.form, "feedback"))).orderBy(schema.signupQuestions.sortOrder).all();
+    expect(restored.map((q) => [q.prompt, q.audience, q.required, q.allowOther])).toEqual([["How was it?", "all", false, false], ["Draft?", "captains", true, true]]);
+    expect(db.select().from(schema.feedbackResponses).where(eq(schema.feedbackResponses.bingoId, imported.id)).all()).toEqual([]);
+    // The signup form is untouched by them.
+    expect(db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, imported.id), eq(schema.signupQuestions.form, "signup"))).all()).toHaveLength(3);
+
+    delete (doc as { feedbackQuestions?: unknown }).feedbackQuestions;
+    const older = importBingo(db, doc, { slug: "before-feedback", createdByUserId: admin.id });
+    expect(db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, older.id), eq(schema.signupQuestions.form, "feedback"))).all()).toEqual([]);
   });
 
   it("imports a file exported before Superlative categories existed", () => {
@@ -637,7 +702,11 @@ describe("every column is accounted for", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
     accounted(schema.tileCategories, Object.keys(doc.categories[0]!), ["id", "bingoId"], ["localId"]);
-    accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId"]);
+    // The signup form's questions: which form is this one (form), and audience, which only a Feedback question has.
+    accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId", "form", "audience"]);
+    // The Feedback form's: visibility is signup-only.
+    createQuestion(db, { bingoId: bingo.id, form: "feedback", prompt: "Anything else?", type: "text" });
+    accounted(schema.signupQuestions, Object.keys(exportBingo(db, bingo.id).feedbackQuestions![0]!), ["id", "bingoId", "form", "visibility"]);
     accounted(schema.superlativeCategories, Object.keys(doc.superlativeCategories![0]!), ["id", "bingoId"]);
   });
 });

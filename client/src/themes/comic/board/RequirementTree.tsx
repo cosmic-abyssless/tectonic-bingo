@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import type { RequirementNodeModel } from "../../../headless/types";
 import { CheckIcon } from "../../../core/ui/icons";
 import { ItemIcon } from "../../../core/ui/ItemIcon";
@@ -45,15 +45,25 @@ function CountsAs({ countsAs, colors }: { countsAs: number | undefined; colors: 
   ) : null;
 }
 
-/** An ITEM, or a SUM over a single item (whose quantity and x/N progress sit on the row). */
-function LeafRow({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
+// The line down a nested condition's options, with a branch to each, as the board editor draws it. Drawn per row (and
+// through the gaps between rows, which are each row's top padding), so it stops at the last option's branch. The branch
+// meets a row's first line: its padding, plus half a box.
+const BRANCH = "relative pl-4 pt-1.5 before:absolute before:left-0 before:top-0 before:border-l-2 before:border-[color:var(--tree)]";
+const BRANCH_TICK = "after:absolute after:left-0 after:top-4 after:w-3 after:border-t-2 after:border-[color:var(--tree)]";
+const branchClass = (last: boolean, tick = true) => `${BRANCH} ${last ? "before:h-4" : "before:bottom-0"} ${tick ? BRANCH_TICK : ""}`;
+
+/**
+ * An ITEM, or a SUM over a single item (whose quantity and x/N progress sit on the row). `bare`: a piece of an "any one of"
+ * group of Items, which has no box of its own (the group's row has it). `className`: its branch, in a nested condition.
+ */
+function LeafRow({ node, colors, bare, className }: { node: RequirementNodeModel; colors: ComicColors; bare?: boolean; className?: string }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
     // A SUM never strikes through: its items can be handed in again (duplicates
     // count), so what's been received is shown as a count instead.
-    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim && !node.progress ? "line-through" : ""}`} style={{ color }}>
-      <Box done={node.complete} dim={node.dim} colors={colors} />
+    <li className={`flex items-start gap-2 text-sm leading-snug ${node.dim && !node.progress ? "line-through" : ""} ${className ?? ""}`} style={{ color }}>
+      {!bare && <Box done={node.complete} dim={node.dim} colors={colors} />}
       <span className="min-w-0 flex-1">
         <span style={node.lockedBy ? { color: colors.INK_SUBTLE } : undefined}>
           <ItemIcon url={iconUrl} className={`${ICON_CLASS} ${node.dim || node.lockedBy ? "opacity-60" : ""}`} />
@@ -101,10 +111,10 @@ function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: Com
 }
 
 /** "— OR —" between an ANY's direct options, in the heading font. */
-function OrDivider({ dim, colors }: { dim: boolean; colors: ComicColors }) {
+function OrDivider({ dim, colors, className }: { dim: boolean; colors: ComicColors; className?: string }) {
   const color = dim ? colors.INK_SUBTLE : colors.INK;
   return (
-    <li role="separator" className={`flex items-center gap-2 text-sm uppercase leading-none tracking-wide ${dim ? "opacity-60" : ""}`} style={{ fontFamily: COMIC_FONT, color }}>
+    <li role="separator" className={`flex items-center gap-2 text-sm uppercase leading-none tracking-wide ${dim ? "opacity-60" : ""} ${className ?? ""}`} style={{ fontFamily: COMIC_FONT, color }}>
       <span className="h-0.5 w-5" style={{ background: color }} />
       or
       <span className="h-0.5 w-5" style={{ background: color }} />
@@ -123,34 +133,44 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
       </ul>
     );
   }
+  const headingColor = node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.INK;
+  // The root's options are a plain list; a nested condition's hang off its line, a branch to each (see BRANCH).
+  const nested = !root && node.kind !== "SUM";
+  const last = node.children.length - 1;
   return (
-    <div className={root ? "" : "ml-1.5 border-l-[3px] pl-3"} style={root ? undefined : { borderColor: node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.LINE }}>
-      {node.showHeading && (
-        <span
-          className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide"
-          style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.INK }}
-        >
-          {node.label}
-          {node.progress && (
-            <>
-              <span aria-hidden>·</span>
-              <Progress node={node} colors={colors} />
-            </>
-          )}
-          {node.complete && <CheckIcon size={12} />}
-        </span>
-      )}
-      <ul className={`space-y-1.5 ${node.showHeading ? "mt-1.5" : ""}`}>
+    <div style={nested ? ({ "--tree": node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.LINE } as CSSProperties) : undefined}>
+      {node.showHeading &&
+        (node.itemGroup ? (
+          // One option of its parent: a row with its own box, ticked once any piece is in.
+          <div className="flex items-start gap-2">
+            <Box done={node.complete} dim={node.dim} colors={colors} />
+            <span className="mt-0.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: headingColor }}>
+              {node.label}
+            </span>
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: headingColor }}>
+            {node.label}
+            {node.progress && (
+              <>
+                <span aria-hidden>·</span>
+                <Progress node={node} colors={colors} />
+              </>
+            )}
+            {node.complete && <CheckIcon size={12} />}
+          </span>
+        ))}
+      <ul className={nested ? "ml-[7px]" : `space-y-1.5 ${node.showHeading ? "mt-1.5" : ""}`}>
         {node.kind === "SUM" ? (
           <SumItemRows node={node} colors={colors} />
         ) : (
           node.children.map((child, i) => (
             <Fragment key={child.id}>
-              {i > 0 && node.divider && <OrDivider dim={node.divider.dim} colors={colors} />}
+              {i > 0 && node.divider && <OrDivider dim={node.divider.dim} colors={colors} className={nested ? branchClass(false, false) : undefined} />}
               {child.isLeaf ? (
-                <LeafRow node={child} colors={colors} />
+                <LeafRow node={child} colors={colors} bare={node.itemGroup} className={nested ? branchClass(i === last) : undefined} />
               ) : (
-                <li>
+                <li className={nested ? branchClass(i === last) : undefined}>
                   <RequirementTree node={child} />
                 </li>
               )}

@@ -122,6 +122,8 @@ jobs:
       - run: tofu validate
         working-directory: infra
       - run: shellcheck -x --severity=warning infra/*.sh
+      # push-env's half that runs on the box (it compares and writes the app's env files): against a temporary directory.
+      - run: bash infra/test-env-sync.sh
 
   # The image is built in three jobs that run at the same time (each from the same layer cache), rather than built once and
   # handed over: moving a large image between jobs would cost about what the parallelism saves.

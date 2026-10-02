@@ -3,7 +3,7 @@
 import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
-import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
+import { GENERATED_GROUP_RULE_ID, chooseExclusiveGroup, itemToWeigh, type BoardInfo, type PartModel, type PlacedItem } from "./board";
 import type { Player } from "./people";
 import type { Rng } from "./rng";
 import { HOUR, MINUTE, fmt, type Timeline } from "./timeline";
@@ -340,6 +340,24 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
 export async function fetchExclusivityRules(ctx: Ctx): Promise<ExclusivityRule[]> {
   const shell = await ctx.api.as(ctx.admin).get<{ bingo: { exclusivityRules?: ExclusivityRule[] } }>(path(ctx, ""));
   return shell.bingo.exclusivityRules ?? [];
+}
+
+/**
+ * An Admin adds an Exclusive Item rule with a group (board.chooseExclusiveGroup) beside the board's own rules, so every
+ * generated Bingo has one; the Live play then claims one piece and is refused the other. Replaces the rule a Bingo
+ * generated from a generated Bingo already carries. Null when the board has no two Items to group.
+ */
+export async function addExclusiveGroup(ctx: Ctx, at: Date): Promise<{ first: PlacedItem; second: PlacedItem } | null> {
+  const board = await fetchBoard(ctx);
+  const rules = (await fetchExclusivityRules(ctx)).filter((r) => r.id !== GENERATED_GROUP_RULE_ID);
+  const choice = chooseExclusiveGroup(board.tiles, rules, ctx.rng.fork("exclusive-group"));
+  if (!choice) {
+    ctx.log("exclusive item group: no two Items on different Tiles to group");
+    return null;
+  }
+  await ctx.api.as(ctx.admin).patch(path(ctx, "/admin/settings"), { exclusivityRules: [...rules, choice.rule] }, { at });
+  ctx.log(`exclusive item group "${choice.rule.groups![0]!.label}": ${choice.first.itemName} (${choice.first.tileName}) and ${choice.second.itemName} (${choice.second.tileName}), one tile`);
+  return { first: choice.first, second: choice.second };
 }
 
 export async function fetchTeams(ctx: Ctx): Promise<TeamWithMembers[]> {

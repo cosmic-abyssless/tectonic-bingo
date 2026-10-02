@@ -61,7 +61,7 @@ with these environment variables:
 
 | process | command | variables |
 |---|---|---|
-| server | `npm run dev --workspace=server` | `PORT=3101`, `DB_PATH=<absolute path to server/data/e2e.db>`, `DEV_LOGIN_ENABLED=true`, `DISCORD_CLIENT_ID=e2e`, `DISCORD_CLIENT_SECRET=e2e`, `DISCORD_GUILD_ID=e2e`, `DISCORD_CALLBACK_URL=http://localhost:5273/auth/discord/callback`, `SESSION_SECRET=e2e-secret`, `CLIENT_URL=http://localhost:5273`; set to empty: `TECTONIC_API_URL`, `TECTONIC_API_KEY`, `TECTONIC_GUILD_ID`, `WOM_API_KEY`, `RUNEPROFILE_API_KEY`; set to `true`: `PLAYER_STATS_FETCH_DISABLED`, `SCREENSHOT_OCR_DISABLED`, `OSRS_ITEM_SEARCH_DISABLED`, `GE_PRICES_FETCH_DISABLED` |
+| server | `npm run dev --workspace=server` | `PORT=3101`, `DB_PATH=<absolute path to server/data/e2e.db>`, `DEV_LOGIN_ENABLED=true`, `DISCORD_CLIENT_ID=e2e`, `DISCORD_CLIENT_SECRET=e2e`, `DISCORD_GUILD_ID=e2e`, `DISCORD_CALLBACK_URL=http://localhost:5273/auth/discord/callback`, `SESSION_SECRET=e2e-secret`, `FEEDBACK_SECRET=e2e-feedback-secret`, `CLIENT_URL=http://localhost:5273`; set to empty: `TECTONIC_API_URL`, `TECTONIC_API_KEY`, `TECTONIC_GUILD_ID`, `WOM_API_KEY`, `RUNEPROFILE_API_KEY`; set to `true`: `PLAYER_STATS_FETCH_DISABLED`, `SCREENSHOT_OCR_DISABLED`, `OSRS_ITEM_SEARCH_DISABLED`, `GE_PRICES_FETCH_DISABLED` |
 | client | `npm run dev --workspace=client` | `VITE_PORT=5273`, `VITE_API_TARGET=http://localhost:3101` |
 
 `DEV_LOGIN_ENABLED=true` turns on the server's `/auth/dev-login` route, which

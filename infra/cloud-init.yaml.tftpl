@@ -1,10 +1,10 @@
 #cloud-config
-# First boot of the box (rendered by infra/hetzner.tf). It carries no application secret: those are entered afterwards
-# with deploy/fill-secrets.sh, because cloud-init's data stays readable from the machine's metadata service.
+# First boot of the box (rendered by infra/hetzner.tf). It carries no application secret: infra/push-env.sh writes those
+# afterwards over SSH, because cloud-init's data stays readable from the machine's metadata service.
 #
 # What it does, in order: give the machine the host key GitHub was told about; let root clone the repository with the
-# box's read-only key; run deploy/bootstrap-box.sh from that clone; create the env files and the staging password; start
-# the front door. Progress is in /var/log/cloud-init-output.log; success leaves /srv/tectonic/state/.bootstrapped.
+# box's read-only key; run deploy/bootstrap-box.sh from that clone; create the backup env files; start the front
+# door. Progress is in /var/log/cloud-init-output.log; success leaves /srv/tectonic/state/.bootstrapped.
 
 hostname: ${hostname}
 manage_etc_hosts: true
@@ -58,7 +58,7 @@ runcmd:
     --repo-url ${repo_ssh_url}
     --repo-key /root/.ssh/repo_deploy_key
     --ssh-port ${ssh_port}
-  # The env files, the session secrets and the staging password (printed once, into this log; see the runbook).
+  # The backup env files (infra/push-backup-env.sh fills them in; infra/push-env.sh writes the app's own).
   - runuser -u deploy -- bash /srv/tectonic/deploy/init-env.sh
   - runuser -u deploy -- /srv/tectonic/deploy/deploy.sh edge
   # Root's copy of the repository key is no longer needed: the deploy user has its own installed copy.

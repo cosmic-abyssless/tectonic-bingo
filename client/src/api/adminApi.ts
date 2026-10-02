@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -236,11 +236,12 @@ export function deleteLine(slug: string, id: string) {
   return api.delete(`${base(slug)}/lines/${id}`);
 }
 
-export function getQuestions(slug: string) {
+export function getQuestions(slug: string, form: QuestionForm = "signup") {
   // answerCounts: non-blank answers per question id (absent = none), for the delete confirmation.
-  return api.get<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(`${base(slug)}/questions`);
+  return api.get<{ questions: SignupQuestion[]; answerCounts: Record<string, number> }>(`${base(slug)}/questions${form === "feedback" ? "?form=feedback" : ""}`);
 }
-export function createQuestion(slug: string, payload: { prompt: string; helperText?: string; type: SignupQuestion["type"]; optionsJson?: string; allowOther?: boolean; multiplePicks?: boolean; maxPicks?: number | null; required?: boolean; sortOrder?: number; visibility?: SignupQuestion["visibility"] }) {
+/** `form` says which form the question is on (the signup form unless "feedback"); `visibility` is signup-only, `audience` feedback-only. */
+export function createQuestion(slug: string, payload: { prompt: string; helperText?: string; type: SignupQuestion["type"]; optionsJson?: string; allowOther?: boolean; multiplePicks?: boolean; maxPicks?: number | null; required?: boolean; sortOrder?: number; visibility?: SignupQuestion["visibility"]; audience?: FeedbackAudience; form?: QuestionForm }) {
   return api.post<{ question: SignupQuestion }>(`${base(slug)}/questions`, payload);
 }
 export function updateQuestion(slug: string, id: string, payload: Partial<SignupQuestion>) {
@@ -249,8 +250,8 @@ export function updateQuestion(slug: string, id: string, payload: Partial<Signup
 export function deleteQuestion(slug: string, id: string) {
   return api.delete(`${base(slug)}/questions/${id}`);
 }
-export function reorderQuestions(slug: string, orderedIds: string[]) {
-  return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds });
+export function reorderQuestions(slug: string, orderedIds: string[], form: QuestionForm = "signup") {
+  return api.post<{ questions: SignupQuestion[] }>(`${base(slug)}/questions/reorder`, { orderedIds, form });
 }
 
 export function getSuperlativeCategories(slug: string) {

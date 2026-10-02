@@ -16,7 +16,7 @@ import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
 import type { ProofCheck, SubmissionKind } from "./proof.ts";
 import type { HistoricalRecorded } from "./historical.ts";
-import type { RestrictionEntry } from "./permissions.ts";
+import type { PlayerAccess, RestrictionEntry } from "./permissions.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -742,9 +742,28 @@ export function canSeeAnswers(visibility: QuestionVisibility, viewer: AnswerView
   return VIEWER_RANK[viewer] >= VISIBILITY_RANK[visibility];
 }
 
+/**
+ * Which form a question is on: the signup form, or the Feedback form (CONTEXT.md "Feedback form") of a Finished Bingo.
+ * Both are built from the same question settings; `visibility` is signup-only and `audience` feedback-only.
+ */
+export const QUESTION_FORMS = ["signup", "feedback"] as const;
+export type QuestionForm = (typeof QUESTION_FORMS)[number];
+
+/**
+ * Who answers a Feedback question (CONTEXT.md "Feedback question"): every Player, or only the Captains (both halves of a
+ * Duo leading a Team count), whose answers are kept apart as their Captain response. Not visibility, which is who reads
+ * a signup answer.
+ */
+export const FEEDBACK_AUDIENCES = ["all", "captains"] as const;
+export type FeedbackAudience = (typeof FEEDBACK_AUDIENCES)[number];
+
 export interface SignupQuestion {
   id: string;
   bingoId: string;
+  /** The form it's on. */
+  form: QuestionForm;
+  /** Feedback questions only (always "all" on a signup question): who answers it. */
+  audience: FeedbackAudience;
   prompt: string;
   /** Plain text shown under the question on the signup form, when set. */
   helperText: string | null;
@@ -758,6 +777,7 @@ export interface SignupQuestion {
   maxPicks: number | null;
   required: boolean;
   sortOrder: number;
+  /** Signup questions only (a Feedback question has none: Moderators and Admins read every answer). */
   visibility: QuestionVisibility;
 }
 
@@ -792,6 +812,78 @@ export interface SignupAnswer {
 export interface SignupAnswerInput {
   questionId: string;
   value: string;
+}
+
+// ---------------------------------------------------------------------------
+// Feedback (CONTEXT.md "Feedback form"; docs/adr/0002-anonymous-feedback.md). Nothing here names a user: a response is
+// anonymous to everyone, and no type below carries an id, a user or a time that could link one to its Player.
+// ---------------------------------------------------------------------------
+
+/** One answer on a Feedback form, in the same stored form as a signup answer (see signupAnswers.ts). */
+export interface FeedbackAnswer {
+  questionId: string;
+  value: string;
+}
+
+/**
+ * Why a Feedback form that's open to someone can't take answers on this server: "not_configured", FEEDBACK_SECRET isn't
+ * set; "key_changed", the Bingo's responses were saved with a different FEEDBACK_SECRET, so nobody's earlier answers can be
+ * found and new ones would count Players twice (docs/adr/0002-anonymous-feedback.md).
+ */
+export type FeedbackUnavailable = "not_configured" | "key_changed";
+
+/**
+ * GET /api/bingos/:slug/feedback: the Feedback form as the viewer sees it. `open` is whether they can answer right now:
+ * the Bingo is Finished and they're a Player (a reopened Bingo closes it, keeping the answers). Closed, there are no
+ * questions or answers. `questions` are the ones they answer, in order: every All Players question, and for a Captain
+ * the Captains-only ones too (each has its `audience`). `answers` is their own Feedback response and `captainAnswers`
+ * their Captain response (a Captain only); `responded` / `respondedAsCaptain` are whether they've given each.
+ * `unavailable` is set, with `open` false, when the form would be open to them but this server can't take answers.
+ */
+export interface FeedbackFormResponse {
+  open: boolean;
+  unavailable: FeedbackUnavailable | null;
+  isCaptain: boolean;
+  questions: SignupQuestion[];
+  answers: FeedbackAnswer[];
+  captainAnswers: FeedbackAnswer[];
+  responded: boolean;
+  respondedAsCaptain: boolean;
+}
+
+/**
+ * PUT /api/bingos/:slug/feedback: the Player's whole Feedback response and, for a Captain, their Captain response. Each
+ * replaces what was saved; one left out is left as it is (a Captain can answer only their own questions).
+ */
+export interface FeedbackSubmission {
+  answers?: FeedbackAnswer[];
+  captainAnswers?: FeedbackAnswer[];
+}
+
+/** How many responses picked one option of a choice (or yes/no) question. Other, with whatever was written, counts as "Other". */
+export interface FeedbackOptionTotal {
+  option: string;
+  count: number;
+}
+
+/** One list of responses in the results: Feedback responses or Captain responses. */
+export interface FeedbackResultList {
+  count: number;
+  /** In a fixed shuffled order, never the order they came in. Answers as the form served them (member picks named). */
+  responses: { answers: FeedbackAnswer[] }[];
+  /** Per question id, for the single choice, multiple choice and yes/no questions that list has. */
+  totals: Record<string, FeedbackOptionTotal[]>;
+}
+
+/**
+ * GET /api/bingos/:slug/mod/feedback: the Feedback results (Moderators and Admins). `unavailable`: why Players can't
+ * answer this form on this server right now, if they can't (results are shown either way).
+ */
+export interface FeedbackResultsResponse {
+  questions: SignupQuestion[];
+  unavailable: FeedbackUnavailable | null;
+  feedback: FeedbackResultList;
+  captain: FeedbackResultList;
 }
 
 export interface MySignupResponse {
@@ -1136,6 +1228,9 @@ export interface PlayerProfile {
   // Earned / total switched-on Achievements (CONTEXT.md "Achievement") for this bingo — count only, never which
   // ones: other players' individual Achievements stay personal. Null when the feature is switched off.
   achievements: AchievementCount | null;
+  // Their roles and Restrictions in this bingo, and what the viewer may do about them (PlayerAccess): only for a viewer
+  // who moderates the bingo, null for everyone else.
+  access: PlayerAccess | null;
 }
 
 export interface DraftTeam extends Team {

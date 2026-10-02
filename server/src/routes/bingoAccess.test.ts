@@ -296,6 +296,21 @@ describe("player cards", () => {
     expect((await get("stranger", `/b1/players/${people.memberA.id}`)).status).toBe(403);
     expect((await get("mod", `/b1/players/${people.stranger.id}`)).status).toBe(200);
   });
+
+  it("show a Moderator or Admin the player's roles and Restrictions, and what they may do about them", async () => {
+    db.insert(schema.bingoRestrictions).values({ bingoId: bingo.id, userId: people.captainA.id, action: "react", reason: "Spam", appliedByUserId: people.mod.id, appliedAt: new Date() }).run();
+    const access = async (as: Person, of: Person) => ((await get(as, `/b1/players/${people[of].id}`)).body.player as { access: unknown }).access;
+
+    expect(await access("memberA", "captainA")).toBeNull();
+    expect(await access("mod", "captainA")).toMatchObject({ roles: ["captain", "player"], restrictions: [{ action: "react", reason: "Spam" }], restrictable: true, liftable: true });
+    // A Moderator can't restrict another Moderator; an Admin can, and can lift anything, but no one restricts an Admin.
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: people.memberA.id }).run();
+    expect(await access("mod", "memberA")).toMatchObject({ roles: ["moderator", "player"], restrictable: false, liftable: false });
+    expect(await access("admin", "memberA")).toMatchObject({ restrictable: true, liftable: true });
+    expect(await access("mod", "admin")).toMatchObject({ roles: ["admin"], restrictions: [], restrictable: false });
+    // Someone in no role here has nothing to restrict.
+    expect(await access("mod", "stranger")).toMatchObject({ roles: [], restrictable: false });
+  });
 });
 
 describe("a Finished bingo", () => {

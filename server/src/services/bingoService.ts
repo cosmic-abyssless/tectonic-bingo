@@ -1,4 +1,4 @@
-import { can, type AchievementKey, type CutMode, type ExclusivityRule } from "@bingo/shared";
+import { can, type AchievementKey, type CutMode, type ExclusivityGroup, type ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -21,6 +21,8 @@ import {
   pickRatings,
   nodeEdges,
   nodes,
+  feedbackAnswers,
+  feedbackResponses,
   signupAnswers,
   signupPairings,
   signupQuestions,
@@ -117,6 +119,7 @@ export function toViewerBingo<T extends typeof bingos.$inferSelect>(bingo: T, se
 
 const MAX_EXCLUSIVITY_RULES = 50;
 const MAX_ITEM_NAMES_PER_RULE = 1000;
+const MAX_GROUPS_PER_RULE = 100;
 
 /** The rules a bingo row holds. Tolerant on purpose (a bad column reads as no rules): what is stored was validated on the way in. */
 export function parseExclusivityRules(json: string | null | undefined): ExclusivityRule[] {
@@ -139,20 +142,57 @@ export function normalizeExclusivityRules(input: unknown): ExclusivityRule[] {
     if (!label) throw new ServiceError(400, `Exclusivity rule ${i + 1} needs a label`);
     if (rule.scope !== "part" && rule.scope !== "tile") throw new ServiceError(400, `Exclusivity rule "${label}": scope must be "part" or "tile"`);
     if (!Array.isArray(rule.itemNames)) throw new ServiceError(400, `Exclusivity rule "${label}": itemNames must be an array`);
-    const seen = new Set<string>();
-    const itemNames: string[] = [];
-    for (const name of rule.itemNames) {
-      const trimmed = typeof name === "string" ? name.trim() : "";
-      if (trimmed && !seen.has(trimmed.toLowerCase())) {
-        seen.add(trimmed.toLowerCase());
-        itemNames.push(trimmed);
-      }
-    }
+    const groups = normalizeExclusivityGroups(rule.groups, label);
+    // A group's names are also the rule's own: added here when a caller listed them only in the group.
+    const itemNames = uniqueNames([...rule.itemNames, ...(groups ?? []).flatMap((g) => g.itemNames)]);
     if (itemNames.length === 0) throw new ServiceError(400, `Exclusivity rule "${label}" has no items`);
     if (itemNames.length > MAX_ITEM_NAMES_PER_RULE) throw new ServiceError(400, `Exclusivity rule "${label}" has too many items`);
     const id = typeof rule.id === "string" && rule.id.trim() ? rule.id.trim() : crypto.randomUUID();
-    return { id, label, itemNames, scope: rule.scope };
+    return { id, label, itemNames, scope: rule.scope, ...(groups ? { groups } : {}) };
   });
+}
+
+/** Trimmed, without blanks, and each name once (case-insensitively), keeping its first spelling. */
+function uniqueNames(names: readonly unknown[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (trimmed && !seen.has(trimmed.toLowerCase())) {
+      seen.add(trimmed.toLowerCase());
+      out.push(trimmed);
+    }
+  }
+  return out;
+}
+
+/**
+ * A rule's groups (names sharing one lock): each needs a label (unique in the rule) and at least one item, and an
+ * item name may be in only one of them. Undefined when there are none, so a rule without groups is stored as before.
+ */
+function normalizeExclusivityGroups(input: unknown, ruleLabel: string): ExclusivityGroup[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}": groups must be an array`);
+  if (input.length > MAX_GROUPS_PER_RULE) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}" has too many groups`);
+  const labels = new Set<string>();
+  const groupOf = new Map<string, string>();
+  const groups = input.map((raw: unknown, i): ExclusivityGroup => {
+    const group = (raw ?? {}) as Partial<ExclusivityGroup>;
+    const label = typeof group.label === "string" ? group.label.trim() : "";
+    if (!label) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}": group ${i + 1} needs a name`);
+    if (labels.has(label.toLowerCase())) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}" has two groups called "${label}"`);
+    labels.add(label.toLowerCase());
+    if (!Array.isArray(group.itemNames)) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}": group "${label}" itemNames must be an array`);
+    const itemNames = uniqueNames(group.itemNames);
+    if (itemNames.length === 0) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}": group "${label}" has no items`);
+    for (const name of itemNames) {
+      const other = groupOf.get(name.toLowerCase());
+      if (other) throw new ServiceError(400, `Exclusivity rule "${ruleLabel}": ${name} is in two groups ("${other}" and "${label}"); an item can be in only one`);
+      groupOf.set(name.toLowerCase(), label);
+    }
+    return { label, itemNames };
+  });
+  return groups.length > 0 ? groups : undefined;
 }
 
 // "Play has started": what team names and player ratings lock on. Mirrors isBoardLocked
@@ -390,6 +430,9 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(signupAnswers).where(inArray(signupAnswers.signupId, signupIds)).run();
     tx.delete(signups).where(eq(signups.bingoId, bingoId)).run();
     tx.delete(signupPairings).where(eq(signupPairings.bingoId, bingoId)).run();
+    const feedbackResponseIds = tx.select({ id: feedbackResponses.id }).from(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId));
+    tx.delete(feedbackAnswers).where(inArray(feedbackAnswers.responseId, feedbackResponseIds)).run();
+    tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();

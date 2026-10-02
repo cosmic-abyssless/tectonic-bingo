@@ -13,6 +13,8 @@ import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
 import { DraftPageLayout } from "./page/DraftPageLayout";
 import { StatsPageLayout } from "./page/StatsPageLayout";
+import { FeedbackPageLayout } from "./page/FeedbackPageLayout";
+import { FeedbackBanner } from "./feedback/FeedbackBanner";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
 import { AchievementRow } from "./achievements/AchievementRow";
@@ -86,6 +88,8 @@ export const defaultTheme: ThemeDefinition = {
     BoardPage: BoardPageLayout,
     DraftPage: DraftPageLayout,
     StatsPage: StatsPageLayout,
+    FeedbackPage: FeedbackPageLayout,
+    FeedbackBanner,
     RewindPage: RewindPageLayout,
     RewindTimeline,
     RewindControls,

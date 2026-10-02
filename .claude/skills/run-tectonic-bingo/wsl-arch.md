@@ -74,7 +74,7 @@ DB_PATH="$(pwd)/server/data/e2e.db" npm run db:seed:dev --workspace=server   # o
 PORT=3101 DB_PATH="$(pwd)/server/data/e2e.db" DEV_LOGIN_ENABLED=true \
   DISCORD_CLIENT_ID=e2e DISCORD_CLIENT_SECRET=e2e DISCORD_GUILD_ID=e2e \
   DISCORD_CALLBACK_URL=http://localhost:5273/auth/discord/callback \
-  SESSION_SECRET=e2e-secret CLIENT_URL=http://localhost:5273 \
+  SESSION_SECRET=e2e-secret FEEDBACK_SECRET=e2e-feedback-secret CLIENT_URL=http://localhost:5273 \
   TECTONIC_API_URL= TECTONIC_API_KEY= TECTONIC_GUILD_ID= WOM_API_KEY= RUNEPROFILE_API_KEY= \
   PLAYER_STATS_FETCH_DISABLED=true SCREENSHOT_OCR_DISABLED=true OSRS_ITEM_SEARCH_DISABLED=true GE_PRICES_FETCH_DISABLED=true \
   setsid npm run dev --workspace=server > /tmp/tb-server.log 2>&1 < /dev/null &

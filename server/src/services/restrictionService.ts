@@ -3,14 +3,14 @@
 // the mod roster; can() reads them (services/permissions.ts restrictionsOf), and both are in the audit log.
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { isRestrictionTarget, mayRestrict, type RestrictionEntry, type RestrictionTarget, type Role } from "@bingo/shared";
+import { isRestrictionTarget, mayRestrict, type PlayerAccess, type RestrictionEntry, type RestrictionTarget, type Role } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingoRestrictions, users } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { audit } from "../audit/record";
 import { userLabelById, userLabelsByIds } from "../audit/describe";
 import { ServiceError } from "./errors";
-import { bingoRoles, bingoRolesOfEveryone } from "./permissions";
+import { bingoRoles, bingoRolesOfEveryone, isOwner } from "./permissions";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -107,4 +107,23 @@ export function liftRestriction(db: Db, bingo: Bingo, actor: Actor, restrictionI
     });
     return { userId: row.userId };
   });
+}
+
+/**
+ * What the player card's Permissions tab shows a Moderator or Admin about `userId` in `bingo`: the roles they hold there
+ * (Owner included), their Restrictions, and whether `actor` may apply one or lift theirs (assertMayRestrict's rules).
+ */
+export function playerAccess(db: Db, bingo: Bingo, actor: Actor, userId: string): PlayerAccess {
+  const target = db.select({ id: users.id, isAdmin: users.isAdmin, discordId: users.discordId }).from(users).where(eq(users.id, userId)).get();
+  if (!target) throw new ServiceError(404, "User not found");
+  const roles = bingoRoles(db, bingo, target);
+  if (isOwner(target)) roles.splice(roles.indexOf("admin") + 1, 0, "owner");
+  const actorRoles = bingoRoles(db, bingo, actor);
+  const restrictable = roles.length > 0 && mayRestrict(actorRoles, roles);
+  return {
+    roles,
+    restrictions: getRestrictions(db, bingo.id).filter((r) => r.userId === userId),
+    restrictable,
+    liftable: restrictable || actorRoles.includes("admin"),
+  };
 }

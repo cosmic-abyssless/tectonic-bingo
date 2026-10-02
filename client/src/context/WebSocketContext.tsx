@@ -48,6 +48,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["wrapped"]);
       // Voting opens with Live and closes on Finishing.
       invalidate(["superlatives"]);
+      // The Feedback form is open only while Finished.
+      invalidate(["feedback"]);
       break;
     case "wrapped_published":
       invalidate(["wrapped"]);
@@ -69,6 +71,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["teamSubmissions"]);
       invalidate(["adminLines"]);
       invalidate(["adminQuestions"]);
+      // The Feedback form's questions are edited there too.
+      invalidate(["feedback"]);
       invalidate(["adminMods"]);
       invalidate(["bingoMods"]);
       invalidate(["adminCaptainCandidates"]);
@@ -123,12 +127,15 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["myBugReports"]);
       break;
     case "restrictions_changed":
-      // The mod roster shows each player's Restrictions.
+      // The mod roster shows each player's Restrictions, and so does their player card's Permissions tab.
       invalidate(["signupRoster"]);
+      invalidate(["playerProfile"]);
       break;
     case "access_changed":
       // Someone's Admin flag: the Site admin pages' list of site admins, for every Admin who has it open.
       if (event.bingoId === null) invalidate(["adminSiteAdmins"]);
+      // Anyone's player card lists their roles (its Permissions tab).
+      invalidate(["playerProfile"]);
       // Only the users named: their roles changed, and with them maybe their Actions and what the shell shows them.
       if (!viewerId || !event.payload.userIds.includes(viewerId)) break;
       invalidate(["permissions"]);

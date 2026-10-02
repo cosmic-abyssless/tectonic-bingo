@@ -332,14 +332,18 @@ describe("exclusive items", () => {
     const petsPage1 = part(pets.id, "Page 1", { kind: "COUNT", minCount: 1, children: [{ kind: "ITEM", itemName: "Baron" }, { kind: "ITEM", itemName: "Nid" }] }, 0);
     const petsPage2 = part(pets.id, "Page 2", { kind: "COUNT", minCount: 2, children: [] }, 1);
     petsPage1.children.forEach((c, i) => db.insert(schema.nodeEdges).values({ parentId: petsPage2.id, childId: c.id, sortOrder: i }).run());
-    // SLAYER BOSSES: each page has its OWN Kraken tentacle node.
-    const slayerPage1 = part(slayer.id, "Page 1", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }] }, 0);
-    const slayerPage2 = part(slayer.id, "Page 2", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }] }, 1);
+    // SLAYER BOSSES: each page has its OWN Kraken tentacle node, and a Bludgeon piece (one group: axon, claw, spine).
+    const slayerPage1 = part(slayer.id, "Page 1", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }, { kind: "ITEM", itemName: "Bludgeon axon" }] }, 0);
+    const slayerPage2 = part(slayer.id, "Page 2", { kind: "SUM", quantity: 2, children: [{ kind: "ITEM", itemName: "Kraken tentacle" }, { kind: "ITEM", itemName: "Bludgeon claw" }] }, 1);
+    const bludgeon = { label: "Bludgeon piece", itemNames: ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"] };
 
     updateBingoSettings(db, seeded.id, {
       exclusivityRules:
         rules === "on"
-          ? [{ id: "pets", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" }, { id: "slayer", label: "Slayer", itemNames: ["Kraken tentacle"], scope: "part" }]
+          ? [
+              { id: "pets", label: "Pets", itemNames: ["Baron", "Nid"], scope: "tile" },
+              { id: "slayer", label: "Slayer", itemNames: ["Kraken tentacle", ...bludgeon.itemNames], scope: "part", groups: [bludgeon] },
+            ]
           : [],
     });
     const bingo = db.select().from(schema.bingos).get()!;
@@ -350,8 +354,27 @@ describe("exclusive items", () => {
       teamId, submit, claim,
       dt2Baron: node(dt2Page1), petsBaron: node(petsPage1, 0), petsNid: node(petsPage1, 1),
       slayer1: node(slayerPage1), slayer2: node(slayerPage2),
+      axon1: node(slayerPage1, 1), claw2: node(slayerPage2, 1),
     };
   }
+
+  it("a group: a piece used on Page 1 locks every piece on Page 2, naming the piece, until it is rejected", () => {
+    const b = exclusiveBoard();
+    const first = b.submit(b.claim(b.axon1, "Bludgeon axon"))();
+    expect(b.submit(b.claim(b.claw2, "Bludgeon claw"))).toThrow(
+      /Bludgeon claw is in Bludgeon piece, already used on SLAYER BOSSES · Page 1 \(Bludgeon axon\): Bludgeon piece can only be used on one part/,
+    );
+    expect(b.submit(b.claim(b.slayer2, "Kraken tentacle"))).not.toThrow(); // the rule's other items keep their own lock
+    db.update(schema.submissions).set({ status: "rejected" }).where(eq(schema.submissions.id, first.id)).run();
+    expect(b.submit(b.claim(b.claw2, "Bludgeon claw"))).not.toThrow();
+    expect(b.submit(b.claim(b.axon1, "Bludgeon axon"))).toThrow(/already used on SLAYER BOSSES · Page 2 \(Bludgeon claw\)/);
+  });
+
+  it("a group: several pieces on the same page are all allowed", () => {
+    const b = exclusiveBoard();
+    expect(b.submit(b.claim(b.axon1, "Bludgeon axon"))).not.toThrow();
+    expect(b.submit(b.claim(b.axon1, "Bludgeon axon"))).not.toThrow();
+  });
 
   it("allows several claims on the boss's tile, then refuses the same pet on PETS while leaving other pets alone", () => {
     const b = exclusiveBoard();

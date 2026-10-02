@@ -69,6 +69,16 @@ if (getAdminDiscordIds().length === 0) {
   log.warn("ADMIN_DISCORD_IDS is not set — no user will bootstrap as a site admin");
 }
 
+// FEEDBACK_SECRET keys Feedback responses to their Players without naming them (services/feedbackService.ts). Only the
+// Feedback form needs it, so the server runs without it, with Feedback forms taking no answers. It must never change
+// while a form has responses: a form whose responses were keyed with another secret takes no answers either.
+const feedbackSecret = process.env.FEEDBACK_SECRET ?? "";
+if (feedbackSecret.trim() === "") {
+  log.warn("FEEDBACK_SECRET is not set — Feedback forms take no answers until it is");
+} else if (feedbackSecret.length < 32) {
+  log.warn("FEEDBACK_SECRET is shorter than 32 characters — use a long random value (openssl rand -hex 32)");
+}
+
 installProcessLogHandlers();
 
 const app = express();
@@ -156,6 +166,7 @@ const sessionAuth = [sessionMiddleware, passport.initialize(), passport.session(
 app.use(...sessionAuth);
 // Which account hit an error, by internal id only (no name or Discord details).
 app.use((req, _res, next) => {
+  // An anonymous route (the Feedback form's) clears this again: anonymous() in audit/middleware.ts.
   if (req.user) Sentry.setUser({ id: req.user.id });
   next();
 });
