@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { WRAPPED_PAGE_WIDTH } from "./camera";
-import { deskGroups, deskLayout } from "./desk";
+import { deskGroups, deskLayout } from "./deskLayout";
 import type { PageKind } from "./guide";
 
 const kinds: PageKind[] = ["cover", "contents", "page", "page", "page", "back", "page", "page"];

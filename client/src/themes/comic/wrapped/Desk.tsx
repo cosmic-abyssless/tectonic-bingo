@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import type { WrappedArtFrames } from "@bingo/shared";
 import { StickerArt } from "../../../core/wrapped/StickerArt";
-import type { DeskGroup } from "./desk";
+import type { DeskGroup } from "./deskLayout";
 import type { CameraEffects } from "./BookController";
 
 /** A side image's size on the desk (px, desk coordinates), and how far from its spread it lies. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageInSection, pageStart, panelPlace, PULL, prevStop, pullsBack, reachedAfter, sectionIds, sectionOfAnchor, sectionStart, withGroups, type GuideScene, type Stop } from "./guide";
-import { deskGroups } from "./desk";
+import { deskGroups } from "./deskLayout";
 
 const scene = (id: string, sectionId: string, panels: number[], steps = panels.length): GuideScene => ({ id, sectionId, steps, panels });
 
