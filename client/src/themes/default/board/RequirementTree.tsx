@@ -62,9 +62,10 @@ function GroupRow({ node, group }: { node: RequirementNodeModel; group: NonNulla
     <li className={`text-sm ${node.dim || group.done ? "text-on-surface-subtle" : "text-on-surface"}`}>
       {group.label ? `${group.label} (any one of: ` : "Any one of: "}
       {group.pieces.map((piece, i) => (
-        <Fragment key={piece}>
+        <Fragment key={piece.name}>
           {i > 0 && ", "}
-          <WikiItemLink name={piece} />
+          <ItemIcon url={piece.iconUrl} className={iconClass(node.dim)} />
+          <WikiItemLink name={piece.name} />
         </Fragment>
       ))}
       {group.label && ")"}

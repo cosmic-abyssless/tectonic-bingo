@@ -126,7 +126,16 @@ export function buildRequirementTree(
       if (child.kind === "ANY") {
         const pieces = groupPieces(child);
         const done = groupDone(child, (id) => itemLeafValue(id, maps));
-        return [{ name: groupLabel(child.label, pieces), iconUrl: null, count: done ? 1 : 0, countsAs: 1, lockedBy: null, group: { label: child.label, pieces, done } }];
+        return [
+          {
+            name: groupLabel(child.label, pieces),
+            iconUrl: null,
+            count: done ? 1 : 0,
+            countsAs: 1,
+            lockedBy: null,
+            group: { label: child.label, pieces: pieces.map((name) => ({ name, iconUrl: wikiIconUrl(name) ?? null })), done },
+          },
+        ];
       }
       if (!child.itemName) return [];
       return [{ name: child.itemName, iconUrl: wikiIconUrl(child.itemName) ?? null, count: itemLeafValue(child.id, maps), countsAs: child.countsAs ?? 1, lockedBy: lockOf(child.id), group: null }];

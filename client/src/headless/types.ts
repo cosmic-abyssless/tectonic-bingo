@@ -89,8 +89,8 @@ export interface SumItemModel {
   countsAs: number;
   /** The team has used the item elsewhere and a rule says it counts in one place only ("Used on DT2 ISSUE 1"). Null for a group. */
   lockedBy: string | null;
-  /** Set for an "any one of" group: its own label (null when it has none), its Items' names, and whether it's done. */
-  group: { label: string | null; pieces: string[]; done: boolean } | null;
+  /** Set for an "any one of" group: its own label (null when it has none), its Items (name and wiki icon), and whether it's done. */
+  group: { label: string | null; pieces: { name: string; iconUrl: string | null }[]; done: boolean } | null;
 }
 
 export interface RequirementNodeModel {

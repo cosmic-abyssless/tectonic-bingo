@@ -110,7 +110,7 @@ describe("an \"any one of\" group of Items inside a SUM", () => {
   it("is one row naming its pieces, done and adding 1 once one piece is approved, and nothing more for a second", () => {
     const before = buildRequirementTree(uniques, buildLeafClaimMaps([sub("s0", "pending", [{ nodeId: "claw", quantity: 1 }])]), new Map())!;
     expect(before.items.map((i) => [i.name, i.count, i.group])).toEqual([
-      ["Bludgeon piece (any one of: Bludgeon axon, Bludgeon claw, Bludgeon spine)", 0, { label: "Bludgeon piece", pieces: ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"], done: false }],
+      ["Bludgeon piece (any one of: Bludgeon axon, Bludgeon claw, Bludgeon spine)", 0, { label: "Bludgeon piece", pieces: ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"].map((name) => ({ name, iconUrl: expect.any(String) })), done: false }],
       ["Abyssal dagger", 0, null],
     ]);
     expect(before.submitted).toBe(true); // a piece in review counts as handed in

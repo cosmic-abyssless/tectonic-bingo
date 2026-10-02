@@ -94,9 +94,10 @@ function GroupRow({ node, group, colors }: { node: RequirementNodeModel; group: 
     <li className="text-sm leading-snug" style={{ color: node.dim || group.done ? colors.INK_SUBTLE : colors.INK_BODY }}>
       {group.label ? `${group.label} (any one of: ` : "Any one of: "}
       {group.pieces.map((piece, i) => (
-        <Fragment key={piece}>
+        <Fragment key={piece.name}>
           {i > 0 && ", "}
-          <WikiItemLink name={piece} />
+          <ItemIcon url={piece.iconUrl} className={`${ICON_CLASS} ${node.dim ? "opacity-60" : ""}`} />
+          <WikiItemLink name={piece.name} />
         </Fragment>
       ))}
       {group.label && ")"}
