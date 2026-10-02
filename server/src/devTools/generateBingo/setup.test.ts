@@ -7,7 +7,7 @@ import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { weighAnItem, type Ctx } from "./setup";
+import { importBingo, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -72,5 +72,24 @@ describe("weighAnItem", () => {
     await weighAnItem(ctx, new Date());
     await weighAnItem(ctx, new Date());
     expect(patches).toHaveLength(1);
+  });
+});
+
+describe("importBingo", () => {
+  // The import copies the board's source theme; the run's own theme is set with the dates, through the settings endpoint.
+  it("sets the theme the run was asked for, in the same settings request as the dates", async () => {
+    const calls: { method: string; path: string; body: Record<string, unknown> }[] = [];
+    const session = {
+      post: async (path: string, body: Record<string, unknown>) => void calls.push({ method: "POST", path, body }),
+      patch: async (path: string, body: Record<string, unknown>) => void calls.push({ method: "PATCH", path, body }),
+    };
+    const at = new Date("2026-09-19T12:00:00Z");
+    const tl = { createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const ctx = { api: { as: () => session }, slug: "testdata-t", admin: "admin", tl, log: () => {} } as unknown as Ctx;
+
+    await importBingo(ctx, { bingo: {} } as never, "Test data t", "comic");
+
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/admin/bingos/import", "PATCH /api/bingos/testdata-t/admin/settings"]);
+    expect(calls[1]!.body).toMatchObject({ theme: "comic", startsAt: at.toISOString() });
   });
 });
