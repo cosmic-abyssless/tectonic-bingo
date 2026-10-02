@@ -72,7 +72,7 @@ The app's own files on the box, `/srv/tectonic/env/staging.env`, `production.env
 | --- | --- |
 | Secrets (Discord client secret, both `SESSION_SECRET`s, the staging password, the clan, WOM and RuneProfile API keys) | Bitwarden, one item each, read by `env.ps1` as `TF_VAR_*` |
 | Settings that aren't secret but stay out of this public repository (Discord ids, the clan API's address and guild, the User-Agent contact) | `terraform.tfvars` |
-| Everything else (addresses, `NODE_ENV`, the switches that keep staging off the live APIs, Sentry) | `app-env.tf`, reviewed like code |
+| Everything else (addresses, `NODE_ENV`, which integrations each environment switches on, Sentry) | `app-env.tf`, reviewed like code |
 
 Tofu keeps a copy in its state, which is encrypted (`backend.tf`), and `tofu plan` shows *that* a secret changed, never its value.
 The containers read the files when they start, so a pushed change reaches an environment with its next deploy (zero-downtime as
@@ -101,7 +101,7 @@ Then deploy the environment (Actions > Deploy). Changing a `SESSION_SECRET` sign
 **Adding a secret:** in the same pull request as the code that needs it:
 
 1. Add a `sensitive` variable with no default to `app-env.tf`, and its line in the environments that use it. Leave it as `""`
-   in the other one, as the clan keys are on staging.
+   in the other one, as Wise Old Man's and RuneProfile's keys are on staging.
 2. Add it to the list in `env.ps1`.
 3. Create the Bitwarden item `tectonic-bingo/TF_VAR_<name>`.
 

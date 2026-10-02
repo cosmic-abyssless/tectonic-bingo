@@ -46,7 +46,7 @@ variable "staging_password" {
 }
 
 variable "tectonic_api_key" {
-  description = "The clan API's key. Production only: staging never calls the live clan APIs."
+  description = "The clan API's key. Staging uses it too."
   type        = string
   sensitive   = true
 
@@ -111,7 +111,7 @@ variable "admin_discord_ids" {
 }
 
 variable "tectonic_api_url" {
-  description = "The clan API's address. Production only."
+  description = "The clan API's address. Both environments."
   type        = string
 
   validation {
@@ -121,7 +121,7 @@ variable "tectonic_api_url" {
 }
 
 variable "tectonic_guild_id" {
-  description = "The clan's id in the clan API. Production only."
+  description = "The clan's id in the clan API. Both environments."
   type        = string
 
   validation {
@@ -131,7 +131,7 @@ variable "tectonic_guild_id" {
 }
 
 variable "user_agent_contact" {
-  description = "Contact details sent in the User-Agent to the clan APIs. Production only."
+  description = "Contact details sent in the User-Agent to the clan APIs. Both environments."
   type        = string
 
   validation {
@@ -161,8 +161,9 @@ locals {
 
   app_settings = {
     # The same image as production with its own data. Dev-login is on (the test-data generator and "log in as" need it),
-    # which needs NODE_ENV to be something other than production, so the Secure cookie flag is put back by hand. The clan
-    # integrations are blank and switched off so test data never calls the live APIs.
+    # which needs NODE_ENV to be something other than production, so the Secure cookie flag is put back by hand. It talks
+    # to the live clan API with production's key, and fetches player stats and Wise Old Man snapshots, so the clan
+    # integration can be tried there; Wise Old Man's competition sync and RuneProfile stay off (no keys).
     staging = merge(local.app_common, {
       NODE_ENV                      = "staging"
       DEV_LOGIN_ENABLED             = "true"
@@ -170,15 +171,15 @@ locals {
       CLIENT_URL                    = "https://staging.tectonic.bingo"
       DISCORD_CALLBACK_URL          = "https://staging.tectonic.bingo/auth/discord/callback"
       SESSION_SECRET                = var.staging_session_secret
-      TECTONIC_API_URL              = ""
-      TECTONIC_API_KEY              = ""
-      TECTONIC_GUILD_ID             = ""
+      TECTONIC_API_URL              = var.tectonic_api_url
+      TECTONIC_API_KEY              = var.tectonic_api_key
+      TECTONIC_GUILD_ID             = var.tectonic_guild_id
+      USER_AGENT_CONTACT            = var.user_agent_contact
       WOM_API_KEY                   = ""
       RUNEPROFILE_API_KEY           = ""
-      USER_AGENT_CONTACT            = ""
-      PLAYER_STATS_FETCH_DISABLED   = "true"
+      PLAYER_STATS_FETCH_DISABLED   = "false"
       WOM_COMPETITION_SYNC_DISABLED = "true"
-      WOM_SNAPSHOT_READS_DISABLED   = "true"
+      WOM_SNAPSHOT_READS_DISABLED   = "false"
       SENTRY_ENVIRONMENT            = "staging"
     })
     # The image sets NODE_ENV=production itself, which turns dev-login off and marks the session cookie Secure.
