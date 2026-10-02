@@ -8,9 +8,11 @@ import {
   isRestrictionTarget,
   mayRestrict,
   OPEN_TO_EVERYONE,
+  OWNER_ACTIONS,
   resolvePermissions,
   RESTRICTABLE_ACTIONS,
   restrictedBy,
+  siteRoles,
   STAGE_ORDER,
   unavailableReason,
   type Action,
@@ -30,34 +32,36 @@ const NONE = "rrrrrrr";
 const FINISHED = "rrrrrr+";
 
 const TABLE: Record<Action, Record<Role, Row>> = {
-  administer_site: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
-  administer_bingo: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
-  moderate_bingo: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  submit: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
-  submit_for_any_team: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  react: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
-  make_draft_pick: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: "xxx+xxx", player: NONE },
-  run_draft: { admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: NONE, player: NONE },
-  rate_picks: { admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
-  rename_team: { admin: ALL, moderator: NONE, staff: NONE, captain: "ssss+ss", player: NONE },
-  mark_buyins: { admin: "x++++xx", moderator: "x++++xx", staff: "s++++ss", captain: NONE, player: NONE },
-  answer_feedback: { admin: "xxxxxx+", moderator: NONE, staff: NONE, captain: NONE, player: "ssssss+" },
-  manage_feedback_questions: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
-  view_bingo: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: "s++++++" },
-  view_hidden_board: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_other_teams: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
-  view_team_stats: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: "sssss+s" },
-  view_mod_activity: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_other_teams_screenshots: { admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
-  view_wrapped_preview: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_draft_room: { admin: ALL, moderator: ALL, staff: FINISHED, captain: "s++sss+", player: "ss+++++" },
-  view_draft_pool_answers: { admin: ALL, moderator: ALL, staff: NONE, captain: ALL, player: NONE },
-  view_player_card_answers: { admin: ALL, moderator: ALL, staff: NONE, captain: "s+++sss", player: NONE },
-  view_mod_questions: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_admin_questions: { admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
-  view_any_player: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_feedback_results: { admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
-  view_buyins: { admin: ALL, moderator: ALL, staff: "s++++ss", captain: NONE, player: NONE },
+  administer_site: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  manage_site_admins: { owner: ALL, admin: NONE, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  manage_claude_connections: { owner: ALL, admin: NONE, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  administer_bingo: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  moderate_bingo: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  submit: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
+  submit_for_any_team: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  react: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: ALL },
+  make_draft_pick: { owner: NONE, admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: "xxx+xxx", player: NONE },
+  run_draft: { owner: NONE, admin: "xxx+xxx", moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  rate_picks: { owner: NONE, admin: "+++++xx", moderator: NONE, staff: NONE, captain: "+++++xx", player: NONE },
+  rename_team: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: "ssss+ss", player: NONE },
+  mark_buyins: { owner: NONE, admin: "x++++xx", moderator: "x++++xx", staff: "s++++ss", captain: NONE, player: NONE },
+  answer_feedback: { owner: NONE, admin: "xxxxxx+", moderator: NONE, staff: NONE, captain: NONE, player: "ssssss+" },
+  manage_feedback_questions: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  view_bingo: { owner: FINISHED, admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: "s++++++" },
+  view_hidden_board: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_other_teams: { owner: FINISHED, admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
+  view_team_stats: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: "sssss+s" },
+  view_mod_activity: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_other_teams_screenshots: { owner: FINISHED, admin: ALL, moderator: ALL, staff: FINISHED, captain: FINISHED, player: FINISHED },
+  view_wrapped_preview: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_draft_room: { owner: FINISHED, admin: ALL, moderator: ALL, staff: FINISHED, captain: "s++sss+", player: "ss+++++" },
+  view_draft_pool_answers: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: ALL, player: NONE },
+  view_player_card_answers: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: "s+++sss", player: NONE },
+  view_mod_questions: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_admin_questions: { owner: NONE, admin: ALL, moderator: NONE, staff: NONE, captain: NONE, player: NONE },
+  view_any_player: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_feedback_results: { owner: NONE, admin: ALL, moderator: ALL, staff: NONE, captain: NONE, player: NONE },
+  view_buyins: { owner: NONE, admin: ALL, moderator: ALL, staff: "s++++ss", captain: NONE, player: NONE },
 };
 
 const CODES: Record<string, PermissionDenial | null> = { "+": null, r: "role", s: "stage", x: "rule" };
@@ -162,6 +166,18 @@ describe("can()", () => {
     expect(can(["admin"], null, "administer_site")).toEqual({ ok: true });
     expect(can([], null, "administer_site")).toEqual({ ok: false, reason: "role" });
     expect(can(["captain"], null, "rename_team")).toEqual({ ok: false, reason: "stage" });
+  });
+
+  it("gives an Owner the Admin's Actions and their own, and a plain Admin none of the Owner's", () => {
+    expect(siteRoles({ isAdmin: true }, true)).toEqual(["admin", "owner"]);
+    expect(siteRoles({ isAdmin: true })).toEqual(["admin"]);
+    // Owner rides on Admin: without the Admin flag (as while their admin powers are off) there's no Owner either.
+    expect(siteRoles({ isAdmin: false }, true)).toEqual([]);
+    for (const action of ACTIONS) {
+      const owners = (OWNER_ACTIONS as readonly Action[]).includes(action);
+      expect(can(siteRoles({ isAdmin: true }, true), null, action).ok, action).toBe(can(["admin"], null, action).ok || owners);
+      if (owners) expect(can(["admin"], null, action), action).toEqual({ ok: false, reason: "role" });
+    }
   });
 });
 

@@ -191,6 +191,9 @@ export function SearchCombo<T>({
       isReadOnly={readOnly}
     >
       <StateRef stateRef={stateRef} />
+      {/* Choosing, once typed in: the top match is highlighted, so Enter picks it. Searching (an item name, a user), Enter
+          keeps what's typed until a row is picked. */}
+      <ComboFocusFirst enabled={choosing && filtering && q !== ""} />
       <ComboInput
         ref={inputRef}
         placeholder={placeholder}
@@ -226,7 +229,9 @@ export function SearchCombo<T>({
                 id={r.id}
                 textValue={itemText(r.item)}
                 onPressStart={(e) => (pickedByPointer.current = e.pointerType !== "keyboard" && e.pointerType !== "virtual")}
-                className="flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm text-on-surface outline-none hovered:bg-surface-hover data-[focused]:bg-accent data-[focused]:text-on-accent"
+                // Only the highlight, no hover look of its own: pointing at a row highlights it, and a hover background
+                // beat the highlight's while its text took the highlight's colour (dark on dark in dark mode).
+                className="flex cursor-default items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-sm text-on-surface outline-none data-[focused]:bg-accent data-[focused]:text-on-accent"
               >
                 {({ isFocused }) => (renderItem ? renderItem(r.item, { isFocused }) : <span className="truncate">{itemText(r.item)}</span>)}
               </ListBoxItem>
@@ -344,14 +349,41 @@ export function ComboPopover({
         {...(triggerRef ? { triggerRef } : {})}
         // A hook for a theme's CSS to dress the list (the comic signup stage gives it an ink border).
         data-select-list=""
-        // react-aria sizes the list to the text box; with a frame to line up under, it takes the frame's width.
-        style={triggerRef?.current ? { ...style, width: triggerRef.current.offsetWidth } : style}
+        // The list takes the width of the box (or the frame it lines up under), measured as it opens. Not react-aria's
+        // own --trigger-width: it reads the box's on-screen size once, when it first appears, so a box that first appears
+        // in a dialog still scaling up as it opens left the list that much narrower for good.
+        style={(values) => {
+          const own = typeof style === "function" ? style(values) : style;
+          const width = (triggerRef ?? anchorRef).current?.offsetWidth;
+          return width ? { ...own, width, "--trigger-width": `${width}px` } : (own ?? {});
+        }}
         className={className ?? "flex w-[var(--trigger-width)] flex-col rounded-md border border-outline bg-surface-raised shadow-pop outline-none"}
       >
         {children}
       </Popover>
     </UNSAFE_PortalProvider>
   );
+}
+
+/**
+ * Keeps the top match highlighted while the list is open and no other row is, so Enter picks it. react-aria clears the
+ * highlight whenever the text changes, in its own effect, after this component's and without a re-render when the
+ * highlight was already set; so this puts it back on the first row a frame later, once react-aria is done.
+ */
+export function ComboFocusFirst({ enabled = true }: { enabled?: boolean }) {
+  const state = useContext(ComboBoxStateContext);
+  useEffect(() => {
+    if (!enabled || !state?.isOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const { collection, selectionManager } = state;
+      if (selectionManager.focusedKey != null) return;
+      let key = collection.getFirstKey();
+      while (key != null && (collection.getItem(key)?.type !== "item" || selectionManager.isDisabled(key))) key = collection.getKeyAfter(key);
+      if (key != null) selectionManager.setFocusedKey(key);
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  return null;
 }
 
 /** Reports the row the keyboard or pointer is on while the list is open (null otherwise), e.g. to point it out on the board. */

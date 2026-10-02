@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SearchCombo } from "./SearchCombo";
 import { SearchableSelect } from "./SearchableSelect";
@@ -105,6 +105,19 @@ describe("SearchableSelect", () => {
     expect(screen.getByRole("group", { name: "Yellow" })).toBeTruthy();
     await user.keyboard("che{ArrowDown}{Enter}");
     expect(onChange).toHaveBeenCalledWith("c");
+  });
+
+  it("highlights the top match once typed in, so Enter alone picks it", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<SearchableSelect value="a" options={options} placeholder="Pick a fruit" onChange={onChange} />);
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    await user.keyboard("an");
+    // A frame later: react-aria clears the highlight as the text changes, then the top match gets it back.
+    await waitFor(() => expect(document.getElementById(input.getAttribute("aria-activedescendant") ?? "")?.textContent).toBe("Banana"));
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith("b");
   });
 
   it("replaces the chosen option's text with what's typed, first letter and all", async () => {

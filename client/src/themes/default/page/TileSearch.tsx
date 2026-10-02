@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { ComboBox, ListBox, ListBoxItem } from "react-aria-components";
 import type { TileSearchModel } from "../../../headless/types";
 import { controlClass } from "../../../core/ui/Field";
-import { ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/SearchCombo";
+import { ComboFocusFirst, ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/SearchCombo";
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
 import { IconButton } from "../../../core/ui/Button";
 
@@ -20,6 +20,8 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
       onSelectionChange={(key) => key !== null && search.choose(String(key))}
       allowsCustomValue
     >
+      {/* The top match is highlighted, so Enter opens it. */}
+      <ComboFocusFirst />
       <ComboFocusedKey onChange={search.setHighlightedId} />
       <SearchIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-subtle" />
       <ComboInput

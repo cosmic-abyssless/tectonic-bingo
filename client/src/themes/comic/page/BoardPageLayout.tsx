@@ -8,6 +8,9 @@ import { useSlot } from "../../context";
 import { ComicPage } from "../fx/ComicPage";
 import { SubmitButton } from "./SubmitButton";
 import { TeamBanner } from "./TeamBanner";
+import { ArtViewer } from "../board/PinnedArt";
+import { useComic } from "../ui/useComic";
+import { ScreenshotViewerHost } from "../../../core/submissions/screenshotViewer";
 
 export function BoardPageLayout() {
   const page = useBingoPage();
@@ -18,6 +21,7 @@ export function BoardPageLayout() {
   // "hover" treatment on the board itself, tying the two together.
   const highlightedTileId = page.search.highlightedId;
   const { dragActive } = useScreenshotCapture(page);
+  const { colors } = useComic();
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -38,112 +42,115 @@ export function BoardPageLayout() {
   const SubmissionModal = useSlot("SubmissionModal");
 
   return (
-    <ComicPage>
-      <PageHeader page={page} />
+    // A Submission's screenshot opens in the same viewer as a Tile's artwork.
+    <ScreenshotViewerHost viewer={(url, close) => <ArtViewer imageUrl={url} name="Submission screenshot" label="Submission screenshot" isOpen={!!url} onClose={close} colors={colors} />}>
+      <ComicPage>
+        <PageHeader page={page} />
 
-      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
-        {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} canRate={page.canRatePicks} />}
-        {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
-        {page.feedback.canOpen && <FeedbackBanner responded={page.feedback.responded} onOpen={page.actions.goToFeedback} />}
-        {page.stageView === "signup" ? (
-          <SignupStage slug={page.slug} />
-        ) : page.stageView === "notPart" ? (
-          <NotPartStage isCut={page.isCut} removedFromTeam={page.removedFromTeam} />
-        ) : page.stageView === "planning" || page.stageView === "captains" ? (
-          <PlanningStage stage={page.stageView} />
-        ) : page.stageView === "draft" ? (
-          <DraftStage
-            draft={page.draft}
-            milestone={page.milestone}
-            onOpenDraft={page.actions.goToDraft}
-          />
-        ) : page.stageView === "historical" && page.historical ? (
-          <HistoricalBingoView slug={page.slug} board={board} teams={page.teams} recorded={page.historical} />
-        ) : page.stageView === "noTeam" ? (
-          <NoTeamStage selector={page.teamSelector} />
-        ) : (
-          <>
-            {page.canModerate && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-              <TileSearch search={page.search} />
-              {/* One control for the team: identity, score, the team dialog,
-                  and (mods, and everyone once Finished) the team switcher.
-                  Someone who can pick a team but hasn't yet still gets it,
-                  as the "Select team" menu. */}
-              {(page.viewing.team || (page.canPickTeam && page.teams.length > 0)) && (
-                // On a phone this row is the banner filling the space with
-                // Submit to its right (Submit leaves the masthead there), and it
-                // sits above the search box rather than under it.
-                <div className="flex items-center gap-3 max-md:order-first max-md:w-full">
-                  <div className="min-w-0 flex-1 md:flex-none">
-                    <TeamBanner
-                      team={page.viewing.team}
-                      isOtherTeam={page.viewing.isOtherTeam}
-                      totalPoints={board.totalPoints}
-                      onOpen={page.teamInfo.show}
-                      onOpenPoints={page.pointBreakdown.show}
-                      selector={page.canPickTeam && page.teams.length > 0 ? page.teamSelector : undefined}
-                    />
+        <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+          {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} canRate={page.canRatePicks} />}
+          {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
+          {page.feedback.canOpen && <FeedbackBanner responded={page.feedback.responded} onOpen={page.actions.goToFeedback} />}
+          {page.stageView === "signup" ? (
+            <SignupStage slug={page.slug} />
+          ) : page.stageView === "notPart" ? (
+            <NotPartStage isCut={page.isCut} removedFromTeam={page.removedFromTeam} />
+          ) : page.stageView === "planning" || page.stageView === "captains" ? (
+            <PlanningStage stage={page.stageView} />
+          ) : page.stageView === "draft" ? (
+            <DraftStage
+              draft={page.draft}
+              milestone={page.milestone}
+              onOpenDraft={page.actions.goToDraft}
+            />
+          ) : page.stageView === "historical" && page.historical ? (
+            <HistoricalBingoView slug={page.slug} board={board} teams={page.teams} recorded={page.historical} />
+          ) : page.stageView === "noTeam" ? (
+            <NoTeamStage selector={page.teamSelector} />
+          ) : (
+            <>
+              {page.canModerate && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                <TileSearch search={page.search} />
+                {/* One control for the team: identity, score, the team dialog,
+                    and (mods, and everyone once Finished) the team switcher.
+                    Someone who can pick a team but hasn't yet still gets it,
+                    as the "Select team" menu. */}
+                {(page.viewing.team || (page.canPickTeam && page.teams.length > 0)) && (
+                  // On a phone this row is the banner filling the space with
+                  // Submit to its right (Submit leaves the masthead there), and it
+                  // sits above the search box rather than under it.
+                  <div className="flex items-center gap-3 max-md:order-first max-md:w-full">
+                    <div className="min-w-0 flex-1 md:flex-none">
+                      <TeamBanner
+                        team={page.viewing.team}
+                        isOtherTeam={page.viewing.isOtherTeam}
+                        totalPoints={board.totalPoints}
+                        onOpen={page.teamInfo.show}
+                        onOpenPoints={page.pointBreakdown.show}
+                        selector={page.canPickTeam && page.teams.length > 0 ? page.teamSelector : undefined}
+                      />
+                    </div>
+                    {(page.canSubmit || page.submitRestricted) && <SubmitButton onPress={() => page.submit.show()} restricted={page.submitRestricted} className="shrink-0 md:hidden" />}
                   </div>
-                  {(page.canSubmit || page.submitRestricted) && <SubmitButton onPress={() => page.submit.show()} restricted={page.submitRestricted} className="shrink-0 md:hidden" />}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <BoardGrid board={board} onOpenTile={page.openTile.open} highlightedTileId={highlightedTileId} />
-          </>
+              <BoardGrid board={board} onOpenTile={page.openTile.open} highlightedTileId={highlightedTileId} />
+            </>
+          )}
+        </main>
+
+        <ScreenshotDropOverlay visible={dragActive} />
+
+        {page.submit.open && (
+          <SubmissionFlowHost
+            initialTileId={page.submit.initialTileId}
+            initialTaskId={page.submit.initialTaskId}
+            initialFile={page.submit.initialFile}
+            initialKind={page.submit.initialKind}
+            onClose={page.submit.hide}
+            onSuccess={() => {}}
+          >
+            {(flow) => <SubmissionModal flow={flow} />}
+          </SubmissionFlowHost>
         )}
-      </main>
 
-      <ScreenshotDropOverlay visible={dragActive} />
+        <RulesDialog
+          isOpen={page.rules.open}
+          markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")}
+          onClose={page.rules.hide}
+        />
 
-      {page.submit.open && (
-        <SubmissionFlowHost
-          initialTileId={page.submit.initialTileId}
-          initialTaskId={page.submit.initialTaskId}
-          initialFile={page.submit.initialFile}
-          initialKind={page.submit.initialKind}
-          onClose={page.submit.hide}
-          onSuccess={() => {}}
-        >
-          {(flow) => <SubmissionModal flow={flow} />}
-        </SubmissionFlowHost>
-      )}
+        <TeamInfoDialog
+          slug={page.slug}
+          team={page.teamInfo.open ? page.viewing.team : null}
+          stage={page.bingo.stage}
+          onClose={page.teamInfo.hide}
+        />
 
-      <RulesDialog
-        isOpen={page.rules.open}
-        markdown={page.bingo.rulesComeLater ? RULES_COME_LATER : (page.bingo.rulesMarkdown ?? "")}
-        onClose={page.rules.hide}
-      />
+        <PointBreakdownDialog team={page.pointBreakdown.open ? page.viewing.team : null} onClose={page.pointBreakdown.hide} />
 
-      <TeamInfoDialog
-        slug={page.slug}
-        team={page.teamInfo.open ? page.viewing.team : null}
-        stage={page.bingo.stage}
-        onClose={page.teamInfo.hide}
-      />
+        <SubmissionsDrawer
+          isOpen={page.drawer.open}
+          submissions={page.submissions}
+          onClose={page.drawer.hide}
+          onSubmit={page.canSubmit ? () => page.submit.show() : undefined}
+        />
 
-      <PointBreakdownDialog team={page.pointBreakdown.open ? page.viewing.team : null} onClose={page.pointBreakdown.hide} />
-
-      <SubmissionsDrawer
-        isOpen={page.drawer.open}
-        submissions={page.submissions}
-        onClose={page.drawer.hide}
-        onSubmit={page.canSubmit ? () => page.submit.show() : undefined}
-      />
-
-      <TileModal
-        tile={modalTile}
-        isOpen={page.openTile.id !== null}
-        onClose={page.openTile.close}
-        onToggleInterest={modalTile?.interest.canToggle ? (taskId) => page.tileInterest.toggle(modalTile.id, taskId) : undefined}
-        onSubmit={
-          page.canSubmit
-            ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId)
-            : undefined
-        }
-        onPostProof={page.canSubmit && modalTile ? (taskId) => page.submit.showProof(modalTile.id, taskId) : undefined}
-      />
-    </ComicPage>
+        <TileModal
+          tile={modalTile}
+          isOpen={page.openTile.id !== null}
+          onClose={page.openTile.close}
+          onToggleInterest={modalTile?.interest.canToggle ? (taskId) => page.tileInterest.toggle(modalTile.id, taskId) : undefined}
+          onSubmit={
+            page.canSubmit
+              ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId)
+              : undefined
+          }
+          onPostProof={page.canSubmit && modalTile ? (taskId) => page.submit.showProof(modalTile.id, taskId) : undefined}
+        />
+      </ComicPage>
+    </ScreenshotViewerHost>
   );
 }

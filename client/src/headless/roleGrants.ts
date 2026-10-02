@@ -1,6 +1,6 @@
 // What every role holds in a Bingo, for the mod panel's Permissions tab: GRANTS (@bingo/shared permissions.ts) read out
 // role by role, each Action with the stages it's open in once the rules for everyone have had their say. No React.
-import { ACTION_INFO, ACTIONS, GRANTS, RESTRICTABLE_ACTIONS, STAGE_LABEL, STAGE_ORDER, passesRules, type Action, type PermissionBingo, type Role, type Stage } from "@bingo/shared";
+import { ACTION_INFO, ACTIONS, grantsOf, RESTRICTABLE_ACTIONS, STAGE_LABEL, STAGE_ORDER, passesRules, type Action, type PermissionBingo, type Role, type Stage } from "@bingo/shared";
 
 export interface RoleGrant {
   action: Action;
@@ -14,19 +14,17 @@ export interface RoleGrant {
 
 /**
  * The Actions `role` holds, in ACTIONS order, with the stages each is open in for a Bingo with these settings. Admin
- * holds every one. A grant the rules leave closed in every stage isn't listed: nobody could ever use it.
+ * holds every one but the Owner's. A grant the rules leave closed in every stage isn't listed: nobody could ever use it.
  */
 export function roleGrants(role: Role, settings: Pick<PermissionBingo, "showScreenshotsWhenFinished">): RoleGrant[] {
-  const grants = GRANTS[role];
-  const held = grants === "*" ? ACTIONS.map((action) => ({ action, stages: undefined })) : grants;
-  return held
+  return grantsOf(role)
     .map(({ action, stages }) => ({
       action,
       stages: STAGE_ORDER.filter(
         (stage) => (!stages || stages.includes(stage)) && (ACTION_INFO[action].onlyIn?.includes(stage) ?? true) && passesRules({ ...settings, stage }, action),
       ),
       does: !action.startsWith("view_"),
-      restrictable: role !== "admin" && (RESTRICTABLE_ACTIONS as readonly Action[]).includes(action),
+      restrictable: role !== "admin" && role !== "owner" && (RESTRICTABLE_ACTIONS as readonly Action[]).includes(action),
     }))
     .filter((grant) => grant.stages.length > 0)
     .sort((a, b) => ACTIONS.indexOf(a.action) - ACTIONS.indexOf(b.action));

@@ -9,6 +9,8 @@ import { withRsn } from "./playerNames";
 import { revokeAllForUser } from "../mcp/connections";
 import { getAuditContext } from "../audit/context";
 import { now } from "../clock";
+import { getAdminDiscordIds, isAdminDiscordId } from "../config";
+import { playerName } from "@bingo/shared";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -61,6 +63,8 @@ export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
   return db.transaction((tx) => {
     const user = tx.select().from(users).where(eq(users.id, userId)).get();
     if (!user) throw new ServiceError(404, "User not found");
+    // An Owner's site admin comes from ADMIN_DISCORD_IDS, and they'd get it back on their next login anyway.
+    if (!isAdmin && isAdminDiscordId(user.discordId)) throw new ServiceError(403, `${userLabel(user)} is an Owner. Remove them from ADMIN_DISCORD_IDS first`);
     if (user.isAdmin === isAdmin) {
       markAuditedNoop();
       return user;
@@ -76,6 +80,24 @@ export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
     if (!isAdmin) revokeAllForUser(tx, userId, getAuditContext()?.actorUserId ?? null);
     return updated;
   });
+}
+
+/**
+ * Site admin > Site admins: the Owners (ADMIN_DISCORD_IDS, in its order), with their account if they've ever signed in,
+ * then every other site admin by name. Someone taken off ADMIN_DISCORD_IDS shows as a plain site admin from then on.
+ */
+export function listSiteAdmins(db: Db) {
+  const ownerIds = getAdminDiscordIds();
+  const ownerAccounts = ownerIds.length ? db.select().from(users).where(inArray(users.discordId, ownerIds)).all() : [];
+  const owners = ownerIds.map((discordId) => ({ discordId, user: ownerAccounts.find((u) => u.discordId === discordId) ?? null }));
+  const admins = db
+    .select()
+    .from(users)
+    .where(eq(users.isAdmin, true))
+    .all()
+    .filter((u) => !ownerIds.includes(u.discordId))
+    .sort((a, b) => playerName(a).localeCompare(playerName(b), undefined, { sensitivity: "base" }));
+  return { owners, admins };
 }
 
 // The account finished or skipped the Tutorial (CONTEXT.md). Kept at the first time: seeing it again (on a device

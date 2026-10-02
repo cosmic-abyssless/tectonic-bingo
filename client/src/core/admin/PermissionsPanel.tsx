@@ -7,7 +7,16 @@ import { ModsManager, StaffManager } from "./ModsManager";
 
 // The matrix's columns, widest reach first, each with who holds it for its heading's tooltip.
 const ROLES: { role: Role; label: string; summary: string }[] = [
-  { role: "admin", label: "Admin", summary: "Site-wide: every Action, in every stage the rules for everyone leave it open. Admins can't be restricted." },
+  {
+    role: "owner",
+    label: "Owner",
+    summary: "Site-wide: the site admins listed in ADMIN_DISCORD_IDS. An Owner is an Admin too, and alone manages site admins. Owners can't be revoked.",
+  },
+  {
+    role: "admin",
+    label: "Admin",
+    summary: "Site-wide: every Action but the Owner's, in every stage the rules for everyone leave it open. Admins can't be restricted.",
+  },
   { role: "moderator", label: "Moderator", summary: "Trusted clan members who moderate this Bingo. Admins add them above." },
   { role: "staff", label: "Staff", summary: "Clan leadership who collect the Buy-ins, and see nothing else of the Bingo. Admins add them above." },
   { role: "captain", label: "Captain", summary: "Leads a Team. Assigned in the Captains tab. A Captain is always a Player too, so they also hold the Player column." },

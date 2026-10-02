@@ -6,13 +6,18 @@ import type { Bingo, Stage } from "./index.ts";
 
 /**
  * A user's standing in one Bingo. They combine: a Moderator can also be a Player, a Captain always is one, and Staff
- * who also play see the Bingo as a Player too.
+ * who also play see the Bingo as a Player too. Owner is site-wide only (siteRoles), never a role in a Bingo: an Admin
+ * whose Discord id is in ADMIN_DISCORD_IDS (CONTEXT.md "Owner").
  */
-export type Role = "admin" | "moderator" | "staff" | "captain" | "player";
+export type Role = "owner" | "admin" | "moderator" | "staff" | "captain" | "player";
 
 export const ACTIONS = [
   /** The Site admin pages, outside any Bingo: users, Bingos, Historical imports, test data. */
   "administer_site",
+  /** Granting and revoking site admin. Owners only, and never on an Owner. */
+  "manage_site_admins",
+  /** Every Admin's Claude connections to the admin MCP server, and revoking any of them. Owners only. */
+  "manage_claude_connections",
   /** Setting a Bingo up and running it: settings, Board, Teams, Moderators, signup questions, stage changes, the pick order, Superlative tallies. */
   "administer_bingo",
   /** The mod panel: reviewing Submissions, Point Adjustments, the signup roster (pairings, withdrawals), Wrapped, the audit log. */
@@ -159,6 +164,9 @@ export function mayRestrict(actorRoles: readonly Role[], targetRoles: readonly R
   return actorRoles.includes("moderator") && targetRoles.every((role) => MODERATOR_RESTRICTS.includes(role));
 }
 
+/** The Actions only Owners hold: Admin's "every Action" stops short of them. */
+export const OWNER_ACTIONS = ["manage_site_admins", "manage_claude_connections"] as const satisfies readonly Action[];
+
 /** An Action a role holds, in every stage or only in the ones listed. */
 export interface Grant {
   action: Action;
@@ -181,9 +189,12 @@ const BUYINS: readonly Stage[] = ["signup", "captains", "draft", "reveal"];
 
 /**
  * Every role's grants. Each role lists its Actions in full, so a new Action is never granted to one by accident; Admin
- * alone holds every Action in every stage. Filled in from what the server enforced before can() existed.
+ * alone holds every Action in every stage, but for the Owner's (OWNER_ACTIONS). Filled in from what the server enforced
+ * before can() existed.
  */
 export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "admin">]: readonly Grant[] } = {
+  // An Owner is always an Admin too (siteRoles), so Admin's Actions aren't repeated here.
+  owner: OWNER_ACTIONS.map((action) => ({ action })),
   admin: "*",
   moderator: [
     { action: "moderate_bingo" },
@@ -238,6 +249,8 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
  */
 export const ACTION_INFO: { readonly [A in Action]: { label: string; description?: string; onlyIn?: readonly Stage[] } } = {
   administer_site: { label: "Site admin pages", description: "Users, Bingos, Historical imports and test data, outside any Bingo." },
+  manage_site_admins: { label: "Manage site admins", description: "Granting and revoking site admin. Never on an Owner." },
+  manage_claude_connections: { label: "See everyone's Claude connections", description: "Every Admin's connections to the admin MCP server, and revoking any of them." },
   administer_bingo: {
     label: "Run the Bingo",
     description: "Settings, Board, Teams, Moderators and Staff, signup questions, stage changes, the pick order and Superlative tallies.",
@@ -300,9 +313,19 @@ export const OPEN_TO_EVERYONE: { readonly [A in Action]?: (bingo: PermissionBing
   view_other_teams_screenshots: (bingo) => bingo.stage === "complete" && bingo.showScreenshotsWhenFinished,
 };
 
-/** Roles outside any Bingo: a site admin's, on the Site admin pages. */
-export function siteRoles(user: { isAdmin: boolean }): Role[] {
-  return user.isAdmin ? ["admin"] : [];
+/**
+ * Roles outside any Bingo: a site admin's, on the Site admin pages, and an Owner's on top. Whether they're an Owner is
+ * the server's to say (ADMIN_DISCORD_IDS): it sends it to the client as MeResponse.isOwner.
+ */
+export function siteRoles(user: { isAdmin: boolean }, isOwner = false): Role[] {
+  if (!user.isAdmin) return [];
+  return isOwner ? ["admin", "owner"] : ["admin"];
+}
+
+/** The grants `role` holds, Admin's "*" spelled out: every Action but the Owner's, in every stage. */
+export function grantsOf(role: Role): readonly Grant[] {
+  const grants = GRANTS[role];
+  return grants === "*" ? ACTIONS.filter((action) => !(OWNER_ACTIONS as readonly Action[]).includes(action)).map((action) => ({ action })) : grants;
 }
 
 export type PermissionDenial = "role" | "stage" | "rule" | "restricted";
@@ -328,12 +351,7 @@ export function can(roles: readonly Role[], bingo: PermissionBingo | null, actio
   let granted = false;
   let inStage = false;
   for (const role of roles) {
-    const grants = GRANTS[role];
-    if (grants === "*") {
-      granted = inStage = true;
-      break;
-    }
-    for (const grant of grants) {
+    for (const grant of grantsOf(role)) {
       if (grant.action !== action) continue;
       granted = true;
       if (!grant.stages || (bingo && grant.stages.includes(bingo.stage))) inStage = true;

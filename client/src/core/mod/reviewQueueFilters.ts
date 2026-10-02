@@ -3,10 +3,8 @@ import type { MultiSelectOption } from "../ui/MultiSelect";
 import type { inclusionFilter } from "../ui/inclusionFilter";
 import { displayName } from "../ui/user";
 
-// The Mod panel's Submissions view (issue #383): its Submitter and Reviewer filters, and drawing the filtered list
-// PAGE_SIZE at a time. Everything is still fetched at once; only the rendering is paged.
-
-export const PAGE_SIZE = 50;
+// The Mod panel's Submissions view (issue #383): its Submitter and Reviewer filters. It draws the filtered list a page
+// at a time with core/ui/paging.
 
 /** Reviewer filter options that aren't a person. */
 export const NOT_REVIEWED = "not-reviewed";
@@ -72,14 +70,4 @@ export function filterSubmissions(
       (!filters.submitter.narrowed || submitterKeys(row).some(filters.submitter.matches)) &&
       filters.reviewer.matches(reviewerKey(row)),
   );
-}
-
-/** The first `shown` rows to draw, and how many are left for Load more. */
-export function page<T>(rows: T[], shown: number): { rows: T[]; remaining: number } {
-  return { rows: rows.slice(0, shown), remaining: Math.max(0, rows.length - shown) };
-}
-
-/** How many to draw so the row with this index is drawn too: whole pages, never fewer than already shown. */
-export function shownToInclude(index: number, shown: number): number {
-  return index < 0 ? shown : Math.max(shown, Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE);
 }

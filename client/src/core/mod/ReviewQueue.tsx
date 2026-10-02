@@ -21,7 +21,8 @@ import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
 import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
 import { TooltipSpan } from "../ui/Tooltip";
-import { filterSubmissions, page, PAGE_SIZE, reviewerOptions, shownToInclude, submitterOptions } from "./reviewQueueFilters";
+import { filterSubmissions, reviewerOptions, submitterOptions } from "./reviewQueueFilters";
+import { page, PAGE_SIZE, shownToInclude } from "../ui/paging";
 import { TextButton } from "../ui/TextButton";
 
 function KeyCap({ children }: { children: React.ReactNode }) {

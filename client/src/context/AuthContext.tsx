@@ -9,8 +9,8 @@ interface AuthState {
   /** /api/me has been asked on this load: `user` is the server's record (or, if it couldn't be asked, the cached one stands). */
   confirmed: boolean;
   devMode: boolean;
-  /** Only admins listed in the server's ADMIN_DISCORD_IDS may grant site admin. */
-  canGrantAdmin: boolean;
+  /** An Owner (CONTEXT.md): a site admin listed in the server's ADMIN_DISCORD_IDS, who holds the Owner's Actions (siteRoles). */
+  isOwner: boolean;
   /** Dev only: the viewer is an admin who switched their admin powers off (the account switcher), so `user.isAdmin` is false. */
   devAdminOff: boolean;
   logout: () => Promise<void>;
@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [cached] = useState(() => readAuthCache<User>(__BUILD_ID__));
   const [user, setUser] = useState<User | null>(cached?.user ?? null);
   const [devMode, setDevMode] = useState(cached?.devMode ?? false);
-  const [canGrantAdmin, setCanGrantAdmin] = useState(cached?.canGrantAdmin ?? false);
+  const [isOwner, setIsOwner] = useState(cached?.isOwner ?? false);
   const [devAdminOff, setDevAdminOff] = useState(cached?.devAdminOff ?? false);
   const [loading, setLoading] = useState(!cached);
   const [confirmed, setConfirmed] = useState(false);
@@ -40,13 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const next = data?.user ?? null;
         setUser(next);
         setDevMode(data?.devMode ?? false);
-        setCanGrantAdmin(data?.canGrantAdmin ?? false);
+        setIsOwner(data?.isOwner ?? false);
         setDevAdminOff(data?.devAdminOff ?? false);
         if (next)
           writeAuthCache(__BUILD_ID__, {
             user: next,
             devMode: data?.devMode ?? false,
-            canGrantAdmin: data?.canGrantAdmin ?? false,
+            isOwner: data?.isOwner ?? false,
             devAdminOff: data?.devAdminOff ?? false,
           });
         else clearAuthCache();
@@ -81,10 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUser = (next: User) => {
     setUser(next);
-    writeAuthCache(__BUILD_ID__, { user: next, devMode, canGrantAdmin, devAdminOff });
+    writeAuthCache(__BUILD_ID__, { user: next, devMode, isOwner, devAdminOff });
   };
 
-  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, canGrantAdmin, devAdminOff, logout, updateUser, refresh }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, confirmed, devMode, isOwner, devAdminOff, logout, updateUser, refresh }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthState {
