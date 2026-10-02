@@ -10,6 +10,7 @@ import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { SubmissionBubble } from "../board/SubmissionBubble";
 import { COMIC_FONT } from "../font";
+import { useLoadMore } from "../../../core/ui/paging";
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -46,6 +47,8 @@ export function SubmissionsDrawer({
   const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
   const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
   const pending = submissions.filter((s) => s.status === "pending").length;
+  // Drawn a page at a time, like the Mod panel's Submissions; back to the first page on a new filter or a fresh open.
+  const drawn = useLoadMore(shown, `${isOpen}:${filter}:${picked.join(",")}`);
 
   // Pinned under the header (ComicDialogHeader's `below`), so the filters stay put while the list scrolls. Index tabs:
   // the picked one is the list's own paper and overlaps the rule, so it reads as the open tab; the rest sit on the
@@ -130,16 +133,28 @@ export function SubmissionsDrawer({
                 </p>
               </CaptionBox>
             ) : (
-              <ul className="space-y-5">
-                {shown.map((s, i) => (
-                  // Each card is its own stacking context (the tilt). Stack earlier
-                  // cards above later ones so an overhanging stamp isn't covered
-                  // by the next card's top edge.
-                  <li key={s.id} className="relative" style={{ transform: `rotate(${i % 2 === 0 ? -0.5 : 0.5}deg)`, zIndex: shown.length - i }}>
-                    <SubmissionBubble submission={s} showTile />
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="space-y-5">
+                  {drawn.rows.map((s, i) => (
+                    // Each card is its own stacking context (the tilt). Stack earlier
+                    // cards above later ones so an overhanging stamp isn't covered
+                    // by the next card's top edge.
+                    <li key={s.id} className="relative" style={{ transform: `rotate(${i % 2 === 0 ? -0.5 : 0.5}deg)`, zIndex: drawn.rows.length - i }}>
+                      <SubmissionBubble submission={s} showTile />
+                    </li>
+                  ))}
+                </ul>
+                {drawn.remaining > 0 && (
+                  <div className="flex flex-col items-center gap-2 pt-6">
+                    <ComicButton size="sm" sfx={false} onPress={drawn.more}>
+                      Load more
+                    </ComicButton>
+                    <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: colors.INK_SUBTLE }}>
+                      Showing {drawn.rows.length} of {shown.length}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </TabPanel>
         )}

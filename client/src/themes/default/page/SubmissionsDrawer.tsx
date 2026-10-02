@@ -13,6 +13,7 @@ import { ScreenshotThumb } from "../../../core/submissions/ScreenshotThumb";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { displayName } from "../../../core/ui/user";
 import { LinkedClaimsSummary } from "../../../core/submissions/LinkedClaimsSummary";
+import { useLoadMore } from "../../../core/ui/paging";
 
 type Filter = SubmissionStatus | "all";
 const FILTERS: { key: Filter; label: string }[] = [
@@ -43,6 +44,8 @@ export function SubmissionsDrawer({
   const bySubmitter = picked.length > 0 ? submissions.filter((s) => s.submittedBy != null && picked.includes(s.submittedBy)) : submissions;
   const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
   const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
+  // Drawn a page at a time, like the Mod panel's Submissions; back to the first page on a new filter or a fresh open.
+  const drawn = useLoadMore(shown, `${isOpen}:${filter}:${picked.join(",")}`);
 
   return (
     <Dialog isOpen={isOpen} onClose={onClose} size="lg" fixedHeight>
@@ -87,39 +90,51 @@ export function SubmissionsDrawer({
             No {filter === "all" ? "" : `${filter} `}submissions{picked.length === 1 ? ` by ${picked[0]}` : picked.length > 1 && ` by those Players`}.
           </p>
         ) : (
-          <ul className="divide-y divide-outline">
-            {shown.map((s) => (
-              <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
-                <ScreenshotThumb url={s.thumbnailUrl ?? undefined} pending={s.screenshotPending} />
+          <>
+            <ul className="divide-y divide-outline">
+              {drawn.rows.map((s) => (
+                <li key={s.id} className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-surface-hover">
+                  <ScreenshotThumb url={s.thumbnailUrl ?? undefined} pending={s.screenshotPending} />
 
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex flex-wrap items-center gap-2">
-                    <span className="truncate text-sm font-medium text-on-surface">{s.tileName ?? "Unknown tile"}</span>
-                    {s.taskLabels.map((label) => (
-                      <Badge key={label}>{label}</Badge>
-                    ))}
-                  </div>
-                  <p className="truncate text-sm text-on-surface-muted">
-                    <LinkedClaimsSummary claims={s.detail.claims} isProof={s.isProof} />
-                  </p>
-                  {s.detail.submittedByUser && (
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">
-                      by <PlayerName userId={s.detail.submittedByUser.id}>{s.submittedBy}</PlayerName>
-                      {s.detail.postedByUser && <> (posted by <PlayerName userId={s.detail.postedByUser.id}>{displayName(s.detail.postedByUser)}</PlayerName>)</>}
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium text-on-surface">{s.tileName ?? "Unknown tile"}</span>
+                      {s.taskLabels.map((label) => (
+                        <Badge key={label}>{label}</Badge>
+                      ))}
+                    </div>
+                    <p className="truncate text-sm text-on-surface-muted">
+                      <LinkedClaimsSummary claims={s.detail.claims} isProof={s.isProof} />
                     </p>
-                  )}
-                  {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
-                  {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
-                  {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
-                </div>
+                    {s.detail.submittedByUser && (
+                      <p className="mt-0.5 text-xs text-on-surface-subtle">
+                        by <PlayerName userId={s.detail.submittedByUser.id}>{s.submittedBy}</PlayerName>
+                        {s.detail.postedByUser && <> (posted by <PlayerName userId={s.detail.postedByUser.id}>{displayName(s.detail.postedByUser)}</PlayerName>)</>}
+                      </p>
+                    )}
+                    {s.screenshotPending && <p className="mt-0.5 text-xs italic text-on-surface-subtle">{SCREENSHOT_NOT_UPLOADED}</p>}
+                    {s.reviewerNotes && <p className="mt-0.5 truncate text-xs text-warn">{s.reviewerNotes}</p>}
+                    {!s.isProof && <ReactionBar className="mt-1.5" reactions={s.reactions} canReact={reactions.canReact} restricted={reactions.restricted} onToggle={(emoji) => reactions.toggle(s.id, emoji)} />}
+                  </div>
 
-                <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                  <SubmissionStatusBadge status={s.status} />
-                  <span className="text-xs text-on-surface-subtle">{s.timeAgo}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+                    <SubmissionStatusBadge status={s.status} />
+                    <span className="text-xs text-on-surface-subtle">{s.timeAgo}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {drawn.remaining > 0 && (
+              <div className="flex flex-col items-center gap-1 border-t border-outline py-4">
+                <Button variant="ghost" onPress={drawn.more}>
+                  Load more
+                </Button>
+                <span className="text-xs text-on-surface-subtle">
+                  Showing {drawn.rows.length} of {shown.length}
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Dialog>

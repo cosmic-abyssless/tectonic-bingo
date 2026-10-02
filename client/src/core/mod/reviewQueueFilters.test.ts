@@ -5,10 +5,7 @@ import {
   filterSubmissions,
   NOBODY_RECORDED,
   NOT_REVIEWED,
-  page,
-  PAGE_SIZE,
   reviewerOptions,
-  shownToInclude,
   submitterOptions,
 } from "./reviewQueueFilters";
 
@@ -92,24 +89,5 @@ describe("filterSubmissions", () => {
     expect(ids({ status: ["approved"], submitter: ["alice", "carol"] })).toEqual(["2", "4"]);
     expect(ids({ reviewer: ["mod"], team: ["Team 2"] })).toEqual(["3"]);
     expect(ids({ status: ["pending"], reviewer: ["mod"] })).toEqual([]);
-  });
-});
-
-describe("paging", () => {
-  const many = Array.from({ length: 120 }, (_, i) => i);
-
-  it("draws a page, then Load more adds one until nothing is left", () => {
-    expect(page(many, PAGE_SIZE)).toMatchObject({ rows: many.slice(0, 50), remaining: 70 });
-    expect(page(many, PAGE_SIZE * 2).remaining).toBe(20);
-    expect(page(many, PAGE_SIZE * 3)).toMatchObject({ rows: many, remaining: 0 });
-    expect(page([1, 2], PAGE_SIZE)).toEqual({ rows: [1, 2], remaining: 0 });
-  });
-
-  it("draws whole pages up to a row opened past them, never fewer than already shown", () => {
-    expect(shownToInclude(10, 50)).toBe(50);
-    expect(shownToInclude(50, 50)).toBe(100);
-    expect(shownToInclude(119, 50)).toBe(150);
-    expect(shownToInclude(3, 150)).toBe(150);
-    expect(shownToInclude(-1, 50)).toBe(50);
   });
 });
