@@ -43,8 +43,8 @@ async function main(): Promise<void> {
     board = { document: JSON.parse(fs.readFileSync(file, "utf-8")) as BingoExportDocument };
   }
 
-  const { stage, progress, days, teams, teamSize, mods, me, seed, slug } = args;
-  const { job: started } = await session.post<{ job: GenerateJob }>("/api/dev/generate", { stage, progress, days, teams, teamSize, mods, me, seed, slug, ...board });
+  const { stage, progress, days, teams, teamSize, mods, me, seed, slug, theme } = args;
+  const { job: started } = await session.post<{ job: GenerateJob }>("/api/dev/generate", { stage, progress, days, teams, teamSize, mods, me, seed, slug, theme, ...board });
   log(`started on ${args.base} as ${admin.discordUsername}`);
 
   let after = 0;

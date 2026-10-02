@@ -253,9 +253,9 @@ cat <<EOF
 Next (see "Setting up the server" in deploy/README.md):
   0. Add the read-only deploy key printed above to the repository (Settings > Deploy keys), so the box can fetch the scripts.
   1. As the deploy user, put the secrets in $root/env/:
-       production.env, staging.env             the app's settings (deploy/env/*.env.example)
+       production.env, staging.env             the app's settings (infra/push-env.sh writes them from OpenTofu)
        production.backup.env, staging.backup.env   where backups go (deploy/backup.env.example; a different BACKUP_PREFIX each)
-       staging.basic-auth                       one line: a username, a space, and a hash from 'caddy hash-password'
+       staging.basic-auth                       staging's password (infra/push-env.sh too)
   2. Start the shared front door:    $root/deploy/deploy.sh edge
   3. Add the GitHub secrets (DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS), then merge to main: staging deploys itself.
   4. Point DNS at this machine, check staging, then run the Deploy workflow for production.

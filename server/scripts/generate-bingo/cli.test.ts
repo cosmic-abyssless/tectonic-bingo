@@ -16,6 +16,13 @@ describe("parseArgs", () => {
     expect(a).toMatchObject({ stage: "draft", seed: 7, me: "123", dryRun: true, teams: 4, from: "tectonic-comics-bingo", base: "https://staging.example" });
   });
 
+  it("takes a theme, default unless given, and refuses an unknown one", () => {
+    expect(parseArgs([], now, noEnv).theme).toBe("default");
+    expect(parseArgs(["--theme", "comic"], now, noEnv).theme).toBe("comic");
+    expect(() => parseArgs(["--theme", "neon"], now, noEnv)).toThrow(/^--theme must be one of default, comic/);
+    expect(() => parseArgs(["--theme"], now, noEnv)).toThrow(/--theme needs a value/);
+  });
+
   it("takes the staging password from the flag or the environment", () => {
     expect(parseArgs(["--basic-auth", "team:pw"], now, noEnv).basicAuth).toBe("team:pw");
     expect(parseArgs([], now, { GENERATE_BINGO_BASIC_AUTH: "team:pw" }).basicAuth).toBe("team:pw");

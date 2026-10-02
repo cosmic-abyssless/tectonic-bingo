@@ -4,7 +4,7 @@
 // (their pictures, points and Task names as rules); the people are made up like any run's, a few of them "left the
 // clan", with Captains, standings, a Wise Old Man competition and an unknown Player or two.
 import sharp from "sharp";
-import { HISTORICAL_BUNDLE_FORMAT, HISTORICAL_BUNDLE_VERSION, type BingoExportDocument, type ExportImage, type ExportNode, type HistoricalBundle, type HistoricalImportScoring } from "@bingo/shared";
+import { DEFAULT_THEME, HISTORICAL_BUNDLE_FORMAT, HISTORICAL_BUNDLE_VERSION, type BingoExportDocument, type ExportImage, type ExportNode, type HistoricalBundle, type HistoricalImportScoring } from "@bingo/shared";
 import type { Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { addRichSections } from "./historicalRich";
@@ -150,6 +150,8 @@ export async function runHistorical(input: HistoricalRunInput): Promise<void> {
   const { usersCreated, scoring } = await input.api
     .as(input.adminDiscordId)
     .post<{ usersCreated: number; scoring: HistoricalImportScoring | null }>("/api/admin/historical-bingos", bundle);
+  // The bundle has no theme (the old site had none): set it the way the Bingo's settings would.
+  if (input.options.theme !== DEFAULT_THEME) await input.api.as(input.adminDiscordId).patch(`/api/bingos/${bundle.bingo.slug}/admin/settings`, { theme: input.options.theme });
   input.log(`imported ${bundle.bingo.slug} through Site admin → Import historical Bingo (${usersCreated} new users)`);
   if (scoring) input.log(`scored by the engine: ${scoring.teams.map((t) => `${t.team} ${t.total}`).join(", ")}`);
   if (bundle.submissions) await uploadScreenshots(input, bundle.bingo.slug);

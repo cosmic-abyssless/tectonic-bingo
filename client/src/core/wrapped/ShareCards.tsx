@@ -18,8 +18,7 @@ export const WRAPPED_CARDS_ID = "wrapped-cards";
  * whatever the theme draws.
  */
 export function WrappedShareCards({ cards, preview, Card }: { cards: WrappedShareCardModel[]; preview: boolean; Card: ComponentType<{ card: WrappedShareCardModel }> }) {
-  // What the browser supports doesn't change while the page is open.
-  const supports = useMemo(() => ({ copy: canCopyImage(), share: canShareImage() }), []);
+  const supports = useShareSupport();
   if (cards.length === 0) return null;
   return (
     <div id={WRAPPED_CARDS_ID} className="mt-16 w-full max-w-5xl scroll-mt-20">
@@ -33,6 +32,19 @@ export function WrappedShareCards({ cards, preview, Card }: { cards: WrappedShar
       </ul>
     </div>
   );
+}
+
+/**
+ * One share card with its buttons, for a theme that sets the cards out its own way (a page each, say) rather than in
+ * WrappedShareCards' row. Fills the width it's given; the card is previewed scaled to it.
+ */
+export function WrappedShareCardItem({ card, preview, Card }: { card: WrappedShareCardModel; preview: boolean; Card: ComponentType<{ card: WrappedShareCardModel }> }) {
+  return <ShareCard card={card} preview={preview} Card={Card} supports={useShareSupport()} />;
+}
+
+/** What the browser can do with a card's image: copy it, share it as a file. It doesn't change while the page is open. */
+function useShareSupport() {
+  return useMemo(() => ({ copy: canCopyImage(), share: canShareImage() }), []);
 }
 
 type Status = { tone: "ok" | "error"; text: string } | null;

@@ -181,7 +181,10 @@ pass). Treat the key as access to production data. It is **not** root on the mac
 or other environments' data except by deploying to them. Closing the rest would need images the box can verify came from
 `main` (building on the box, which spends the site's CPU on every merge, or signed images); that is a known limit, not an
 oversight. If the key leaks: delete it from the deploy user's `authorized_keys`, rotate it in GitHub, and rotate
-production's secrets (`SESSION_SECRET`, the Discord and API keys, and `FEEDBACK_SECRET`: with it and the database anyone can tell whose a Feedback response is, so treat that as read too) and treat the data as read.
+production's secrets (`SESSION_SECRET`, `FEEDBACK_SECRET`, the Discord and API keys: in Bitwarden, then "Changing a value"
+in [`infra/README.md`](../infra/README.md), including deleting the `.bak` that still holds the leaked ones) and treat the
+data as read. With `FEEDBACK_SECRET` and the database anyone can tell whose a Feedback response is, so treat that as read
+too.
 
 `deploy/test-ssh-entry.sh` tests every allowed shape, 24 requests that must be refused, and `sync-deploy` against a real git
 repository (a commit that is not on `main`, a made-up commit, a symlink in `deploy/`, a script that does not parse). It runs
@@ -215,12 +218,12 @@ The credentials, the state bucket and the commands are in [`infra/README.md`](..
 1. `. .\infra\env.ps1`, then `tofu init "-backend-config=backend.hcl"` and `tofu apply` (from `infra/`). This creates the server on
    a stable address, the firewall, the CI, repository and host keys, the deploy key and the four `DEPLOY_*` secrets on GitHub,
    and the R2 bucket with its token. First boot runs `deploy/bootstrap-box.sh`, `deploy/init-env.sh` and `deploy/deploy.sh edge`
-   by itself (progress: `/var/log/cloud-init-output.log`, which also holds the **staging password, printed once**: move it to the
-   password manager and clear that line).
+   by itself (progress: `/var/log/cloud-init-output.log`).
 2. `infra/push-backup-env.ps1` (Windows PowerShell; `infra/push-backup-env.sh` elsewhere) writes the two backup env files (the R2 credentials tofu derived) onto the box and checks it
    can write to the bucket.
-3. `ssh deploy@<address>`, then `deploy/fill-secrets.sh`: asks for the Discord values (once, for both environments), the
-   production clan-API keys and an optional backup alert URL, hiding what you type. `--list` shows what is still blank.
+3. `infra/push-env.ps1 -Write` (`infra/push-env.sh --write` elsewhere) writes the app's own env files and staging's password,
+   rendered by `infra/app-env.tf` from the values in Bitwarden. An optional backup alert URL goes in `*.backup.env` by hand
+   (`BACKUP_PING_URL`; `push-backup-env` keeps it).
 4. DNS (Mico, by hand): `tofu output dns_records_to_ask_for` lists the records, all **DNS only** (grey cloud).
 5. Discord: add the two redirect URIs and change the `/terms` and `/privacy` URLs (step 8 below); optional monitoring (step 10).
 6. **Actions > Deploy > Run workflow** for staging, check it, then production. Steps 9 and 10 below apply as written.
@@ -252,15 +255,12 @@ steps; the rest is secrets and DNS, which only a person can do.
    **add it under the repository's Settings > Deploy keys, with "Allow write access" left OFF.** Until you do, `sync-deploy`
    (and so every deploy from CI) cannot fetch the scripts.
 4. **Put the secrets on the server**, as the deploy user, in `/srv/tectonic/env/` (mode 640, never in git; master copies
-   in the team's password manager). Two scripts do the typing: `deploy/init-env.sh` creates the files from the templates,
-   generates the different session and Feedback secrets (each environment's own) and the staging password (printed once: save it), and never overwrites a file;
-   `deploy/fill-secrets.sh` then asks for the values only you have, hidden as you type. What they produce, if you would
-   rather do it by hand:
-   - `production.env`, `staging.env`: from `deploy/env/*.env.example`. Use different `SESSION_SECRET`s and `FEEDBACK_SECRET`s.
-     `FEEDBACK_SECRET` keys the anonymous Feedback responses to their Players (docs/adr/0002-anonymous-feedback.md): the
-     server refuses to start without it, and it must never change while a Feedback form is open (a new one cuts every
-     Player off from editing their response; it exposes no one). An environment set up before Feedback existed needs it
-     added to its `.env` once, with a long random value (`openssl rand -hex 32`), before the deploy that ships it.
+   in Bitwarden). `deploy/init-env.sh` creates the backup env files from their template and never overwrites a file. The
+   app's own files are what `infra/app-env.tf` renders; without OpenTofu, write them by hand with the same keys:
+   - `production.env`, `staging.env`: every key `infra/app-env.tf` sets for that environment. Use different `SESSION_SECRET`s
+     and `FEEDBACK_SECRET`s (`openssl rand -hex 32`). `FEEDBACK_SECRET` keys the anonymous Feedback responses to their
+     Players (docs/adr/0002-anonymous-feedback.md): the server refuses to start without it, and it must never change while a
+     Feedback form is open (a new one cuts every Player off from editing their response; it exposes no one).
    - `production.backup.env`, `staging.backup.env`: from `deploy/backup.env.example`, with **different `BACKUP_PREFIX`es**
      (`production`, `staging`). The R2 bucket and token are set up as described under "Backups and restoring".
    - `staging.basic-auth`: one line, a username, a space, then a bcrypt hash:
