@@ -52,8 +52,15 @@ if ($useBitwarden) {
         try { $env:BW_SESSION = bw unlock --passwordenv BW_PASSWORD --raw --nointeraction } finally { Remove-Item env:BW_PASSWORD -ErrorAction SilentlyContinue }
         if (-not $env:BW_SESSION) { throw "Bitwarden: could not unlock (wrong master password?)" }
     }
-    Write-Host "Bitwarden: syncing, then reading $($values.Count) items..."
+    Write-Host "Bitwarden: syncing..."
     $null = bw sync --nointeraction
+    # One call for every item (each bw call starts Node and decrypts the vault, seconds apiece on Windows), kept in memory only.
+    Write-Host "Bitwarden: reading the tectonic-bingo/ items..."
+    $items = @{}
+    $listed = (bw list items --search "tectonic-bingo/" --nointeraction) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Bitwarden: could not list the items (bw list items failed)" }
+    foreach ($item in ($listed | ConvertFrom-Json)) { if ($item.login.password) { $items[$item.name] = $item.login.password } }
+    Remove-Variable listed
 } elseif (-not $Prompt) {
     Write-Host "bw (the Bitwarden CLI) is not installed, so each value is asked for. https://bitwarden.com/help/cli/"
 }
@@ -62,12 +69,14 @@ $missing = @()
 foreach ($v in $values) {
     $value = $null
     if ($useBitwarden) {
-        $value = bw get password "tectonic-bingo/$($v.Name)" --nointeraction 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $v.Name }
+        $value = $items["tectonic-bingo/$($v.Name)"]
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $v.Name }
     }
     if (-not $value) { $value = Read-Secret $v.Name $v.Hint }
     Set-Item -Path "env:$($v.Name)" -Value ($value.Trim())
 }
+# This script is dot-sourced, so its variables would outlive it in the window: only the environment variables should.
+Remove-Variable value, items, item -ErrorAction SilentlyContinue
 if ($missing.Count -gt 0) {
     Write-Host "Not in Bitwarden (asked for instead): $($missing -join ', '). Add them as items named tectonic-bingo/<NAME>."
 }
