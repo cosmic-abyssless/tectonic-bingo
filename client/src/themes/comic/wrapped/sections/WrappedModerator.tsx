@@ -28,7 +28,8 @@ export function WrappedModerator({ section }: { section: WrappedModeratorModel }
             </div>
           ) : (
             <>
-              <div className="self-start">
+              {/* OSRS's yellow needs a dark ground to read on the panel's light tint. */}
+              <div className="self-start border-[3px] px-2.5 py-1" style={{ background: "rgb(0 0 0 / 0.78)", borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
                 <OsrsCaption size="md">{section.name}</OsrsCaption>
               </div>
               <div className={ART}>

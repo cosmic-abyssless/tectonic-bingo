@@ -196,7 +196,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           {y.mostActiveDay && (
             <div className="grid flex-1 grid-cols-[0.8fr_1.4fr] gap-2">
               <Reveal step={dayHead} className={`${FILL} overflow-hidden`}>
-                <PanelBody tone="cyan" rays="50% 100%" gap={6} align="start">
+                <PanelBody tone="cyan" rays="50% 100%" gap={6}>
                   <Kicker>Your biggest day</Kicker>
                   <InkTitle size={23}>{y.mostActiveDay.dateLabel}</InkTitle>
                   <Body size={14} className="font-semibold">
