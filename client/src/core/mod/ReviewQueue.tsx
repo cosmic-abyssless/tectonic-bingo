@@ -13,15 +13,17 @@ import { SearchableSelect } from "../ui/SearchableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { useUrlSet } from "../ui/useUrlParam";
-import { ScreenshotThumb } from "../submissions/ScreenshotThumb";
+import { ScreenshotLink, ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
 import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
 import { formatGp } from "../ui/gp";
 import { RepriceGpButton } from "./RepriceGpButton";
 import { fullUrl } from "../../api/imageVariants";
 import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
-import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
-import { filterSubmissions, page, PAGE_SIZE, reviewerOptions, shownToInclude, submitterOptions } from "./reviewQueueFilters";
+import { TooltipSpan } from "../ui/Tooltip";
+import { filterSubmissions, reviewerOptions, submitterOptions } from "./reviewQueueFilters";
+import { page, PAGE_SIZE, shownToInclude } from "../ui/paging";
+import { TextButton } from "../ui/TextButton";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -359,18 +361,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       {creditFor !== row.submission.id && (
                         <>
                           {" · "}
-                          <button
-                            type="button"
-                            className="underline-offset-2 hover:text-on-surface hover:underline"
-                            onClick={(e) => {
-                              e.stopPropagation();
+                          <TextButton
+                            onPress={() => {
                               setCreditFor(row.submission.id);
                               setCreditUserId("");
                               setCreditError(null);
                             }}
                           >
                             Change player
-                          </button>
+                          </TextButton>
                         </>
                       )}
 
@@ -423,18 +422,16 @@ export function ReviewQueue({ slug }: { slug: string }) {
                   <div className="space-y-3 border-t border-outline bg-background px-4 py-4" onClick={(e) => e.stopPropagation()}>
                     {row.screenshots.map((ss, i) => (
                       <div key={ss.id} id={i === 0 ? `review-shots-${row.submission.id}` : undefined}>
-                        <TextTooltip text="Open full size in new tab">
-                          <a href={ss.storageUrl} target="_blank" rel="noreferrer" className="block">
-                            <img
-                              src={fullUrl(ss.storageUrl)}
-                              alt={ss.screenshotType}
-                              // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
-                              style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
-                              onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
-                              className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
-                            />
-                          </a>
-                        </TextTooltip>
+                        <ScreenshotLink href={ss.storageUrl} tooltip="Open full size in new tab" className="block">
+                          <img
+                            src={fullUrl(ss.storageUrl)}
+                            alt={ss.screenshotType}
+                            // Leaves room for the header, the notes and the buttons (and shares it between screenshots), so they fit together.
+                            style={{ maxHeight: `max(12rem, calc((100dvh - 19rem) / ${row.screenshots.length}))` }}
+                            onLoad={() => Date.now() < revealUntil.current && revealReview(row.submission.id)}
+                            className="w-full rounded-md border border-outline bg-black object-contain transition-colors hover:border-outline-strong"
+                          />
+                        </ScreenshotLink>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <ScreenshotAnalysisBadges screenshot={ss} />
                         </div>

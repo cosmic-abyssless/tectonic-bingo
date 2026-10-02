@@ -42,13 +42,15 @@ export function PlainButton({ variant = "secondary", size = "md", className, ...
   );
 }
 
-/** Square icon-only button with a 40px hit area. */
-export function IconButton({ label, className, size = "md", ...props }: ButtonProps & { label: string }) {
+const ICON_SIZE = { xs: "size-5", sm: "size-7", md: "size-9" } as const;
+
+/** Square icon-only button with a 40px hit area. `xs` is for a remove × inside a chip. */
+export function IconButton({ label, className, size = "md", ...props }: Omit<ButtonProps, "size"> & { label: string; size?: keyof typeof ICON_SIZE }) {
   return (
     <AriaButton
       aria-label={label}
       {...props}
-      className={`hit-40 inline-flex items-center justify-center rounded-md text-on-surface-muted hover:text-on-surface hover:bg-surface-hover transition-colors duration-100 pressed:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${size === "sm" ? "size-7" : "size-9"} ${className ?? ""}`}
+      className={`hit-40 inline-flex items-center justify-center rounded-md text-on-surface-muted hover:text-on-surface hover:bg-surface-hover transition-colors duration-100 pressed:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${ICON_SIZE[size]} ${className ?? ""}`}
     />
   );
 }

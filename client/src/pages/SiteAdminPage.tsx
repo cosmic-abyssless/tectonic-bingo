@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Key } from "react-aria-components";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ import { Field, Input } from "../core/ui/Field";
 import { CheckIcon, TrashIcon } from "../core/ui/icons";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useUrlTab } from "../core/ui/useUrlParam";
+import { FileDropButton } from "../core/ui/FileDropButton";
 
 function slugify(s: string): string {
   return s
@@ -101,7 +102,6 @@ function CreateBingoForm() {
 function ImportBingoPanel() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedDoc, setParsedDoc] = useState<BingoExportDocument | null>(null);
   const [fileName, setFileName] = useState("");
   const [name, setName] = useState("");
@@ -141,14 +141,9 @@ function ImportBingoPanel() {
   return (
     <div className="max-w-md space-y-4">
       <p className="text-sm text-on-surface-muted">Create a new bingo from a previously exported board and settings file.</p>
-      <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-md border border-dashed border-outline-strong px-3 py-4 text-center text-sm text-on-surface-muted transition-colors hover:border-on-surface/60 hover:text-on-surface"
-        >
-          {fileName || "Choose an export file…"}
-        </button>
-        <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && onFileChange(e.target.files[0])} />
+      <FileDropButton accept=".json,application/json" onFiles={([file]) => onFileChange(file)} className="w-full px-3 py-4 text-center text-sm">
+        {fileName || "Choose an export file…"}
+      </FileDropButton>
 
         {parsedDoc && (
           <>

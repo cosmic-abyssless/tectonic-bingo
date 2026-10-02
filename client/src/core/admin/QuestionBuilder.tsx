@@ -8,6 +8,7 @@ import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Input } from "../ui/Field";
+import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { MAX_MEMBER_PICKS, MAX_QUESTION_HELPER_TEXT } from "@bingo/shared";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
@@ -54,13 +55,9 @@ function VisibilitySelect(props: { value: QuestionVisibility; onChange: (v: Ques
 // Choice questions only: an extra Other choice where players write their own answer.
 function AllowOtherCheckbox(props: { checked: boolean; onChange: (on: boolean) => void; "aria-label": string }) {
   return (
-    <div className="max-w-40 shrink-0">
-      <label className="flex h-8 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
-        <input type="checkbox" aria-label={props["aria-label"]} checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} className="size-4 accent-accent" />
-        Allow Other
-      </label>
-      <p className="text-xs text-on-surface-subtle">Players can write their own answer</p>
-    </div>
+    <Checkbox size="xs" muted aria-label={props["aria-label"]} checked={props.checked} onChange={props.onChange} hint="Players can write their own answer" className="max-w-40 shrink-0 pt-2">
+      Allow Other
+    </Checkbox>
   );
 }
 
@@ -220,10 +217,9 @@ export function QuestionBuilder({ slug }: { slug: string }) {
                 </div>
                 <Input aria-label="Question prompt" defaultValue={q.prompt} onBlur={(e) => patch(q.id, { prompt: e.target.value })} className="min-w-0 flex-1" />
                 <TypeSelect aria-label="Question type" value={q.type} onChange={(type) => patch(q.id, { type })} />
-                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={q.required} onChange={(e) => patch(q.id, { required: e.target.checked })} className="size-4 accent-accent" />
+                <Checkbox size="xs" muted checked={q.required} onChange={(required) => patch(q.id, { required })} className="h-8 shrink-0">
                   Required
-                </label>
+                </Checkbox>
                 <IconButton label="Delete question" size="sm" onPress={() => requestRemove(q)} className="hover:text-danger">
                   <XIcon size={12} />
                 </IconButton>
@@ -270,10 +266,9 @@ export function QuestionBuilder({ slug }: { slug: string }) {
             className="min-w-0 flex-1"
           />
           <TypeSelect aria-label="New question type" value={newType} onChange={setNewType} />
-          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-on-surface-muted">
-            <input type="checkbox" aria-label="New question required" checked={newRequired} onChange={(e) => setNewRequired(e.target.checked)} className="size-4 accent-accent" />
+          <Checkbox size="xs" muted aria-label="New question required" checked={newRequired} onChange={setNewRequired} className="h-8 shrink-0">
             Required
-          </label>
+          </Checkbox>
           <Button onPress={add} isDisabled={!newPrompt.trim()} className="shrink-0">
             Add
           </Button>

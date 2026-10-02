@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { ComboBox, ListBox, ListBoxItem } from "react-aria-components";
+import { Button, ComboBox, ListBox, ListBoxItem } from "react-aria-components";
 import type { TileSearchModel } from "../../../headless/types";
 import { controlClass } from "../../../core/ui/Field";
-import { ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/SearchCombo";
+import { ComboFocusFirst, ComboFocusedKey, ComboInput, ComboPopover } from "../../../core/ui/SearchCombo";
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
@@ -56,6 +56,8 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
       onSelectionChange={(key) => key !== null && search.choose(String(key))}
       allowsCustomValue
     >
+      {/* The top match is highlighted, so Enter opens it. */}
+      <ComboFocusFirst />
       <ComboFocusedKey onChange={search.setHighlightedId} />
       <div
         ref={bubbleRef}
@@ -71,18 +73,18 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
           className={`${controlClass()} !h-full min-w-0 flex-1 !rounded-none !border-none !bg-transparent !px-0 !text-current !outline-none placeholder:!text-current/50`}
         />
         {search.query && (
-          <button
-            type="button"
+          // A bare ink cross, not ComicIconButton: its raised round button is too big for the bubble's line.
+          <Button
             aria-label="Clear search"
-            onClick={() => {
+            onPress={() => {
               search.clear();
               search.inputRef.current?.focus();
             }}
-            className="hit-40 flex shrink-0 items-center justify-center rounded-sm transition-colors hover:opacity-70"
+            className="hit-40 flex shrink-0 items-center justify-center rounded-sm outline-none transition-opacity hovered:opacity-70 focus-visible:ring-2 focus-visible:ring-current"
             style={{ color: colors.INK }}
           >
             <XIcon />
-          </button>
+          </Button>
         )}
         <BubbleTail outline={line} fill={colors.PAPER_RAISED} />
       </div>

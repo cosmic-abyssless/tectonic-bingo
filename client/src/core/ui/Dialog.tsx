@@ -8,8 +8,8 @@ const MAX_WIDTH = {
   lg: "max-w-2xl",
 } as const;
 
-/** A fixedHeight dialog's height: tall enough for a long list, and never past the viewport's 90vh cap. */
-export const FIXED_HEIGHT = "h-[min(90vh,44rem)]";
+/** A fixedHeight dialog's height: the whole of the 90vh every dialog is capped at, for a long list. */
+export const FIXED_HEIGHT = "h-[90vh]";
 
 export { DialogTrigger };
 

@@ -5,7 +5,7 @@ import { describeValuedAs, type ItemGroup, type NodeKind, type GraphNode, type G
 import { ItemSearchInput, iconUrlFor } from "../ui/ItemSearchInput";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Button, IconButton } from "../ui/Button";
-import { controlClass } from "../ui/Field";
+import { Input } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, GripIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
@@ -601,16 +601,17 @@ function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | 
 // Saves on blur (or Enter), at least 1.
 function NumberInput({ label, value, onSave }: { label: string; value?: number | null; onSave: (value: number) => void }) {
   return (
-    // controlClass is w-full, so the wrapper sets the width.
+    // Input is w-full, so the wrapper sets the width.
     <div className="w-14 shrink-0">
-      <input
+      <Input
+        size="sm"
         aria-label={label}
         type="number"
         min={1}
         defaultValue={value ?? 1}
         onBlur={(e) => onSave(Math.max(1, Number(e.target.value) || 1))}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        className={`${controlClass("sm")} num`}
+        className="num"
       />
     </div>
   );
@@ -751,7 +752,8 @@ function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: num
       counts as
       <span className="w-14">
         <TextTooltip text={`One ${name} adds this much to the total (e.g. a Pyromancer garb counting as 25 burnt pages). Players still submit how many they really got.`}>
-          <input
+          <Input
+            size="sm"
             aria-label={`${name} counts as`}
             type="number"
             min={1}
@@ -763,7 +765,7 @@ function CountsAsInput({ name, countsAs, onSave }: { name: string; countsAs: num
               if (next !== countsAs) onSave(next);
             }}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            className={`${controlClass("sm")} num`}
+            className="num"
           />
         </TextTooltip>
       </span>
@@ -786,18 +788,18 @@ function ValuedAsEditor({ itemName, valuedAs, onSave, onCancel }: { itemName: st
       <div className="flex items-center gap-2">
         <ItemSearchInput ariaLabel="Valued as item" placeholder="e.g. Magus vestige" containerClassName="min-w-0 flex-1" value={item} onChange={setItem} onPickItem={setItem} />
         <span className="text-xs text-on-surface-muted">÷</span>
-        {/* controlClass is w-full, so the wrapper sets the width. */}
+        {/* Input is w-full, so the wrapper sets the width. */}
         <div className="w-16 shrink-0">
-          <input aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} className={controlClass("sm")} />
+          <Input size="sm" aria-label="Divided by" type="number" min={1} step={1} value={divisor} onChange={(e) => setDivisor(e.target.value)} />
         </div>
       </div>
-      <input
+      <Input
+        size="sm"
         aria-label="Source"
         placeholder="Source, shown next to the item (optional, e.g. Vardorvis)"
         maxLength={40}
         value={source}
         onChange={(e) => setSource(e.target.value)}
-        className={controlClass("sm")}
       />
       <div className="flex gap-2">
         <Button size="sm" variant="primary" isDisabled={!valid} onPress={() => onSave({ itemName: item.trim(), divisor: n, source: source.trim() || null })}>

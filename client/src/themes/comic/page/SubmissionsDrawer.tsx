@@ -1,5 +1,3 @@
-import { useState } from "react";
-import type { SubmissionStatus } from "@bingo/shared";
 import type { SubmissionModel } from "../../../headless/types";
 import { MultiSelect } from "../../../core/ui/MultiSelect";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
@@ -9,19 +7,12 @@ import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { SubmissionBubble } from "../board/SubmissionBubble";
 import { COMIC_FONT } from "../font";
-
-type Filter = SubmissionStatus | "all";
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
-  { key: "approved", label: "Approved" },
-  { key: "rejected", label: "Rejected" },
-];
+import { useTeamSubmissionsFilter } from "../../../core/submissions/useTeamSubmissionsFilter";
 
 /**
  * Submissions — every claim the team has sent in, stacked as a pile of
- * mail with rubber-stamped verdicts. Filter tabs are ink-bordered
- * index tabs; the list scrolls inside the dialog.
+ * mail with rubber-stamped verdicts. Status and Player filters sit under the
+ * header; the list scrolls inside the dialog.
  */
 export function SubmissionsDrawer({
   isOpen,
@@ -35,55 +26,14 @@ export function SubmissionsDrawer({
   onSubmit?: () => void;
 }) {
   const { colors } = useComic();
-  const [filter, setFilter] = useState<Filter>("all");
-  // None picked = everyone. Names come from the submissions themselves, so the list only ever offers people who
-  // actually submitted something.
-  const [picked, setPicked] = useState<string[]>([]);
-  const submitters = [...new Set(submissions.flatMap((s) => (s.submittedBy ? [s.submittedBy] : [])))].sort();
-  const submitterOptions = submitters.map((name) => ({ key: name, label: name, count: submissions.filter((s) => s.submittedBy === name).length }));
-  const bySubmitter = picked.length > 0 ? submissions.filter((s) => s.submittedBy != null && picked.includes(s.submittedBy)) : submissions;
-  const shown = filter === "all" ? bySubmitter : bySubmitter.filter((s) => s.status === filter);
-  const countFor = (key: Filter) => (key === "all" ? bySubmitter.length : bySubmitter.filter((s) => s.status === key).length);
+  const { statusOptions, statuses, setStatuses, playerOptions, players, setPlayers, showPlayers, shown, drawn, emptyText } = useTeamSubmissionsFilter(submissions, isOpen);
   const pending = submissions.filter((s) => s.status === "pending").length;
 
-  // Pinned under the header (ComicDialogHeader's `below`), so the filters stay put while the list scrolls. Index tabs:
-  // the picked one is the list's own paper and overlaps the rule, so it reads as the open tab; the rest sit on the
-  // unbroken rule, a shade darker.
-  const tabs = submissions.length > 0 && (
-    <div className="flex flex-wrap items-end gap-2 border-b-[3px] px-5 pt-3" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }}>
-      {FILTERS.map(({ key, label }) => {
-        const active = filter === key;
-        const count = countFor(key);
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setFilter(key)}
-            aria-pressed={active}
-            className={`comic-press relative flex items-center gap-2 border-[3px] border-b-0 px-3 text-lg uppercase leading-none tracking-wide ${active ? "-mb-[3px] pb-2.5 pt-2" : "pb-1.5 pt-1.5"}`}
-            style={{
-              fontFamily: COMIC_FONT,
-              borderColor: colors.LINE,
-              background: active ? colors.PAPER : `color-mix(in srgb, ${colors.PAPER_ALT} 90%, ${colors.INK})`,
-              color: active ? colors.INK : colors.INK_SUBTLE,
-              zIndex: active ? 2 : 1,
-            }}
-          >
-            {label}
-            <span
-              className="rounded-full px-1.5 text-xs leading-4"
-              style={{ background: active ? colors.INK : colors.RULE, color: active ? colors.PAPER : colors.INK, fontFamily: "inherit" }}
-            >
-              {count}
-            </span>
-          </button>
-        );
-      })}
-      {submitters.length > 1 && (
-        <div className="mb-2 ml-auto">
-          <MultiSelect label="Player" options={submitterOptions} selected={picked} onChange={setPicked} />
-        </div>
-      )}
+  // Pinned under the header (ComicDialogHeader's `below`), so the filters stay put while the list scrolls.
+  const filters = submissions.length > 0 && (
+    <div className="flex flex-wrap items-center gap-2 border-b-[3px] px-5 py-2.5" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }}>
+      <MultiSelect label="Status" options={statusOptions} selected={statuses} onChange={setStatuses} />
+      {showPlayers && <MultiSelect label="Player" options={playerOptions} selected={players} onChange={setPlayers} />}
     </div>
   );
 
@@ -98,7 +48,7 @@ export function SubmissionsDrawer({
             : `${submissions.length} submission${submissions.length !== 1 ? "s" : ""}${pending ? ` · ${pending} pending review` : ""}`
         }
         onClose={onClose}
-        below={tabs}
+        below={filters}
         action={
           onSubmit && (
             <ComicButton
@@ -121,20 +71,32 @@ export function SubmissionsDrawer({
         ) : shown.length === 0 ? (
           <CaptionBox tone="paper" tilt={-0.5}>
             <p className="text-sm" style={{ color: colors.INK_BODY }}>
-              No {filter === "all" ? "" : `${filter} `}submissions{picked.length === 1 ? ` from ${picked[0]}` : picked.length > 1 && ` from those Players`}.
+              {emptyText}
             </p>
           </CaptionBox>
         ) : (
-          <ul className="space-y-5">
-            {shown.map((s, i) => (
-              // Each card is its own stacking context (the tilt). Stack earlier
-              // cards above later ones so an overhanging stamp isn't covered
-              // by the next card's top edge.
-              <li key={s.id} className="relative" style={{ transform: `rotate(${i % 2 === 0 ? -0.5 : 0.5}deg)`, zIndex: shown.length - i }}>
-                <SubmissionBubble submission={s} showTile />
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-5">
+              {drawn.rows.map((s, i) => (
+                // Each card is its own stacking context (the tilt). Stack earlier
+                // cards above later ones so an overhanging stamp isn't covered
+                // by the next card's top edge.
+                <li key={s.id} className="relative" style={{ transform: `rotate(${i % 2 === 0 ? -0.5 : 0.5}deg)`, zIndex: drawn.rows.length - i }}>
+                  <SubmissionBubble submission={s} showTile />
+                </li>
+              ))}
+            </ul>
+            {drawn.remaining > 0 && (
+              <div className="flex flex-col items-center gap-2 pt-6">
+                <ComicButton size="sm" sfx={false} onPress={drawn.more}>
+                  Load more
+                </ComicButton>
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: colors.INK_SUBTLE }}>
+                  Showing {drawn.rows.length} of {shown.length}
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </ComicDialog>

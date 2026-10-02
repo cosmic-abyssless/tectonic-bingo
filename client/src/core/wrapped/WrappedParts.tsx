@@ -3,8 +3,9 @@ import type { WrappedArtFrames } from "@bingo/shared";
 import type { WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel } from "../../headless/types";
 import { WikiIcon } from "../ui/ItemIcon";
 import { OsrsCaption } from "./OsrsCaption";
+import { ScreenshotLink } from "../submissions/ScreenshotThumb";
 import { StickerArt } from "./StickerArt";
-import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
+import { TooltipSpan } from "../ui/Tooltip";
 
 // Small shared pieces of Wrapped's default sections, for any theme to reuse.
 
@@ -37,11 +38,9 @@ export function WrappedDropCard({ drop, showPlayer = false, showTeam = showPlaye
   return (
     <div className={`flex w-full items-center gap-3 rounded-xl border border-outline bg-surface p-3 text-left ${className}`}>
       {drop.thumbnailUrl && drop.screenshotUrl ? (
-        <TextTooltip text="View screenshot">
-          <a href={drop.screenshotUrl} target="_blank" rel="noreferrer" className="shrink-0">
-            <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="size-16 rounded-lg border border-outline object-cover sm:size-20" />
-          </a>
-        </TextTooltip>
+        <ScreenshotLink href={drop.screenshotUrl} className="shrink-0">
+          <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="size-16 rounded-lg border border-outline object-cover sm:size-20" />
+        </ScreenshotLink>
       ) : (
         <div aria-hidden className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-outline bg-surface-raised sm:size-20">
           <WikiIcon name={drop.itemName} className="size-8 [image-rendering:pixelated]" />
@@ -116,8 +115,9 @@ export interface CaptionedArt {
  * sits quietly under that, below the art rather than over it so it never collides with the sticker.
  *
  * Every image aims for the height a lone one gets, so a row of several grows sideways instead of shrinking (#279):
- * they only shrink, together, once the row runs out of width. A caption wraps rather than truncating. These are the
- * Category's main credits, so their name reads bigger than an additional credit's (#279 follow-up).
+ * they only shrink, together, once the row runs out of width. A caption may run past its image's sides (up to twice
+ * its width) before it wraps, and it wraps rather than truncating. These are the Category's main credits, so their
+ * name reads bigger than an additional credit's (#279 follow-up).
  */
 export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedArt)[] }) {
   if (art.length === 0) return null;
@@ -130,7 +130,12 @@ export function WrappedSectionArt({ art }: { art: (WrappedArtFrames | CaptionedA
         <div key={frames[0]} className={`flex min-w-0 flex-col items-center ${basis} sm:basis-auto`}>
           <div className="relative max-w-full">
             <StickerArt frames={frames} className="max-w-full" frameClassName="max-h-48 max-w-full sm:max-h-64" phase={i / art.length} />
-            {name && <OsrsCaption size="md" className="absolute inset-x-1 bottom-1 text-center">{name}</OsrsCaption>}
+            {/* Free to run past the art's sides into the gap, so a short name of two words stays on one line. */}
+            {name && (
+              <OsrsCaption size="md" className="absolute bottom-1 left-1/2 w-max max-w-[200%] -translate-x-1/2 text-center">
+                {name}
+              </OsrsCaption>
+            )}
           </div>
           {role && <span className="mt-1 max-w-full truncate text-xs text-on-surface-subtle">{role}</span>}
         </div>

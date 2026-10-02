@@ -13,10 +13,16 @@ import { useSlot } from "../../themes/context";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
-import { ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { RequirementTreeEditor, type ExistingLeaf, type ExistingCondition } from "./RequirementTreeEditor";
+import { Disclosure } from "../ui/Disclosure";
+import { Checkbox } from "../ui/Checkbox";
+import { SegmentedControl } from "../ui/SegmentedControl";
 
-const CHECKBOX = "size-4 accent-accent disabled:opacity-40";
+
+const SCORING_MODES = [
+  { id: "automatic", label: "Automatic" },
+  { id: "manual", label: "Manual (mod judges)" },
+] as const;
 
 // Edits to a tile's tasks show up in the cached board immediately and roll
 // back if the server rejects them, so tree edits and deletes don't wait on
@@ -101,25 +107,24 @@ export function TaskEditor({
   const requiresPrevious = task.submitGateNodeId != null;
   const withholdsPoints = task.pointsGateNodeId != null;
 
+  // Controlled, so the editor itself mounts only once the Task is opened.
   return (
-    <div className="overflow-hidden rounded-md border border-outline bg-background">
-      <button
-        type="button"
-        aria-label={`${expanded ? "Collapse" : "Expand"} task: ${task.label}`}
-        onClick={() => setExpanded((e) => !e)}
-        className="flex h-10 w-full items-center justify-between px-3 text-left transition-colors hover:bg-surface-hover"
-      >
-        <span className="text-sm font-medium text-on-surface">
+    <Disclosure
+      variant="nested"
+      isExpanded={expanded}
+      onExpandedChange={setExpanded}
+      triggerLabel={`${expanded ? "Collapse" : "Expand"} task: ${task.label}`}
+      title={
+        <span className="flex-1 text-sm font-medium text-on-surface">
           {task.label}{" "}
           <span className="font-normal text-on-surface-subtle">
             — <span className="num">{task.points}</span> pts{isManual ? " · manual" : ""}
           </span>
         </span>
-        <span className="text-on-surface-subtle">{expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-      </button>
-
+      }
+    >
       {expanded && (
-        <div className="space-y-4 border-t border-outline px-3 py-3" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
           {/* Locked, the editing controls are disabled in fieldsets, leaving "Preview for Players" between them open. */}
           <fieldset disabled={locked} className="min-w-0 space-y-4 disabled:opacity-60">
             <div className="grid grid-cols-2 gap-3">
@@ -136,57 +141,35 @@ export function TaskEditor({
             </Field>
 
             <Field label="Scoring mode" as="div">
-              <div className="flex w-fit overflow-hidden rounded-md border border-outline-strong">
-                {(
-                  [
-                    ["Automatic", false],
-                    ["Manual (mod judges)", true],
-                  ] as const
-                ).map(([label, manual], i) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => patch({ kind: manual ? "MANUAL" : "ALL", children: [] })}
-                    className={`h-8 px-3 text-xs font-medium transition-colors ${i > 0 ? "border-l border-outline-strong" : ""} ${
-                      isManual === manual ? "bg-accent text-on-accent" : "bg-background text-on-surface-muted hover:text-on-surface"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                size="sm"
+                aria-label="Scoring mode"
+                options={SCORING_MODES}
+                value={isManual ? "manual" : "automatic"}
+                onChange={(mode) => patch({ kind: mode === "manual" ? "MANUAL" : "ALL", children: [] })}
+              />
             </Field>
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              <div>
-                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={requiresPrevious} disabled={!previousTaskId} onChange={(e) => patch({ submitGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-                  Requires previous task
-                </label>
-                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Can't submit until the previous task is completed</p>
-              </div>
-              <div>
-                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={withholdsPoints} disabled={!previousTaskId} onChange={(e) => patch({ pointsGateNodeId: e.target.checked ? previousTaskId : null })} className={CHECKBOX} />
-                  Withhold points until previous
-                </label>
-                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Can complete early; points stay 0 until the previous task completes</p>
-              </div>
-              <div>
-                <label className="flex items-center gap-2 text-xs text-on-surface-muted">
-                  <input type="checkbox" checked={task.allowsPreLoad} onChange={(e) => patch({ allowsPreLoad: e.target.checked })} className={CHECKBOX} />
-                  Allows pre-load
-                </label>
-                <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Players may prepare it before the bingo is live, e.g. pre-load a chest</p>
-              </div>
+              <Checkbox size="xs" muted checked={requiresPrevious} disabled={!previousTaskId} onChange={(on) => patch({ submitGateNodeId: on ? previousTaskId : null })} hint="Can't submit until the previous task is completed">
+                Requires previous task
+              </Checkbox>
+              <Checkbox size="xs" muted checked={withholdsPoints} disabled={!previousTaskId} onChange={(on) => patch({ pointsGateNodeId: on ? previousTaskId : null })} hint="Can complete early; points stay 0 until the previous task completes">
+                Withhold points until previous
+              </Checkbox>
+              <Checkbox size="xs" muted checked={task.allowsPreLoad} onChange={(allowsPreLoad) => patch({ allowsPreLoad })} hint="Players may prepare it before the bingo is live, e.g. pre-load a chest">
+                Allows pre-load
+              </Checkbox>
               {!tileRequiresProof && (
-                <div>
-                  <label className="flex items-center gap-2 text-xs text-on-surface-muted">
-                    <input type="checkbox" checked={task.requiresProof} onChange={(e) => patch({ requiresProof: e.target.checked, proofNote: e.target.checked ? task.proofNote : null })} className={CHECKBOX} />
-                    Needs a Proof screenshot
-                  </label>
-                  <p className="mt-0.5 pl-6 text-xs text-on-surface-subtle">Each player posts a screenshot of the starting state before their drops on this task count</p>
-                </div>
+                <Checkbox
+                  size="xs"
+                  muted
+                  checked={task.requiresProof}
+                  onChange={(requiresProof) => patch({ requiresProof, proofNote: requiresProof ? task.proofNote : null })}
+                  hint="Each player posts a screenshot of the starting state before their drops on this task count"
+                >
+                  Needs a Proof screenshot
+                </Checkbox>
               )}
             </div>
 
@@ -228,7 +211,7 @@ export function TaskEditor({
           </fieldset>
         </div>
       )}
-    </div>
+    </Disclosure>
   );
 }
 
@@ -238,22 +221,13 @@ export function TaskEditor({
 function PlayerPreview({ task, themeKey }: { task: GraphNode; themeKey: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-3">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 text-xs font-medium text-on-surface-muted transition-colors hover:text-on-surface"
-      >
-        {open ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
-        Preview for Players
-      </button>
+    <Disclosure variant="nested" isExpanded={open} onExpandedChange={setOpen} className="mt-3" title={<span className="flex-1 text-xs font-medium text-on-surface-muted">Preview for Players</span>}>
       {open && (
-        <ThemeProvider themeKey={themeKey} fallback={<p className="mt-2 text-xs text-on-surface-subtle">Loading the bingo's theme…</p>}>
+        <ThemeProvider themeKey={themeKey} fallback={<p className="text-xs text-on-surface-subtle">Loading the bingo's theme…</p>}>
           <PreviewTree task={task} />
         </ThemeProvider>
       )}
-    </div>
+    </Disclosure>
   );
 }
 
@@ -263,7 +237,7 @@ function PreviewTree({ task }: { task: GraphNode }) {
   const RequirementTree = useSlot("RequirementTree");
   const tree = buildRequirementTree(task, NO_CLAIMS, new Map());
   return (
-    <div className="mt-2 rounded-md border border-outline bg-surface p-3 text-on-surface">
+    <div className="rounded-md border border-outline bg-surface p-3 text-on-surface">
       {tree ? <RequirementTree node={tree} root /> : <p className="text-xs text-on-surface-subtle">Nothing to preview.</p>}
     </div>
   );

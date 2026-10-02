@@ -33,14 +33,14 @@ export function WrappedShareCard({ card }: { card: WrappedShareCardModel }) {
  * The cover: an inked frame on white, the masthead, then the content over the printed ground, the strip at the foot.
  * `bodyRef` is the whole card, clipped, so a cover that doesn't fit shows as overflowing it.
  */
-function Cover({ card, issue, accent, bodyRef, strip, children }: { card: WrappedShareCardModel; issue: string; accent: string; bodyRef?: Ref<HTMLDivElement>; strip: ReactNode; children: ReactNode }) {
+function Cover({ card, issue, accent, bodyRef, strip, artFloor = 0, children }: { card: WrappedShareCardModel; issue: string; accent: string; bodyRef?: Ref<HTMLDivElement>; strip: ReactNode; artFloor?: number; children: ReactNode }) {
   return (
     <div ref={bodyRef} className="flex size-full flex-col overflow-hidden" style={{ background: C.PAPER_RAISED, padding: 12, color: C.INK, fontFamily: "ui-sans-serif, system-ui, sans-serif" }}>
       <div className="relative flex flex-1 flex-col" style={{ border: `4px solid ${C.INK}` }}>
         <Ground accent={accent} />
         <Masthead bingoName={card.bingoName} issue={issue} />
         <div className="relative flex flex-1 flex-col gap-3 px-4 pt-3 pb-4">
-          {card.artUrls.length > 0 && <CoverStars urls={card.artUrls} />}
+          {card.artUrls.length > 0 && <CoverStars urls={card.artUrls} floor={artFloor} />}
           {children}
         </div>
         {strip}
@@ -55,32 +55,32 @@ const STICKER_SHADOW = "drop-shadow(0 6px 8px rgb(0 0 0 / 0.35))";
 const STAR_TILT = [-4, 3, -2];
 
 /**
- * The cover star: the card's art in the corner beside the content. Several (a Team's) overlap side by side like
- * stickers along the foot, the middle one larger and on top, each tipped a little.
+ * The cover star: the card's art in the corner beside the content, behind it. Several (a Team's) stand side by side
+ * like stickers, each as tall as the space allows and as wide as it is, overlapping its neighbour a little; the middle
+ * of three is taller and in front, and each is tipped a little. They stand on `floor` (px above the foot), so a row of
+ * captions along the foot stays clear of them, and rise no higher than a third of the way down, below the title.
  */
-function CoverStars({ urls }: { urls: string[] }) {
+function CoverStars({ urls, floor }: { urls: string[]; floor: number }) {
   if (urls.length === 1) {
     return (
-      <div className="absolute flex items-end justify-end" style={{ right: 0, bottom: 0, top: 30, width: "46%" }}>
+      <div className="absolute flex items-end justify-end" style={{ right: 0, bottom: floor, top: 30, width: "46%" }}>
         <CardImage src={urls[0]!} className="object-contain" style={{ maxHeight: "100%", maxWidth: "100%", filter: STICKER_SHADOW }} />
       </div>
     );
   }
-  // Each sticker gets an equal slot, overlapping its neighbours by a third.
-  const width = 100 / (1 + (urls.length - 1) * (2 / 3));
   return (
-    <div className="absolute" style={{ right: 4, bottom: 0, top: 30, width: "58%" }}>
+    // Isolated, so the stickers' own stacking order never lifts them over the content. A size container, so the
+    // overlap can follow the stickers' height (cqh) rather than the row's width.
+    <div className="absolute isolate flex items-end justify-center" style={{ right: 4, bottom: floor, top: "34%", width: "62%", containerType: "size" }}>
       {urls.map((url, i) => {
-        // The middle of three is a fifth larger, centred on its slot.
-        const scale = urls.length === 3 && i === 1 ? 1.2 : 1;
-        const left = i * width * (2 / 3) - (width * (scale - 1)) / 2;
+        const middle = urls.length === 3 && i === 1;
         return (
           <div
             key={`${i}:${url}`}
-            className="absolute"
-            style={{ left: `${left}%`, bottom: 0, width: `${width * scale}%`, height: `${66 * scale}%`, zIndex: scale > 1 ? 2 : 1, transform: `rotate(${STAR_TILT[i % STAR_TILT.length]}deg)` }}
+            className="flex min-w-0 items-end"
+            style={{ flex: "0 1 auto", height: middle ? "100%" : "86%", marginLeft: i === 0 ? 0 : "-9cqh", zIndex: middle ? 2 : 1, transform: `rotate(${STAR_TILT[i % STAR_TILT.length]}deg)` }}
           >
-            <CardImage src={url} className="size-full object-contain" style={{ objectPosition: "bottom", filter: STICKER_SHADOW }} />
+            <CardImage src={url} className="object-contain" style={{ height: "100%", width: "auto", maxWidth: "100%", objectPosition: "bottom", filter: STICKER_SHADOW }} />
           </div>
         );
       })}
@@ -134,30 +134,53 @@ function Ground({ accent }: { accent: string }) {
   );
 }
 
-/** Cover lettering: white, inked round and dropped. Wraps to `lines`, then clips. */
-function Title({ children, size, lines = 2 }: { children: ReactNode; size: number; lines?: number }) {
+/**
+ * Cover lettering: white, inked round and dropped. On one line, its lettering shrunk to fit down to `minSize`; past
+ * that it wraps to `lines`, then clips.
+ */
+function Title({ children, size, minSize = size, lines = 2 }: { children: ReactNode; size: number; minSize?: number; lines?: number }) {
+  const { ref, fontSize, oneLine } = useFitLine<HTMLHeadingElement>(size, minSize, children);
   return (
     <h2
+      ref={ref}
       style={{
+        // Never wider than its column, however it's laid out: the box the lettering is fitted to.
+        maxWidth: "100%",
         fontFamily: COMIC_FONT,
         fontWeight: 400,
-        fontSize: size,
+        fontSize,
         lineHeight: 0.98,
         color: C.TITLE_FILL,
-        WebkitTextStroke: `${Math.max(1.5, size / 28)}px ${C.INK}`,
-        textShadow: hardShadow(size / 14),
+        WebkitTextStroke: `${Math.max(1.5, fontSize / 28)}px ${C.INK}`,
+        textShadow: hardShadow(fontSize / 14),
         letterSpacing: "0.02em",
-        overflowWrap: "anywhere",
-        display: "-webkit-box",
-        WebkitLineClamp: lines,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden",
-        paddingBottom: size / 12,
+        ...(oneLine ? { whiteSpace: "nowrap", overflow: "hidden" } : { overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden" }),
+        paddingBottom: fontSize / 12,
+        // Room for the drop shadow and the ink, which a one-line box would otherwise clip.
+        paddingRight: fontSize / 12,
       }}
     >
       {children}
     </h2>
   );
+}
+
+/**
+ * Lettering on one line, shrunk from `size` until it fits its box, but never below `min`: past that it gives up the
+ * one line (`oneLine` false) for the caller to wrap. Measured before paint, so the card is never seen (or drawn) at the
+ * wrong size. `content` starts it over when the text changes.
+ */
+function useFitLine<T extends HTMLElement>(size: number, min: number, content: ReactNode) {
+  const ref = useRef<T>(null);
+  const [fit, setFit] = useState({ content, fontSize: size, oneLine: true });
+  const current = fit.content === content ? fit : { content, fontSize: size, oneLine: true };
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !current.oneLine || el.scrollWidth <= el.clientWidth + 1) return;
+    const shrunk = Math.floor(current.fontSize * (el.clientWidth / el.scrollWidth) * 10) / 10;
+    setFit(shrunk >= min ? { content, fontSize: Math.min(shrunk, current.fontSize - 0.5), oneLine: true } : { content, fontSize: min, oneLine: false });
+  });
+  return { ref, fontSize: current.fontSize, oneLine: current.oneLine };
 }
 
 /** A narration caption: a box of `fill`, thick ink border, hard shadow, Bangers capitals; `tilt` knocks it askew. */
@@ -274,6 +297,20 @@ function useFit(card: WrappedPlayerCardModel) {
   return { ref, shows: (f: Optional) => has[f] && !out.includes(f) };
 }
 
+/** The Player's Team, and their Duo partner: on one line, its lettering shrunk to fit, then cut short. */
+function TeamLine({ children }: { children: string }) {
+  const { ref, fontSize, oneLine } = useFitLine<HTMLParagraphElement>(20, 13, children);
+  return (
+    <p
+      ref={ref}
+      className={oneLine ? "overflow-hidden whitespace-nowrap" : "truncate"}
+      style={{ fontFamily: COMIC_FONT, fontSize, lineHeight: 1.1, letterSpacing: "0.02em", color: C.TITLE_FILL, WebkitTextStroke: `0.8px ${C.INK}`, textShadow: hardShadow(2), paddingRight: 2 }}
+    >
+      {children}
+    </p>
+  );
+}
+
 function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
   const fit = useFit(card);
   const teamLine = [card.team?.name, card.partnerLabel].filter(Boolean).join(" · ");
@@ -330,12 +367,10 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
         <div className="flex min-w-0 max-w-full items-center gap-3">
           <Avatar url={card.avatarUrl} name={card.name} size={64} style={{ border: `4px solid ${C.INK}`, boxShadow: hardShadow(3) }} />
           <div className="min-w-0">
-            <Title size={50}>{card.name}</Title>
-            {teamLine && (
-              <p className="truncate" style={{ fontFamily: COMIC_FONT, fontSize: 20, lineHeight: 1.1, letterSpacing: "0.02em", color: C.TITLE_FILL, WebkitTextStroke: `0.8px ${C.INK}`, textShadow: hardShadow(2) }}>
-                {teamLine}
-              </p>
-            )}
+            <Title size={50} minSize={30}>
+              {card.name}
+            </Title>
+            {teamLine && <TeamLine>{teamLine}</TeamLine>}
           </div>
         </div>
       </div>
@@ -373,9 +408,14 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
         // Down at the foot of the cover, over the strip.
         <div className="relative mt-auto flex flex-col items-start gap-2">
           {stats.length > 0 && (
-            <Caption size={13} style={beside(card)}>
-              {stats.join(" · ")}
-            </Caption>
+            // One caption each, so a line breaks between them rather than inside one.
+            <div className="flex flex-wrap gap-1.5" style={beside(card)}>
+              {stats.map((stat) => (
+                <Caption key={stat} size={13} style={{ whiteSpace: "nowrap" }}>
+                  {stat}
+                </Caption>
+              ))}
+            </div>
           )}
           {card.titles.length > 0 && (
             // At most 3, wrapping onto a second line rather than cutting one off.
@@ -393,6 +433,9 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
   );
 }
 
+/** How high the Team card's MVP row stands, px: its art stands on it. */
+const MVP_ROW = 44;
+
 function TeamCard({ card }: { card: WrappedTeamCardModel }) {
   // "1st of 4": the ordinal big in the burst, the rest under it.
   const [place, ...ofTeams] = card.placementLabel.split(" ");
@@ -401,6 +444,7 @@ function TeamCard({ card }: { card: WrappedTeamCardModel }) {
       card={card}
       issue="Team card"
       accent={coverColor(card.color)}
+      artFloor={card.mvp ? MVP_ROW : 0}
       strip={
         (card.biggestDrop || card.superlatives.length > 0) && (
           <Strip label="Also in this issue">
@@ -425,7 +469,7 @@ function TeamCard({ card }: { card: WrappedTeamCardModel }) {
         <Caption tilt={-3} fill={C.YELLOW}>
           The sensational
         </Caption>
-        <Title size={44} lines={3}>
+        <Title size={44} minSize={30} lines={3}>
           {card.name}
         </Title>
       </div>
@@ -450,8 +494,9 @@ function TeamCard({ card }: { card: WrappedTeamCardModel }) {
         </div>
       </div>
       {card.mvp && (
-        // Down at the foot of the cover, over the strip, as quiet as the Player card's stats line.
-        <div className="relative mt-auto flex min-w-0 items-center gap-2 self-start" style={beside(card)}>
+        // Down at the foot of the cover, over the strip, as quiet as the Player card's stats line. The art stands on it,
+        // so it has the cover's whole width.
+        <div className="relative mt-auto flex min-w-0 max-w-full items-center gap-2 self-start">
           <Caption size={13} fill={C.RED} tilt={-2} style={{ color: C.ON_LOUD, flexShrink: 0 }}>
             MVP
           </Caption>

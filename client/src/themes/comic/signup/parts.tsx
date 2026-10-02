@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Button as AriaButton, Disclosure as AriaDisclosure, DisclosurePanel, Heading } from "react-aria-components";
-import { CheckIcon, ChevronDownIcon, SpinnerIcon } from "../../../core/ui/icons";
+import { ChevronDownIcon, SpinnerIcon } from "../../../core/ui/icons";
 import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
@@ -186,36 +186,6 @@ export function TabLegend({ children }: { children: ReactNode }) {
     >
       {children}
     </legend>
-  );
-}
-
-/**
- * One answer to a choice question, as a chunky chip that goes yellow and stands up off the page when chosen. A real
- * radio or checkbox underneath (hidden, still focusable), so keyboards and screen readers get the native control.
- */
-export function ChoiceChip({ type, name, checked, onChange, children }: { type: "checkbox" | "radio"; name?: string; checked: boolean; onChange: (checked: boolean) => void; children: ReactNode }) {
-  const { colors } = useComic();
-  return (
-    <label
-      className="inline-flex cursor-pointer select-none items-center gap-2 rounded-md border-[3px] px-2.5 py-1.5 text-sm font-semibold outline-offset-2 transition-[box-shadow,background-color] duration-150 has-[:focus-visible]:outline-[3px] has-[:focus-visible]:outline-solid"
-      style={{
-        borderColor: colors.LINE,
-        outlineColor: colors.BLUE,
-        background: checked ? colors.YELLOW : colors.PAPER_RAISED,
-        color: checked ? colors.ON_YELLOW : colors.INK,
-        boxShadow: `${checked ? 3 : 1}px ${checked ? 3 : 1}px 0 ${colors.SHADOW}`,
-      }}
-    >
-      <input type={type} name={name} checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
-      <span
-        aria-hidden
-        className={`flex size-4 shrink-0 items-center justify-center border-2 ${type === "radio" ? "rounded-full" : "rounded-[3px]"}`}
-        style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}
-      >
-        {checked && (type === "radio" ? <span className="size-2 rounded-full" style={{ background: colors.INK }} /> : <CheckIcon size={12} />)}
-      </span>
-      {children}
-    </label>
   );
 }
 

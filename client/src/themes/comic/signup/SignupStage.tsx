@@ -6,11 +6,13 @@ import { SearchableSelect } from "../../../core/ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { ComicField } from "../submission/ComicField";
-import { ComicButton } from "../ui/ComicButton";
+import { ComicButton, ComicIconButton } from "../ui/ComicButton";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { ComicCheckbox } from "../ui/ComicCheckbox";
 import { PartnerSheet } from "./PartnerSheet";
-import { Callout, ChoiceChip, CollapsibleSheet, paperVars, Required, StatBox, TabLegend } from "./parts";
+import { Callout, CollapsibleSheet, paperVars, Required, StatBox, TabLegend } from "./parts";
+import { TextButton } from "../../../core/ui/TextButton";
 
 /**
  * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) as sheets on the
@@ -195,12 +197,9 @@ function Question({ question }: { question: SignupQuestionModel }) {
 
   if (question.type === "boolean") {
     return (
-      <div>
-        <ChoiceChip type="checkbox" checked={question.value === "true"} onChange={(on) => question.set(on ? "true" : "false")}>
-          {label}
-        </ChoiceChip>
-        {question.hint && <Hint className="mt-1.5">{question.hint}</Hint>}
-      </div>
+      <ComicCheckbox checked={question.value === "true"} onChange={(on) => question.set(on ? "true" : "false")} hint={question.hint}>
+        {label}
+      </ComicCheckbox>
     );
   }
 
@@ -242,17 +241,17 @@ function MemberPickQuestion({ question, label }: { question: SignupQuestionModel
               style={{ borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}
             >
               {p.name}
-              <button type="button" aria-label={`Remove ${p.name}`} onClick={p.remove} className="rounded-sm p-0.5 hover:opacity-70">
+              <ComicIconButton label={`Remove ${p.name}`} onPress={p.remove} sfx={false} className="size-6 border-2">
                 <XIcon size={12} />
-              </button>
+              </ComicIconButton>
             </li>
           ))}
         </ul>
       )}
       {question.clear && (
-        <button type="button" onClick={question.clear} className="mt-1.5 px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
+        <TextButton ownColour onPress={question.clear} className="mt-1.5 px-1 text-xs" style={{ color: colors.INK_SUBTLE }}>
           Clear
-        </button>
+        </TextButton>
       )}
     </ComicField>
   );
@@ -268,12 +267,12 @@ function ChoiceQuestion({ question, label }: { question: SignupQuestionModel; la
       <TabLegend>{label}</TabLegend>
       <div className="flex flex-wrap gap-2">
         {question.choices.map((choice) => (
-          <ChoiceChip key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
+          <ComicCheckbox key={choice.label} type={multiple ? "checkbox" : "radio"} name={multiple ? undefined : `question-${question.id}`} checked={choice.checked} onChange={choice.set}>
             {choice.label}
-          </ChoiceChip>
+          </ComicCheckbox>
         ))}
         {other && (
-          <ChoiceChip
+          <ComicCheckbox
             type={multiple ? "checkbox" : "radio"}
             name={multiple ? undefined : `question-${question.id}`}
             checked={other.checked}
@@ -284,12 +283,12 @@ function ChoiceQuestion({ question, label }: { question: SignupQuestionModel; la
             }}
           >
             Other
-          </ChoiceChip>
+          </ComicCheckbox>
         )}
         {question.clear && (
-          <button type="button" onClick={question.clear} className="px-1 text-xs underline underline-offset-2 hover:opacity-70" style={{ color: colors.INK_SUBTLE }}>
+          <TextButton ownColour onPress={question.clear} className="px-1 text-xs" style={{ color: colors.INK_SUBTLE }}>
             Clear
-          </button>
+          </TextButton>
         )}
       </div>
       {other?.checked && (
