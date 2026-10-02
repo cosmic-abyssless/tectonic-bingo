@@ -421,7 +421,11 @@ export function useApplyRestriction(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: { userId: string; action: string; reason: string }) => api.post<{ restriction: RestrictionEntry }>(`/api/bingos/${slug}/mod/restrictions`, params),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+    onSuccess: () => {
+      // The roster"s Restrictions column, and the player card"s Permissions tab.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["playerProfile", slug] });
+    },
   });
 }
 
@@ -429,7 +433,11 @@ export function useLiftRestriction(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (restrictionId: string) => api.delete<void>(`/api/bingos/${slug}/mod/restrictions/${restrictionId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) }),
+    onSuccess: () => {
+      // The roster"s Restrictions column, and the player card"s Permissions tab.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.signupRoster(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["playerProfile", slug] });
+    },
   });
 }
 

@@ -32,6 +32,7 @@ import * as wrappedService from "../services/wrappedService";
 import * as superlativeService from "../services/superlativeService";
 import * as feedbackService from "../services/feedbackService";
 import * as historicalService from "../services/historicalService";
+import * as restrictionService from "../services/restrictionService";
 import { isOcrEnabled, analyzeSubmissionScreenshot } from "../ocr";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { getTectonicMembership, matchRsn } from "../services/tectonicMembership";
@@ -822,6 +823,7 @@ router.get(
       tectonicUnavailable: tectonic.unavailable,
       pastBingoStats: getPastParticipationsForUser(db, userId),
       achievements: achievementService.getAchievementCount(db, bingo, userId),
+      access: viewerCan(req, "moderate_bingo") ? restrictionService.playerAccess(db, bingo, req.user!, userId) : null,
     };
     res.json({ player });
   }),

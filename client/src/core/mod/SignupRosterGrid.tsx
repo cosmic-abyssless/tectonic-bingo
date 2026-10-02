@@ -30,7 +30,7 @@ import type {
   StateUpdatedEvent,
   TooltipCallbackParams,
 } from "ag-grid-community";
-import { describeRestrictionTarget, formatSignupAnswer, formatTimeZone, RESTRICTABLE_ACTIONS, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
+import { formatSignupAnswer, formatTimeZone, timeZoneOffsetMinutes, timeZoneOptions, type RosterEntry, type SignupQuestion } from "@bingo/shared";
 import type { useApplyRestriction, useLiftRestriction, useMarkBuyin, useModPair, useModUnpair, useModWithdrawSignup, useRefreshSignupStats, useSetSignupTimezone } from "../../api/queries";
 import { useGridTheme } from "../ui/agGrid";
 import type { StatsResult } from "../../context/WebSocketContext";
@@ -47,7 +47,7 @@ import { TierBadge, tierTitle } from "../tectonic/ProfileBadges";
 import { timeAgo } from "../ui/time";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { NoTooltips } from "../ui/Tooltip";
-import { Input } from "../ui/Field";
+import { restrictionLabel, RestrictionsManager } from "./Restrictions";
 
 /** A roster entry plus its 1-based signup position — kept on the row (not derived from `rowIndex`) so sorting by
  * another column doesn't change what "#" shows. */
@@ -268,14 +268,6 @@ function WithdrawEditor({ data, onValueChange, stopEditing }: CustomCellEditorPr
   );
 }
 
-// Restrictions (CONTEXT.md "Restriction"): what can be taken, a wildcard for both kinds of submitting, or everything.
-const RESTRICTION_OPTIONS: { value: string; label: string }[] = [...RESTRICTABLE_ACTIONS, "submit*", "*"].map((value) => {
-  const words = describeRestrictionTarget(value);
-  return { value, label: words.charAt(0).toUpperCase() + words.slice(1) };
-});
-
-const restrictionLabel = (action: string) => RESTRICTION_OPTIONS.find((o) => o.value === action)?.label ?? action;
-
 /** Whether a row's Restrictions cell opens its editor: to restrict them, or to lift one already on them. */
 function restrictionsEditable(data: RosterRow | undefined): boolean {
   return !!data && (!!data.restrictable || (data.restrictions?.length ?? 0) > 0);
@@ -298,82 +290,28 @@ const RestrictionsCell = memo(function RestrictionsCell({ data }: CustomCellRend
   );
 });
 
-// The player's Restrictions, each with Lift, and (when the viewer may restrict them) a form to take one more Action,
-// with a reason. Acts straight away through the mutations in context, then closes.
+// The player's Restrictions with Lift, and (when the viewer may restrict them) a form to take one more Action
+// (RestrictionsManager). Acts straight away through the mutations in context, then closes.
 function RestrictionsEditor({ data, context, stopEditing }: CustomCellEditorProps<RosterRow, string, GridContext>) {
-  const [action, setAction] = useState(RESTRICTION_OPTIONS[0]!.value);
-  const [reason, setReason] = useState("");
   const name = data.signup.rsn;
-  const restrict = () => {
-    if (!reason.trim()) return;
-    context.applyRestriction.mutate({ userId: data.user.id, action, reason: reason.trim() }, editFailed(`restrict ${name}`));
-    stopEditing();
-  };
   return (
-    <div className={`${EDITOR_POPUP} w-80 space-y-3 p-3 text-sm`}>
-      {(data.restrictions ?? []).map((r) => (
-        <div key={r.id} className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-on-surface">{restrictionLabel(r.action)}</p>
-            <p className="text-on-surface-muted">{r.reason}</p>
-            <p className="text-xs text-on-surface-subtle">
-              {r.appliedByLabel ?? "Someone"}, {timeAgo(r.appliedAt)}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onPress={() => {
-              context.liftRestriction.mutate(r.id, editFailed(`lift ${name}'s restriction`));
-              stopEditing();
-            }}
-          >
-            Lift
-          </Button>
-        </div>
-      ))}
-      {data.restrictable && (
-        <form
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            restrict();
-          }}
-        >
-          <p className="text-on-surface">
-            Take an Action from <span className="font-semibold">{name}</span> in this bingo, until it's lifted. They see the reason.
-          </p>
-          <select
-            aria-label="What to restrict"
-            value={action}
-            onChange={(e) => setAction(e.target.value)}
-            className="w-full rounded-md border border-outline bg-surface px-2 py-1.5 text-on-surface"
-          >
-            {RESTRICTION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          <Input
-            size="sm"
-            aria-label="Reason"
-            placeholder="Reason (they see this)"
-            value={reason}
-            maxLength={500}
-            autoFocus
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onPress={() => stopEditing(true)}>
-              Cancel
-            </Button>
-            <Button size="sm" variant="danger" type="submit" isDisabled={!reason.trim()}>
-              Restrict
-            </Button>
-          </div>
-        </form>
-      )}
+    <div className={`${EDITOR_POPUP} w-80 p-3`}>
+      <RestrictionsManager
+        name={name}
+        restrictions={data.restrictions ?? []}
+        restrictable={!!data.restrictable}
+        liftable
+        autoFocus
+        onLift={(id) => {
+          context.liftRestriction.mutate(id, editFailed(`lift ${name}'s restriction`));
+          stopEditing();
+        }}
+        onRestrict={(action, reason) => {
+          context.applyRestriction.mutate({ userId: data.user.id, action, reason }, editFailed(`restrict ${name}`));
+          stopEditing();
+        }}
+        onCancel={() => stopEditing(true)}
+      />
     </div>
   );
 }
