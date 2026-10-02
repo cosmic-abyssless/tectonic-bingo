@@ -132,10 +132,12 @@ export const SQL_TABLES: Record<string, TableClass> = {
 
   // ---- signups & draft -------------------------------------------------------------------------------------------
   signup_questions: {
-    note: "A Bingo's signup form questions.",
+    note: "A Bingo's questions, on its signup form or (form feedback) its Feedback form, which Players answer anonymously once the Bingo is Finished.",
     columns: {
       id: "",
       bingo_id: "",
+      form: "signup or feedback: which form the question is on",
+      audience: "Feedback questions only: all (every Player) or captains (only Captains, in their separate Captain response)",
       prompt: "",
       helper_text: "",
       type: "text, textarea, select, multiselect, boolean or member",
@@ -145,7 +147,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       max_picks: "",
       required: "",
       sort_order: "",
-      visibility: "Who sees the answers: captains, mods or admins",
+      visibility: "Signup questions only: who sees the answers: captains, mods or admins",
     },
   },
   signups: {
@@ -173,6 +175,19 @@ export const SQL_TABLES: Record<string, TableClass> = {
   signup_answers: {
     note: "Answers to signup_questions.",
     columns: { id: "", signup_id: "", question_id: "", value: "Booleans as 'true'/'false'; multiselect and member picks as JSON" },
+  },
+  feedback_responses: {
+    note: "A Finished Bingo's anonymous Feedback responses (kind player: a Player's Feedback response; kind captain: a Captain's Captain response). Nothing here, or anywhere, says who gave one: there is no user id, no timestamp, and a Player's two responses are not linked.",
+    columns: {
+      id: "Random, so ordering by it is a fixed shuffle, not the order they came in",
+      bingo_id: "",
+      kind: "player or captain",
+      respondent_key: deny("An HMAC of the respondent (user, Bingo, kind) made with FEEDBACK_SECRET, so a Player can find their own response to edit it. Anonymity is exactly that nobody can read this."),
+    },
+  },
+  feedback_answers: {
+    note: "Answers to the feedback questions of signup_questions, by response.",
+    columns: { id: "", response_id: "", question_id: "", value: "Booleans as 'true'/'false'; multiselect and member picks as JSON" },
   },
   signup_pairings: {
     note: "Duo partner requests. A pair is a row with status accepted.",

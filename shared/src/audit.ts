@@ -144,11 +144,13 @@ export interface AuditDetailsMap {
   "line.updated": { lineType: string; lineIndex: number; points: { before: number; after: number } };
   "line.deleted": { lineType: string; lineIndex: number; points: number };
 
-  "question.created": { prompt: string; type: string; required: boolean };
-  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; allowOther: boolean; multiplePicks: boolean; maxPicks: number | null; required: boolean; sortOrder: number }> };
+  // `form`: "feedback" for a Feedback question (CONTEXT.md); absent means a signup question, as every entry from before
+  // Feedback questions was.
+  "question.created": { prompt: string; type: string; required: boolean; form?: "feedback" };
+  "question.updated": { changes: FieldChanges<{ prompt: string; helperText: string | null; type: string; optionsJson: string | null; allowOther: boolean; multiplePicks: boolean; maxPicks: number | null; required: boolean; sortOrder: number; audience: string; visibility: string }>; form?: "feedback" };
   /** `answersDeleted`: how many players' (non-blank) answers went with it. Absent on entries from before answers could be deleted along with it. */
-  "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number };
-  "question.reordered": { order: string[] };
+  "question.deleted": { prompt: string; type: string; required: boolean; answersDeleted?: number; form?: "feedback" };
+  "question.reordered": { order: string[]; form?: "feedback" };
 
   "superlative.category_created": { name: string };
   "superlative.category_updated": { changes: FieldChanges<{ name: string }> };
@@ -351,6 +353,8 @@ const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const settingValue = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v));
 // ` on "Pets"`, or nothing when the tile's name isn't there.
 const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
+/** "feedback" or "signup": which form a question audit entry is about (absent: signup, as before Feedback questions). */
+const formWord = (d: { form?: "feedback" }) => (d.form === "feedback" ? "feedback" : "signup");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
 /** "Green team's", or "their" when the team isn't known. */
 const teamPossessive = (i: { teamName: string | null }) => (i.teamName ? `${i.teamName}'s` : "their");
@@ -609,10 +613,10 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "line.generated": { category: "board", tone: "neutral", visibility: "mods", title: "Lines generated", label: (i) => `${actor(i)} regenerated bingo lines (${i.details.pointsPerLine} pts each)` },
   "line.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Line updated", label: (i) => `${actor(i)} changed ${i.details.lineType} ${i.details.lineIndex + 1}'s points to ${i.details.points.after}` },
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },
-  "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Signup question added", label: (i) => `${actor(i)} added the signup question "${i.details.prompt}"` },
-  "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup question updated", label: (i) => `${actor(i)} updated the signup question "${i.entityLabel ?? ""}"` },
-  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Signup question deleted", label: (i) => `${actor(i)} deleted the signup question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
-  "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Signup questions reordered", label: (i) => `${actor(i)} reordered the signup questions` },
+  "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Question added", label: (i) => `${actor(i)} added the ${formWord(i.details)} question "${i.details.prompt}"` },
+  "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Question updated", label: (i) => `${actor(i)} updated the ${formWord(i.details)} question "${i.entityLabel ?? ""}"` },
+  "question.deleted": { category: "signup", tone: "danger", visibility: "mods", title: "Question deleted", label: (i) => `${actor(i)} deleted the ${formWord(i.details)} question "${i.details.prompt}"${i.details.answersDeleted ? ` and ${i.details.answersDeleted} answer${i.details.answersDeleted === 1 ? "" : "s"} to it` : ""}` },
+  "question.reordered": { category: "signup", tone: "neutral", visibility: "mods", title: "Questions reordered", label: (i) => `${actor(i)} reordered the ${formWord(i.details)} questions` },
   "superlative.category_created": { category: "superlative", tone: "ok", visibility: "mods", title: "Superlative category added", label: (i) => `${actor(i)} added the superlative category "${i.details.name}"` },
   "superlative.category_updated": { category: "superlative", tone: "neutral", visibility: "mods", title: "Superlative category updated", label: (i) => `${actor(i)} renamed the superlative category "${i.entityLabel ?? ""}" to "${i.details.changes.after.name ?? ""}"` },
   "superlative.category_deleted": { category: "superlative", tone: "danger", visibility: "mods", title: "Superlative category deleted", label: (i) => `${actor(i)} deleted the superlative category "${i.details.name}"${i.details.votesDeleted ? ` and ${i.details.votesDeleted} vote${i.details.votesDeleted === 1 ? "" : "s"} in it` : ""}` },

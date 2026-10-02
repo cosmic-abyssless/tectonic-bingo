@@ -82,6 +82,7 @@ cat >"$root/env/staging.env" <<EOF
 NODE_ENV=development
 DEV_LOGIN_ENABLED=true
 SESSION_SECRET=zero-downtime-test
+FEEDBACK_SECRET=zero-downtime-test-feedback
 CLIENT_URL=http://localhost:$port
 DISCORD_CLIENT_ID=test
 DISCORD_CLIENT_SECRET=test

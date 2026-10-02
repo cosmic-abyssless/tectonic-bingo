@@ -45,6 +45,7 @@ import { mountClientApp } from "./middleware/clientApp";
 import { readRuntimeConfig } from "./runtimeConfig";
 import { getTectonicConfig } from "./services/tectonicService";
 import { installProcessLogHandlers, log, requestLog } from "./log";
+import { isAnonymousRoute } from "./anonymousRoutes";
 import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
 import { createMcpRouter } from "./mcp/router";
@@ -56,6 +57,9 @@ const REQUIRED_ENV = [
   "DISCORD_CALLBACK_URL",
   "DISCORD_GUILD_ID",
   "SESSION_SECRET",
+  // Keys Feedback responses to their Players without naming them (services/feedbackService.ts). Must never change while
+  // a Feedback form is open: a new one cuts every Player off from editing their response.
+  "FEEDBACK_SECRET",
   "CLIENT_URL",
 ] as const;
 
@@ -156,7 +160,8 @@ const sessionAuth = [sessionMiddleware, passport.initialize(), passport.session(
 app.use(...sessionAuth);
 // Which account hit an error, by internal id only (no name or Discord details).
 app.use((req, _res, next) => {
-  if (req.user) Sentry.setUser({ id: req.user.id });
+  // Not on the Feedback form's routes: a response is anonymous (anonymousRoutes.ts).
+  if (req.user && !isAnonymousRoute(req.originalUrl)) Sentry.setUser({ id: req.user.id });
   next();
 });
 

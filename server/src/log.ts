@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ServiceError } from "./services/errors";
+import { isAnonymousRoute } from "./anonymousRoutes";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -82,13 +83,15 @@ export function requestLog(req: Request, res: Response, next: NextFunction): voi
     const status = res.statusCode;
     const err = res.locals.error as unknown;
     const level: LogLevel = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
+    // A Feedback response is anonymous: its request line names no user (anonymousRoutes.ts).
+    const anonymous = isAnonymousRoute(req.originalUrl || req.url);
     const fields: LogFields = {
       method: req.method,
       path,
       status,
       ms: Date.now() - started,
       requestId: req.audit?.requestId,
-      userId: req.user?.id ?? req.audit?.actorUserId ?? undefined,
+      userId: anonymous ? undefined : (req.user?.id ?? req.audit?.actorUserId ?? undefined),
       bingoId: req.bingo?.id,
     };
     if (err) Object.assign(fields, errorInfo(err));

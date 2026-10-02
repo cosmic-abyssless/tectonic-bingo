@@ -51,13 +51,17 @@ for environment in staging production; do
   [ "$existed" = 1 ] || set_value "$target" BACKUP_PREFIX "$environment"
 done
 
-# A different session secret per environment, generated here so it never passes through anyone's hands.
+# A different session secret and Feedback secret per environment, generated here so they never pass through anyone's
+# hands. (The Feedback secret keys anonymous Feedback responses to their Players: it must never change while a Feedback
+# form is open, see docs/adr/0002-anonymous-feedback.md.)
 for environment in staging production; do
   file="$env_dir/$environment.env"
-  if grep -q '^SESSION_SECRET=$' "$file"; then
-    set_value "$file" SESSION_SECRET "$(openssl rand -hex 32)"
-    say "generated the $environment SESSION_SECRET"
-  fi
+  for secret in SESSION_SECRET FEEDBACK_SECRET; do
+    if grep -q "^$secret=\$" "$file"; then
+      set_value "$file" "$secret" "$(openssl rand -hex 32)"
+      say "generated the $environment $secret"
+    fi
+  done
 done
 
 # Staging asks for a shared password on everything except /health (Caddy basic auth; deploy/environments/staging.conf).

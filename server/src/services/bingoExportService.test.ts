@@ -3,7 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import sharp from "sharp";
-import { count, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -247,6 +247,34 @@ describe("importBingo", () => {
 
     const superlatives = getSuperlativeCategories(db, imported.id);
     expect(superlatives.map((c) => c.name)).toEqual(["Team MVP", "Team Spirit"]);
+  });
+
+  it("carries Feedback questions with their audience, never their answers, and reads a file from before them", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const general = createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "How was it?", helperText: "Be kind", type: "textarea", sortOrder: 0 });
+    createQuestion(db, { bingoId: source.id, form: "feedback", prompt: "Draft?", type: "select", optionsJson: JSON.stringify(["good", "bad"]), allowOther: true, required: true, audience: "captains", sortOrder: 1 });
+    const response = db.insert(schema.feedbackResponses).values({ bingoId: source.id, kind: "player", respondentKey: "k" }).returning().get();
+    db.insert(schema.feedbackAnswers).values({ responseId: response.id, questionId: general.id, value: "Loved it" }).run();
+
+    const doc = exportBingo(db, source.id);
+    expect(doc.signupQuestions.map((q) => q.prompt).sort()).toEqual(["Preferred role", "Who would you like to play with?", "Willing to captain?"]);
+    expect(doc.feedbackQuestions).toEqual([
+      expect.objectContaining({ prompt: "How was it?", helperText: "Be kind", type: "textarea", audience: "all" }),
+      expect.objectContaining({ prompt: "Draft?", type: "select", allowOther: true, required: true, audience: "captains" }),
+    ]);
+    expect(doc.feedbackQuestions![0]).not.toHaveProperty("visibility");
+    expect(JSON.stringify(doc)).not.toContain("Loved it");
+
+    const imported = importBingo(db, JSON.parse(JSON.stringify(doc)) as BingoExportDocument, { slug: "with-feedback", createdByUserId: admin.id });
+    const restored = db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, imported.id), eq(schema.signupQuestions.form, "feedback"))).orderBy(schema.signupQuestions.sortOrder).all();
+    expect(restored.map((q) => [q.prompt, q.audience, q.required, q.allowOther])).toEqual([["How was it?", "all", false, false], ["Draft?", "captains", true, true]]);
+    expect(db.select().from(schema.feedbackResponses).where(eq(schema.feedbackResponses.bingoId, imported.id)).all()).toEqual([]);
+    // The signup form is untouched by them.
+    expect(db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, imported.id), eq(schema.signupQuestions.form, "signup"))).all()).toHaveLength(3);
+
+    delete (doc as { feedbackQuestions?: unknown }).feedbackQuestions;
+    const older = importBingo(db, doc, { slug: "before-feedback", createdByUserId: admin.id });
+    expect(db.select().from(schema.signupQuestions).where(and(eq(schema.signupQuestions.bingoId, older.id), eq(schema.signupQuestions.form, "feedback"))).all()).toEqual([]);
   });
 
   it("imports a file exported before Superlative categories existed", () => {
@@ -637,7 +665,11 @@ describe("every column is accounted for", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
     accounted(schema.tileCategories, Object.keys(doc.categories[0]!), ["id", "bingoId"], ["localId"]);
-    accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId"]);
+    // The signup form's questions: which form is this one (form), and audience, which only a Feedback question has.
+    accounted(schema.signupQuestions, Object.keys(doc.signupQuestions[0]!), ["id", "bingoId", "form", "audience"]);
+    // The Feedback form's: visibility is signup-only.
+    createQuestion(db, { bingoId: bingo.id, form: "feedback", prompt: "Anything else?", type: "text" });
+    accounted(schema.signupQuestions, Object.keys(exportBingo(db, bingo.id).feedbackQuestions![0]!), ["id", "bingoId", "form", "visibility"]);
     accounted(schema.superlativeCategories, Object.keys(doc.superlativeCategories![0]!), ["id", "bingoId"]);
   });
 });

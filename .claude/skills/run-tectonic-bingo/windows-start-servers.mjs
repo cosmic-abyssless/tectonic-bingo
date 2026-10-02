@@ -26,7 +26,7 @@ const servers = {
     DEV_LOGIN_ENABLED: 'true',
     DISCORD_CLIENT_ID: 'e2e', DISCORD_CLIENT_SECRET: 'e2e', DISCORD_GUILD_ID: 'e2e',
     DISCORD_CALLBACK_URL: `${clientUrl}/auth/discord/callback`,
-    SESSION_SECRET: 'e2e-secret', CLIENT_URL: clientUrl,
+    SESSION_SECRET: 'e2e-secret', FEEDBACK_SECRET: 'e2e-feedback-secret', CLIENT_URL: clientUrl,
     TECTONIC_API_URL: '', TECTONIC_API_KEY: '', TECTONIC_GUILD_ID: '', WOM_API_KEY: '', RUNEPROFILE_API_KEY: '',
     PLAYER_STATS_FETCH_DISABLED: 'true', SCREENSHOT_OCR_DISABLED: 'true',
     OSRS_ITEM_SEARCH_DISABLED: 'true', GE_PRICES_FETCH_DISABLED: 'true',
