@@ -38,3 +38,35 @@ output "dns_records_to_ask_for" {
     "tectonic.cc"            = "A ${hcloud_primary_ip.box.ip_address} (at decommission, phase 7: Caddy redirects it)"
   }
 }
+
+output "app_env" {
+  description = "The contents of staging.env and production.env (app-env.tf). Sensitive: infra/push-env.sh (or .ps1) puts them on the box."
+  value       = local.app_env
+  sensitive   = true
+
+  # The mistakes a typo in Bitwarden would make, caught before anything reaches the box.
+  precondition {
+    condition     = var.staging_session_secret != var.production_session_secret
+    error_message = "Staging and production must not share a SESSION_SECRET."
+  }
+  precondition {
+    condition     = length(var.staging_session_secret) >= 32 && length(var.production_session_secret) >= 32
+    error_message = "A SESSION_SECRET should be at least 32 characters (openssl rand -hex 32)."
+  }
+  precondition {
+    condition     = alltrue([for settings in values(local.app_settings) : alltrue([for value in values(settings) : !can(regex("[\r\n]", value))])])
+    error_message = "A value contains a line break, which would split it across lines of the env file."
+  }
+}
+
+output "staging_basic_auth" {
+  description = "staging.basic-auth: the username and the bcrypt hash of staging's password, as Caddy wants them. Sensitive."
+  value       = terraform_data.staging_basic_auth.output
+  sensitive   = true
+}
+
+output "staging_login" {
+  description = "Staging's address and password, for infra/push-env to check the password logs in to the live site. Sensitive."
+  value       = { url = local.app_settings.staging.CLIENT_URL, user = "team", password = var.staging_password }
+  sensitive   = true
+}

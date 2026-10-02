@@ -13,3 +13,12 @@ admin_public_keys = [
 # repository_ref = "infra/opentofu"
 
 # The defaults (cpx31 in Ashburn, Ubuntu 24.04, bucket tectonic-backups) are in variables.tf; override here if needed.
+
+# ---- the app's settings that are not secret but stay out of this public repository (app-env.tf) --------------------
+# Its secrets are not here: they come from Bitwarden as TF_VAR_* (env.ps1).
+discord_client_id  = "" # Discord developer portal > the application > OAuth2 > Client ID
+discord_guild_id   = "" # the clan's Discord server id (right-click the server > Copy Server ID)
+admin_discord_ids  = "" # comma-separated Discord user ids: the Owners
+tectonic_api_url   = "" # the clan API's address (production only)
+tectonic_guild_id  = "" # the clan's id in the clan API (production only)
+user_agent_contact = "" # contact details for the clan APIs' User-Agent (production only)

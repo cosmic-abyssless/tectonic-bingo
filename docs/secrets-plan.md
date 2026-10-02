@@ -1,7 +1,9 @@
 # App secrets as code: Cloudflare Secrets Store, and what to do instead
 
-> **THEORETICAL.** An investigation, not a decision. Nothing here is built. Written 2026-10-02 against
-> `docs/infrastructure-as-code-plan.md` and the `infra/` module as they stand on main.
+> **BUILT** (2026-10-02): the recommendation below, with one change: the generated secrets (both `SESSION_SECRET`s, the
+> staging password) are Bitwarden values like the others rather than `random_password` resources, so the move needs no
+> `tofu import` (which prints the value it imports). How to use it: "App settings and secrets" in `infra/README.md`.
+> Written as an investigation the same day, against `docs/infrastructure-as-code-plan.md` and `infra/` as they stood.
 
 ## The gap
 
