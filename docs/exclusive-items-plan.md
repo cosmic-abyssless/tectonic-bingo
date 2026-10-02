@@ -411,3 +411,14 @@ the 400; as a mod reject the DT2 submission and see PETS' Baron unlock.
   claims exist.
 - Players see locked items before they try; admins manage rules in
   settings; export/import keeps them; the generator plays within them.
+
+## Groups (#435)
+
+A rule can carry `groups?: { label, itemNames }[]`: names that share one lock ("Bludgeon piece": axon, claw,
+spine). A group's names are **also** in the rule's own `itemNames` (which stays the full list of what the rule
+covers, so everything that reads `itemNames` keeps working); the group only changes the key a name is locked under,
+from the name to the group (`lockKey` in `shared/src/exclusivity.ts`), in both `exclusivityConflicts` and
+`keepFirstScope`. A conflict on a group names the piece holding the lock: "Used on SLAYER BOSSES · Page 1 (Bludgeon
+axon)". A name is in at most one group per rule (the settings editor and `normalizeExclusivityRules` refuse more, and
+an empty or unnamed group); a group's names missing from `itemNames` are added on save. A rule without groups is
+stored without the field, exactly as before, and export/import carries groups unchanged.

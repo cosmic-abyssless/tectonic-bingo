@@ -111,3 +111,74 @@ describe("keepFirstScope", () => {
     expect(keepFirstScope([], LEAVES, claims)).toEqual(claims);
   });
 });
+
+// Groups (several item names sharing one lock): SLAYER BOSSES with its own Bludgeon pieces under each page, and
+// another tile with a claw on it.
+describe("exclusivity groups", () => {
+  const GROUP_LEAVES = new Map<string, PlacedLeaf>(
+    [
+      leaf("p1-axon", "Bludgeon axon", "slayer", "SLAYER BOSSES", [["slayer-p1", "Page 1"]]),
+      leaf("p1-claw", "Bludgeon claw", "slayer", "SLAYER BOSSES", [["slayer-p1", "Page 1"]]),
+      leaf("p2-axon", "Bludgeon axon", "slayer", "SLAYER BOSSES", [["slayer-p2", "Page 2"]]),
+      leaf("p2-claw", "bludgeon CLAW", "slayer", "SLAYER BOSSES", [["slayer-p2", "Page 2"]]),
+      leaf("p2-spine", "Bludgeon spine", "slayer", "SLAYER BOSSES", [["slayer-p2", "Page 2"]]),
+      leaf("p1-kraken", "Kraken tentacle", "slayer", "SLAYER BOSSES", [["slayer-p1", "Page 1"]]),
+      leaf("p2-kraken", "Kraken tentacle", "slayer", "SLAYER BOSSES", [["slayer-p2", "Page 2"]]),
+      leaf("sire-claw", "Bludgeon claw", "sire", "ABYSSAL SIRE", [["sire-p1", "Page 1"]]),
+    ].map((l) => [l.nodeId, l]),
+  );
+  const BLUDGEON: ExclusivityRule = {
+    id: "slayer",
+    label: "Slayer",
+    itemNames: ["Kraken tentacle", "Bludgeon axon", "Bludgeon claw", "Bludgeon spine"],
+    scope: "part",
+    groups: [{ label: "Bludgeon piece", itemNames: ["Bludgeon axon", "Bludgeon claw", "Bludgeon spine"] }],
+  };
+  const at = (h: number) => new Date(Date.UTC(2026, 0, 1, h));
+
+  it("locks every member of the group in another place, naming the piece that holds the lock", () => {
+    for (const nodeId of ["p2-axon", "p2-claw", "p2-spine", "sire-claw"]) {
+      const conflicts = exclusivityConflicts([BLUDGEON], GROUP_LEAVES, ["p1-axon"], [nodeId]);
+      expect(conflicts, nodeId).toMatchObject([{ nodeId, usedOn: "SLAYER BOSSES · Page 1 (Bludgeon axon)", group: "Bludgeon piece" }]);
+    }
+  });
+
+  it("allows several pieces of the group in the same place", () => {
+    expect(exclusivityConflicts([BLUDGEON], GROUP_LEAVES, ["p1-axon"], ["p1-claw", "p1-axon"])).toEqual([]);
+  });
+
+  it("frees the group once its claim is gone (a rejection)", () => {
+    expect(exclusivityConflicts([BLUDGEON], GROUP_LEAVES, [], ["p2-claw"])).toEqual([]);
+  });
+
+  it("leaves the rule's ungrouped items on their own lock", () => {
+    expect(exclusivityConflicts([BLUDGEON], GROUP_LEAVES, ["p1-axon"], ["p2-kraken"])).toEqual([]);
+    const [c] = exclusivityConflicts([BLUDGEON], GROUP_LEAVES, ["p1-kraken"], ["p2-kraken"]);
+    expect(c).toMatchObject({ usedOn: "SLAYER BOSSES · Page 1" });
+    expect(c).not.toHaveProperty("group");
+  });
+
+  it("refuses one submission that puts two pieces in two places", () => {
+    expect(exclusivityConflicts([BLUDGEON], GROUP_LEAVES, [], ["p1-axon", "p2-spine"]).map((c) => c.nodeId)).toEqual(["p2-spine"]);
+  });
+
+  it("matches a name in a group even when the rule's own list leaves it out", () => {
+    const groupOnly: ExclusivityRule = { ...BLUDGEON, itemNames: ["Kraken tentacle"] };
+    expect(exclusivityConflicts([groupOnly], GROUP_LEAVES, ["p1-axon"], ["p2-claw"])).toHaveLength(1);
+  });
+
+  it("keeps the earliest claim's place for the whole group when scoring", () => {
+    const claims = [{ nodeId: "p2-claw", at: at(3) }, { nodeId: "p1-axon", at: at(1) }, { nodeId: "p1-claw", at: at(2) }, { nodeId: "sire-claw", at: at(4) }, { nodeId: "p2-kraken", at: at(5) }];
+    expect(keepFirstScope([BLUDGEON], GROUP_LEAVES, claims).map((c) => c.nodeId)).toEqual(["p1-axon", "p1-claw", "p2-kraken"]);
+    // An axon then a claw elsewhere: the group drops the claw; without the group each name keeps its own place.
+    const axonThenClaw = [{ nodeId: "p1-axon", at: at(1) }, { nodeId: "p2-claw", at: at(2) }];
+    expect(keepFirstScope([BLUDGEON], GROUP_LEAVES, axonThenClaw).map((c) => c.nodeId)).toEqual(["p1-axon"]);
+    expect(keepFirstScope([{ ...BLUDGEON, groups: undefined }], GROUP_LEAVES, axonThenClaw).map((c) => c.nodeId)).toEqual(["p1-axon", "p2-claw"]);
+  });
+
+  it("leaves rules without groups as they were (an empty list included)", () => {
+    const ungrouped: ExclusivityRule = { ...BLUDGEON, groups: [] };
+    expect(exclusivityConflicts([ungrouped], GROUP_LEAVES, ["p1-axon"], ["p2-claw"])).toEqual([]);
+    expect(exclusivityConflicts([ungrouped], GROUP_LEAVES, ["p1-axon"], ["p2-axon"])).toMatchObject([{ usedOn: "SLAYER BOSSES · Page 1" }]);
+  });
+});

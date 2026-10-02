@@ -274,6 +274,7 @@ An Item a Team may use in **one place only**: a Claim on it locks the same Item 
 - **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
 - **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
 - **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
+- **Groups:** A rule can name a group of its items that count as one Item for locking (not an Item Group, which only starts a rule), e.g. "Bludgeon piece": the axon, claw and spine. A Claim on any member locks every member elsewhere in the rule's scope, shown with the piece used: "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)". Several members in the same place stay allowed, and a rejection frees the group. An item is in at most one group per rule, and a group belongs to its rule. Whether several members in one place all *count* is up to the Requirement Tree.
 - **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 
 ### Point Adjustment

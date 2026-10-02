@@ -7,7 +7,7 @@
 // rejection, an undo, a point adjustment, a hand coming down). See docs/generate-bingo-plan.md, Phase 4.
 import type { TeamProgressSummary } from "@bingo/shared";
 import { ApiError } from "./client";
-import { planSubmissions, type BoardInfo, type Claim, type PartModel } from "./board";
+import { planSubmissions, type BoardInfo, type Claim, type PartModel, type PlacedItem } from "./board";
 import { localHour, playingProbability, type Player } from "./people";
 import { clamp, type Rng } from "./rng";
 import { DAY, HOUR, MINUTE, fmt } from "./timeline";
@@ -288,6 +288,33 @@ export class Simulation {
       this.summary.submitted++;
     } catch (err) {
       this.note(err, `submit ${state.part.tileName} ${state.part.label}`);
+    }
+  }
+
+  /**
+   * The exclusive item group's play (setup.addExclusiveGroup): one of the team's players claims `first` as an ordinary
+   * submission the mods then review, and two minutes later tries `second`, in the same group on another Tile, which
+   * the server must refuse. `claimed` is false when the team couldn't claim `first` (already used the group, or the
+   * part is out of play); `refusal` is the server's message, null when it let the second claim through.
+   */
+  async claimThenRefused(team: SimTeam, first: PlacedItem, second: PlacedItem, at: Date): Promise<{ claimed: boolean; refusal: string | null }> {
+    const part = this.board.parts.find((p) => p.leafIds.includes(first.nodeId));
+    const state = part && team.parts.get(part.id);
+    const by = team.members.find((m) => m.userId);
+    const claim: Claim = { nodeId: first.nodeId, itemName: first.itemName, quantity: 1 };
+    if (!state || !by || !this.board.claimable(first.nodeId, team.completed) || this.conflicts(team, [claim])) return { claimed: false, refusal: null };
+    const posted = this.summary.submitted;
+    await this.submit(team, state, [claim], by, at, false);
+    if (this.summary.submitted === posted) return { claimed: false, refusal: null };
+
+    const later = new Date(at.getTime() + 2 * MINUTE);
+    try {
+      await this.ctx.api.as(by.discordId).submit(`/api/bingos/${this.ctx.slug}/submissions`, [{ nodeId: second.nodeId, itemName: second.itemName, quantity: 1 }], { at: later });
+      this.stamp(later);
+      return { claimed: true, refusal: null };
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) return { claimed: true, refusal: err.detail };
+      throw err;
     }
   }
 

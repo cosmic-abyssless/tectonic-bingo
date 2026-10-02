@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { normalizeItemName, type ExclusivityRule, type ExclusivityScope, type ItemGroup } from "@bingo/shared";
+import type { ExclusivityRule, ExclusivityScope, ItemGroup } from "@bingo/shared";
 import { useItemGroups } from "../../api/adminQueries";
 import { fullBoard, useBoard } from "../../api/queries";
 import { boardItemSources, type ItemSource } from "../board/exclusivity";
+import { addGroup, addToGroup, groupLabelOf, groupProblems, groupsOf, mergeNames, removeFromGroup, removeGroup, removeItem, renameGroup, ungroupedNames } from "./exclusiveGroups";
 import { Button, IconButton } from "../ui/Button";
 import { Field, Input } from "../ui/Field";
 import { Select, type SelectOption } from "../ui/Select";
@@ -13,20 +14,6 @@ const SCOPE_HELP: Record<ExclusivityScope, string> = {
   tile: "one tile only: several of an item on one tile all count, but not on another tile",
   part: "one part only: an item used for Page 1 can't be used for Page 2 (or anywhere else)",
 };
-
-/** Adds names to a list, keeping the first spelling of each and skipping ones already there. */
-function mergeNames(existing: readonly string[], added: readonly string[]): string[] {
-  const seen = new Set(existing.map(normalizeItemName));
-  const merged = [...existing];
-  for (const raw of added) {
-    const name = raw.trim();
-    if (name && !seen.has(normalizeItemName(name))) {
-      seen.add(normalizeItemName(name));
-      merged.push(name);
-    }
-  }
-  return merged;
-}
 
 /** A "Start from" / "Add items from" choice: an item group, or a tile or part of this board. */
 const SCOPE_OPTIONS: SelectOption[] = [
@@ -51,6 +38,122 @@ function resolveSource(value: string, groups: ItemGroup[], sources: ItemSource[]
     return source ? { label: source.label, itemNames: source.itemNames } : null;
   }
   return null;
+}
+
+/** One group of a rule: its name, its items, and adding one of the rule's ungrouped items or a new name to it. */
+function GroupRow({ rule, index, onChange }: { rule: ExclusivityRule; index: number; onChange: (rule: ExclusivityRule) => void }) {
+  const group = groupsOf(rule)[index]!;
+  const [typed, setTyped] = useState("");
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const name = group.label.trim() || `group ${index + 1}`;
+  const ungrouped = ungroupedNames(rule);
+
+  function add(itemName: string) {
+    const next = addToGroup(rule, index, itemName);
+    if (typeof next === "string") {
+      setRefusal(next);
+      return;
+    }
+    setRefusal(null);
+    onChange(next);
+    setTyped("");
+  }
+
+  return (
+    <li className="space-y-1.5 rounded-md border border-outline px-2.5 py-2" data-testid="exclusive-group">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label={`Name of group ${index + 1} in ${rule.label}`}
+          value={group.label}
+          onChange={(e) => onChange(renameGroup(rule, index, e.target.value))}
+          placeholder="e.g. Bludgeon piece"
+          size="sm"
+          className="min-w-40 flex-1"
+        />
+        <Button size="sm" variant="ghost" className="text-danger" onPress={() => onChange(removeGroup(rule, index))}>
+          Remove group
+        </Button>
+      </div>
+      <ul className="flex flex-wrap gap-1.5 text-xs text-on-surface-muted">
+        {group.itemNames.length === 0 && <li className="text-on-surface-subtle">No items yet</li>}
+        {group.itemNames.map((itemName) => (
+          <li key={itemName} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5">
+            {itemName}
+            <IconButton
+              size="xs"
+              label={`Take ${itemName} out of ${name}`}
+              onPress={() => onChange(removeFromGroup(rule, index, itemName))}
+              className="-my-0.5 -mr-1.5 rounded-full hover:text-danger"
+            >
+              <XIcon size={12} />
+            </IconButton>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        {ungrouped.length > 0 && (
+          <Select
+            aria-label={`Add one of ${rule.label}'s items to ${name}`}
+            value=""
+            onChange={add}
+            placeholder="Add one of the rule's items…"
+            size="sm"
+            className="min-w-48 flex-1"
+            options={ungrouped.map((n) => ({ value: n, label: n }))}
+          />
+        )}
+        <ItemSearchInput value={typed} onChange={setTyped} onPickItem={add} placeholder="Or a new item" ariaLabel={`Add a new item to ${name}`} containerClassName="min-w-48 flex-1" />
+        <Button size="sm" onPress={() => add(typed)} isDisabled={!typed.trim()}>
+          Add
+        </Button>
+      </div>
+      {refusal && <p className="text-xs text-danger">{refusal}</p>}
+    </li>
+  );
+}
+
+/**
+ * A rule's groups: several of its items that share one lock (the pieces of a Bludgeon), so a claim on any of them
+ * locks all of them elsewhere. An item can be in only one group of a rule.
+ */
+function GroupsEditor({ rule, onChange }: { rule: ExclusivityRule; onChange: (rule: ExclusivityRule) => void }) {
+  const [label, setLabel] = useState("");
+  const groups = groupsOf(rule);
+  const problems = groupProblems(rule);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-on-surface-muted">
+        <span className="font-medium">Groups</span>: items that share one lock, like the pieces of a Bludgeon. A claim on any item in a group locks every item
+        in it elsewhere, shown as "Used on … (the piece used)".
+      </p>
+      {groups.length > 0 && (
+        <ul className="space-y-1.5">
+          {groups.map((_, i) => (
+            <GroupRow key={i} rule={rule} index={i} onChange={onChange} />
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Input aria-label={`New group in ${rule.label}`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New group, e.g. Bludgeon piece" size="sm" className="min-w-40 flex-1" />
+        <Button
+          size="sm"
+          onPress={() => {
+            onChange(addGroup(rule, label));
+            setLabel("");
+          }}
+          isDisabled={!label.trim()}
+        >
+          Add group
+        </Button>
+      </div>
+      {problems.map((p) => (
+        <p key={p} className="text-xs text-warn">
+          {p}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 function RuleRow({
@@ -98,21 +201,27 @@ function RuleRow({
           <span className="num">{rule.itemNames.length}</span> items{rule.itemNames.length === 0 && " (add at least one before saving)"}
         </summary>
         <ul className="mt-1.5 flex flex-wrap gap-1.5">
-          {rule.itemNames.map((name) => (
-            <li key={name} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5">
-              {name}
-              <IconButton
-                size="xs"
-                label={`Remove ${name} from ${rule.label}`}
-                onPress={() => onChange({ ...rule, itemNames: rule.itemNames.filter((n) => n !== name) })}
-                className="-my-0.5 -mr-1.5 rounded-full hover:text-danger"
-              >
-                <XIcon size={12} />
-              </IconButton>
-            </li>
-          ))}
+          {rule.itemNames.map((name) => {
+            const group = groupLabelOf(rule, name);
+            return (
+              <li key={name} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5">
+                {name}
+                {group !== null && <span className="text-on-surface-subtle">· {group}</span>}
+                <IconButton
+                  size="xs"
+                  label={`Remove ${name} from ${rule.label}`}
+                  onPress={() => onChange(removeItem(rule, name))}
+                  className="-my-0.5 -mr-1.5 rounded-full hover:text-danger"
+                >
+                  <XIcon size={12} />
+                </IconButton>
+              </li>
+            );
+          })}
         </ul>
       </details>
+
+      <GroupsEditor rule={rule} onChange={onChange} />
 
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Add an item or an item group" className="min-w-48 flex-1">
@@ -161,7 +270,8 @@ function RuleRow({
  * The bingo's exclusive items: sets of items a team can use in one place only. A rule is a name, a scope and a
  * list of item names (a snapshot: it isn't linked to the group or tile it was started from). It can be started
  * from a tile or part of the board, an item group or nothing, and the items edited one by one, because a
- * tile's items rarely match a group. The server refuses a claim on an item already used elsewhere under it.
+ * tile's items rarely match a group. Some of a rule's items can be put in a named group that shares one lock (any
+ * piece of a Bludgeon). The server refuses a claim on an item already used elsewhere under it.
  * See docs/exclusive-items-plan.md.
  */
 export function ExclusiveItemsSection({ slug, rules, onChange }: { slug: string; rules: ExclusivityRule[]; onChange: (rules: ExclusivityRule[]) => void }) {
