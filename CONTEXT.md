@@ -191,7 +191,7 @@ The recursive structure inside a Part or Task defining how objectives combine:
 - **Condition Types:**
   - `ALL` — "Complete all of"
   - `ANY` — "Complete any one of"
-  - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5). Over Items only it reads "N of any (no dupes)": each Item is done at one drop, so the same item twice still counts once.
+  - `COUNT` — "Complete at least N of" (e.g., any 2 out of 5). Over Items only it reads "N of any (no dupes)": each Item is done at one drop, so the same item twice still counts once. An "any one of" group of Items among them is one more option, done at any one of its pieces, so it still reads "no dupes" (Slayer Bosses: "only 1 Bludgeon piece will be counted").
   - `SUM` — "N of any (dupes count)" (e.g., 500 total kill count or secondary ingredients): every drop adds to the total, the same item again included. An Item in it can count as more than one (see Counts as). Besides Items, it may hold an `ANY` made only of Items, for a set of pieces that counts once ("only 1 Bludgeon piece will be counted"): that ANY adds 1 to the total once it's done, and more of its Items add nothing. Nothing else goes in a SUM.
 - **Leaves:**
   - `ITEM` — An in-game item drop, tracked by OSRS item name and quantity.

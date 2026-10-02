@@ -4,7 +4,7 @@
 import { isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, groupDone, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
-import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
+import { collectLeaves, conditionHeading, isItemGroup } from "../core/board/requirementTree";
 import { groupLabel, groupPieces, leafLabel } from "../core/board/labels";
 import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
 import { wikiIconUrl } from "../api/wikiIcons";
@@ -168,7 +168,13 @@ export function buildRequirementTree(
   const nodeComplete = statusByNodeId.get(node.id) === "completed";
   const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
   const children = node.children
-    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks))
+    .map((child) => {
+      const model = buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks);
+      // A named "any one of" group of Items among a COUNT's options keeps its name ("Bludgeon pieces (any one of)"), as it
+      // does in a total.
+      if (model && node.kind === "COUNT" && child.label && isItemGroup(child)) return { ...model, label: `${child.label} (any one of)` };
+      return model;
+    })
     .filter((c): c is RequirementNodeModel => c !== null);
 
   return {

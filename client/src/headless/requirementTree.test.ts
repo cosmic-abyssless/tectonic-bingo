@@ -209,6 +209,23 @@ describe("buildRequirementTree: nested condition layout", () => {
     expect(buildRequirementTree(mixed, buildLeafClaimMaps([]), new Map())!.label).toBe("Complete at least 3 of");
   });
 
+  it("still says no dupes with an \"any one of\" group of Items among a COUNT's options, keeps the group's name, and crosses out all its pieces once one is in", () => {
+    const pieces = node({ id: "bludgeon", kind: "ANY", label: "Bludgeon pieces", children: [item("axon", "Bludgeon axon"), item("claw", "Bludgeon claw")] });
+    const count = node({ id: "count", kind: "COUNT", minCount: 3, children: [item("whip", "Abyssal whip"), pieces, item("dagger", "Abyssal dagger")] });
+    const tree = buildRequirementTree(count, approved("axon"), new Map([["bludgeon", "completed"]]))!;
+    expect(tree.label).toBe("3 of any (no dupes)");
+    expect(tree.progress).toEqual({ current: 1, target: 3 });
+    const group = tree.children[1]!;
+    expect(group.label).toBe("Bludgeon pieces (any one of)");
+    expect(group.children.map((c) => [c.label, c.dim])).toEqual([
+      ["Bludgeon axon", true],
+      ["Bludgeon claw", true],
+    ]);
+    // An unnamed group keeps the plain heading.
+    const unnamed = node({ ...count, children: [item("whip"), node({ ...pieces, label: null })] });
+    expect(buildRequirementTree(unnamed, buildLeafClaimMaps([]), new Map())!.children[1]!.label).toBe("Complete any one of");
+  });
+
   it("makes a SUM over several items a group headed with its rule and progress", () => {
     const sum = node({ id: "sum", kind: "SUM", quantity: 5, children: [item("a", "Dragon claws"), item("b", "Dinh's bulwark")] });
     const tree = buildRequirementTree(sum, approved("b"), new Map())!;
