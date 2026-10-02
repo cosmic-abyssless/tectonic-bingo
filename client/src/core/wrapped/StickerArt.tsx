@@ -53,8 +53,9 @@ export function StickerArt({
           draggable={false}
           // The first frame sizes the sticker: to the box's height with its own width (a box with only a height hugs the art),
           // contained in a box sized both ways, or by `frameClassName` (e.g. only max sizes: as big as fits, up to its
-          // own size). The second lies exactly over it.
-          className={`object-contain ${i === 0 ? `mx-auto block ${frameClassName}` : "absolute inset-0 size-full"} ${frame === i ? "visible" : "invisible"}`}
+          // own size). The second lies exactly over it. The frame on show says nothing of its own visibility, so a hidden
+          // ancestor (a comic panel not yet drawn) hides the sticker too.
+          className={`object-contain ${i === 0 ? `mx-auto block ${frameClassName}` : "absolute inset-0 size-full"} ${frame === i ? "" : "invisible"}`}
         />
       ))}
     </div>
