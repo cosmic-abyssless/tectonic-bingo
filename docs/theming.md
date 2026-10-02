@@ -174,12 +174,7 @@ of truth and will drift less than a doc copy. Broadly:
   so a comic section is written for that one page width, with no viewport breakpoints. It paints the
   default sections' `sm:` sizes back to their phone sizes meanwhile. The book adds its own contents
   page, and the Outro's first Scene is the back cover (its other Scenes, the share cards, are pages
-  like any other: `WrappedShareCardItem` draws one with its buttons). The comic's You, Duo, Captain
-  and Moderator (#420, in `wrapped/sections/`) are a page or two each: You is two Scenes (the
-  numbers and the best drop, then the rest of the story), a Duo's best moments get a second, a
-  Captain's Steal and grade a second. Each panel is one `Reveal`, a part with nothing to say draws
-  no panel, and the panels left fill its room (`FILL` in `sectionParts-you-duo-captain-moderator`
-  is the class string that makes a panel stretch to the room its row gives it).
+  like any other: `WrappedShareCardItem` draws one with its buttons).
 - **Wrapped share cards** (#232, #314): `WrappedOutro` shows the viewer's cards (`section.cards`:
   a Player's Player and Team cards, none for anyone else) before its way out,
   drawn with `core/wrapped`'s `WrappedShareCards`, which previews each one scaled to fit and
@@ -195,6 +190,12 @@ of truth and will drift less than a doc copy. Broadly:
   calls `actions.outroReached()` once the viewer gets to the Outro and, when
   `outroReachedBefore` and the Outro has cards, offers a jump to them (`WRAPPED_CARDS_ID`).
   Only the default theme draws cards; others fall back to it.
+- **The comic's You, Duo, Captain and Moderator** (#420, in `themes/comic/wrapped/sections/`) are a
+  page or two each: You is two Scenes (the numbers and the best drop, then the rest of the story),
+  a Duo's best moments get a second, a Captain's Steal and grade a second. Each panel is one
+  `Reveal`, a part with nothing to say draws no panel, and the panels left fill its room (`FILL` in
+  `sectionParts-you-duo-captain-moderator` is the class string that makes a panel stretch to the
+  room its row gives it).
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.
