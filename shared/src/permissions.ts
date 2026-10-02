@@ -111,6 +111,17 @@ export interface RestrictionEntry extends Restriction {
   appliedAt: string;
 }
 
+/**
+ * One user's standing in a Bingo, for the player card's Permissions tab (Moderators and Admins only): the roles they hold
+ * there, their Restrictions, and whether the viewer may apply one to them (mayRestrict) or lift theirs (an Admin always).
+ */
+export interface PlayerAccess {
+  roles: Role[];
+  restrictions: RestrictionEntry[];
+  restrictable: boolean;
+  liftable: boolean;
+}
+
 /** Whether a Restriction on `target` takes `action`. */
 export function restrictionCovers(target: string, action: Action): boolean {
   if (!(RESTRICTABLE_ACTIONS as readonly Action[]).includes(action)) return false;

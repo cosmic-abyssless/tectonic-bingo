@@ -16,7 +16,7 @@ import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
 import type { TimeZoneRegion } from "./timezone.ts";
 import type { ProofCheck, SubmissionKind } from "./proof.ts";
 import type { HistoricalRecorded } from "./historical.ts";
-import type { RestrictionEntry } from "./permissions.ts";
+import type { PlayerAccess, RestrictionEntry } from "./permissions.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -1228,6 +1228,9 @@ export interface PlayerProfile {
   // Earned / total switched-on Achievements (CONTEXT.md "Achievement") for this bingo — count only, never which
   // ones: other players' individual Achievements stay personal. Null when the feature is switched off.
   achievements: AchievementCount | null;
+  // Their roles and Restrictions in this bingo, and what the viewer may do about them (PlayerAccess): only for a viewer
+  // who moderates the bingo, null for everyone else.
+  access: PlayerAccess | null;
 }
 
 export interface DraftTeam extends Team {

@@ -4,25 +4,26 @@ import { describeStages, roleGrants } from "../../headless/roleGrants";
 import { CheckIcon, XIcon } from "../ui/icons";
 import { Tooltip } from "../ui/Tooltip";
 import { ModsManager, StaffManager } from "./ModsManager";
+import { ROLE_LABEL } from "./roles";
 
 // The matrix's columns, widest reach first, each with who holds it for its heading's tooltip.
 const ROLES: { role: Role; label: string; summary: string }[] = [
   {
     role: "owner",
-    label: "Owner",
+    label: ROLE_LABEL.owner,
     summary: "Site-wide: the site admins listed in ADMIN_DISCORD_IDS. An Owner is an Admin too, and alone manages site admins. Owners can't be revoked.",
   },
   {
     role: "admin",
-    label: "Admin",
+    label: ROLE_LABEL.admin,
     summary: "Site-wide: every Action but the Owner's, in every stage the rules for everyone leave it open. Admins can't be restricted.",
   },
-  { role: "moderator", label: "Moderator", summary: "Trusted clan members who moderate this Bingo. Admins add them above." },
-  { role: "staff", label: "Staff", summary: "Clan leadership who collect the Buy-ins, and see nothing else of the Bingo. Admins add them above." },
-  { role: "captain", label: "Captain", summary: "Leads a Team. Assigned in the Captains tab. A Captain is always a Player too, so they also hold the Player column." },
+  { role: "moderator", label: ROLE_LABEL.moderator, summary: "Trusted clan members who moderate this Bingo. Admins add them above." },
+  { role: "staff", label: ROLE_LABEL.staff, summary: "Clan leadership who collect the Buy-ins, and see nothing else of the Bingo. Admins add them above." },
+  { role: "captain", label: ROLE_LABEL.captain, summary: "Leads a Team. Assigned in the Captains tab. A Captain is always a Player too, so they also hold the Player column." },
   {
     role: "player",
-    label: "Player",
+    label: ROLE_LABEL.player,
     summary: "Everyone with an active signup until Board revealed (less Cut signups once the Draft begins), then everyone on a Team.",
   },
 ];
