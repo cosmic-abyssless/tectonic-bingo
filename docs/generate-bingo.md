@@ -15,7 +15,7 @@ can run a script next to the server.
 
 The server must be in **dev mode**: `DEV_LOGIN_ENABLED=true`, and `NODE_ENV` anything but `production`
 (`NODE_ENV=production` switches off every dev-only feature below, whatever else is set). Local dev servers usually
-are; staging always is (`deploy/env/staging.env.example`). Nothing else needs setting: the generator's requests skip
+are; staging always is (`infra/app-env.tf`). Nothing else needs setting: the generator's requests skip
 the screenshot OCR and the outside services themselves (see "What was added to the server"), so your normal dev
 server works as it is, integrations and all.
 
