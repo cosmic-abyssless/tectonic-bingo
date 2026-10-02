@@ -167,6 +167,19 @@ of truth and will drift less than a doc copy. Broadly:
   screen) and `Reveal` (a line that fades up with the scroll, and just fades in under reduced
   motion); `WrappedParts` and `PointsChart` are there to reuse. `WrappedBanner` is the Board's
   way in: every `BoardPage` must draw it when `page.wrapped.canOpen`.
+- **A guided Wrapped page** (the comic theme's, #419): a `WrappedPage` that doesn't scroll holds a
+  `createWrappedProgressStore()`, wraps the sections in `WrappedProgressProvider` and, from its
+  camera, tells each Scene `store.setSceneState(id, { reached, current })`. A Scene is one page and
+  a `Reveal` step one panel on it; a step the section has no `Reveal` at is skipped. The provider's
+  `reveal` prop gives the page's own component to draw each `Reveal` (the comic's inked panel,
+  empty until the camera arrives, then painted in by a brush stroke), and a `Reveal` that brings its
+  own frame says `bare`. Scenes and Reveals carry `data-wrapped-scene` and `data-wrapped-step` for
+  the page to find them. The comic page lays every page out at a fixed 420px width (`wrapped/camera`'s
+  `WRAPPED_PAGE_WIDTH`, at least 2:3 tall, taller to fit its content) and frames it with a camera,
+  so a comic section is written for that one page width, with no viewport breakpoints. It paints the
+  default sections' `sm:` sizes back to their phone sizes meanwhile. The book adds its own contents
+  page, and the Outro's first Scene is the back cover (its other Scenes, the share cards, are pages
+  like any other: `WrappedShareCardItem` draws one with its buttons).
 - **Wrapped share cards** (#232, #314): `WrappedOutro` shows the viewer's cards (`section.cards`:
   a Player's Player and Team cards, none for anyone else) before its way out,
   drawn with `core/wrapped`'s `WrappedShareCards`, which previews each one scaled to fit and

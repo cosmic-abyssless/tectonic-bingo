@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { motion, useReducedMotion, useScroll, useTransform, type MotionValue } from "motion/react";
-import { useWrappedProgressSource, WRAPPED_SCENE_UNREACHED, type WrappedProgressSource, type WrappedSceneState } from "./sceneProgress";
+import { useWrappedProgressSource, useWrappedRevealComponent, WRAPPED_SCENE_UNREACHED, type WrappedProgressSource, type WrappedSceneState } from "./sceneProgress";
 
 // Wrapped's reveal (CONTEXT.md "Wrapped"): a Scene is one screen of the story, and each Reveal in it fades up at its
 // step, in step order. Themes build their Wrapped sections from these. Where the progress comes from is the page's call:
@@ -54,7 +54,7 @@ function PageDrivenScene({ source, steps, className, children }: { source: Wrapp
   const state = useSceneState(source, id);
   return (
     <SceneContext.Provider value={{ mode: "page", source, id, steps }}>
-      <section ref={ref} data-wrapped-scene-current={state.current} className={`${SCENE_CLASS} ${className}`}>
+      <section ref={ref} data-wrapped-scene={id} data-wrapped-scene-current={state.current} className={`${SCENE_CLASS} ${className}`}>
         {children}
       </section>
     </SceneContext.Provider>
@@ -79,13 +79,16 @@ export function useWrappedSceneState(): (WrappedSceneState & { steps: number }) 
   return page ? { ...state, steps: page.steps } : null;
 }
 
-/** A line of a Scene that fades up at its `step` (0 first). Outside a Scene it's shown as it is. */
-export function Reveal({ step = 0, className, children }: { step?: number; className?: string; children: ReactNode }) {
+/**
+ * A line of a Scene that fades up at its `step` (0 first). Outside a Scene it's shown as it is. `bare` tells a page that
+ * draws its Reveals in frames (a comic's panels) that this one brings a frame of its own, so it should add none.
+ */
+export function Reveal({ step = 0, bare = false, className, children }: { step?: number; bare?: boolean; className?: string; children: ReactNode }) {
   const scene = useContext(SceneContext);
   if (!scene) return <div className={className}>{children}</div>;
   if (scene.mode === "page") {
     return (
-      <PageDrivenReveal source={scene.source} sceneId={scene.id} step={step} className={className}>
+      <PageDrivenReveal source={scene.source} sceneId={scene.id} step={step} bare={bare} className={className}>
         {children}
       </PageDrivenReveal>
     );
@@ -119,12 +122,21 @@ function ScrollReveal({ progress, steps, step, className, children }: { progress
   );
 }
 
-function PageDrivenReveal({ source, sceneId, step, className, children }: { source: WrappedProgressSource; sceneId: string; step: number; className?: string; children: ReactNode }) {
+function PageDrivenReveal({ source, sceneId, step, bare, className, children }: { source: WrappedProgressSource; sceneId: string; step: number; bare: boolean; className?: string; children: ReactNode }) {
   const reduceMotion = useReducedMotion();
+  const Custom = useWrappedRevealComponent();
   const revealed = step < useSceneState(source, sceneId).reached;
+  if (Custom) {
+    return (
+      <Custom sceneId={sceneId} step={step} revealed={revealed} bare={bare} className={className}>
+        {children}
+      </Custom>
+    );
+  }
   return (
     <motion.div
       className={className}
+      data-wrapped-step={step}
       data-revealed={revealed}
       initial={false}
       animate={{ opacity: revealed ? 1 : 0, y: revealed ? 0 : 28 }}

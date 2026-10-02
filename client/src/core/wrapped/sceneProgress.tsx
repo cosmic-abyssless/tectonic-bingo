@@ -1,4 +1,4 @@
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
 // Where a Wrapped Scene's progress comes from (see Scene.tsx). By default a Scene measures its own scroll progress.
 // A theme's WrappedPage that doesn't scroll (a guided view that steps through panels) supplies the progress itself:
@@ -102,14 +102,44 @@ export function useWrappedScenes(store: WrappedProgressStore): readonly WrappedS
   return useSyncExternalStore(store.subscribeScenes, store.getScenes);
 }
 
-const ProgressSourceContext = createContext<WrappedProgressSource | null>(null);
+/** What a page-supplied Reveal is given to draw itself with (see WrappedProgressProvider's `reveal`). */
+export interface WrappedRevealProps {
+  /** The Scene the Reveal is in (a WrappedSceneInfo's `id`) and the step it belongs to. */
+  sceneId: string;
+  step: number;
+  /** Whether the page has reached the Reveal's step. */
+  revealed: boolean;
+  /** The Reveal's `bare` prop: the section draws its own frame, so the page adds none. */
+  bare: boolean;
+  /** The classes the section gave the Reveal: how it lays itself out in its Scene. */
+  className?: string;
+  children: ReactNode;
+}
 
-/** Makes every WrappedScene and Reveal inside follow `source` instead of the scroll position. */
-export function WrappedProgressProvider({ source, children }: { source: WrappedProgressSource; children: ReactNode }) {
-  return <ProgressSourceContext.Provider value={source}>{children}</ProgressSourceContext.Provider>;
+interface ProgressContextValue {
+  source: WrappedProgressSource;
+  reveal: ComponentType<WrappedRevealProps> | null;
+}
+
+const ProgressSourceContext = createContext<ProgressContextValue | null>(null);
+
+/**
+ * Makes every WrappedScene and Reveal inside follow `source` instead of the scroll position. `reveal` is how the page
+ * wants a Reveal drawn: by default a Reveal fades up when its step is reached. A page with its own look for an
+ * unreached step (a comic's empty panel, say) gives a component that draws the Reveal's frame, content and reveal
+ * itself; it must put the layout classes the section gave the Reveal on the element it draws.
+ */
+export function WrappedProgressProvider({ source, reveal = null, children }: { source: WrappedProgressSource; reveal?: ComponentType<WrappedRevealProps> | null; children: ReactNode }) {
+  const value = useMemo(() => ({ source, reveal }), [source, reveal]);
+  return <ProgressSourceContext.Provider value={value}>{children}</ProgressSourceContext.Provider>;
 }
 
 /** The page-supplied source, or null when Scenes measure scroll progress. */
 export function useWrappedProgressSource(): WrappedProgressSource | null {
-  return useContext(ProgressSourceContext);
+  return useContext(ProgressSourceContext)?.source ?? null;
+}
+
+/** The page's own Reveal component, if it gave one. */
+export function useWrappedRevealComponent(): ComponentType<WrappedRevealProps> | null {
+  return useContext(ProgressSourceContext)?.reveal ?? null;
 }

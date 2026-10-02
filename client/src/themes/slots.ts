@@ -280,7 +280,10 @@ export interface ThemeSlots {
   // createWrappedProgressStore(). Each Scene then registers its step count with the source (read it with
   // useWrappedScenes(store): id, steps, element, in document order) and the page sets, per Scene,
   // store.setSceneState(id, { reached, current }): its Reveals at steps below `reached` are shown (instantly with
-  // reduced motion), the rest hidden. Nothing scrolls or is measured then, and the sections are the same either way. Each section model carries
+  // reduced motion), the rest hidden. Nothing scrolls or is measured then, and the sections are the same either way. A guided
+  // page reads a Scene as a page and a Reveal step as a panel on it (a step no Reveal is at is skipped), and may give the
+  // provider a `reveal` component to draw each Reveal itself, as a frame of its own that is empty until its step is reached
+  // (the comic's panels); a section whose Reveal brings its own frame marks it `bare`. Each section model carries
   // its category's art (`art`: any number of Category images, each two boil frames and maybe a credited name, and
   // the category's additional credits; both empty without any): draw it with core/wrapped's WrappedCategoryArt (or
   // WrappedSectionArt / StickerArt), which swaps the frames slowly and adds the CSS shadow, and make sure the section
