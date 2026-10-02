@@ -27,8 +27,9 @@ function branchClass(last: boolean, tick = true) {
 // A leaf row: an ITEM, or a SUM over a single item — the model already carries
 // dim/submitted/complete/progress precomputed (see headless/boardModel.ts's
 // buildRequirementTree), so this only renders them. `bare`: a piece of an "any one of" group of Items, which has no
-// bullet of its own (the group's row has it). `className`: its branch, in a nested condition.
-function LeafRow({ node, bare, className }: { node: RequirementNodeModel; bare?: boolean; className?: string }) {
+// bullet of its own (the group's row has it). `hideLock`: its group's row already says where the group was used, so it
+// only shows that it's unavailable. `className`: its branch, in a nested condition.
+function LeafRow({ node, bare, hideLock, className }: { node: RequirementNodeModel; bare?: boolean; hideLock?: boolean; className?: string }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   return (
     <li className={`${rowClass(node.dim, node.submitted, !!node.progress)} ${className ?? ""}`}>
@@ -39,7 +40,7 @@ function LeafRow({ node, bare, className }: { node: RequirementNodeModel; bare?:
         {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
         {node.kind === "SUM" && <CountsAs countsAs={node.items[0]?.countsAs} />}
         {node.quantity && <span className="num ml-1.5 text-xs font-medium">×{node.quantity}</span>}
-        {node.lockedBy && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
+        {node.lockedBy && !hideLock && <span className="ml-1.5 text-xs text-warn">{node.lockedBy}</span>}
       </span>
       {node.complete && !bare && <Check />}
     </li>
@@ -107,7 +108,8 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
           // One option of its parent: a row with its own bullet, and a tick once any piece is in.
           <div className={rowClass(node.dim, false, true)}>
             <span className="text-on-surface-subtle">·</span>
-            <span className="text-[11px] uppercase tracking-wide">{node.label}</span>
+            <span className={`text-[11px] uppercase tracking-wide ${node.lockedBy && !node.complete ? "text-on-surface-subtle" : ""}`}>{node.label}</span>
+            {node.lockedBy && <span className="text-xs text-warn">{node.lockedBy}</span>}
             {node.complete && <Check />}
           </div>
         ) : (
@@ -130,7 +132,7 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
             <Fragment key={child.id}>
               {i > 0 && node.divider && <OrDivider dim={node.divider.dim} className={nested ? branchClass(false, false) : undefined} />}
               {child.isLeaf ? (
-                <LeafRow node={child} bare={node.itemGroup} className={nested ? branchClass(i === last) : undefined} />
+                <LeafRow node={child} bare={node.itemGroup} hideLock={node.itemGroup && !!node.lockedBy} className={nested ? branchClass(i === last) : undefined} />
               ) : (
                 <li className={nested ? branchClass(i === last) : undefined}>
                   <RequirementTree node={child} />

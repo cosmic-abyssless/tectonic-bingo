@@ -54,9 +54,10 @@ const branchClass = (last: boolean, tick = true) => `${BRANCH} ${last ? "before:
 
 /**
  * An ITEM, or a SUM over a single item (whose quantity and x/N progress sit on the row). `bare`: a piece of an "any one of"
- * group of Items, which has no box of its own (the group's row has it). `className`: its branch, in a nested condition.
+ * group of Items, which has no box of its own (the group's row has it). `hideLock`: its group's row already says where the group was
+ * used, so it only shows that it's unavailable. `className`: its branch, in a nested condition.
  */
-function LeafRow({ node, colors, bare, className }: { node: RequirementNodeModel; colors: ComicColors; bare?: boolean; className?: string }) {
+function LeafRow({ node, colors, bare, hideLock, className }: { node: RequirementNodeModel; colors: ComicColors; bare?: boolean; hideLock?: boolean; className?: string }) {
   const iconUrl = node.iconUrl ?? (node.items.length === 1 ? node.items[0]!.iconUrl : null);
   const color = node.dim ? colors.INK_SUBTLE : node.submitted && !node.complete ? colors.WARN : colors.INK_BODY;
   return (
@@ -74,7 +75,7 @@ function LeafRow({ node, colors, bare, className }: { node: RequirementNodeModel
               ×{node.quantity}
             </span>
           )}
-          {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
+          {node.lockedBy && !hideLock && <LockedTag text={node.lockedBy} colors={colors} />}
         </span>
         {node.submitted && !node.complete && !node.dim && (
           <span className="ml-1.5 text-[10px] uppercase tracking-wider" style={{ color: colors.WARN }}>
@@ -138,14 +139,16 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
   const nested = !root && node.kind !== "SUM";
   const last = node.children.length - 1;
   return (
-    <div style={nested ? ({ "--tree": node.complete ? colors.OK : node.dim ? colors.INK_SUBTLE : colors.LINE } as CSSProperties) : undefined}>
+    <div style={nested ? ({ "--tree": node.complete ? colors.OK : node.dim || node.lockedBy ? colors.INK_SUBTLE : colors.LINE } as CSSProperties) : undefined}>
       {node.showHeading &&
         (node.itemGroup ? (
-          // One option of its parent: a row with its own box, ticked once any piece is in.
+          // One option of its parent: a row with its own box, ticked once any piece is in, and greyed with its "Used on"
+          // once the team has used the group on another Part.
           <div className="flex items-start gap-2">
-            <Box done={node.complete} dim={node.dim} colors={colors} />
-            <span className="mt-0.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: headingColor }}>
+            <Box done={node.complete} dim={node.dim || !!node.lockedBy} colors={colors} />
+            <span className="mt-0.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: node.lockedBy && !node.complete ? colors.INK_SUBTLE : headingColor }}>
               {node.label}
+              {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
             </span>
           </div>
         ) : (
@@ -168,7 +171,7 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
             <Fragment key={child.id}>
               {i > 0 && node.divider && <OrDivider dim={node.divider.dim} colors={colors} className={nested ? branchClass(false, false) : undefined} />}
               {child.isLeaf ? (
-                <LeafRow node={child} colors={colors} bare={node.itemGroup} className={nested ? branchClass(i === last) : undefined} />
+                <LeafRow node={child} colors={colors} bare={node.itemGroup} hideLock={node.itemGroup && !!node.lockedBy} className={nested ? branchClass(i === last) : undefined} />
               ) : (
                 <li className={nested ? branchClass(i === last) : undefined}>
                   <RequirementTree node={child} />
