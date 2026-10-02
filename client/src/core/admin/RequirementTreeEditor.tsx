@@ -561,11 +561,12 @@ function RuleControls({ node, path, update }: Pick<NodeProps, "node" | "path" | 
       value={node.kind}
       onChange={(value) => {
         const kind = value as NodeKind;
+        // Between "at least N of" and "N of any (dupes count)" the N carries over ("3 of any" either way).
         update(path, (n) => ({
           ...n,
           kind,
-          minCount: kind === "COUNT" ? n.minCount ?? 1 : undefined,
-          quantity: kind === "SUM" ? n.quantity ?? 1 : undefined,
+          minCount: kind === "COUNT" ? (n.minCount ?? n.quantity ?? 1) : undefined,
+          quantity: kind === "SUM" ? (n.quantity ?? n.minCount ?? 1) : undefined,
         }));
       }}
       size="sm"

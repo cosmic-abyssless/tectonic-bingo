@@ -4,7 +4,7 @@
 import { isScreenshotPending, proofStatus, type BoardLine, type GraphNode, type NodeStatus, type PointAdjustment, type ProofStatus, type SealedBoardResponse, type SubmissionDetails, type TeamNodeState, type TeamWithMembers, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
 import { summarizeTileProgress, getFreezeUnlockAt, groupSubmissionsByTile, type TileProgressSummary } from "../core/board/tileProgress";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal, type LeafClaimMaps } from "../core/board/taskClaims";
-import { collectLeaves, conditionHeading } from "../core/board/requirementTree";
+import { collectLeaves, conditionHeading, isItemGroup } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { NO_LOCKS, lockTag, type ExclusiveLocks } from "../core/board/exclusivity";
 import { wikiIconUrl } from "../api/wikiIcons";
@@ -112,6 +112,7 @@ export function buildRequirementTree(
       progress: null,
       quantity: null,
       showHeading: false,
+      itemGroup: false,
       divider: null,
       children: [],
     };
@@ -142,6 +143,7 @@ export function buildRequirementTree(
       progress: { current: progress, target },
       quantity: !isGroup && target > 1 ? target : null,
       showHeading: isGroup,
+      itemGroup: false,
       divider: null,
       children: [],
     };
@@ -151,7 +153,21 @@ export function buildRequirementTree(
   const nodeComplete = statusByNodeId.get(node.id) === "completed";
   const childAncestorSatisfied = ancestorSatisfied || nodeComplete;
   const children = node.children
-    .map((child) => buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks))
+    .map((child) => {
+      const model = buildRequirementTree(child, maps, statusByNodeId, childAncestorSatisfied, locks);
+      // An "any one of" group of Items among a condition's options is one option: a row with its own box, its name kept
+      // ("Bludgeon pieces (any one of)"), and no "OR" between its pieces, which the heading already says.
+      if (model && isItemGroup(child)) {
+        return {
+          ...model,
+          label: child.label ? `${child.label} (any one of)` : model.label,
+          itemGroup: true,
+          dim: model.complete || childAncestorSatisfied,
+          divider: null,
+        };
+      }
+      return model;
+    })
     .filter((c): c is RequirementNodeModel => c !== null);
 
   return {
@@ -170,6 +186,7 @@ export function buildRequirementTree(
     progress: node.kind === "COUNT" ? { current: children.filter((c) => c.complete).length, target: node.minCount ?? 1 } : null,
     quantity: null,
     showHeading: true,
+    itemGroup: false,
     divider: node.kind === "ANY" ? { label: "OR", dim: childAncestorSatisfied } : null,
     children,
   };

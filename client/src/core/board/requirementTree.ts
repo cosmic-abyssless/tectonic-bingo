@@ -141,16 +141,23 @@ export function collectLabeledConditions<T extends { kind: NodeKind; children?: 
   return result;
 }
 
+/** Whether a node is an "any one of" group of Items: an ANY whose options are all Items (CONTEXT.md "Requirement Tree"). */
+export function isItemGroup(node: { kind: NodeKind; children?: { kind: NodeKind }[] | null }): boolean {
+  const children = node.children ?? [];
+  return node.kind === "ANY" && children.length > 0 && children.every((child) => child.kind === "ITEM");
+}
+
 /**
  * Player-facing heading for a composite condition, e.g. "Complete at least 3 of". Whether duplicates count is spelled
  * out where it matters: a SUM adds up every drop ("5 of any (dupes count)"), while a COUNT whose options are all Items
- * is done at one of each ("3 of any (no dupes)"). A COUNT holding a condition keeps "Complete at least N of".
+ * is done at one of each ("3 of any (no dupes)"), "any one of" groups of Items among them included (each is one more
+ * option, done at one of its pieces). A COUNT holding any other condition keeps "Complete at least N of".
  */
 export function conditionHeading(node: {
   kind: NodeKind;
   minCount?: number | null;
   quantity?: number | null;
-  children?: { kind: NodeKind }[] | null;
+  children?: { kind: NodeKind; children?: { kind: NodeKind }[] | null }[] | null;
 }): string {
   switch (node.kind) {
     case "ALL":
@@ -159,7 +166,7 @@ export function conditionHeading(node: {
       return "Complete any one of";
     case "COUNT": {
       const children = node.children ?? [];
-      const overItems = children.length > 0 && children.every((child) => child.kind === "ITEM");
+      const overItems = children.length > 0 && children.every((child) => child.kind === "ITEM" || isItemGroup(child));
       return overItems ? `${node.minCount ?? 1} of any (no dupes)` : `Complete at least ${node.minCount ?? 1} of`;
     }
     case "SUM":
