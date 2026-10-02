@@ -4,8 +4,6 @@ import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
 import { thumbUrl } from "../../../api/imageVariants";
-import { TextTooltip } from "../../../core/ui/Tooltip";
-import { tileTooltip } from "../../../core/board/tileTooltip";
 
 /*
  * Board tile. All colours come from the `--tile-*` variables set by the
@@ -22,77 +20,75 @@ export const TileCell = memo(function TileCell({ tile, onOpen, isSearchHighlight
   const borderColor = tile.freeze.isFrozen ? "var(--tile-frozen)" : tile.progress.allComplete ? "var(--tile-complete)" : undefined;
 
   return (
-    <TextTooltip text={tileTooltip(tile, { tasks: true })}>
-      <button
-        onClick={() => onOpen(tile.id)}
-        style={{ ...style, borderColor }}
-        className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border-2 border-[var(--tile-border)] bg-[var(--tile-bg)] transition-[border-color,opacity] duration-150 hover:border-[var(--tile-accent)] ${
-          tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
-        } ${isSearchHighlighted ? "tile-flash" : ""}`}
-      >
-        {tile.imageUrl && !imgFailed ? (
-          <img
-            src={thumbUrl(tile.imageUrl)}
-            alt={tile.name}
-            onError={() => setImgFailed(true)}
-            className={`absolute inset-0 h-full w-full object-contain p-1.5 transition-transform duration-150 ${
-              tile.freeze.isFrozen ? "opacity-30 saturate-0" : "group-hover:scale-105"
-            }`}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-on-surface-muted">{tile.name}</div>
-        )}
+    <button
+      onClick={() => onOpen(tile.id)}
+      style={{ ...style, borderColor }}
+      className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border-2 border-[var(--tile-border)] bg-[var(--tile-bg)] transition-[border-color,opacity] duration-150 hover:border-[var(--tile-accent)] ${
+        tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
+      } ${isSearchHighlighted ? "tile-flash" : ""}`}
+    >
+      {tile.imageUrl && !imgFailed ? (
+        <img
+          src={thumbUrl(tile.imageUrl)}
+          alt={tile.name}
+          onError={() => setImgFailed(true)}
+          className={`absolute inset-0 h-full w-full object-contain p-1.5 transition-transform duration-150 ${
+            tile.freeze.isFrozen ? "opacity-30 saturate-0" : "group-hover:scale-105"
+          }`}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-on-surface-muted">{tile.name}</div>
+      )}
 
-        {tile.progress.allComplete && !tile.freeze.isFrozen && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--tile-complete)]/40">
-            <CheckIcon className="size-1/2 text-[var(--tile-complete)] drop-shadow" strokeWidth={2.5} />
-          </div>
-        )}
+      {tile.progress.allComplete && !tile.freeze.isFrozen && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--tile-complete)]/40">
+          <CheckIcon className="size-1/2 text-[var(--tile-complete)] drop-shadow" strokeWidth={2.5} />
+        </div>
+      )}
 
-        {tile.freeze.isFrozen && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
-            <LockIcon />
-            <span className="num font-mono text-[11px] font-semibold leading-none">{formatCountdown(tile.freeze.remainingMs)}</span>
-          </div>
-        )}
+      {tile.freeze.isFrozen && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-background/70 text-[var(--tile-frozen)]">
+          <LockIcon />
+          <span className="num font-mono text-[11px] font-semibold leading-none">{formatCountdown(tile.freeze.remainingMs)}</span>
+        </div>
+      )}
 
-        {tile.freeze.hasFreezePeriod && !tile.freeze.isFrozen && (
-          <span className="absolute left-1 top-1 z-10 text-[var(--tile-frozen)] drop-shadow">
-            <ClockIcon size={14} />
-          </span>
-        )}
+      {tile.freeze.hasFreezePeriod && !tile.freeze.isFrozen && (
+        <span className="absolute left-1 top-1 z-10 text-[var(--tile-frozen)] drop-shadow">
+          <ClockIcon size={14} />
+        </span>
+      )}
 
-        {tile.interest.people.length > 0 && !tile.progress.allComplete && (
-          <span
-            className={`absolute right-1 top-1 z-20 flex items-center gap-0.5 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none ${tile.interest.mine ? "text-on-surface" : "text-on-surface-muted"}`}
-          >
-            <HandIcon size={11} fill={tile.interest.mine ? "currentColor" : "none"} />
-            {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}
-          </span>
-        )}
+      {tile.interest.people.length > 0 && !tile.progress.allComplete && (
+        <span
+          className={`absolute right-1 top-1 z-20 flex items-center gap-0.5 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none ${tile.interest.mine ? "text-on-surface" : "text-on-surface-muted"}`}
+        >
+          <HandIcon size={11} fill={tile.interest.mine ? "currentColor" : "none"} />
+          {tile.interest.people.length > 1 && <span className="num">{tile.interest.people.length}</span>}
+        </span>
+      )}
 
-        {tile.progress.totalTasks > 0 && (
-          <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
-            {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
-          </span>
-        )}
+      {tile.progress.totalTasks > 0 && (
+        <span className="num absolute bottom-1 left-1 z-20 rounded-sm bg-background/80 px-1 py-0.5 text-[9px] font-semibold leading-none text-on-surface-muted">
+          {tile.progress.pointsAwarded}/{tile.progress.totalPoints}
+        </span>
+      )}
 
-        {tile.progress.totalTasks > 1 && (
-          <div className="absolute bottom-1 right-1 z-20 flex gap-0.5">
-            {tile.taskStatuses.map((task) => {
-              if (task.status === "not_started") return null;
-              return (
-                <span
-                  key={task.id}
-                  className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
-                >
-                  {task.index + 1}
-                </span>
-              );
-            })}
-          </div>
-        )}
-      </button>
-    </TextTooltip>
+      {tile.progress.totalTasks > 1 && (
+        <div className="absolute bottom-1 right-1 z-20 flex gap-0.5">
+          {tile.taskStatuses.map((task) => {
+            if (task.status === "not_started") return null;
+            return (
+              <span
+                key={task.id}
+                className={`inline-flex size-4 items-center justify-center rounded-full text-[9px] font-bold leading-none text-background ${TASK_STATUS_DOT[task.status]}`}
+              >
+                {task.index + 1}
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </button>
   );
 });
