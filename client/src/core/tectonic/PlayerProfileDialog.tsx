@@ -23,15 +23,17 @@ import { usePlayerContribution } from "../stats/usePlayerContribution";
 import { useUrlParam } from "../ui/useUrlParam";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
+import { ProfilePermissions } from "./ProfilePermissions";
 
 /** The URL parameter holding the open profile's tab (PlayerName.tsx keeps the open profile in ?player=). */
 export const PROFILE_TAB_PARAM = "profileTab";
-const PROFILE_TABS = ["bingo", "clan", "past", "signup"] as const;
+const PROFILE_TABS = ["bingo", "clan", "past", "signup", "access"] as const;
 type ProfileTab = (typeof PROFILE_TABS)[number];
 
 /**
  * One player's card, in tabs: their Points share in this bingo, clan standing (tier, records, event
- * placements, CA, EHB), past bingos and — for mods and team leads — their signup answers. A tab with nothing
+ * placements, CA, EHB), past bingos, — for mods and team leads — their signup answers and — for mods only — their
+ * roles and Restrictions here (Permissions). A tab with nothing
  * to show stays, dimmed. Fetches on open so it can be reached from any name on any page.
  */
 export function PlayerProfileDialog({ slug, userId, onClose }: { slug: string; userId: string | null; onClose: () => void }) {
@@ -119,7 +121,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
   const [savedTab, saveTab] = usePreference("profileTab");
   const [urlTab, setUrlTab] = useUrlParam(PROFILE_TAB_PARAM);
   const wanted = PROFILE_TABS.includes(urlTab as ProfileTab) ? (urlTab as ProfileTab) : savedTab;
-  const tab = (wanted === "bingo" && !showBingoTab) || (wanted === "signup" && !showSignupTab) ? "clan" : wanted;
+  const tab = (wanted === "bingo" && !showBingoTab) || (wanted === "signup" && !showSignupTab) || (wanted === "access" && !player.access) ? "clan" : wanted;
   const setTab = (next: ProfileTab) => {
     saveTab(next);
     setUrlTab(next);
@@ -183,6 +185,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
                 Signup
               </Tab>
             )}
+            {player.access && <Tab id="access">Permissions</Tab>}
           </TabList>
           {showBingoTab && (
             <TabPanel id="bingo">
@@ -322,6 +325,11 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
               ) : (
                 <Empty>No signup answers to show.</Empty>
               )}
+            </TabPanel>
+          )}
+          {player.access && (
+            <TabPanel id="access">
+              <ProfilePermissions slug={slug} userId={player.user.id} name={player.rsn ?? name} access={player.access} />
             </TabPanel>
           )}
         </Tabs>

@@ -17,7 +17,7 @@ const PREFERENCES = {
   // How the stats timeline shows when each event happened (core/stats/timeFormat.ts).
   statsTimeFormat: ["clock", "sinceStart", "ago", "full"],
   // The player profile's last picked tab (core/tectonic/PlayerProfileDialog.tsx).
-  profileTab: ["bingo", "clan", "past", "signup"],
+  profileTab: ["bingo", "clan", "past", "signup", "access"],
   // Whether this browser has already confirmed what re-pricing a submission's Drop value is for (core/mod/RepriceGpButton.tsx).
   repriceGpWarning: ["unseen", "seen"],
 } as const satisfies Record<string, readonly string[]>;
