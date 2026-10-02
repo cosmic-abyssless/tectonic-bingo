@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { Reveal, useWrappedSceneState, WrappedScene } from "./Scene";
-import { createWrappedProgressStore, useWrappedScenes, WrappedProgressProvider, type WrappedProgressStore } from "./sceneProgress";
+import { createWrappedProgressStore, useWrappedScenes, WrappedProgressProvider, type WrappedProgressStore, type WrappedRevealProps } from "./sceneProgress";
 
 afterEach(cleanup);
 
@@ -97,6 +97,47 @@ describe("a page-supplied progress source", () => {
     expect(store.getScenes()).toHaveLength(2);
     unmount();
     expect(store.getScenes()).toHaveLength(0);
+  });
+});
+
+describe("a page's own Reveal component", () => {
+  it("draws every Reveal, given its step, whether it is reached, whether it is bare and the section's classes", () => {
+    const store = createWrappedProgressStore();
+    const seen: string[] = [];
+    const Own = ({ step, revealed, bare, className, children }: WrappedRevealProps) => {
+      seen.push(`${step}:${revealed}:${bare}:${className ?? ""}`);
+      return <b data-own={step}>{children}</b>;
+    };
+    render(
+      <WrappedProgressProvider source={store} reveal={Own}>
+        <WrappedScene steps={2}>
+          <Reveal step={0} className="mt-2">
+            a
+          </Reveal>
+          <Reveal step={1} bare>
+            b
+          </Reveal>
+        </WrappedScene>
+      </WrappedProgressProvider>,
+    );
+    expect(screen.getByText("a").getAttribute("data-own")).toBe("0");
+    expect(seen).toContain("0:false:false:mt-2");
+    expect(seen).toContain("1:false:true:");
+    act(() => store.setSceneState(store.getScenes()[0]!.id, { reached: 1 }));
+    expect(seen).toContain("0:true:false:mt-2");
+  });
+
+  it("still marks each Scene and each default Reveal for the page to find", () => {
+    const store = createWrappedProgressStore();
+    const { container } = render(
+      <WrappedProgressProvider source={store}>
+        <WrappedScene steps={1}>
+          <Reveal step={0}>x</Reveal>
+        </WrappedScene>
+      </WrappedProgressProvider>,
+    );
+    expect(container.querySelector("section")?.getAttribute("data-wrapped-scene")).toBe(store.getScenes()[0]!.id);
+    expect(screen.getByText("x").closest("[data-wrapped-step]")?.getAttribute("data-wrapped-step")).toBe("0");
   });
 });
 

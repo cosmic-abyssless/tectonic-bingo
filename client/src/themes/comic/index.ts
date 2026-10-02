@@ -52,6 +52,9 @@ import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
+import { WrappedPage } from "./wrapped/WrappedPage";
+import { WrappedIntro } from "./wrapped/WrappedIntro";
+import { WrappedOutro } from "./wrapped/WrappedOutro";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -195,7 +198,10 @@ const comicTheme: ThemeDefinition = {
     RequirementPicker,
     StagedClaimsList,
     RewindPopup,
+    WrappedPage,
     WrappedBanner,
+    WrappedIntro,
+    WrappedOutro,
     WrappedShareCard,
   },
 };
