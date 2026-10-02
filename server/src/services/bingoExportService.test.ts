@@ -16,7 +16,8 @@ import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoServi
 import * as achievementService from "./achievementService";
 import { additionalCredits, setAdditionalCredits } from "./wrappedArtService";
 import { ServiceError } from "./errors";
-import { ACHIEVEMENT_KEYS, type BingoExportDocument } from "@bingo/shared";
+import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument } from "@bingo/shared";
+import { placeLeaves } from "./exclusivityService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -168,6 +169,42 @@ describe("importBingo", () => {
     const { exclusivityRules: _dropped, ...oldBingo } = doc.bingo;
     importBingo(db, { ...doc, bingo: oldBingo }, { slug: "no-rules", name: "No rules", createdByUserId: admin.id });
     expect(toPublicBingo(getBingoBySlug(db, "no-rules")!).exclusivityRules).toEqual([]);
+  });
+
+  it("carries a rule's groups over exactly, as a file, and the imported copy locks the same way", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const rule = {
+      id: "r1",
+      label: "Uniques",
+      itemNames: ["Own item", "Vorki", "Cerberus drop"],
+      scope: "tile" as const,
+      groups: [{ label: "Boss piece", itemNames: ["Vorki", "Cerberus drop"] }],
+    };
+    const plain = { id: "r2", label: "Pets", itemNames: ["Block a"], scope: "part" as const };
+    updateBingoSettings(db, source.id, { exclusivityRules: [rule, plain] });
+    // Through JSON, as the downloaded file is.
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, source.id))) as BingoExportDocument;
+    expect(doc.bingo.exclusivityRules).toEqual([rule, plain]);
+
+    const imported = importBingo(db, doc, { slug: "with-groups", name: "With groups", createdByUserId: admin.id });
+    const rules = toPublicBingo(getBingoBySlug(db, "with-groups")!).exclusivityRules;
+    expect(rules).toEqual([rule, plain]);
+    expect(rules[1]).not.toHaveProperty("groups"); // a rule without groups stays as it was
+
+    // A Claim on one piece (Vorki, Tile A) locks the other piece (Cerberus drop) on Tile B of the imported copy.
+    const itemNode = (name: string) => db.select().from(schema.nodes).where(and(eq(schema.nodes.bingoId, imported.id), eq(schema.nodes.itemName, name))).get()!.id;
+    const leaves = placeLeaves(db, imported.id);
+    const [conflict] = exclusivityConflicts(rules, leaves, [itemNode("Vorki")], [itemNode("Cerberus drop")]);
+    expect(conflict).toMatchObject({ itemName: "Cerberus drop", usedOn: "Tile A (Vorki)", group: "Boss piece" });
+    expect(exclusivityConflicts(rules, leaves, [itemNode("Vorki")], [itemNode("Own item")])).toEqual([]);
+  });
+
+  it("refuses a file whose groups can't work, leaving no partial bingo", () => {
+    const { bingo: source, admin } = seedFullBingo();
+    const doc = exportBingo(db, source.id);
+    const twice = [{ id: "x", label: "Pets", itemNames: ["Vorki"], scope: "tile" as const, groups: [{ label: "A", itemNames: ["Vorki"] }, { label: "B", itemNames: ["vorki"] }] }];
+    expect(() => importBingo(db, { ...doc, bingo: { ...doc.bingo, exclusivityRules: twice } }, { slug: "broken", name: "Broken", createdByUserId: admin.id })).toThrow(/in two groups/);
+    expect(getBingoBySlug(db, "broken")).toBeUndefined();
   });
 
   it("carries each category's additional credits over, and an older file without them keeps what a new bingo starts with (#281)", () => {

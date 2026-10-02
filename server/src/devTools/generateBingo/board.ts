@@ -1,6 +1,6 @@
 // What the generator knows about the board: the tiles, parts and lines as the server serves them, how hard each
 // part is, what a team has to submit to finish one, and which claims the server would accept right now.
-import { exclusivityConflicts, placeLeaves, type BoardLine, type ExclusivityConflict, type ExclusivityRule, type GraphNode, type Tile } from "@bingo/shared";
+import { exclusivityConflicts, normalizeItemName, placeLeaves, type BoardLine, type ExclusivityConflict, type ExclusivityRule, type GraphNode, type PlacedLeaf, type Tile } from "@bingo/shared";
 import type { Rng } from "./rng";
 
 export interface Claim {
@@ -282,6 +282,45 @@ export function itemToWeigh(tasks: GraphNode[]): { task: GraphNode; item: GraphN
     const items = node.children.filter((c) => c.kind === "ITEM");
     if (node.kind !== "SUM" || items.length < 2 || (node.quantity ?? 1) < 3) continue;
     return { task, item: items[items.length - 1]!, countsAs: Math.min(25, Math.max(2, Math.floor((node.quantity ?? 1) / 4))) };
+  }
+  return null;
+}
+
+/** The id of the Exclusive Item rule the generator adds (chooseExclusiveGroup). */
+export const GENERATED_GROUP_RULE_ID = "testdata-unique-pieces";
+
+/** One Item of the board, as the exclusive group play claims it. */
+export interface PlacedItem {
+  nodeId: string;
+  itemName: string;
+  tileName: string;
+}
+
+/**
+ * An Exclusive Item rule with a group, so a generated Bingo shows one even when its board has none: two Items with
+ * different names on two different Tiles, both submittable from the start and on Tiles without a Freeze Period,
+ * that no rule names yet, grouped as one "Unique piece" (one Tile). `first` is what the generated play claims and
+ * `second` what it is then refused. Null when the board has no such pair.
+ */
+export function chooseExclusiveGroup(tiles: Tile[], rules: readonly ExclusivityRule[], rng: Rng): { rule: ExclusivityRule; first: PlacedItem; second: PlacedItem } | null {
+  const ruled = new Set(rules.flatMap((r) => [...r.itemNames, ...(r.groups ?? []).flatMap((g) => g.itemNames)]).map(normalizeItemName));
+  const frozen = new Set(tiles.filter((t) => t.hasFreezePeriod).map((t) => t.id));
+  const { claimable, tiles: ordered } = buildBoard(tiles, []);
+  // In board order and by name, not by node id (new on every import), so a seed picks the same Items each run.
+  const position = new Map(ordered.map((t, i) => [t.id, i]));
+  const open = [...placeLeaves(tiles).values()]
+    .filter((l): l is PlacedLeaf & { itemName: string } => !!l.itemName?.trim() && !ruled.has(normalizeItemName(l.itemName)) && !frozen.has(l.tileId) && claimable(l.nodeId, new Set()))
+    .sort((a, b) => position.get(a.tileId)! - position.get(b.tileId)! || a.itemName.localeCompare(b.itemName) || a.partLabels.join().localeCompare(b.partLabels.join()));
+  const shuffled = rng.shuffle(open);
+  for (const a of shuffled) {
+    const b = shuffled.find((l) => l.tileId !== a.tileId && normalizeItemName(l.itemName) !== normalizeItemName(a.itemName));
+    if (!b) continue;
+    const itemNames = [a.itemName.trim(), b.itemName.trim()];
+    return {
+      rule: { id: GENERATED_GROUP_RULE_ID, label: "Unique pieces", itemNames, scope: "tile", groups: [{ label: "Unique piece", itemNames }] },
+      first: { nodeId: a.nodeId, itemName: a.itemName, tileName: a.tileName },
+      second: { nodeId: b.nodeId, itemName: b.itemName, tileName: b.tileName },
+    };
   }
   return null;
 }

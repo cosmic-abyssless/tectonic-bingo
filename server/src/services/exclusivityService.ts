@@ -66,7 +66,9 @@ export function conflictsForClaims(db: Queryable, bingo: { id: string; exclusivi
   return exclusivityConflicts(rules, placeLeaves(db, bingo.id), liveClaimNodeIds(db, teamId), nodeIds);
 }
 
+/** "Baron is already used on DT2 ISSUE 1: …", or for a group "Bludgeon claw is in Bludgeon piece, already used on SLAYER BOSSES · Page 1 (Bludgeon axon): …". */
 export function conflictMessage(c: ExclusivityConflict): string {
+  if (c.group) return `${c.itemName} is in ${c.group}, already used on ${c.usedOn}: ${c.group} can only be used on one ${c.rule.scope}`;
   return `${c.itemName} is already used on ${c.usedOn}: ${c.rule.label} can only be used on one ${c.rule.scope}`;
 }
 

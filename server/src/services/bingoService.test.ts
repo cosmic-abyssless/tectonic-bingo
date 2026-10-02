@@ -344,6 +344,38 @@ describe("exclusivity rules", () => {
     expect(toPublicBingo(db.select().from(schema.bingos).get()!).exclusivityRules).toEqual([]); // nothing half-saved
   });
 
+  it("stores groups cleaned, adds their names to the rule's items, and leaves a rule without groups without the field", () => {
+    const bingo = seedBingo();
+    const slayer = {
+      id: "s",
+      label: "Slayer",
+      itemNames: ["Kraken tentacle", "Bludgeon axon"],
+      scope: "part" as const,
+      groups: [{ label: " Bludgeon piece ", itemNames: ["Bludgeon axon", " bludgeon claw", "Bludgeon CLAW", "Bludgeon spine", ""] }],
+    };
+    const rules = toPublicBingo(updateBingoSettings(db, bingo.id, { exclusivityRules: [slayer, { ...pets, groups: [] }] })).exclusivityRules;
+    expect(rules[0]).toEqual({
+      id: "s",
+      label: "Slayer",
+      itemNames: ["Kraken tentacle", "Bludgeon axon", "bludgeon claw", "Bludgeon spine"],
+      scope: "part",
+      groups: [{ label: "Bludgeon piece", itemNames: ["Bludgeon axon", "bludgeon claw", "Bludgeon spine"] }],
+    });
+    expect(rules[1]).toEqual(pets);
+  });
+
+  it("refuses groups that can't work: a name in two groups, an empty or unnamed group, two groups with one name", () => {
+    const bingo = seedBingo();
+    const bad = (groups: unknown) => () => updateBingoSettings(db, bingo.id, { exclusivityRules: [{ ...pets, groups } as never] });
+    expect(bad([{ label: "A", itemNames: ["Baron", "Nid"] }, { label: "B", itemNames: ["baron "] }])).toThrow(/baron is in two groups \("A" and "B"\)/);
+    expect(bad([{ label: "A", itemNames: [" "] }])).toThrow(/group "A" has no items/);
+    expect(bad([{ label: " ", itemNames: ["Baron"] }])).toThrow(/group 1 needs a name/);
+    expect(bad([{ label: "A", itemNames: ["Baron"] }, { label: "a", itemNames: ["Nid"] }])).toThrow(/two groups called "a"/);
+    expect(bad([{ label: "A", itemNames: "Baron" }])).toThrow(/itemNames must be an array/);
+    expect(bad("A")).toThrow(/groups must be an array/);
+    expect(toPublicBingo(db.select().from(schema.bingos).get()!).exclusivityRules).toEqual([]);
+  });
+
   it("records the change in the settings audit entry", () => {
     const bingo = seedBingo();
     updateBingoSettings(db, bingo.id, { exclusivityRules: [pets] });

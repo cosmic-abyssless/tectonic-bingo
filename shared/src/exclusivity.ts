@@ -9,13 +9,27 @@ import type { Tile } from "./index.ts";
 
 export type ExclusivityScope = "part" | "tile";
 
+/**
+ * Several item names in a rule that share one lock ("Bludgeon piece": axon, claw and spine): a claim on any of
+ * them locks every one of them elsewhere. Its names are also in the rule's own `itemNames`, which stays the full
+ * list of what the rule covers; the group only changes what they are locked under. A name is in at most one
+ * group per rule.
+ */
+export interface ExclusivityGroup {
+  /** e.g. "Bludgeon piece". */
+  label: string;
+  itemNames: string[];
+}
+
 export interface ExclusivityRule {
   id: string;
   /** e.g. "Pets". */
   label: string;
-  /** A snapshot of the item group the rule was made from; matched case-insensitively. */
+  /** Every item name the rule covers, grouped or not (a snapshot of what it was started from); matched case-insensitively. */
   itemNames: string[];
   scope: ExclusivityScope;
+  /** Absent on a rule without groups (and on every rule saved before groups existed). */
+  groups?: ExclusivityGroup[];
 }
 
 /** Where an item node sits, as the rules see it. */
@@ -33,8 +47,13 @@ export interface ExclusivityConflict {
   nodeId: string;
   itemName: string;
   rule: ExclusivityRule;
-  /** Where the item is already used, e.g. "DT2 ISSUE 1" or "SLAYER BOSSES · Page 1". */
+  /**
+   * Where the item is already used, e.g. "DT2 ISSUE 1" or "SLAYER BOSSES · Page 1". For an item in a group, with
+   * the piece that holds the lock: "SLAYER BOSSES · Page 1 (Bludgeon axon)".
+   */
   usedOn: string;
+  /** The group the item is locked under, when it is in one (e.g. "Bludgeon piece"). */
+  group?: string;
 }
 
 export const normalizeItemName = (name: string): string => name.trim().toLowerCase();
@@ -80,18 +99,34 @@ export function describeScope(leaf: PlacedLeaf, scope: ExclusivityScope): string
   return scope === "tile" || leaf.partLabels.length === 0 ? leaf.tileName : `${leaf.tileName} · ${leaf.partLabels.join(" & ")}`;
 }
 
-/** The rules that name an item, each with the normalized name set they were built from. */
+/** The rules that name an item: in their item names, or only in a group (a rule written by hand rather than saved). */
 function rulesFor(rules: readonly ExclusivityRule[], itemName: string | null): ExclusivityRule[] {
   if (!itemName) return [];
   const name = normalizeItemName(itemName);
-  return rules.filter((r) => r.itemNames.some((n) => normalizeItemName(n) === name));
+  return rules.filter((r) => r.itemNames.some((n) => normalizeItemName(n) === name) || groupOf(r, name) !== null);
+}
+
+/** The group of a rule a (normalized) name is in, if any, and its place in the rule's list. */
+function groupOf(rule: ExclusivityRule, name: string): { group: ExclusivityGroup; index: number } | null {
+  const index = rule.groups?.findIndex((g) => g.itemNames.some((n) => normalizeItemName(n) === name)) ?? -1;
+  return index < 0 ? null : { group: rule.groups![index]!, index };
+}
+
+/** The group of a rule an item name is in, matched case-insensitively; null when it is in none. */
+export const exclusivityGroupOf = (rule: ExclusivityRule, itemName: string): ExclusivityGroup | null => groupOf(rule, normalizeItemName(itemName))?.group ?? null;
+
+/** What a (normalized) name is locked under in a rule: its group when it is in one, otherwise the name itself. */
+function lockKey(rule: ExclusivityRule, name: string): string {
+  const grouped = groupOf(rule, name);
+  return grouped ? `group:${grouped.index}` : `item:${name}`;
 }
 
 /**
  * Which of `candidates` a team may not claim. `existing` is every node the team already has a live (pending or
  * approved) claim on. A candidate conflicts when a rule names its item and there is a claim on a node with the
- * same item name under a different scope key, whether already existing or another candidate earlier in the list.
- * Several claims for one name under the SAME key are fine (three Barons on one tile).
+ * same item name (for a name in a group, any name of the group) under a different scope key, whether already
+ * existing or another candidate earlier in the list. Several claims for one name or group under the SAME key are
+ * fine (three Barons on one tile).
  */
 export function exclusivityConflicts(
   rules: readonly ExclusivityRule[],
@@ -114,11 +149,14 @@ export function exclusivityConflicts(
     const name = normalizeItemName(leaf.itemName);
     for (const rule of rulesFor(rules, leaf.itemName)) {
       const key = scopeKey(leaf, rule.scope);
+      const lock = lockKey(rule, name);
       const others = [...taken, ...candidates.slice(0, index).flatMap((id) => leaves.get(id) ?? [])];
-      const clash = others.find((o) => o.itemName && normalizeItemName(o.itemName) === name && scopeKey(o, rule.scope) !== key);
+      const clash = others.find((o) => o.itemName && lockKey(rule, normalizeItemName(o.itemName)) === lock && scopeKey(o, rule.scope) !== key);
       if (clash && !seen.has(`${nodeId}|${rule.id}`)) {
         seen.add(`${nodeId}|${rule.id}`);
-        conflicts.push({ nodeId, itemName: leaf.itemName, rule, usedOn: describeScope(clash, rule.scope) });
+        const group = groupOf(rule, name)?.group.label;
+        const usedOn = describeScope(clash, rule.scope) + (group ? ` (${clash.itemName})` : "");
+        conflicts.push({ nodeId, itemName: leaf.itemName, rule, usedOn, ...(group ? { group } : {}) });
       }
     }
   });
@@ -127,7 +165,8 @@ export function exclusivityConflicts(
 
 /**
  * For scoring: drops the claims that lose to an earlier one. Walking the claims oldest first, the first claim on
- * an item name fixes the scope key for each rule naming it, and a later claim under a different key is ignored.
+ * an item name (or on any name of its group) fixes the scope key for each rule naming it, and a later claim under a
+ * different key is ignored.
  * A dropped claim fixes nothing. (Refusing at submission keeps this from mattering day to day; it makes a rule
  * added after claims exist, or a mod's approval of two pending claims, score consistently instead of double.)
  */
@@ -137,7 +176,7 @@ export function keepFirstScope<T extends { nodeId: string; at: Date }>(
   claims: readonly T[],
 ): T[] {
   if (rules.length === 0) return [...claims];
-  const fixed = new Map<string, string>(); // `${rule.id}|${name}` -> scope key
+  const fixed = new Map<string, string>(); // `${rule.id}|${lock key}` (the name, or its group) -> scope key
   const kept: T[] = [];
   const ordered = claims.map((c, i) => ({ c, i })).sort((a, b) => a.c.at.getTime() - b.c.at.getTime() || a.i - b.i);
   for (const { c } of ordered) {
@@ -148,7 +187,7 @@ export function keepFirstScope<T extends { nodeId: string; at: Date }>(
       continue;
     }
     const name = normalizeItemName(leaf.itemName);
-    const checks = applicable.map((rule) => ({ id: `${rule.id}|${name}`, key: scopeKey(leaf, rule.scope) }));
+    const checks = applicable.map((rule) => ({ id: `${rule.id}|${lockKey(rule, name)}`, key: scopeKey(leaf, rule.scope) }));
     if (checks.some(({ id, key }) => fixed.has(id) && fixed.get(id) !== key)) continue;
     for (const { id, key } of checks) if (!fixed.has(id)) fixed.set(id, key);
     kept.push(c);
