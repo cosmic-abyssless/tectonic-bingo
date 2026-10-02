@@ -71,7 +71,7 @@ The teardown script takes the same `--base` and `--basic-auth`.
 | `--admin` | first site admin | the admin the run acts as |
 | `--seed` | random (printed) | the same seed and options give the same people, choices and outcomes |
 | `--slug` | `testdata-<date>-<time>` | must start with `testdata-` |
-| `--theme` | `default` | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Set on the imported bingo, not copied from the board's source. For a Historical Bingo too |
+| `--theme` | the board's own | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Without it, the bingo keeps the theme of the board it's made from (`--from`'s bingo, or the export's); the Test data tab's "Same as the board". A Historical Bingo has none of its own, so it is drawn in `default` unless given |
 | `--base` | `http://localhost:3001` | the server |
 | `--from` | none | a bingo on the server to copy the board from |
 | `--export` | repo-root `tectonic-comics-bingo-export.json` | the board to send, when `--from` isn't given |
@@ -236,14 +236,8 @@ copy, and the bingo's *exclusive item* rules (pets: one tile, the tile's own 40 
 see `docs/exclusive-items-plan.md`) stop a team using one drop twice. The generator reads
 the rules from the imported bingo, and a simulated team never plans or posts a claim the
 rules would refuse. It draws that part's plan again a few times, then leaves the part alone.
-
-Every generated Bingo also gets an exclusive item rule with a *group* (several item names
-sharing one lock), added by the Admin through the settings after the import: "Unique pieces",
-two Items with different names on two Tiles (submittable from the start, no Freeze Period,
-named by no other rule), grouped as one "Unique piece", one Tile. Twenty minutes into Live a
-Team claims the first piece, and the run then tries the second piece on the other Tile, which
-the server must refuse with "Used on <Tile> (<the first piece>)"; if it is let through, the run
-reports it as a failed sanity check. A board with no such pair gets no group (the log says so).
+The rules, *groups* (several item names sharing one lock) included, are the board's own: the
+generator adds none, so a generated Bingo's rules are exactly its source's.
 
 ## Running against a private server (leave your dev database alone)
 
