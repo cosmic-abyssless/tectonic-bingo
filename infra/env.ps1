@@ -44,9 +44,12 @@ if ($useBitwarden) {
     $status = (bw status | ConvertFrom-Json).status
     if ($status -eq "unauthenticated") { throw "Bitwarden: run 'bw login' once on this machine first (or use -Prompt)" }
     if ($status -ne "unlocked") {
-        # bw asks for the master password itself; --raw prints only the session key, kept for this window.
-        $env:BW_SESSION = bw unlock --raw
-        if (-not $env:BW_SESSION) { throw "Bitwarden: could not unlock" }
+        # Asked for here, not by bw: bw draws its prompt on the same output --raw's session key comes out on, so capturing
+        # that output would swallow the prompt and leave the window waiting for a password it never asked for. The password
+        # reaches bw through an environment variable that lives only for this one command.
+        $env:BW_PASSWORD = Read-Secret "Bitwarden master password" "unlocks the vault for this window"
+        try { $env:BW_SESSION = bw unlock --passwordenv BW_PASSWORD --raw } finally { Remove-Item env:BW_PASSWORD -ErrorAction SilentlyContinue }
+        if (-not $env:BW_SESSION) { throw "Bitwarden: could not unlock (wrong master password?)" }
     }
     $null = bw sync
 } elseif (-not $Prompt) {
