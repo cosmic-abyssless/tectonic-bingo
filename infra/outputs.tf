@@ -57,6 +57,12 @@ output "app_env" {
     condition     = alltrue([for settings in values(local.app_settings) : alltrue([for value in values(settings) : !can(regex("[\r\n]", value))])])
     error_message = "A value contains a line break, which would split it across lines of the env file."
   }
+  # Compose's dotenv parser substitutes $VARIABLES and starts a comment at " #" in an unquoted value, and reads a value that
+  # starts with a quote as quoted: a secret holding any of them would reach the app changed (app-env.tf).
+  precondition {
+    condition     = alltrue([for settings in values(local.app_settings) : alltrue([for value in values(settings) : !can(regex("[$#]|^[\"']", value))])])
+    error_message = "A value contains $ or #, or starts with a quote, which Compose would change on the way to the app. Choose another (for a secret: openssl rand -hex 32)."
+  }
 }
 
 output "staging_basic_auth" {

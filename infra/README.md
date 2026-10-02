@@ -89,9 +89,14 @@ tofu apply
 .\push-env.ps1 -Write             # write (each old file is kept as FILE.bak)
 ```
 
-Then deploy the environment (Actions > Deploy). Changing a `SESSION_SECRET` signs everyone out of that environment. Changing
-the staging password: `push-env` notices the live site refuses the new one and leaves `staging.basic-auth` alone unless you
-pass `-NewStagingPassword`. On Linux or macOS: `bash infra/push-env.sh [--write]`, with `jq` and `curl`.
+Then deploy the environment (Actions > Deploy). Changing a `SESSION_SECRET` signs everyone out of that environment.
+
+- **The `.bak` holds the old values.** Once the deploy is confirmed, delete it, above all after rotating a secret because it
+  leaked: `ssh deploy@5.161.101.213 rm /srv/tectonic/env/production.env.bak` (or `staging.env.bak`, `staging.basic-auth.bak`).
+- **The staging password.** `push-env` writes `staging.basic-auth` only when the password in OpenTofu logs in to the live
+  site, or when the box has none yet. When you change the password on purpose, the live site refuses the new one, so pass
+  `-NewStagingPassword`. The same applies if staging can't be reached at the time.
+- **On Linux or macOS:** `bash infra/push-env.sh [--write]`, with `jq` and `curl`.
 
 **Adding a secret:** in the same pull request as the code that needs it:
 

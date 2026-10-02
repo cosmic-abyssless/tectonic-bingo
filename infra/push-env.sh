@@ -11,8 +11,9 @@
 #
 #   --write                 replace the files (without it, nothing on the box changes)
 #   --only ENV              just one environment
-#   --new-staging-password  write staging.basic-auth even though the live site refuses the password in OpenTofu (you are
-#                           changing it on purpose)
+#   --new-staging-password  write staging.basic-auth even though the password in OpenTofu was not confirmed against the live
+#                           site (refused, or the site could not be reached): you are changing it on purpose. A box with no
+#                           staging.basic-auth yet gets it without this.
 #   --identity FILE         the admin private key (default ~/.ssh/tectonic_box)
 #
 # Run from a shell where infra/env.ps1's credentials are set (it reads `tofu output`). Needs jq and curl. Trusts the server by
@@ -72,11 +73,14 @@ for environment in staging production; do
       401) login=wrong; echo "staging password: does NOT log in to $url (the live one is different)" ;;
       *) login=unknown; echo "staging password: could not check ($url answered ${status:-nothing})" ;;
     esac
-    # Only a password the live site refuses holds the file back: changing staging's password is done on purpose.
-    if [ "$mode" = write ] && [ "$login" = wrong ] && [ "$new_password" = 0 ]; then
-      echo "  left staging.basic-auth as it is: pass --new-staging-password to change staging's password on purpose"
-    else
+    # Written only when the password is known to be right (it logs in), when the box has none yet (a new box), or when it is
+    # being changed on purpose; never on a guess, since a site that cannot be reached proves nothing about a typo.
+    has_auth=1
+    box 'test -f /srv/tectonic/env/staging.basic-auth' || has_auth=0
+    if [ "$mode" = check ] || [ "$login" = ok ] || [ "$has_auth" = 0 ] || [ "$new_password" = 1 ]; then
       sync_file staging.basic-auth "$(jq -r '.staging_basic_auth.value' <<<"$outputs")"
+    else
+      echo "  left staging.basic-auth as it is (the password was not confirmed): pass --new-staging-password to change it on purpose"
     fi
   fi
 done

@@ -182,7 +182,8 @@ or other environments' data except by deploying to them. Closing the rest would 
 `main` (building on the box, which spends the site's CPU on every merge, or signed images); that is a known limit, not an
 oversight. If the key leaks: delete it from the deploy user's `authorized_keys`, rotate it in GitHub, and rotate
 production's secrets (`SESSION_SECRET`, the Discord and API keys: in Bitwarden, then "Changing a value" in
-[`infra/README.md`](../infra/README.md)) and treat the data as read.
+[`infra/README.md`](../infra/README.md), including deleting the `.bak` that still holds the leaked ones) and treat the
+data as read.
 
 `deploy/test-ssh-entry.sh` tests every allowed shape, 24 requests that must be refused, and `sync-deploy` against a real git
 repository (a commit that is not on `main`, a made-up commit, a symlink in `deploy/`, a script that does not parse). It runs

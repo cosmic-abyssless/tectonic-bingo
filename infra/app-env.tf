@@ -15,6 +15,11 @@ variable "discord_client_secret" {
   description = "The Discord application's client secret. One application serves both environments."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.discord_client_secret)) > 0
+    error_message = "discord_client_secret is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "staging_session_secret" {
@@ -33,24 +38,44 @@ variable "staging_password" {
   description = "The shared password Caddy asks for on all of staging except /health (username: team)."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.staging_password)) > 0
+    error_message = "staging_password is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "tectonic_api_key" {
   description = "The clan API's key. Production only: staging never calls the live clan APIs."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.tectonic_api_key)) > 0
+    error_message = "tectonic_api_key is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "wom_api_key" {
   description = "Wise Old Man's API key. Production only."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.wom_api_key)) > 0
+    error_message = "wom_api_key is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "runeprofile_api_key" {
   description = "RuneProfile's API key. Production only."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.runeprofile_api_key)) > 0
+    error_message = "runeprofile_api_key is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 # ---- settings that stay out of the repository (terraform.tfvars) --------------------------------------------------
@@ -58,31 +83,61 @@ variable "runeprofile_api_key" {
 variable "discord_client_id" {
   description = "The Discord application's client id."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.discord_client_id)) > 0
+    error_message = "discord_client_id is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "discord_guild_id" {
   description = "The clan's Discord server id."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.discord_guild_id)) > 0
+    error_message = "discord_guild_id is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "admin_discord_ids" {
   description = "Comma-separated Discord user ids: the Owners (CONTEXT.md), site admins on first login who alone can grant and revoke it."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.admin_discord_ids)) > 0
+    error_message = "admin_discord_ids is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "tectonic_api_url" {
   description = "The clan API's address. Production only."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.tectonic_api_url)) > 0
+    error_message = "tectonic_api_url is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "tectonic_guild_id" {
   description = "The clan's id in the clan API. Production only."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.tectonic_guild_id)) > 0
+    error_message = "tectonic_guild_id is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 variable "user_agent_contact" {
   description = "Contact details sent in the User-Agent to the clan APIs. Production only."
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.user_agent_contact)) > 0
+    error_message = "user_agent_contact is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
 }
 
 # ---- the files -------------------------------------------------------------------------------------------------------
@@ -141,7 +196,9 @@ locals {
     })
   }
 
-  # One KEY=value per line, sorted. Nothing is quoted: Compose reads the line after the first "=" as the value.
+  # One KEY=value per line, sorted, unquoted. Compose reads these files with its dotenv parser, which in an unquoted value
+  # substitutes $VARIABLES and treats " #" as the start of a comment, so outputs.tf refuses values that hold either (and any
+  # that start with a quote, which would change how the line is read).
   app_env = {
     for environment, settings in local.app_settings : environment => join("\n", concat(
       [

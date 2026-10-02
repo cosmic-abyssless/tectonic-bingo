@@ -10,10 +10,12 @@ dir="$(mktemp -d)"
 trap 'rm -rf "$dir"' EXIT
 fails=0
 
-# Runs env-sync.sh the way push-env does: the variables in front, the script on standard input.
+# Runs env-sync.sh the way push-env does: the variables in front, the script on standard input. A failure is reported in
+# the output ("(exit N)") rather than stopping the tests, so the expectations below say what went wrong.
 sync() { # mode target contents
-  local desired; desired="$(printf '%s' "$3" | base64 | tr -d '\n')"
-  { printf 'MODE=%q ENV_DIR=%q TARGET=%q DESIRED=%q\n' "$1" "$dir" "$2" "$desired"; cat "$here/env-sync.sh"; } | bash -s 2>&1
+  local desired status=0; desired="$(printf '%s' "$3" | base64 | tr -d '\n')"
+  { printf 'MODE=%q ENV_DIR=%q TARGET=%q DESIRED=%q\n' "$1" "$dir" "$2" "$desired"; cat "$here/env-sync.sh"; } | bash -s 2>&1 || status=$?
+  [ "$status" = 0 ] || echo "(exit $status)"
 }
 expect() { # description haystack needle
   if grep -qF -- "$3" <<<"$2"; then echo "ok   $1"; else echo "FAIL $1: expected \"$3\" in:"; sed 's/^/       /' <<<"$2"; fails=$((fails + 1)); fi
@@ -62,6 +64,25 @@ sync write staging.env "$v2" >/dev/null
 out="$(sync check staging.env "$v2")"
 expect "after writing, all the same" "$out" "4 same, 0 different, 0 new, 1 only on the box"
 
+# A box file with lines that aren't settings (whitespace only, a stray word) is read past, not choked on.
+printf 'A=one\n   \nstray\nSECRET=correct-horse\n' >"$dir/production.env"
+out="$(sync check production.env $'A=one\nSECRET=correct-horse')"
+expect "lines without a setting are not settings" "$out" "2 same, 0 different, 0 new, 0 only on the box"
+out="$(sync write production.env $'A=one\nSECRET=correct-horse')"
+expect "and writing past them works" "$out" "wrote $dir/production.env"
+
+# A box file with Windows line endings compares by its values, not as different everywhere.
+printf 'A=one\r\nSECRET=correct-horse\r\n\r\nBOX_ONLY=keepme\r\n' >"$dir/production.env"
+out="$(sync check production.env $'A=one\nSECRET=correct-horse')"
+expect "a CRLF box file compares by value" "$out" "2 same, 0 different, 0 new, 1 only on the box"
+sync write production.env $'A=one\nSECRET=correct-horse' >/dev/null
+grep -q $'\r' "$dir/production.env" && { echo "FAIL a kept CRLF line brought its carriage return"; fails=$((fails + 1)); } || echo "ok   kept lines arrive without carriage returns"
+
+# Keys are compared as text, never as patterns.
+printf 'A.B=1\nAxB=2\n' >"$dir/production.env"
+out="$(sync check production.env 'A.B=1')"
+expect "a key with a regex character matches only itself" "$out" "1 same, 0 different, 0 new, 1 only on the box"
+
 # Windows line endings on the way in are removed.
 out="$(sync write production.env $'K=v\r\nL=w\r')"
 grep -q $'\r' "$dir/production.env" && { echo "FAIL a carriage return was written"; fails=$((fails + 1)); } || echo "ok   carriage returns removed"
@@ -76,9 +97,9 @@ out="$(sync check staging.basic-auth 'team $2a$10$xyz')"
 expect "another hash changes" "$out" "staging.basic-auth: changes"
 
 # Anything else is refused.
-out="$(sync write ../etc/passwd 'x' || true)"
+out="$(sync write ../etc/passwd 'x')"
 expect "an unknown file is refused" "$out" "will not touch"
-out="$(sync delete staging.env 'x' || true)"
+out="$(sync delete staging.env 'x')"
 expect "an unknown mode is refused" "$out" "MODE must be check or write"
 
 echo

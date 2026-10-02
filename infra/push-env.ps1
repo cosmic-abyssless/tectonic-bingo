@@ -22,7 +22,8 @@
   Just one environment: staging or production.
 
 .PARAMETER NewStagingPassword
-  Write staging.basic-auth even though the live site refuses the password in OpenTofu (changing it on purpose).
+  Write staging.basic-auth even though the password in OpenTofu was not confirmed against the live site (refused, or the site
+  could not be reached): changing it on purpose. A box with no staging.basic-auth yet gets it without this.
 
 .PARAMETER Identity
   The admin private key. Default: ~\.ssh\tectonic_box
@@ -104,11 +105,13 @@ try {
                 "wrong" { Write-Host "staging password: does NOT log in to $($login.url) (the live one is different)" }
                 default { Write-Host "staging password: could not check $($login.url)" }
             }
-            # Only a password the live site refuses holds the file back: changing staging's password is done on purpose.
-            if ($Write -and $result -eq "wrong" -and -not $NewStagingPassword) {
-                Write-Host "  left staging.basic-auth as it is: pass -NewStagingPassword to change staging's password on purpose"
-            } else {
+            # Written only when the password is known to be right (it logs in), when the box has none yet (a new box), or when it
+            # is being changed on purpose; never on a guess, since a site that cannot be reached proves nothing about a typo.
+            $hasAuth = (Invoke-Box "test -f /srv/tectonic/env/staging.basic-auth && echo yes").Output -eq "yes"
+            if (-not $Write -or $result -eq "ok" -or -not $hasAuth -or $NewStagingPassword) {
                 Sync-File "staging.basic-auth" $outputs.staging_basic_auth.value
+            } else {
+                Write-Host "  left staging.basic-auth as it is (the password was not confirmed): pass -NewStagingPassword to change it on purpose"
             }
         }
     }

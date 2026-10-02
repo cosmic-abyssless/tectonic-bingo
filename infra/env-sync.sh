@@ -22,7 +22,6 @@ case "$TARGET" in staging.env | production.env | staging.basic-auth) ;; *) echo 
 [ -d "$ENV_DIR" ] || { echo "ENV-SYNC FAILED: $ENV_DIR does not exist" >&2; exit 1; }
 
 file="$ENV_DIR/$TARGET"
-kept=()
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 chmod 700 "$work"
@@ -32,51 +31,51 @@ printf '%s' "$DESIRED" | base64 -d | tr -d '\r' >"$work/desired"
 # Ends with a line break, so a line someone adds by hand never joins the last one.
 [ -z "$(tail -c 1 "$work/desired")" ] || echo >>"$work/desired"
 
-# KEY<TAB>sha256 of the value, one line per setting, for comparing without ever showing a value. Comments and blank lines
-# are not settings; for a repeated key the last one wins, as it does for Compose.
-digests() { # file
-  local line key value
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in '' | '#'*) continue ;; esac
-    key="${line%%=*}"
-    value="${line#*=}"
-    printf '%s\t%s\n' "$key" "$(printf '%s' "$value" | sha256sum | cut -d' ' -f1)"
-  done <"$1" | awk -F'\t' '{d[$1]=$2} END {for (k in d) print k "\t" d[k]}' | sort
-}
+# The box's copy, with any Windows line endings removed like the desired one's, so a CRLF file on the box compares by
+# its values rather than reading as different everywhere.
+if [ -f "$file" ]; then tr -d '\r' <"$file" >"$work/box"; else : >"$work/box"; fi
 
 if [ "$TARGET" = staging.basic-auth ]; then
   if [ ! -f "$file" ]; then
     echo "$TARGET: new"
-  elif cmp -s "$work/desired" <(tr -d '\r' <"$file"); then
+  elif cmp -s "$work/desired" "$work/box"; then
     echo "$TARGET: same"
   else
     echo "$TARGET: changes (a new hash; whether the password itself changes is the login check's job)"
   fi
 else
-  digests "$work/desired" >"$work/want"
-  if [ -f "$file" ]; then digests "$file" >"$work/have"; else : >"$work/have"; fi
-  same=() changed=() added=()
-  while IFS=$'\t' read -r key digest; do
-    have="$(awk -F'\t' -v k="$key" '$1==k {print $2}' "$work/have")"
-    if [ -z "$have" ]; then added+=("$key")
-    elif [ "$have" = "$digest" ]; then same+=("$key")
-    else changed+=("$key"); fi
-  done <"$work/want"
-  while IFS=$'\t' read -r key _; do
-    grep -q "^$key	" "$work/want" || kept+=("$key")
-  done <"$work/have"
+  # One pass over both files. A setting is a line with an "=" that isn't a comment: blank, whitespace-only and stray lines
+  # are not settings. Its key is what comes before the first "=", and for a repeated key the last line wins, as it does for
+  # Compose. Values are compared, never printed: the report is "<state> <key>" lines, and the box-only settings' lines go to
+  # $work/kept to be written back.
+  awk -v desired="$work/desired" -v kept="$work/kept" '
+    /^[[:space:]]*#/ { next }
+    {
+      i = index($0, "=")
+      if (i < 2) next
+      k = substr($0, 1, i - 1)
+      if (FILENAME == desired) want[k] = substr($0, i + 1)
+      else { have[k] = substr($0, i + 1); line[k] = $0 }
+    }
+    END {
+      for (k in want) print ((k in have) ? (have[k] == want[k] ? "same" : "different") : "new"), k
+      for (k in have) if (!(k in want)) { print "kept", k; print line[k] >kept }
+    }' "$work/desired" "$work/box" | sort >"$work/report"
+  count() { grep -c "^$1 " "$work/report" || true; }
+  names() { awk -v s="$1" '$1 == s { printf "%s%s", sep, $2; sep = " " }' "$work/report"; }
+
   [ -f "$file" ] || echo "$TARGET: new file"
-  echo "$TARGET: ${#same[@]} same, ${#changed[@]} different, ${#added[@]} new, ${#kept[@]} only on the box"
-  [ ${#changed[@]} -eq 0 ] || echo "  different: ${changed[*]}"
-  [ ${#added[@]} -eq 0 ] || echo "  new: ${added[*]}"
-  [ ${#kept[@]} -eq 0 ] || echo "  only on the box (kept as they are): ${kept[*]}"
+  echo "$TARGET: $(count same) same, $(count different) different, $(count new) new, $(count kept) only on the box"
+  [ "$(count different)" = 0 ] || echo "  different: $(names different)"
+  [ "$(count new)" = 0 ] || echo "  new: $(names new)"
+  [ "$(count kept)" = 0 ] || echo "  only on the box (kept as they are): $(names kept)"
 
   # The box's own settings go back in at the end, exactly as they were.
-  if [ ${#kept[@]} -gt 0 ]; then
+  if [ -s "$work/kept" ]; then
     {
       echo
       echo "# Only on the box, not in OpenTofu (infra/app-env.tf): kept as they were."
-      for key in "${kept[@]}"; do grep "^$key=" "$file" | tail -n 1; done
+      sort "$work/kept"
     } >>"$work/desired"
   fi
 fi
