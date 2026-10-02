@@ -53,6 +53,10 @@ import { RewindPopup } from "./rewind/RewindPopup";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
 import { WrappedPage } from "./wrapped/WrappedPage";
+import { WrappedYou } from "./wrapped/sections/WrappedYou";
+import { WrappedDuo } from "./wrapped/sections/WrappedDuo";
+import { WrappedCaptain } from "./wrapped/sections/WrappedCaptain";
+import { WrappedModerator } from "./wrapped/sections/WrappedModerator";
 import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
 import { WrappedTeam } from "./wrapped/sections/WrappedTeam";
@@ -201,6 +205,10 @@ const comicTheme: ThemeDefinition = {
     StagedClaimsList,
     RewindPopup,
     WrappedPage,
+    WrappedYou,
+    WrappedDuo,
+    WrappedCaptain,
+    WrappedModerator,
     WrappedBanner,
     WrappedIntro,
     WrappedTeam,

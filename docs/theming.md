@@ -195,6 +195,12 @@ of truth and will drift less than a doc copy. Broadly:
   calls `actions.outroReached()` once the viewer gets to the Outro and, when
   `outroReachedBefore` and the Outro has cards, offers a jump to them (`WRAPPED_CARDS_ID`).
   Only the default theme draws cards; others fall back to it.
+- **The comic's You, Duo, Captain and Moderator** (#420, in `themes/comic/wrapped/sections/`) are a
+  page or two each: You is two Scenes (the numbers and the best drop, then the rest of the story),
+  a Duo's best moments get a second, a Captain's Steal and grade a second. Each panel is one
+  `Reveal`, a part with nothing to say draws no panel, and the panels left fill its room (`FILL` in
+  `sectionParts-you-duo-captain-moderator` is the class string that makes a panel stretch to the
+  room its row gives it).
 - **Submission flow**: `SubmissionModal`, `ScreenshotDropzone`,
   `AnalysisPanel`, `TilePicker`, `TaskPicker`, `RequirementPicker`,
   `StagedClaimsList`.
