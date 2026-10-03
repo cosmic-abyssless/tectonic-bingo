@@ -52,7 +52,7 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
  * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, turns on
  * the Discord team sync (with an extra channel), and sets its theme when one was asked for (the import keeps the board's own otherwise).
  */
-export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null): Promise<void> {
+export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null, discordGuildId: string | null = null): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
   const { tl } = ctx;
   await ctx.api.as(ctx.admin).patch(
@@ -68,10 +68,13 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
       // shows it, while the sync itself never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).
       discordEnabled: true,
       discordChannels: [...DEFAULT_DISCORD_CHANNELS, { key: "loot", type: "text", name: "{team}-loot" }],
+      // Asked for a test Discord server: the Teams' roles and channels really are made there (only there).
+      ...(discordGuildId ? { discordGuildId } : {}),
     },
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );
   ctx.log(`imported ${ctx.slug} in ${theme ? `the ${theme} theme` : "its board's own theme"} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
+  if (discordGuildId) ctx.log(`Discord: Team roles and channels go to test server ${discordGuildId} once the draft finishes`);
 }
 
 /** A Task as the board editor sends it back: every field and child as loaded, ids and all, so nothing else changes. */

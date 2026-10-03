@@ -97,6 +97,12 @@ describe("importBingo", () => {
     calls.length = 0;
     await importBingo(ctx, { bingo: {} } as never, "Test data t", null);
     expect(calls[1]!.body).not.toHaveProperty("theme");
+    expect(calls[1]!.body).not.toHaveProperty("discordGuildId");
+
+    // A test Discord server goes in the same settings request.
+    calls.length = 0;
+    await importBingo(ctx, { bingo: {} } as never, "Test data t", null, "700000000000000000");
+    expect(calls[1]!.body).toMatchObject({ discordGuildId: "700000000000000000", discordEnabled: true });
     expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
   });
 });

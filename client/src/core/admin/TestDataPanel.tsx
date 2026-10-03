@@ -31,6 +31,8 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
   const [seed, setSeed] = useState("");
   // "": keep the board's own theme (TestDataOptions.theme).
   const [theme, setTheme] = useState<string>("");
+  // "": no Discord. Otherwise a test server the Team roles and channels are really made in (TestDataOptions.discordGuildId).
+  const [discordGuildId, setDiscordGuildId] = useState("");
   const [joinAsMe, setJoinAsMe] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,7 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
         teamSize,
         mods,
         theme: theme || null,
+        discordGuildId: discordGuildId.trim() || null,
         me: joinAsMe && user ? user.discordId : null,
         ...(seed.trim() ? { seed: Number(seed) } : {}),
       });
@@ -93,6 +96,9 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
         </Field>
         <Field label="Theme" hint="How its Board, Wrapped and the rest are drawn.">
           <Select value={theme} onChange={setTheme} options={[{ value: "", label: "Same as the board" }, ...THEME_KEYS.map((key) => ({ value: key, label: key }))]} />
+        </Field>
+        <Field label="Test Discord server ID" hint="Optional. Its Team roles and channels are really made in this server (the bot must be in it) once the draft finishes. Never the clan's server. Teardown removes them.">
+          <Input value={discordGuildId} onChange={(e) => setDiscordGuildId(e.target.value.replace(/[^0-9]/g, ""))} placeholder="none" className="num" />
         </Field>
         <Field label="Seed" hint="Optional. The same seed and settings make the same bingo.">
           <Input value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^0-9]/g, ""))} placeholder="random" className="num" />

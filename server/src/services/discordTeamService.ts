@@ -212,6 +212,14 @@ function resolveApi(source: DiscordApiSource, guildId: string | null): DiscordGu
   return source;
 }
 
+/**
+ * Whether the Bingo syncs to a test Discord server picked on a dev server, not the clan's. Only then may a test data
+ * Bingo (the generator's) be synced: its made-up Players and Teams never reach the clan's server.
+ */
+export function onDiscordTestServer(bingo: Pick<Bingo, "discordGuildId">): boolean {
+  return isDevModeActive() && !!bingo.discordGuildId && bingo.discordGuildId !== process.env.DISCORD_GUILD_ID;
+}
+
 /** A Discord server other than `guildId` that still holds some of the Bingo's roles and channels, or null. */
 function strayGuildId(db: Db, bingoId: string, guildId: string): string | null {
   return db.select({ guildId: discordResources.guildId }).from(discordResources).where(eq(discordResources.bingoId, bingoId)).all().find((r) => r.guildId !== guildId)?.guildId ?? null;
@@ -284,8 +292,8 @@ function syncDisabled(): boolean {
 export function discordSyncBlocker(bingo: Pick<Bingo, "slug" | "stage" | "historical" | "discordEnabled" | "discordGuildId">, source?: DiscordApiSource): string | null {
   if (!resolveApi(source, discordGuildIdFor(bingo))) return "The server has no Discord bot set up (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID).";
   if (!bingo.discordEnabled) return "Turned off for this bingo.";
-  // A test data Bingo's made-up Players and Teams must never reach the real server.
-  if (bingo.slug.startsWith(TESTDATA_PREFIX)) return "A test data bingo is never synced to Discord.";
+  // A test data Bingo's made-up Players and Teams must never reach the clan's server; a test server is fine.
+  if (bingo.slug.startsWith(TESTDATA_PREFIX) && !onDiscordTestServer(bingo)) return "A test data bingo is only synced to a test Discord server (its Discord server ID).";
   if (bingo.historical) return "A historical bingo is never synced to Discord.";
   if (!SYNC_STAGES.includes(bingo.stage)) return "Starts when the draft finishes, with the Wise Old Man competition.";
   return null;
@@ -294,7 +302,7 @@ export function discordSyncBlocker(bingo: Pick<Bingo, "slug" | "stage" | "histor
 // One Discord job at a time per Bingo, so two quick changes can't both create a Team's role. A sync that hasn't
 // started yet already covers any later change, so further requests share it instead of queueing another.
 const tails = new Map<string, Promise<unknown>>();
-const pendingSyncs = new Map<string, Promise<void>>();
+const pendingSyncs = new Map<string, { run: Promise<void>; skipIntegrations: boolean }>();
 
 function enqueue<T>(bingoId: string, job: () => Promise<T>): Promise<T> {
   const next = (tails.get(bingoId) ?? Promise.resolve()).catch(() => undefined).then(job);
@@ -308,6 +316,8 @@ function enqueue<T>(bingoId: string, job: () => Promise<T>): Promise<T> {
 }
 
 export interface DiscordSyncOptions {
+  /** Set by syncDiscordTeams: the request asked to keep off the outside services (X-Dev-Skip-Integrations). */
+  skipIntegrations?: boolean;
   /** Re-send everything, not only what changed: puts back what someone changed or deleted by hand in Discord. */
   force?: boolean;
 }
@@ -315,17 +325,21 @@ export interface DiscordSyncOptions {
 /**
  * Brings a Bingo's Discord roles and channels up to date with its Teams. Fire-and-forget from the routes: never throws,
  * and resolves once the sync (or the one already waiting, which it joins) is done. A no-op unless discordSyncBlocker
- * says the Bingo is synced, or when a request asked to keep off the outside services (the test data generator's).
+ * says the Bingo is synced, or when a request asked to keep off the outside services (the test data generator's), unless
+ * the Bingo syncs to a test Discord server (onDiscordTestServer).
  */
 export function syncDiscordTeams(db: Db, bingoId: string, options: DiscordSyncOptions = {}, api?: DiscordApiSource): Promise<void> {
-  if (syncDisabled() || skipsIntegrations() || api === null || (api === undefined && !process.env.DISCORD_BOT_TOKEN)) return Promise.resolve();
+  if (syncDisabled() || api === null || (api === undefined && !process.env.DISCORD_BOT_TOKEN)) return Promise.resolve();
+  // Read now, in the request's context: the job below may run in another's.
+  if (skipsIntegrations()) options = { ...options, skipIntegrations: true };
+  // A waiting sync covers this one, unless it was asked to keep off the outside services and this one wasn't.
   const pending = pendingSyncs.get(bingoId);
-  if (pending && !options.force) return pending;
+  if (pending && !options.force && (!pending.skipIntegrations || options.skipIntegrations)) return pending.run;
   const run = enqueue(bingoId, async () => {
-    if (pendingSyncs.get(bingoId) === run) pendingSyncs.delete(bingoId);
+    if (pendingSyncs.get(bingoId)?.run === run) pendingSyncs.delete(bingoId);
     await syncNow(db, bingoId, options, api);
   });
-  pendingSyncs.set(bingoId, run);
+  pendingSyncs.set(bingoId, { run, skipIntegrations: !!options.skipIntegrations });
   return run;
 }
 
@@ -340,6 +354,8 @@ interface SyncChanges {
 async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, source: DiscordApiSource): Promise<void> {
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
   if (!bingo || discordSyncBlocker(bingo, source)) return;
+  // The generator's requests keep off the outside services, except a test Discord server it was pointed at.
+  if (options.skipIntegrations && !onDiscordTestServer(bingo)) return;
   const api = resolveApi(source, discordGuildIdFor(bingo))!;
   const changes: SyncChanges = { created: [], updated: [], deleted: [], membersAdded: 0, membersRemoved: 0 };
   try {

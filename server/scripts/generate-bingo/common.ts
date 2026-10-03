@@ -24,7 +24,7 @@ export class UsageError extends Error {}
 
 /** The flag each option is given as, for messages. */
 const FLAG_NAMES: Partial<Record<keyof GenerateOptions, string>> = {
-  stage: "--stage", progress: "--progress", days: "--days", teams: "--teams", teamSize: "--team-size", mods: "--mods", me: "--me", seed: "--seed", slug: "--slug", theme: "--theme",
+  stage: "--stage", progress: "--progress", days: "--days", teams: "--teams", teamSize: "--team-size", mods: "--mods", me: "--me", seed: "--seed", slug: "--slug", theme: "--theme", discordGuildId: "--discord-guild",
 };
 
 export function parseArgs(argv: string[], now = new Date(), env: NodeJS.ProcessEnv = process.env): Args {
@@ -40,7 +40,7 @@ export function parseArgs(argv: string[], now = new Date(), env: NodeJS.ProcessE
       i++;
     }
   }
-  const known = new Set(["stage", "progress", "days", "teams", "team-size", "mods", "me", "admin", "seed", "base", "slug", "dry-run", "export", "from", "basic-auth", "all", "theme"]);
+  const known = new Set(["stage", "progress", "days", "teams", "team-size", "mods", "me", "admin", "seed", "base", "slug", "dry-run", "export", "from", "basic-auth", "all", "theme", "discord-guild"]);
   for (const key of raw.keys()) if (!known.has(key)) throw new UsageError(`Unknown option --${key}`);
 
   const str = (key: string): string | null => {
@@ -53,7 +53,7 @@ export function parseArgs(argv: string[], now = new Date(), env: NodeJS.ProcessE
   let options: GenerateOptions;
   try {
     options = normalizeOptions(
-      { stage: str("stage"), progress: str("progress"), days: str("days"), teams: str("teams"), teamSize: str("team-size"), mods: str("mods"), me: str("me"), seed: str("seed"), slug: str("slug"), theme: str("theme") },
+      { stage: str("stage"), progress: str("progress"), days: str("days"), teams: str("teams"), teamSize: str("team-size"), mods: str("mods"), me: str("me"), seed: str("seed"), slug: str("slug"), theme: str("theme"), discordGuildId: str("discord-guild") },
       now,
       FLAG_NAMES,
     );

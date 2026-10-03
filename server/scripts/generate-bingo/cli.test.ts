@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { UsageError, parseArgs } from "./common";
 
 describe("parseArgs", () => {
@@ -21,6 +21,18 @@ describe("parseArgs", () => {
     expect(parseArgs(["--theme", "comic"], now, noEnv).theme).toBe("comic");
     expect(() => parseArgs(["--theme", "neon"], now, noEnv)).toThrow(/^--theme must be one of default, comic/);
     expect(() => parseArgs(["--theme"], now, noEnv)).toThrow(/--theme needs a value/);
+  });
+
+  it("takes a test Discord server, never the clan's", () => {
+    expect(parseArgs([], now, noEnv).discordGuildId).toBeNull();
+    expect(parseArgs(["--discord-guild", "700000000000000000"], now, noEnv).discordGuildId).toBe("700000000000000000");
+    expect(() => parseArgs(["--discord-guild", "abc"], now, noEnv)).toThrow(/^--discord-guild must be a Discord server ID/);
+    vi.stubEnv("DISCORD_GUILD_ID", "100000000000000000");
+    try {
+      expect(() => parseArgs(["--discord-guild", "100000000000000000"], now, noEnv)).toThrow(/not the clan's/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("takes the staging password from the flag or the environment", () => {

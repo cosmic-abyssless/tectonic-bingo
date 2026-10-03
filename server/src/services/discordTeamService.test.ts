@@ -579,6 +579,33 @@ describe("a test Discord server (dev servers only)", () => {
     expect(getDiscordSyncStatus(db, bingoRow(bingo.id), source).guildId).toBe(TEST_GUILD);
   });
 
+  it("syncs a test data bingo (the generator's) only to a test server, even from its requests", async () => {
+    vi.stubEnv("DEV_LOGIN_ENABLED", "true");
+    const { clan, test, source } = guilds();
+    const { bingo } = seed({ slug: "testdata-x", discordGuildId: TEST_GUILD });
+    // The generator's requests keep off the outside services, but not the test server it was pointed at.
+    await syncDiscordTeams(db, bingo.id, { skipIntegrations: true }, source);
+    expect(test.roles.size).toBe(1);
+    expect(clan.calls).toEqual([]);
+
+    // Pointed at the clan's server (or nowhere), it never syncs.
+    ({ sqlite, db } = createTestDb());
+    const other = seed({ slug: "testdata-y", discordGuildId: GUILD });
+    await syncDiscordTeams(db, other.bingo.id, {}, source);
+    expect(clan.calls).toEqual([]);
+    expect(discordSyncBlocker(other.bingo, source)).toMatch(/test Discord server/);
+  });
+
+  it("keeps the generator's requests off a real bingo's Discord, without losing a real change behind them", async () => {
+    vi.stubEnv("DEV_LOGIN_ENABLED", "true");
+    const { clan, source } = guilds();
+    const { bingo } = seed();
+    const skipped = syncDiscordTeams(db, bingo.id, { skipIntegrations: true }, source);
+    const real = syncDiscordTeams(db, bingo.id, {}, source);
+    await Promise.all([skipped, real]);
+    expect(clan.roles.size).toBe(1);
+  });
+
   it("ignores the picked server anywhere but a dev server", async () => {
     vi.stubEnv("DEV_LOGIN_ENABLED", "false");
     const { clan, test, source } = guilds();
