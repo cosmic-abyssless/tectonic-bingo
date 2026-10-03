@@ -1,11 +1,12 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, nodes, submissions, teamNodeState, tileInterests, tiles } from "../db/schema";
+import { claims, nodes, submissions, teamNodeState, tileInterests } from "../db/schema";
 import { ServiceError } from "./errors";
 import { valuedAsOf } from "./gpValueService";
 import type { ApprovedClaim, EngineNode } from "./engine";
+import { PUBLISHED_BOARD, type BoardTables } from "./boardTables";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -16,7 +17,7 @@ type Queryable = Db | Tx;
 // ---------------------------------------------------------------------------
 
 interface TreeCtx {
-  nodesById: Map<string, typeof nodes.$inferSelect>;
+  nodesById: Map<string, BoardTables["nodes"]["$inferSelect"]>;
   edgesByParent: Map<string, { childId: string; sortOrder: number }[]>;
 }
 
@@ -49,8 +50,9 @@ function toGraphNode(id: string, ctx: TreeCtx): GraphNode {
 // node, typically). Descendants are found by following edges from the roots
 // — a node reachable from two different roots in the same call is loaded
 // once and nested under both (shared leaf).
-export function getNodeTrees(db: Queryable, rootIds: string[]): Map<string, GraphNode> {
+export function getNodeTrees(db: Queryable, rootIds: string[], t: BoardTables = PUBLISHED_BOARD): Map<string, GraphNode> {
   if (rootIds.length === 0) return new Map();
+  const { nodes, nodeEdges } = t;
 
   const allIds = new Set<string>(rootIds);
   let frontier = rootIds;
@@ -80,15 +82,19 @@ export function getNodeTrees(db: Queryable, rootIds: string[]): Map<string, Grap
   return result;
 }
 
-export function getNodeTree(db: Queryable, rootId: string): GraphNode | undefined {
-  return getNodeTrees(db, [rootId]).get(rootId);
+export function getNodeTree(db: Queryable, rootId: string, t: BoardTables = PUBLISHED_BOARD): GraphNode | undefined {
+  return getNodeTrees(db, [rootId], t).get(rootId);
 }
 
 // Every node in a bingo, flattened for the scoring engine (evaluateGraph
 // needs the whole graph, not just what's reachable from tiles/lines — a
-// standalone bonus node with no presentation row still scores).
-export function getFullGraph(db: Queryable, bingoId: string): { engineNodes: EngineNode[]; childrenOf: Map<string, string[]>; nodesById: Map<string, EngineNode> } {
-  const nodeRows = db.select().from(nodes).where(eq(nodes.bingoId, bingoId)).all();
+// standalone bonus node with no presentation row still scores). A node a Publish took off the board while Claims
+// still pointed at it (nodes.removedAt) is left out: it no longer counts.
+export function getFullGraph(db: Queryable, bingoId: string, t: BoardTables = PUBLISHED_BOARD): { engineNodes: EngineNode[]; childrenOf: Map<string, string[]>; nodesById: Map<string, EngineNode> } {
+  const { nodes, nodeEdges } = t;
+  const nodeRows = t.draft
+    ? db.select().from(nodes).where(eq(nodes.bingoId, bingoId)).all()
+    : db.select().from(nodes).where(and(eq(nodes.bingoId, bingoId), isNull(schema.nodes.removedAt))).all();
   const ids = nodeRows.map((r) => r.id);
   const edgeRows = ids.length ? db.select().from(nodeEdges).where(inArray(nodeEdges.parentId, ids)).all() : [];
 
@@ -114,14 +120,14 @@ export function getFullGraph(db: Queryable, bingoId: string): { engineNodes: Eng
 }
 
 // A team's approved claims across the whole bingo (the engine needs all of
-// them at once — a leaf can be a descendant of several roots).
+// them at once — a leaf can be a descendant of several roots). Claims on a node a Publish removed don't count.
 export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string): ApprovedClaim[] {
   return db
     .select({ nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
     .innerJoin(nodes, eq(claims.nodeId, nodes.id))
-    .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(nodes.bingoId, bingoId)))
+    .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(nodes.bingoId, bingoId), isNull(nodes.removedAt)))
     .all()
     .map((r) => ({ ...r, reviewedAt: r.reviewedAt! }));
 }
@@ -129,6 +135,7 @@ export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string
 // nodeId plus every ancestor reached by walking edges upward. Used to find
 // which tile/line a leaf belongs to (submission-time tile resolution).
 export function findAncestorIds(db: Queryable, nodeId: string): Set<string> {
+  const { nodeEdges } = PUBLISHED_BOARD;
   const seen = new Set<string>([nodeId]);
   let frontier = [nodeId];
   while (frontier.length > 0) {
@@ -149,6 +156,7 @@ export function findAncestorIds(db: Queryable, nodeId: string): Set<string> {
  */
 export function submitGateBlock(db: Queryable, leafId: string, completed: ReadonlySet<string>): string | null {
   const memo = new Map<string, string | null>();
+  const { nodeEdges } = PUBLISHED_BOARD;
   const parentsOf = (nodeId: string) => db.select({ parentId: nodeEdges.parentId }).from(nodeEdges).where(eq(nodeEdges.childId, nodeId)).all().map((r) => r.parentId);
   // The block on the routes above a node (its parents and theirs): null as soon as one route is open. (A task
   // that is a single item carries its own gate on the item, so the item itself is checked too: see blockAt.)
@@ -187,7 +195,7 @@ export function leafDescendants(rootId: string, childrenOf: Map<string, string[]
 // Writes
 // ---------------------------------------------------------------------------
 
-type NodeRow = typeof nodes.$inferInsert;
+type NodeRow = BoardTables["nodes"]["$inferInsert"];
 
 // SUM's children must all be ITEM kind: the engine only adds up its Items' claimed quantities, so a condition inside a
 // SUM would silently count for nothing. Enforced here, on every node written (fresh or reconciled), because the editor
@@ -252,11 +260,12 @@ function valuedAsFields(input: GraphNodeInput): Pick<NodeRow, "valuedAsItemName"
 // Inserts a brand-new subtree (used for a freshly created tile/line/task with
 // no prior existence). Honors input.id when the caller wants a specific id
 // (e.g. keeping a tile's designated root id stable); otherwise the DB assigns one.
-export function insertSubtree(tx: Tx, bingoId: string, input: GraphNodeInput): string {
+export function insertSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, t: BoardTables = PUBLISHED_BOARD): string {
+  const { nodes, nodeEdges } = t;
   const values: NodeRow = { ...nodeFields(bingoId, input), ...(input.id ? { id: input.id } : {}) };
   const node = tx.insert(nodes).values(values).returning().get();
   (input.children ?? []).forEach((child, i) => {
-    const childId = insertSubtree(tx, bingoId, child);
+    const childId = insertSubtree(tx, bingoId, child, t);
     tx.insert(nodeEdges).values({ parentId: node.id, childId, sortOrder: i }).run();
   });
   return node.id;
@@ -269,23 +278,24 @@ export function insertSubtree(tx: Tx, bingoId: string, input: GraphNodeInput): s
 // replaceSubtree for this: it would mint new ids for the node's own children
 // and corrupt any not-yet-applied gate reference pointing at them.
 export function setNodeGates(tx: Tx, nodeId: string, gates: { pointsGateNodeId: string | null; submitGateNodeId: string | null }): void {
-  tx.update(nodes).set(gates).where(eq(nodes.id, nodeId)).run();
+  tx.update(PUBLISHED_BOARD.nodes).set(gates).where(eq(nodes.id, nodeId)).run();
 }
 
 // Reconciles `input` onto the graph: a child whose `id` names an existing
 // node is updated in place (so claims already pointing at it stay valid);
 // anything else is created fresh. Every id touched (reused or new) is
 // recorded in `touched` so the caller can garbage-collect what's left over.
-function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touched: Set<string>): string {
+function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touched: Set<string>, t: BoardTables): string {
+  const { nodes, nodeEdges } = t;
   const existing = input.id ? tx.select({ id: nodes.id, kind: nodes.kind, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, input.id)).get() : undefined;
-  if (existing) assertClaimedNodeKeepsMeaning(tx, existing, input);
+  if (existing) assertClaimedNodeKeepsMeaning(tx, existing, input, t);
   const id = existing ? existing.id : tx.insert(nodes).values({ ...nodeFields(bingoId, input), ...(input.id ? { id: input.id } : {}) }).returning().get().id;
   if (existing) tx.update(nodes).set(nodeFields(bingoId, input)).where(eq(nodes.id, id)).run();
   touched.add(id);
 
   tx.delete(nodeEdges).where(eq(nodeEdges.parentId, id)).run();
   (input.children ?? []).forEach((child, i) => {
-    const childId = reconcileSubtree(tx, bingoId, child, touched);
+    const childId = reconcileSubtree(tx, bingoId, child, touched, t);
     tx.insert(nodeEdges).values({ parentId: id, childId, sortOrder: i }).run();
   });
   return id;
@@ -295,12 +305,14 @@ function reconcileSubtree(tx: Tx, bingoId: string, input: GraphNodeInput, touche
 // directly by tiles.nodeId / bingoLines.nodeId instead — so the orphan check
 // below must also know about these, or it would wrongly GC a tile that a
 // deleted line pointed at.
-function isPresentationRoot(tx: Tx, id: string): boolean {
+function isPresentationRoot(tx: Tx, id: string, t: BoardTables): boolean {
+  const { tiles, bingoLines } = t;
   if (tx.select({ id: tiles.id }).from(tiles).where(eq(tiles.nodeId, id)).get()) return true;
   return !!tx.select({ id: bingoLines.id }).from(bingoLines).where(eq(bingoLines.nodeId, id)).get();
 }
 
-function collectDescendants(tx: Tx, rootId: string): Set<string> {
+function collectDescendants(tx: Tx, rootId: string, t: BoardTables): Set<string> {
+  const { nodeEdges } = t;
   const seen = new Set<string>([rootId]);
   let frontier = [rootId];
   while (frontier.length > 0) {
@@ -316,7 +328,8 @@ function claimsOn(tx: Tx, nodeId: string): number {
   return tx.select({ id: claims.id }).from(claims).where(eq(claims.nodeId, nodeId)).all().length;
 }
 
-function nodeName(tx: Tx, nodeId: string): string {
+function nodeName(tx: Tx, nodeId: string, t: BoardTables): string {
+  const { nodes } = t;
   const node = tx.select({ label: nodes.label, itemName: nodes.itemName }).from(nodes).where(eq(nodes.id, nodeId)).get();
   return node?.label ?? node?.itemName ?? "this requirement";
 }
@@ -324,49 +337,61 @@ function nodeName(tx: Tx, nodeId: string): string {
 // Claims match by node id and the engine doesn't re-check the item name, so an edit that keeps
 // a claimed node's id but changes what it asks for (another item, another kind) would quietly
 // count teams' old proof toward the new requirement. Points, labels and descriptions can change.
-function assertClaimedNodeKeepsMeaning(tx: Tx, existing: { id: string; kind: string; itemName: string | null }, input: GraphNodeInput): void {
+// Claims point at the Published board's ids, which a Draft board node keeps, so this holds in the draft too.
+function assertClaimedNodeKeepsMeaning(tx: Tx, existing: { id: string; kind: string; itemName: string | null }, input: GraphNodeInput, t: BoardTables): void {
   if (existing.kind === input.kind && existing.itemName === (input.itemName ?? null)) return;
   const claimed = claimsOn(tx, existing.id);
   if (claimed === 0) return;
-  throw new ServiceError(409, `Can't change "${nodeName(tx, existing.id)}" into something else: ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Add a new requirement instead.`);
+  throw new ServiceError(409, `Can't change "${nodeName(tx, existing.id, t)}" into something else: ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Add a new requirement instead.`);
 }
 
 // Unconditionally deletes `id` (and its edges), then recurses into its
 // former children via deleteNodeIfOrphaned — so a child still reachable from
 // elsewhere in the DAG (e.g. a leaf shared by two tasks) survives, and one
 // that isn't is cleaned up too.
-function deleteNodeForce(tx: Tx, id: string): void {
-  // Proof teams have already submitted for this node points at it, so it can't go: the caller
-  // (an edit made while the bingo is live) is told which one, and the whole change is rolled back.
-  const claimed = claimsOn(tx, id);
+function deleteNodeForce(tx: Tx, id: string, t: BoardTables): void {
+  const { nodes, nodeEdges } = t;
+  // Proof teams have already submitted for this node points at it, so it can't go from the Published board: the
+  // caller is told which one, and the whole change is rolled back. The Draft board may remove it (its Claims stop
+  // counting once that's published; the Publish screen warns about them, boardDraftService).
+  const claimed = t.draft ? 0 : claimsOn(tx, id);
   if (claimed > 0) {
-    throw new ServiceError(409, `Can't remove "${nodeName(tx, id)}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
+    throw new ServiceError(409, `Can't remove "${nodeName(tx, id, t)}": ${claimed} submission claim${claimed === 1 ? "" : "s"} refer to it. Edit it instead of removing it.`);
   }
-  const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTaskId, id)).all().length;
-  if (proofs > 0) {
-    throw new ServiceError(409, `Can't remove "${nodeName(tx, id)}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it. Edit it instead of removing it.`);
+  assertNoProofsFor(tx, id, nodeName(tx, id, t));
+  if (!t.draft) {
+    // Derived or soft references: a team's completed-node rows are recomputed after the edit, and a
+    // raised hand on a task that no longer exists means nothing.
+    tx.delete(teamNodeState).where(eq(teamNodeState.nodeId, id)).run();
+    tx.delete(tileInterests).where(eq(tileInterests.taskId, id)).run();
   }
-  // Derived or soft references: a team's completed-node rows are recomputed after the edit, and a
-  // raised hand on a task that no longer exists means nothing.
-  tx.delete(teamNodeState).where(eq(teamNodeState.nodeId, id)).run();
-  tx.delete(tileInterests).where(eq(tileInterests.taskId, id)).run();
   const childIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, id)).all().map((r) => r.childId);
   tx.delete(nodeEdges).where(or(eq(nodeEdges.parentId, id), eq(nodeEdges.childId, id))).run();
   tx.delete(nodes).where(eq(nodes.id, id)).run();
-  for (const childId of childIds) deleteNodeIfOrphaned(tx, childId);
+  for (const childId of childIds) deleteNodeIfOrphaned(tx, childId, t);
+}
+
+// A Proof screenshot names its Task (submissions.proofTaskId), so a Task one was posted for stays on the board, in
+// either copy: the Proof would lose what it proves.
+export function assertNoProofsFor(tx: Tx, nodeId: string, name: string): void {
+  const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTaskId, nodeId)).all().length;
+  if (proofs > 0) {
+    throw new ServiceError(409, `Can't remove "${name}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it. Edit it instead of removing it.`);
+  }
 }
 
 // Deletes `id` only if it has no remaining parent edge (a child still
 // reachable from elsewhere in the DAG is kept). Used for GC after a subtree
 // replace/delete — never call this on a node the caller means to remove
 // outright (it has a parent by definition); use deleteNode/deleteSubtree.
-function deleteNodeIfOrphaned(tx: Tx, id: string): void {
+function deleteNodeIfOrphaned(tx: Tx, id: string, t: BoardTables): void {
+  const { nodes, nodeEdges } = t;
   const stillExists = tx.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, id)).get();
   if (!stillExists) return;
   const hasParent = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.childId, id)).get();
   if (hasParent) return;
-  if (isPresentationRoot(tx, id)) return;
-  deleteNodeForce(tx, id);
+  if (isPresentationRoot(tx, id, t)) return;
+  deleteNodeForce(tx, id, t);
 }
 
 // Replaces the subtree rooted at `rootNodeId` in place — the root's id never
@@ -374,24 +399,24 @@ function deleteNodeIfOrphaned(tx: Tx, id: string): void {
 // named by `id` in `input` are updated in place; everything else in the old
 // subtree that isn't reused and isn't still referenced from elsewhere in the
 // graph is deleted.
-export function replaceSubtree(tx: Tx, rootNodeId: string, bingoId: string, input: GraphNodeInput): void {
-  const before = collectDescendants(tx, rootNodeId);
+export function replaceSubtree(tx: Tx, rootNodeId: string, bingoId: string, input: GraphNodeInput, t: BoardTables = PUBLISHED_BOARD): void {
+  const before = collectDescendants(tx, rootNodeId, t);
   const touched = new Set<string>();
-  reconcileSubtree(tx, bingoId, { ...input, id: rootNodeId }, touched);
+  reconcileSubtree(tx, bingoId, { ...input, id: rootNodeId }, touched, t);
   for (const id of before) {
     if (id === rootNodeId || touched.has(id)) continue;
-    deleteNodeIfOrphaned(tx, id);
+    deleteNodeIfOrphaned(tx, id, t);
   }
 }
 
 // Deletes a subtree entirely (e.g. a tile is deleted). Same orphan-safety for
 // its descendants as replaceSubtree's cleanup, just with nothing kept.
-export function deleteSubtree(tx: Tx, rootNodeId: string): void {
-  deleteNodeForce(tx, rootNodeId);
+export function deleteSubtree(tx: Tx, rootNodeId: string, t: BoardTables = PUBLISHED_BOARD): void {
+  deleteNodeForce(tx, rootNodeId, t);
 }
 
 // Deletes one node (e.g. removing a single task from a tile) regardless of
 // its current parent edge, and GCs any children left orphaned by that.
-export function deleteNode(tx: Tx, nodeId: string): void {
-  deleteNodeForce(tx, nodeId);
+export function deleteNode(tx: Tx, nodeId: string, t: BoardTables = PUBLISHED_BOARD): void {
+  deleteNodeForce(tx, nodeId, t);
 }

@@ -1,13 +1,16 @@
 // setup.ts's weighAnItem: the Counts as a run gives one Item after the import, sent back the way the board editor
-// sends a Task, and written by the real board service.
+// sends a Task, and written by the real board service to the Draft board; and publishBoard, which publishes it.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
-import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { importBingo, weighAnItem, type Ctx } from "./setup";
+import { eq } from "drizzle-orm";
+import { createTask, createTile, getBoardTiles, updateNode } from "../../services/boardService";
+import { editDraft, getDraftStatus, getEditorBoard, getPublishPreview, publishDraft } from "../../services/boardDraftService";
+import { DRAFT_BOARD } from "../../services/boardTables";
+import { importBingo, publishBoard, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -36,18 +39,29 @@ function seed() {
   return { bingo, task };
 }
 
-// A Ctx whose requests go straight to the board service, as the routes would.
+// A Ctx whose requests go straight to the board services, as the admin routes would.
 function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[]) {
   const patches: { path: string; body: GraphNodeInput }[] = [];
+  const posts: { path: string; body: unknown }[] = [];
   const session = {
-    get: async () => getBoardForViewer(db, bingo, true),
+    get: async (path: string) => {
+      if (path.endsWith("/admin/board-draft")) return getEditorBoard(db, bingo.id);
+      if (path.endsWith("/admin/board-draft/status")) return { status: getDraftStatus(db, bingo.id) };
+      if (path.endsWith("/admin/board-draft/preview")) return { preview: getPublishPreview(db, bingo.id) };
+      throw new Error(`unexpected GET ${path}`);
+    },
     patch: async (path: string, body: GraphNodeInput) => {
       patches.push({ path, body });
-      return { task: updateNode(db, path.split("/").at(-1)!, body) };
+      return { task: editDraft(db, bingo.id, null, (t) => updateNode(db, path.split("/").at(-1)!, body, t)) };
+    },
+    post: async (path: string, body: { revision: string }) => {
+      posts.push({ path, body });
+      if (!path.endsWith("/admin/board-draft/publish")) throw new Error(`unexpected POST ${path}`);
+      return publishDraft(db, bingo, body.revision);
     },
   };
   const ctx = { api: { as: () => session }, slug: bingo.slug, admin: "admin", log: (m: string) => log.push(m) } as unknown as Ctx;
-  return { ctx, patches };
+  return { ctx, patches, posts };
 }
 
 describe("weighAnItem", () => {
@@ -58,7 +72,9 @@ describe("weighAnItem", () => {
     await weighAnItem(ctx, new Date());
 
     expect(patches.map((p) => p.path)).toEqual([`/api/bingos/testdata-w/admin/tasks/${task.id}`]);
-    const after = getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!;
+    // An edit in the board editor goes to the Draft board; the Published board is as imported until publishBoard.
+    expect(getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!.children[0]!.children.map((c) => c.countsAs)).toEqual([1, 1]);
+    const after = getBoardTiles(db, bingo.id, DRAFT_BOARD).find((t) => t.name === "Wintertodt")!.node.children[0]!;
     const [sum] = after.children;
     expect(sum!.children.map((c) => [c.id, c.itemName, c.countsAs])).toEqual(task.children[0]!.children.map((c) => [c.id, c.itemName, c.itemName === "Bruma torch" ? 25 : 1]));
     expect(sum!.children[1]!.valuedAs).toMatchObject({ itemName: "Tome of fire", divisor: 8 });
@@ -72,6 +88,30 @@ describe("weighAnItem", () => {
     await weighAnItem(ctx, new Date());
     await weighAnItem(ctx, new Date());
     expect(patches).toHaveLength(1);
+  });
+});
+
+describe("publishBoard", () => {
+  it("publishes the setup edits through the Publish endpoint, so the Bingo plays on them and its audit log shows it", async () => {
+    const { bingo, task } = seed();
+    const log: string[] = [];
+    const { ctx, posts } = ctxFor(bingo, log);
+    await weighAnItem(ctx, new Date());
+    await publishBoard(ctx, new Date());
+
+    expect(posts.map((p) => p.path)).toEqual(["/api/bingos/testdata-w/admin/board-draft/publish"]);
+    const sum = getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!.children[0]!;
+    expect(sum.children.map((c) => [c.id, c.countsAs])).toEqual(task.children[0]!.children.map((c) => [c.id, c.itemName === "Bruma torch" ? 25 : 1]));
+    expect(getDraftStatus(db, bingo.id).hasChanges).toBe(false);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "board.published")).all()).toHaveLength(1);
+    expect(log.at(-1)).toMatch(/^published the board \(1 Tile changed\)/);
+  });
+
+  it("publishes nothing when the setup made no board edits", async () => {
+    const { bingo } = seed();
+    const { ctx, posts } = ctxFor(bingo, []);
+    await publishBoard(ctx, new Date());
+    expect(posts).toHaveLength(0);
   });
 });
 

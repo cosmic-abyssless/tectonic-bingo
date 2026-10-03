@@ -695,7 +695,8 @@ describe("every column is accounted for", () => {
       submitGateLocalId: ["submitGateNodeId"],
       valuedAs: ["valuedAsItemName", "valuedAsDivisor", "valuedAsSource"],
     };
-    accounted(schema.nodes, Object.keys(node).flatMap((k) => renamed[k] ?? [k]), ["id", "bingoId"], ["localId", "children", "reuse"]);
+    // removedAt: a node a Publish took off the board is on no Tile, so it's never exported.
+    accounted(schema.nodes, Object.keys(node).flatMap((k) => renamed[k] ?? [k]), ["id", "bingoId", "removedAt"], ["localId", "children", "reuse"]);
   });
 
   it("categories and signup questions", () => {

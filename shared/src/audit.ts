@@ -143,6 +143,13 @@ export interface AuditDetailsMap {
   "line.generated": { pointsPerLine: number; replaced: number; created: { row: number; column: number; diagonal: number } };
   "line.updated": { lineType: string; lineIndex: number; points: { before: number; after: number } };
   "line.deleted": { lineType: string; lineIndex: number; points: number };
+  /**
+   * The Draft board was published (CONTEXT.md "Publish"): `summary` is one line per kind of change ("2 Tiles changed"),
+   * `removedClaims` the Claims it stopped counting, and each Team's points before and after (Points share aside).
+   */
+  "board.published": { summary: string[]; removedClaims: number; teams: { teamId: string; teamName: string; before: number; after: number }[] };
+  /** The Draft board was thrown away (CONTEXT.md "Discard"); `summary` is what it had changed. */
+  "board.discarded": { summary: string[] };
 
   // `form`: "feedback" for a Feedback question (CONTEXT.md); absent means a signup question, as every entry from before
   // Feedback questions was.
@@ -612,6 +619,20 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   "task.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Task deleted", label: (i) => `${actor(i)} deleted a task${onTile("from", i.details.tileName)}` },
   "line.generated": { category: "board", tone: "neutral", visibility: "mods", title: "Lines generated", label: (i) => `${actor(i)} regenerated bingo lines (${i.details.pointsPerLine} pts each)` },
   "line.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Line updated", label: (i) => `${actor(i)} changed ${i.details.lineType} ${i.details.lineIndex + 1}'s points to ${i.details.points.after}` },
+  "board.published": {
+    category: "board",
+    tone: "ok",
+    visibility: "mods",
+    title: "Board published",
+    label: (i) => `${actor(i)} published the board (${i.details.summary.join(", ")})`,
+  },
+  "board.discarded": {
+    category: "board",
+    tone: "danger",
+    visibility: "mods",
+    title: "Board discarded",
+    label: (i) => `${actor(i)} discarded the unpublished board changes (${i.details.summary.join(", ")})`,
+  },
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },
   "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Question added", label: (i) => `${actor(i)} added the ${formWord(i.details)} question "${i.details.prompt}"` },
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Question updated", label: (i) => `${actor(i)} updated the ${formWord(i.details)} question "${i.entityLabel ?? ""}"` },

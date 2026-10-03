@@ -29,6 +29,13 @@ export const SQL_TABLES: Record<string, TableClass> = {
   oauth_clients: { denied: "The MCP server's own OAuth apps and their secrets." },
   oauth_codes: { denied: "OAuth authorization codes." },
   oauth_tokens: { denied: "OAuth token hashes." },
+  // The Draft board (CONTEXT.md): the Admins' unpublished working copy. The tools read the Published board only.
+  board_drafts: { denied: "The Draft board's unpublished Exclusive Item rules and Rules text." },
+  draft_nodes: { denied: "The Draft board's unpublished nodes." },
+  draft_node_edges: { denied: "The Draft board's unpublished node edges." },
+  draft_tiles: { denied: "The Draft board's unpublished Tiles." },
+  draft_tile_categories: { denied: "The Draft board's unpublished Categories." },
+  draft_bingo_lines: { denied: "The Draft board's unpublished Lines." },
 
   // ---- identity & platform ---------------------------------------------------------------------------------------
   users: {
@@ -322,6 +329,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       valued_as_source: "",
       requires_proof: "A Task only: each Player needs an approved Proof screenshot for it (never with a Tile-wide one)",
       proof_note: "What the Proof screenshot should show",
+      removed_at: "Set when a Publish took the node off the board while Claims still pointed at it (unix seconds): it no longer scores. Null on every node on the board.",
     },
   },
   node_edges: {

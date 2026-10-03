@@ -1591,6 +1591,7 @@ export * from "./achievements.ts";
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
+export * from "./boardDraft.ts";
 export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";
