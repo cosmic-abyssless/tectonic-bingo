@@ -334,6 +334,9 @@ export const signups = sqliteTable('signups', {
   // RSNs at signup time. Never set from a client-supplied claim.
   womId: text('wom_id'),
   rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
+  // A Borrowed account (CONTEXT.md "Signup"): an Admin set this Signup to play on an OSRS account the Player doesn't
+  // own. `rsn` and `womId` are then that account's (womId from Wise Old Man, not the clan) and rsnVerified is false.
+  accountBorrowed: integer('account_borrowed', { mode: 'boolean' }).notNull().default(false),
   // Raw WOM (/players/{rsn}) and RuneProfile (/accounts/{rsn}/full) API
   // responses, fetched at signup (and on mod refresh) and reused as-is at
   // draft time — no live external calls in the draft room's hot path. May
