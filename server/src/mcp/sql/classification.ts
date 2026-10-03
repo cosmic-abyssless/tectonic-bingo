@@ -167,6 +167,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       timezone: "IANA zone",
       wom_id: "",
       rsn_verified: "",
+      account_borrowed: "1 on a Borrowed account: rsn and wom_id are an account an Admin set them to play on, not their own",
       wom_data_json: "Raw Wise Old Man player response at signup (large)",
       rune_profile_data_json: "Raw RuneProfile response at signup (large)",
       stats_fetched_at: TS,
