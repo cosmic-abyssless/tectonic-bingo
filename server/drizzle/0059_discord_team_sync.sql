@@ -14,7 +14,6 @@ CREATE TABLE `discord_resources` (
 CREATE INDEX `discord_resources_bingo_idx` ON `discord_resources` (`bingo_id`);--> statement-breakpoint
 ALTER TABLE `bingos` ADD `discord_enabled` integer DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE `bingos` ADD `discord_category_name` text;--> statement-breakpoint
-ALTER TABLE `bingos` ADD `discord_category_id` text;--> statement-breakpoint
 ALTER TABLE `bingos` ADD `discord_guild_id` text;--> statement-breakpoint
 ALTER TABLE `bingos` ADD `discord_channels_json` text DEFAULT '[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]' NOT NULL;--> statement-breakpoint
 ALTER TABLE `bingos` ADD `discord_sync_error` text;--> statement-breakpoint
