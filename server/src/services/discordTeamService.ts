@@ -1,11 +1,12 @@
 // Discord team sync: when an Admin turns it on in a Bingo's settings (bingos.discordEnabled), every Team gets, in the
 // clan's Discord server (DISCORD_GUILD_ID):
 //   - a role named after the Team, in the Team's color, given to each of its Players;
-//   - a private text channel and a private voice channel, which only that role (plus the bot, and the optional staff
-//     role, bingos.discordStaffRoleId) can see;
-// all under one category named after the Bingo. They're kept up to date from the Draft on: a Team renamed or
-// recolored, a Player drafted, removed or signed up late, a Team added or deleted. Nothing is deleted when the Bingo
-// is Finished; an Admin removes them from the settings panel (removeDiscordTeams) when they're done with them.
+//   - the channels the Bingo's admins listed in Settings > Discord (bingos.discordChannelsJson, by default one text and
+//     one voice channel, named after the Team), which only that role and the bot can see;
+// all under one category the sync makes for the Bingo, named after it (or bingos.discordCategoryName). They're made as
+// the Draft finishes, when the Wise Old Man competition is, and kept up to date from then on: a Team renamed or
+// recolored, a Player removed or signed up late, a Team added or deleted, the channel list edited. Nothing is deleted
+// when the Bingo is Finished; an Admin removes them from the settings panel (removeDiscordTeams) when done with them.
 //
 // The bot talks to Discord over REST only (no gateway connection): it needs DISCORD_BOT_TOKEN, and in the server the
 // Manage Roles and Manage Channels permissions plus every permission it hands out to the Teams (docs/discord-team-sync.md).
@@ -13,13 +14,14 @@
 // Same conventions as womCompetitionService: the route layer calls syncDiscordTeams fire-and-forget after anything
 // that may change a Team; it never throws, and a failure is kept on bingos.discordSyncError for the settings panel.
 // Every sync compares what the Bingo wants with what it last sent (discord_resources.applied_json) and only sends the
-// difference, so a Draft pick costs one role assignment, not a rename of every channel (Discord allows a channel two
+// difference, so a late signup costs one role assignment, not a rename of every channel (Discord allows a channel two
 // renames per 10 minutes).
-import { DiscordAPIError, REST } from "@discordjs/rest";
+import { DiscordAPIError, RateLimitError, REST, type RateLimitData } from "@discordjs/rest";
 import { ChannelType, OverwriteType, PermissionFlagsBits, Routes } from "discord-api-types/v10";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { DiscordSyncStatus } from "@bingo/shared";
+import { discordCategoryName, discordChannelName, discordRoleName, type DiscordChannelTemplate, type DiscordSyncStatus } from "@bingo/shared";
+import { parseDiscordChannels } from "./bingoService";
 import * as schema from "../db/schema";
 import { bingos, discordResources, teamMembers, teams, users } from "../db/schema";
 import { audit } from "../audit/record";
@@ -54,6 +56,7 @@ export interface ChannelBody {
   name: string;
   type: ChannelType.GuildCategory | ChannelType.GuildText | ChannelType.GuildVoice;
   parent_id?: string | null;
+  position?: number;
   permission_overwrites: PermissionOverwrite[];
 }
 
@@ -63,12 +66,20 @@ export class DiscordSyncApiError extends Error {
     message: string,
     readonly status: number | null,
     readonly code: number | string | null,
+    /** Set when Discord's rate limit would hold the request this long: the sync stops and tries again after it. */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = "DiscordSyncApiError";
   }
 }
 
+const LONG_RATE_LIMIT_MS = 30_000;
+
+/** How long a rate limit holds a request: a sublimit (a channel's renames) is in retryAfter, not the bucket's reset. */
+function rateLimitWait(limit: Pick<RateLimitData, "timeToReset" | "retryAfter" | "sublimitTimeout">): number {
+  return Math.max(limit.timeToReset, limit.retryAfter, limit.sublimitTimeout);
+}
 const UNKNOWN_CHANNEL = 10003;
 const UNKNOWN_MEMBER = 10007;
 const UNKNOWN_ROLE = 10011;
@@ -110,7 +121,9 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
     /** Tests point it at a local server. */
     apiBaseUrl?: string,
   ) {
-    this.rest = new REST({ version: "10", retries: 1, ...(apiBaseUrl ? { api: apiBaseUrl } : {}) }).setToken(token);
+    // A short rate limit is waited out; a long one (a channel renamed a third time within 10 minutes) fails the request
+    // instead of holding the sync, and every change queued behind it, for minutes. The sync retries after it.
+    this.rest = new REST({ version: "10", retries: 1, rejectOnRateLimit: (limit) => rateLimitWait(limit) > LONG_RATE_LIMIT_MS, ...(apiBaseUrl ? { api: apiBaseUrl } : {}) }).setToken(token);
   }
 
   async botUserId(): Promise<string> {
@@ -156,6 +169,10 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
     try {
       return await fn();
     } catch (err) {
+      if (err instanceof RateLimitError) {
+        const wait = rateLimitWait(err);
+        throw new DiscordSyncApiError(`Discord's rate limit holds ${err.method.toUpperCase()} ${err.route} for ${Math.ceil(wait / 1000)}s`, 429, null, wait);
+      }
       if (err instanceof DiscordAPIError) throw new DiscordSyncApiError(`Discord: ${err.message} (${err.method.toUpperCase()} ${err.url.replace(/^.*\/api\/v\d+/, "")})`, err.status, err.code);
       throw new DiscordSyncApiError(`Couldn't reach Discord: ${err instanceof Error ? err.message : String(err)}`, null, null);
     }
@@ -176,23 +193,6 @@ export function getDiscordGuildApi(): DiscordGuildApi | null {
 // ---------------------------------------------------------------------------
 // What a Bingo wants in Discord
 // ---------------------------------------------------------------------------
-
-const NAME_MAX = 100;
-
-/** A Team's text channel name: Discord's own rules (lowercase, no spaces), so a sync doesn't see a "change" it made. */
-export function textChannelName(teamName: string): string {
-  const name = teamName
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, NAME_MAX);
-  return name || "team";
-}
-
-function displayName(name: string, fallback: string): string {
-  return name.trim().slice(0, NAME_MAX) || fallback;
-}
 
 /** "#e74c3c" (or "e74c3c") as Discord's integer color; 0 (no color) for anything else. */
 export function roleColor(hex: string | null): number {
@@ -216,13 +216,13 @@ const VIEW = bits(PermissionFlagsBits.ViewChannel);
 // (Manage Permissions in a channel) can't be granted by an overwrite unless the bot is an Administrator, so it isn't.
 const BOT_ACCESS = bits(PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.Connect);
 
-function overwrites(guildId: string, botId: string, staffRoleId: string | null, grants: { id: string; allow: string }[]): PermissionOverwrite[] {
+function overwrites(guildId: string, botId: string, grants: { id: string; allow: string }[]): PermissionOverwrite[] {
   return [
     // The @everyone role's id is the guild's own.
     { id: guildId, type: OverwriteType.Role, allow: "0", deny: VIEW },
     { id: botId, type: OverwriteType.Member, allow: BOT_ACCESS, deny: "0" },
     ...grants.map((g) => ({ id: g.id, type: OverwriteType.Role, allow: g.allow, deny: "0" })),
-  ].concat(staffRoleId ? [{ id: staffRoleId, type: OverwriteType.Role, allow: grants[0]?.allow ?? VIEW, deny: "0" }] : []);
+  ];
 }
 
 interface RoleApplied extends RoleBody {
@@ -245,8 +245,8 @@ function parseApplied<T>(row: ResourceRow): Partial<T> {
 // When a Bingo is synced
 // ---------------------------------------------------------------------------
 
-/** From the Draft on the Teams exist; before it Captains (and so Teams) still come and go. */
-const SYNC_STAGES: readonly Bingo["stage"][] = ["draft", "reveal", "live", "complete"];
+/** Once the Draft has finished, the same moment the Wise Old Man competition is made (syncWomCompetitionAfterDraft). */
+const SYNC_STAGES: readonly Bingo["stage"][] = ["reveal", "live", "complete"];
 
 // E2E test hook, same convention as WOM_COMPETITION_SYNC_DISABLED.
 function syncDisabled(): boolean {
@@ -260,7 +260,7 @@ export function discordSyncBlocker(bingo: Pick<Bingo, "slug" | "stage" | "histor
   // A test data Bingo's made-up Players and Teams must never reach the real server.
   if (bingo.slug.startsWith(TESTDATA_PREFIX)) return "A test data bingo is never synced to Discord.";
   if (bingo.historical) return "A historical bingo is never synced to Discord.";
-  if (!SYNC_STAGES.includes(bingo.stage)) return "Starts once the bingo reaches the Draft.";
+  if (!SYNC_STAGES.includes(bingo.stage)) return "Starts when the draft finishes, with the Wise Old Man competition.";
   return null;
 }
 
@@ -318,9 +318,19 @@ async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, api
     await reconcile(db, bingo, api, options, changes);
     db.update(bingos).set({ discordSyncError: null, discordSyncedAt: clockNow() }).where(eq(bingos.id, bingoId)).run();
   } catch (err) {
-    const message = err instanceof DiscordSyncApiError && err.code === MISSING_PERMISSIONS ? `${err.message}. Check the bot's permissions and that its role is above the Team roles.` : err instanceof Error ? err.message : String(err);
+    const message =
+      err instanceof DiscordSyncApiError && err.code === MISSING_PERMISSIONS
+        ? `${err.message}. Check the bot's permissions and that its role is above the Team roles.`
+        : err instanceof DiscordSyncApiError && err.retryAfterMs !== null
+          ? `${err.message}; trying again then.`
+          : err instanceof Error
+            ? err.message
+            : String(err);
+    if (err instanceof DiscordSyncApiError && err.retryAfterMs !== null) {
+      setTimeout(() => void syncDiscordTeams(db, bingoId, {}, api), err.retryAfterMs + 1000).unref();
+    }
     log.warn("discord team sync failed", { bingoId, err: message });
-    // Recorded once per distinct failure: a broken setup would otherwise add one per Draft pick.
+    // Recorded once per distinct failure: a broken setup would otherwise add one per change.
     if (bingo.discordSyncError !== message) {
       audit(db, { action: "discord.sync_failed", bingoId, entity: { type: "bingo", id: bingoId, label: bingo.name }, details: { message }, actor: "system" });
     }
@@ -336,18 +346,17 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
   const reason = `Tectonic Bingo: ${bingo.name}`.slice(0, 512);
   const botId = await api.botUserId();
   const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingo.id)).all();
-  const rowFor = (teamId: string | null, kind: ResourceKind) => rows.find((r) => r.teamId === teamId && r.kind === kind);
+  const rowFor = (teamId: string | null, kind: ResourceKind, channelKey: string | null = null) => rows.find((r) => r.teamId === teamId && r.kind === kind && r.channelKey === channelKey);
 
   /** Creates the object, or edits it when what's wanted differs from what was last sent (or always, when forced). */
   async function ensure<T extends object>(
-    teamId: string | null,
-    kind: ResourceKind,
+    where: { teamId: string | null; kind: ResourceKind; channelKey?: string },
     label: string,
     wanted: T,
     ops: { create: () => Promise<string>; edit: (id: string) => Promise<void> },
-    applied: (row: ResourceRow | undefined) => object = (row) => wanted,
+    applied: (row: ResourceRow | undefined) => object = () => wanted,
   ): Promise<{ id: string; recreated: boolean }> {
-    const row = rowFor(teamId, kind);
+    const row = rowFor(where.teamId, where.kind, where.channelKey ?? null);
     if (row) {
       const differs = !sameJson(pick(parseApplied<T>(row), wanted), wanted);
       if (!differs && !options.force) return { id: row.discordId, recreated: false };
@@ -368,24 +377,32 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
       row.discordId = id;
       row.appliedJson = appliedJson;
     } else {
-      rows.push(db.insert(discordResources).values({ bingoId: bingo.id, teamId, kind, discordId: id, appliedJson, createdAt: clockNow(), updatedAt: clockNow() }).returning().get());
+      const values = { bingoId: bingo.id, teamId: where.teamId, kind: where.kind, channelKey: where.channelKey ?? null, discordId: id, appliedJson, createdAt: clockNow(), updatedAt: clockNow() };
+      rows.push(db.insert(discordResources).values(values).returning().get());
     }
     changes.created.push(label);
     return { id, recreated: true };
   }
 
-  // The category everything sits under, named after the Bingo.
+  // The category everything sits under. Every channel the sync makes goes in it, so it always knows where they go.
   const categoryBody: ChannelBody = {
-    name: displayName(bingo.name, "Bingo"),
+    name: discordCategoryName(bingo.discordCategoryName, bingo.name),
     type: ChannelType.GuildCategory,
-    permission_overwrites: overwrites(api.guildId, botId, bingo.discordStaffRoleId, []),
+    permission_overwrites: overwrites(api.guildId, botId, []),
   };
-  const category = await ensure(null, "category", `category "${categoryBody.name}"`, categoryBody, {
+  const category = await ensure({ teamId: null, kind: "category" }, `category "${categoryBody.name}"`, categoryBody, {
     create: () => api.createChannel(categoryBody, reason),
     edit: (id) => api.editChannel(id, categoryBody, reason),
   });
 
-  const teamRows = db.select().from(teams).where(eq(teams.bingoId, bingo.id)).all();
+  const templates = parseDiscordChannels(bingo.discordChannelsJson);
+  // Teams in their draft order, so each Team's channels sit together in the category in the same order as on the site.
+  const teamRows = db
+    .select()
+    .from(teams)
+    .where(eq(teams.bingoId, bingo.id))
+    .all()
+    .sort((a, b) => (a.draftOrder ?? Infinity) - (b.draftOrder ?? Infinity) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
   const memberRows = teamRows.length
     ? db
         .select({ teamId: teamMembers.teamId, discordId: users.discordId, inGuild: users.inGuild })
@@ -395,40 +412,57 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
         .all()
     : [];
 
-  for (const team of teamRows) {
-    const teamName = displayName(team.name, "Team");
+  for (const [teamIndex, team] of teamRows.entries()) {
     // A Player who isn't in the server can't hold a role (a Historical import's are the only ones without one).
     const members = memberRows
       .filter((m) => m.teamId === team.id && m.inGuild !== false && /^\d+$/.test(m.discordId))
       .map((m) => m.discordId)
       .sort();
 
-    const roleBody: RoleBody = { name: teamName, color: roleColor(team.color), mentionable: true };
-    const role = await ensure(team.id, "role", `role "${teamName}"`, roleBody, {
+    const roleBody: RoleBody = { name: discordRoleName(team.name), color: roleColor(team.color), mentionable: true };
+    const role = await ensure({ teamId: team.id, kind: "role" }, `role "${roleBody.name}"`, roleBody, {
       create: () => api.createRole(roleBody, reason),
       edit: (id) => api.editRole(id, roleBody, reason),
     }, (row) => ({ ...roleBody, members: row ? (parseApplied<RoleApplied>(row).members ?? []) : [] }));
-    await syncRoleMembers(db, rowFor(team.id, "role")!, role.id, members, options.force || role.recreated, reason, api, changes);
+    await syncRoleMembers(db, rowFor(team.id, "role")!, role.id, members, !!options.force || role.recreated, reason, api, changes);
 
-    for (const [kind, type, name, access] of [
-      ["text_channel", ChannelType.GuildText, textChannelName(teamName), TEXT_ACCESS],
-      ["voice_channel", ChannelType.GuildVoice, teamName, VOICE_ACCESS],
-    ] as const) {
-      const body: ChannelBody = { name, type, parent_id: category.id, permission_overwrites: overwrites(api.guildId, botId, bingo.discordStaffRoleId, [{ id: role.id, allow: access }]) };
-      await ensure(team.id, kind, `${kind === "text_channel" ? "text" : "voice"} channel "${name}"`, body, {
+    for (const [templateIndex, template] of templates.entries()) {
+      const body = channelBody(template, team.name, category.id, teamIndex * templates.length + templateIndex, overwrites(api.guildId, botId, [{ id: role.id, allow: template.type === "text" ? TEXT_ACCESS : VOICE_ACCESS }]));
+      await ensure({ teamId: team.id, kind: channelKind(template), channelKey: template.key }, `${template.type} channel "${body.name}"`, body, {
         create: () => api.createChannel(body, reason),
         edit: (id) => api.editChannel(id, body, reason),
       });
     }
   }
 
-  // What's left of Teams that are gone (deleted, or undone by moving the Bingo back).
+  // What's no longer wanted: everything of a Team that's gone (deleted, or undone by moving the Bingo back), and every
+  // Team's channel for an entry taken off the list (or whose type changed, which Discord can only do by replacing it).
   const teamIds = new Set(teamRows.map((t) => t.id));
-  const orphans = rows.filter((r) => r.teamId !== null && !teamIds.has(r.teamId));
+  const wantedChannels = new Set(templates.map((t) => `${channelKind(t)}:${t.key}`));
+  const orphans = rows.filter((r) => r.teamId !== null && (!teamIds.has(r.teamId) || (r.kind !== "role" && !wantedChannels.has(`${r.kind}:${r.channelKey}`))));
   for (const row of orphanOrder(orphans)) {
     await deleteResource(db, row, reason, api);
-    changes.deleted.push(`${row.kind.replace("_", " ")} of a removed team`);
+    const name = parseApplied<ChannelBody & RoleBody>(row).name;
+    changes.deleted.push(`${row.kind.replace("_", " ")}${name ? ` "${name}"` : ""}`);
   }
+}
+
+function channelKind(template: Pick<DiscordChannelTemplate, "type">): "text_channel" | "voice_channel" {
+  return template.type === "text" ? "text_channel" : "voice_channel";
+}
+
+/**
+ * One Team's channel for one entry of the list: in the Bingo's category, at its place (Teams in draft order, each
+ * Team's channels in the list's order; Discord still shows a category's text channels above its voice ones).
+ */
+function channelBody(template: DiscordChannelTemplate, teamName: string, categoryId: string, position: number, permissionOverwrites: PermissionOverwrite[]): ChannelBody {
+  return {
+    name: discordChannelName(template, teamName),
+    type: template.type === "text" ? ChannelType.GuildText : ChannelType.GuildVoice,
+    parent_id: categoryId,
+    position,
+    permission_overwrites: permissionOverwrites,
+  };
 }
 
 /** Only the keys `wanted` has, so a stored role's member list doesn't count as a difference in its name or color. */
@@ -446,17 +480,17 @@ function saveApplied(db: Db, row: ResourceRow, applied: object): void {
  * from people the sync gave it to (the role's stored member list), so a role an Admin handed out by hand stays.
  */
 async function syncRoleMembers(db: Db, row: ResourceRow, roleId: string, wanted: string[], resendAll: boolean, reason: string, api: DiscordGuildApi, changes: SyncChanges): Promise<void> {
-  const had = new Set(resendAll ? [] : (parseApplied<RoleApplied>(row).members ?? []));
+  const had = new Set(parseApplied<RoleApplied>(row).members ?? []);
   const want = new Set(wanted);
   const members = new Set(had);
   const save = () => saveApplied(db, row, { ...parseApplied(row), members: [...members].sort() });
   try {
     for (const id of want) {
-      if (had.has(id)) continue;
+      if (had.has(id) && !resendAll) continue;
       try {
         await api.addMemberRole(id, roleId, reason);
+        if (!had.has(id)) changes.membersAdded++;
         members.add(id);
-        changes.membersAdded++;
       } catch (err) {
         // Not in the server: they get it on a later sync once they've joined and logged in again.
         if (!isUnknownMember(err)) throw err;
@@ -538,12 +572,18 @@ export function removeDiscordTeams(db: Db, bingoId: string, api: DiscordGuildApi
 export function getDiscordSyncStatus(db: Db, bingo: Bingo, api: DiscordGuildApi | null = getDiscordGuildApi()): DiscordSyncStatus {
   const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingo.id)).all();
   const teamRows = db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingo.id)).all();
-  const idOf = (teamId: string, kind: ResourceKind) => rows.find((r) => r.teamId === teamId && r.kind === kind)?.discordId ?? null;
+  const templates = parseDiscordChannels(bingo.discordChannelsJson);
+  const idOf = (teamId: string, kind: ResourceKind, channelKey: string | null = null) => rows.find((r) => r.teamId === teamId && r.kind === kind && r.channelKey === channelKey)?.discordId ?? null;
   return {
     blocker: discordSyncBlocker(bingo, api),
     guildId: api?.guildId ?? process.env.DISCORD_GUILD_ID ?? null,
     categoryId: db.select().from(discordResources).where(and(eq(discordResources.bingoId, bingo.id), isNull(discordResources.teamId), eq(discordResources.kind, "category"))).get()?.discordId ?? null,
-    teams: teamRows.map((t) => ({ teamId: t.id, teamName: t.name, roleId: idOf(t.id, "role"), textChannelId: idOf(t.id, "text_channel"), voiceChannelId: idOf(t.id, "voice_channel") })),
+    teams: teamRows.map((t) => ({
+      teamId: t.id,
+      teamName: t.name,
+      roleId: idOf(t.id, "role"),
+      channels: templates.map((c) => ({ key: c.key, channelId: idOf(t.id, channelKind(c), c.key) })),
+    })),
     resourceCount: rows.length,
   };
 }

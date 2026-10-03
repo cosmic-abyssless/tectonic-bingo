@@ -903,7 +903,6 @@ router.post(
     const picks = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     const [first] = picks;
     broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
-    void syncDiscordTeams(db, bingo.id);
     res.status(201).json({ picks });
   }),
 );
@@ -917,7 +916,6 @@ router.post(
     const bingo = req.bingo!;
     const undone = draftService.undoLastPick(db, { bingo, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     broadcast({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
-    void syncDiscordTeams(db, bingo.id);
     res.json({ undone });
   }),
 );

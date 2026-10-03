@@ -1,6 +1,7 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
 import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import { DEFAULT_DISCORD_CHANNELS } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
@@ -49,7 +50,7 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 
 /**
  * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, turns on
- * the Discord team sync, and sets its theme when one was asked for (the import keeps the board's own otherwise).
+ * the Discord team sync (with an extra channel), and sets its theme when one was asked for (the import keeps the board's own otherwise).
  */
 export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
@@ -63,9 +64,10 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
       revealScheduledAt: tl.revealAt.toISOString(),
       startsAt: tl.startsAt.toISOString(),
       endsAt: tl.endsAt.toISOString(),
-      // Discord team roles and channels on, as an admin would: the settings panel shows it, while the sync itself
-      // never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).
+      // Discord team roles and channels on, with a channel added to the list, as an admin would: the settings panel
+      // shows it, while the sync itself never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).
       discordEnabled: true,
+      discordChannels: [...DEFAULT_DISCORD_CHANNELS, { key: "loot", type: "text", name: "{team}-loot" }],
     },
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );

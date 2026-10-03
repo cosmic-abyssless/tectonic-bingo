@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Bingo, DiscordSyncStatus } from "@bingo/shared";
+import { discordChannelName, type Bingo, type DiscordSyncStatus } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
 import { Button } from "../ui/Button";
@@ -52,9 +52,6 @@ export function DiscordSyncPanel({ slug, bingo, onRemoved }: { slug: string; bin
     }
   }
 
-  const channelLink = (channelId: string | null, label: string) =>
-    channelId && status?.guildId ? <ExternalLink href={`https://discord.com/channels/${status.guildId}/${channelId}`}>{label}</ExternalLink> : <span className="text-on-surface-subtle">not made yet</span>;
-
   return (
     <div className="space-y-3">
       {status?.blocker && <Notice tone="neutral">Not syncing: {status.blocker}</Notice>}
@@ -74,10 +71,21 @@ export function DiscordSyncPanel({ slug, bingo, onRemoved }: { slug: string; bin
             {status.teams.map((t) => (
               <tr key={t.teamId} className="border-t border-outline">
                 <td className="py-1.5 text-on-surface">{t.teamName}</td>
-                <td className="py-1.5">{t.roleId ? <span className="num">{t.roleId}</span> : <span className="text-on-surface-subtle">not made yet</span>}</td>
+                <td className="py-1.5">{t.roleId ? "made" : <span className="text-on-surface-subtle">not made yet</span>}</td>
                 <td className="space-x-3 py-1.5">
-                  {channelLink(t.textChannelId, "text")}
-                  {t.voiceChannelId && channelLink(t.voiceChannelId, "voice")}
+                  {t.channels.map((c) => {
+                    const template = bingo.discordChannels.find((d) => d.key === c.key);
+                    const label = template ? discordChannelName(template, t.teamName) : "channel";
+                    return (
+                      <span key={c.key}>
+                        {c.channelId && status.guildId ? (
+                          <ExternalLink href={`https://discord.com/channels/${status.guildId}/${c.channelId}`}>{label}</ExternalLink>
+                        ) : (
+                          <span className="text-on-surface-subtle">{label} (not made yet)</span>
+                        )}
+                      </span>
+                    );
+                  })}
                 </td>
               </tr>
             ))}

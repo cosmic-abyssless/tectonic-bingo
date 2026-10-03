@@ -88,7 +88,7 @@ target (say `signup`), the later dates are simply scheduled in the future.
 ## What it does
 
 1. Imports the board and sets the dates (signups open, draft, reveal, start, end), turning on the **Discord team
-   sync** in the same settings request (never synced for a `testdata-` bingo; see below). Unless the board already has an
+   sync** in the same settings request, with a `{team}-loot` channel added to its channel list (never synced for a `testdata-` bingo; see below). Unless the board already has an
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.

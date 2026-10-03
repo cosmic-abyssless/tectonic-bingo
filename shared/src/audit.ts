@@ -112,7 +112,8 @@ export interface AuditDetailsMap {
       womGroupId: string | null;
       womGroupVerificationCode: string;
       discordEnabled: boolean;
-      discordStaffRoleId: string | null;
+      discordCategoryName: string | null;
+      discordChannelsJson: string;
       achievementsEnabled: boolean;
       sealedTiles: boolean;
       hideRules: boolean;

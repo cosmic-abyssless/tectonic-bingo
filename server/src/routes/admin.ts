@@ -100,7 +100,9 @@ router.patch(
       if (typeof body.discordEnabled !== "boolean") throw new ServiceError(400, "discordEnabled must be a boolean");
       params.discordEnabled = body.discordEnabled;
     }
-    if ("discordStaffRoleId" in body) params.discordStaffRoleId = body.discordStaffRoleId ? String(body.discordStaffRoleId).trim() : null;
+    if ("discordCategoryName" in body) params.discordCategoryName = body.discordCategoryName ? String(body.discordCategoryName).trim() || null : null;
+    // Validated and given keys by the service (normalizeDiscordChannels).
+    if ("discordChannels" in body) params.discordChannels = body.discordChannels;
     // Achievements (CONTEXT.md "Achievement"): the master switch, and/or a partial map of per-Achievement switches.
     if ("showScreenshotsWhenFinished" in body) {
       if (typeof body.showScreenshotsWhenFinished !== "boolean") throw new ServiceError(400, "showScreenshotsWhenFinished must be a boolean");
@@ -130,8 +132,8 @@ router.patch(
     if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
-    // The Discord category carries the bingo's name; turning the sync on (or changing the staff role) syncs everything.
-    if (params.name !== undefined || params.discordEnabled || params.discordStaffRoleId !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    // The Discord category carries the bingo's name; turning the sync on, or editing its category or channels, applies them.
+    if (params.name !== undefined || params.discordEnabled || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

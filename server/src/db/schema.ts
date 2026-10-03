@@ -179,11 +179,13 @@ export const bingos = sqliteTable('bingos', {
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
   historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
   // Discord team sync (discordTeamService.ts): when on, every Team gets a Discord role (its name, color and members)
-  // and its own text and voice channels, under a category named after the Bingo, kept up to date from the Draft on.
-  // Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
+  // and its own channels, under a category named after the Bingo (or discordCategoryName), from the moment the Draft
+  // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
   discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
-  // An existing guild role (e.g. the clan's staff role) that may see every Team's channels. Null: only the Team does.
-  discordStaffRoleId: text('discord_staff_role_id'),
+  discordCategoryName: text('discord_category_name'),
+  // The channels every Team gets: a JSON array of DiscordChannelTemplate (shared/src/discord.ts), parsed by
+  // bingoService.parseDiscordChannels and exposed as `discordChannels`. Starts as a text and a voice channel.
+  discordChannelsJson: text('discord_channels_json').notNull().default('[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]'),
   // Last sync failure, surfaced in the settings panel; cleared by the next successful sync.
   discordSyncError: text('discord_sync_error'),
   discordSyncedAt: integer('discord_synced_at', { mode: 'timestamp' }),
@@ -439,6 +441,8 @@ export const discordResources = sqliteTable('discord_resources', {
   // Null for the Bingo's category.
   teamId: text('team_id'),
   kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
+  // A channel's entry in bingos.discord_channels_json (its `key`); null for the category and a role.
+  channelKey: text('channel_key'),
   discordId: text('discord_id').notNull(),
   appliedJson: text('applied_json').notNull().default('{}'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),

@@ -203,7 +203,8 @@ router.post(
     if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
     // With no start date set, the bingo starts when it goes live: the competition's start moves to match.
     if (toStage === "live") void syncWomCompetition(db, bingo.id);
-    // Discord roles and channels start with the Draft; moving back before it removes the Teams it undoes.
+    // Discord roles and channels are made as the draft finishes, alongside the WOM competition; later stage changes
+    // (back to the Draft too, which undoes Teams) keep them in step.
     void syncDiscordTeams(db, bingo.id);
     // Same fire-and-forget convention: snapshot the bingo's WOM competition
     // once it's actually over, so its per-player gains survive independently

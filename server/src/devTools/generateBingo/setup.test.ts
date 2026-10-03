@@ -91,6 +91,7 @@ describe("importBingo", () => {
 
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/admin/bingos/import", "PATCH /api/bingos/testdata-t/admin/settings"]);
     expect(calls[1]!.body).toMatchObject({ theme: "comic", startsAt: at.toISOString(), discordEnabled: true });
+    expect(calls[1]!.body.discordChannels).toContainEqual({ key: "loot", type: "text", name: "{team}-loot" });
 
     // Asked for none, it leaves the theme the import copied from the board alone.
     calls.length = 0;

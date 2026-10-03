@@ -1,4 +1,4 @@
-import { can, type AchievementKey, type CutMode, type ExclusivityGroup, type ExclusivityRule } from "@bingo/shared";
+import { can, discordChannelsProblem, DISCORD_NAME_MAX, type AchievementKey, type CutMode, type DiscordChannelTemplate, type ExclusivityGroup, type ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -92,12 +92,44 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null; discordChannelsJson: string }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil" | "discordChannelsJson"> & { exclusivityRules: ExclusivityRule[]; discordChannels: DiscordChannelTemplate[] } {
   // wrappedCreditsJson is unused (#281), and a category's additional credits go out with the Wrapped art instead.
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, ...rest } = bingo;
-  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, discordChannelsJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), discordChannels: parseDiscordChannels(discordChannelsJson) };
+}
+
+/** The channels every Team gets (Settings > Discord). Tolerant like parseExclusivityRules: what's stored was validated. */
+export function parseDiscordChannels(json: string | null | undefined): DiscordChannelTemplate[] {
+  try {
+    const value: unknown = JSON.parse(json ?? "[]");
+    return Array.isArray(value) ? (value as DiscordChannelTemplate[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Validates a channel list from the settings: trims names, and keeps each entry's key (what ties it to its channels
+ * in Discord, so a rename renames them) or mints one for a new entry.
+ */
+export function normalizeDiscordChannels(input: unknown): DiscordChannelTemplate[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "discordChannels must be an array");
+  const seen = new Set<string>();
+  const channels = input.map((raw): DiscordChannelTemplate => {
+    const c = (raw ?? {}) as Record<string, unknown>;
+    const type = c.type;
+    if (type !== "text" && type !== "voice") throw new ServiceError(400, "A channel is either text or voice");
+    const name = typeof c.name === "string" ? c.name.trim() : "";
+    let key = typeof c.key === "string" && /^[a-z0-9-]{1,40}$/.test(c.key) ? c.key : "";
+    if (!key || seen.has(key)) key = crypto.randomUUID().slice(0, 8);
+    seen.add(key);
+    return { key, type, name };
+  });
+  const problem = discordChannelsProblem(channels);
+  if (problem) throw new ServiceError(400, problem);
+  return channels;
 }
 
 /**
@@ -602,7 +634,8 @@ export interface UpdateBingoSettingsParams {
   womGroupId?: string | null;
   womGroupVerificationCode?: string | null;
   discordEnabled?: boolean;
-  discordStaffRoleId?: string | null;
+  discordCategoryName?: string | null;
+  discordChannels?: unknown;
   // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
   achievementsEnabled?: boolean;
@@ -629,12 +662,13 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    if (params.discordStaffRoleId != null && !/^\d{15,25}$/.test(params.discordStaffRoleId)) {
-      throw new ServiceError(400, "The Discord staff role ID must be a role's numeric ID (Developer Mode > right-click the role > Copy Role ID)");
+    if (params.discordCategoryName != null && params.discordCategoryName.length > DISCORD_NAME_MAX) {
+      throw new ServiceError(400, `The Discord category name is at most ${DISCORD_NAME_MAX} characters`);
     }
-    const { exclusivityRules, achievements: _achievements, ...columns } = params;
+    const { exclusivityRules, achievements: _achievements, discordChannels, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
+    if (discordChannels !== undefined) set.discordChannelsJson = JSON.stringify(normalizeDiscordChannels(discordChannels));
     const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
     const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });

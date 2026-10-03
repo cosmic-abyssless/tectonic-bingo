@@ -5,7 +5,8 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { ChannelType, OverwriteType } from "discord-api-types/v10";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { deleteBingo } from "./bingoService";
+import { deleteBingo, updateBingoSettings } from "./bingoService";
+import { discordChannelName, discordTextChannelName, type DiscordChannelTemplate } from "@bingo/shared";
 import {
   DiscordSyncApiError,
   discordSyncBlocker,
@@ -13,7 +14,6 @@ import {
   removeDiscordTeams,
   roleColor,
   syncDiscordTeams,
-  textChannelName,
   type ChannelBody,
   type DiscordGuildApi,
   type RoleBody,
@@ -100,6 +100,11 @@ class FakeGuild implements DiscordGuildApi {
   }
 }
 
+/** A channel list, keys c0, c1, ... */
+function channels(...entries: [DiscordChannelTemplate["type"], string][]): DiscordChannelTemplate[] {
+  return entries.map(([type, name], i) => ({ key: `c${i}`, type, name }));
+}
+
 let discordUserSeq = 0;
 function user(name: string, overrides: Partial<typeof schema.users.$inferInsert> = {}) {
   const discordId = String(300000000000000000n + BigInt(++discordUserSeq));
@@ -142,10 +147,15 @@ afterEach(() => {
 
 describe("names and colors", () => {
   it("makes a text channel name the way Discord would", () => {
-    expect(textChannelName("Red Dragons")).toBe("red-dragons");
-    expect(textChannelName("  The *Best*  Team!! ")).toBe("the-best-team");
-    expect(textChannelName("Ærø Ünïcode")).toBe("ærø-ünïcode");
-    expect(textChannelName("!!!")).toBe("team");
+    expect(discordTextChannelName("Red Dragons")).toBe("red-dragons");
+    expect(discordTextChannelName("  The *Best*  Team!! ")).toBe("the-best-team");
+    expect(discordTextChannelName("Ærø Ünïcode")).toBe("ærø-ünïcode");
+    expect(discordTextChannelName("!!!")).toBe("team");
+  });
+
+  it("names a Team's channel from its entry in the list", () => {
+    expect(discordChannelName({ type: "text", name: "{team}-loot" }, "Red Dragons")).toBe("red-dragons-loot");
+    expect(discordChannelName({ type: "voice", name: "{team} Voice" }, "Red Dragons")).toBe("Red Dragons Voice");
   });
 
   it("reads a hex color, and anything else as no color", () => {
@@ -158,11 +168,12 @@ describe("names and colors", () => {
 
 describe("discordSyncBlocker", () => {
   const base = { slug: "spring", stage: "reveal" as const, historical: false, discordEnabled: true };
-  it("syncs from the Draft on", () => {
+  it("syncs once the Draft has finished, with the Wise Old Man competition", () => {
     expect(discordSyncBlocker(base, guild)).toBeNull();
-    expect(discordSyncBlocker({ ...base, stage: "draft" }, guild)).toBeNull();
+    expect(discordSyncBlocker({ ...base, stage: "live" }, guild)).toBeNull();
     expect(discordSyncBlocker({ ...base, stage: "complete" }, guild)).toBeNull();
-    expect(discordSyncBlocker({ ...base, stage: "captains" }, guild)).toMatch(/Draft/);
+    expect(discordSyncBlocker({ ...base, stage: "draft" }, guild)).toMatch(/draft finishes/);
+    expect(discordSyncBlocker({ ...base, stage: "captains" }, guild)).toMatch(/draft finishes/);
   });
   it("never syncs without a bot, when off, or for test data and historical bingos", () => {
     expect(discordSyncBlocker(base, null)).toMatch(/DISCORD_BOT_TOKEN/);
@@ -295,14 +306,81 @@ describe("syncDiscordTeams", () => {
     expect(text.permission_overwrites.some((o) => o.id === newRoleId)).toBe(true);
   });
 
-  it("lets the staff role see every channel", async () => {
-    const { bingo } = seed({ discordStaffRoleId: "400000000000000000" });
+  it("makes the channels the list asks for, each Team's together and in the list's order", async () => {
+    const { bingo, captain } = seed({ discordChannelsJson: JSON.stringify(channels(["text", "{team}"], ["text", "{team}-loot"], ["voice", "{team} Voice"])) });
+    const blue = user("blue");
+    db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: blue.id, name: "Blue Whales", codeword: "blue-x", draftOrder: 0 }).run();
+    db.update(schema.teams).set({ draftOrder: 1 }).where(eq(schema.teams.captainUserId, captain.id)).run();
     await syncDiscordTeams(db, bingo.id, {}, guild);
-    for (const channel of guild.channels.values()) expect(channel.permission_overwrites.some((o) => o.id === "400000000000000000")).toBe(true);
+
+    const inOrder = [...guild.channels.values()].filter((c) => c.type !== ChannelType.GuildCategory).sort((a, b) => a.position! - b.position!).map((c) => c.name);
+    expect(inOrder).toEqual(["blue-whales", "blue-whales-loot", "Blue Whales Voice", "red-dragons", "red-dragons-loot", "Red Dragons Voice"]);
+    const [categoryId] = guild.channelNamed("Spring Bingo", ChannelType.GuildCategory)!;
+    for (const c of guild.channels.values()) if (c.type !== ChannelType.GuildCategory) expect(c.parent_id).toBe(categoryId);
+  });
+
+  it("renames a Team's channels when their entry is renamed, keeping them", async () => {
+    const { bingo } = seed({ discordChannelsJson: JSON.stringify(channels(["text", "{team}"])) });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const [id] = guild.channelNamed("red-dragons", ChannelType.GuildText)!;
+    guild.calls = [];
+    db.update(schema.bingos).set({ discordChannelsJson: JSON.stringify(channels(["text", "{team}-chat"])) }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(guild.calls).toEqual(["editChannel red-dragons-chat"]);
+    expect(guild.channels.get(id)!.name).toBe("red-dragons-chat");
+  });
+
+  it("adds a new entry's channels to every Team, and deletes a removed one's", async () => {
+    const { bingo } = seed({ discordChannelsJson: JSON.stringify(channels(["text", "{team}"], ["voice", "{team}"])) });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    guild.calls = [];
+    db.update(schema.bingos).set({ discordChannelsJson: JSON.stringify(channels(["text", "{team}"], ["text", "{team}-loot"])) }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(guild.calls.sort()).toEqual(["createChannel red-dragons-loot", "deleteChannel Red Dragons"]);
+    expect(auditActions()).toContain("discord.synced");
+  });
+
+  it("replaces a Team's channel when its entry changes from text to voice", async () => {
+    const { bingo } = seed({ discordChannelsJson: JSON.stringify(channels(["text", "{team}"])) });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    db.update(schema.bingos).set({ discordChannelsJson: JSON.stringify([{ key: "c0", type: "voice", name: "{team}" }]) }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect([...guild.channels.values()].map((c) => c.type).sort()).toEqual([ChannelType.GuildVoice, ChannelType.GuildCategory].sort());
+  });
+
+  it("names the category as set, or after the bingo", async () => {
+    const { bingo } = seed({ discordCategoryName: "Bingo #12" });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(guild.channelNamed("Bingo #12", ChannelType.GuildCategory)).toBeDefined();
+  });
+
+  it("on a forced sync still takes the role from a Player who left the Team", async () => {
+    const { bingo, player } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const [roleId] = guild.roleNamed("Red Dragons")!;
+    db.delete(schema.teamMembers).where(eq(schema.teamMembers.userId, player.id)).run();
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    expect(guild.holders(roleId)).not.toContain(player.discordId);
+  });
+
+  it("stops at a long rate limit and tries again after it", async () => {
+    vi.useFakeTimers();
+    try {
+      const { bingo } = seed();
+      guild.failNext = new DiscordSyncApiError("Discord's rate limit holds PATCH /channels/:id for 300s", 429, null, 300_000);
+      await syncDiscordTeams(db, bingo.id, {}, guild);
+      expect(bingoRow(bingo.id).discordSyncError).toMatch(/trying again then/);
+      expect(guild.roles.size).toBe(0);
+      await vi.advanceTimersByTimeAsync(301_000);
+      expect(bingoRow(bingo.id).discordSyncError).toBeNull();
+      expect(guild.roles.size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does nothing for a test data bingo, before the Draft, or when turned off", async () => {
-    for (const overrides of [{ slug: "testdata-x" }, { stage: "captains" as const }, { discordEnabled: false }]) {
+    for (const overrides of [{ slug: "testdata-x" }, { stage: "draft" as const }, { discordEnabled: false }]) {
       ({ sqlite, db } = createTestDb());
       const { bingo } = seed(overrides);
       await syncDiscordTeams(db, bingo.id, {}, guild);
@@ -371,13 +449,14 @@ describe("removeDiscordTeams", () => {
 describe("getDiscordSyncStatus", () => {
   it("lists each Team's role and channels", async () => {
     const { bingo, team } = seed();
-    expect(getDiscordSyncStatus(db, bingo, guild).teams).toEqual([{ teamId: team.id, teamName: "Red Dragons", roleId: null, textChannelId: null, voiceChannelId: null }]);
+    expect(getDiscordSyncStatus(db, bingo, guild).teams).toEqual([{ teamId: team.id, teamName: "Red Dragons", roleId: null, channels: [{ key: "chat", channelId: null }, { key: "voice", channelId: null }] }]);
     await syncDiscordTeams(db, bingo.id, {}, guild);
     const status = getDiscordSyncStatus(db, bingoRow(bingo.id), guild);
     expect(status.blocker).toBeNull();
     expect(status.guildId).toBe(GUILD);
     expect(status.categoryId).not.toBeNull();
     expect(status.teams[0]!.roleId).toBe(guild.roleNamed("Red Dragons")![0]);
+    expect(status.teams[0]!.channels[0]!.channelId).toBe(guild.channelNamed("red-dragons", ChannelType.GuildText)![0]);
     expect(status.resourceCount).toBe(4);
   });
 });
@@ -431,6 +510,40 @@ describe("RestDiscordGuildApi", () => {
       expect(decodeURIComponent(seen[1]!.reason!)).toBe("Tectonic Bingo: Spring");
       // A channel's type isn't sent on an edit.
       expect(seen[3]!.body).toEqual({ name: "red", parent_id: "cat", permission_overwrites: [] });
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("channel list settings", () => {
+  it("keeps entries' keys, mints them for new ones, and refuses a name without {team}", () => {
+    const { bingo } = seed();
+    const saved = updateBingoSettings(db, bingo.id, { discordChannels: [{ key: "chat", type: "text", name: " {team}-chat " }, { type: "voice", name: "{team}" }] });
+    const list = JSON.parse(saved.discordChannelsJson) as DiscordChannelTemplate[];
+    expect(list[0]).toEqual({ key: "chat", type: "text", name: "{team}-chat" });
+    expect(list[1]!.key).toMatch(/^[a-z0-9-]+$/);
+    expect(() => updateBingoSettings(db, bingo.id, { discordChannels: [{ type: "text", name: "general" }] })).toThrow(/\{team\}/);
+    expect(() => updateBingoSettings(db, bingo.id, { discordChannels: [{ type: "stage", name: "{team}" }] })).toThrow(/text or voice/);
+  });
+});
+
+describe("RestDiscordGuildApi rate limits", () => {
+  it("fails fast on a long one (a channel's third rename in 10 minutes), saying how long", async () => {
+    const { createServer } = await import("node:http");
+    const { RestDiscordGuildApi } = await import("./discordTeamService");
+    const server = createServer((_req, res) => {
+      res.statusCode = 429;
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Retry-After", "300");
+      res.end(JSON.stringify({ message: "You are being rate limited.", retry_after: 300, global: false }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const api = new RestDiscordGuildApi("token", GUILD, `http://127.0.0.1:${(server.address() as { port: number }).port}/api`);
+      const err = await api.editChannel("c1", { name: "x", type: ChannelType.GuildText, permission_overwrites: [] }, "why").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(DiscordSyncApiError);
+      expect((err as DiscordSyncApiError).retryAfterMs).toBeGreaterThanOrEqual(300_000);
     } finally {
       server.close();
     }

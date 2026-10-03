@@ -17,6 +17,7 @@ import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
 import { DiscordSyncPanel } from "./DiscordSyncPanel";
+import { DiscordChannelsEditor, discordChannelsDeleted } from "./DiscordChannelsEditor";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -77,7 +78,8 @@ export function BingoSettingsForm({
     // kept as-is.
     womGroupVerificationCode: "",
     discordEnabled: bingo.discordEnabled,
-    discordStaffRoleId: bingo.discordStaffRoleId ?? "",
+    discordCategoryName: bingo.discordCategoryName ?? "",
+    discordChannels: bingo.discordChannels,
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -107,6 +109,9 @@ export function BingoSettingsForm({
   }
 
   async function save() {
+    // Channels taken off the list (or switched between text and voice) are deleted from Discord with their messages.
+    const deleted = discordChannelsDeleted(bingo.discordChannels, form.discordChannels);
+    if (deleted.length > 0 && bingo.discordEnabled && !confirm(`Saving deletes every team's ${deleted.map((c) => `"${c.name}"`).join(", ")} channel in Discord, with its messages. Save anyway?`)) return;
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -136,7 +141,8 @@ export function BingoSettingsForm({
         // Omit entirely when blank so the server keeps the existing code.
         ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
         discordEnabled: form.discordEnabled,
-        discordStaffRoleId: form.discordStaffRoleId.trim() || null,
+        discordCategoryName: form.discordCategoryName.trim() || null,
+        discordChannels: form.discordChannels,
       });
       setForm((f) => ({ ...f, womGroupVerificationCode: "" }));
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
@@ -268,13 +274,15 @@ export function BingoSettingsForm({
 
       <IntegrationSection title="Discord" switchLabel="Enable Discord team roles and channels" enabled={form.discordEnabled} onToggle={(discordEnabled) => setForm({ ...form, discordEnabled })}>
         <Notice tone="info">
-          When enabled, every team gets a Discord role in its color, given to its players, and its own private text and voice channels, under a category
-          named after the bingo. It starts with the draft and keeps up from then on: renames, colors, players drafted, removed or signed up late. Nothing
-          is deleted when the bingo finishes; remove it all below once you're done with it.
+          When enabled, every team gets a Discord role in its color, given to its players, and the channels below, private to that role, all in one
+          category the bot makes for this bingo. They're made when the draft finishes, with the Wise Old Man competition, then kept up to date: renames,
+          colors, players removed or signed up late, and changes to this list. Nothing is deleted when the bingo finishes; remove it all below once
+          you're done with it.
         </Notice>
-        <Field label="Staff role ID (optional)" hint="A Discord role that may see every team's channels, e.g. the clan's staff. In Discord: Developer Mode, then right-click the role > Copy Role ID.">
-          <Input value={form.discordStaffRoleId} onChange={(e) => setForm({ ...form, discordStaffRoleId: e.target.value })} className="num" />
+        <Field label="Category name" hint="Where every team's channels go. Blank: the bingo's name.">
+          <Input value={form.discordCategoryName} placeholder={form.name} onChange={(e) => setForm({ ...form, discordCategoryName: e.target.value })} />
         </Field>
+        <DiscordChannelsEditor channels={form.discordChannels} onChange={(discordChannels) => setForm({ ...form, discordChannels })} />
         <DiscordSyncPanel slug={slug} bingo={bingo} onRemoved={() => setForm((f) => ({ ...f, discordEnabled: false }))} />
       </IntegrationSection>
 
