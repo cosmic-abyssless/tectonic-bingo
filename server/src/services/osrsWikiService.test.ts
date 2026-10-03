@@ -106,13 +106,20 @@ describe("OsrsWikiClient.bossPage", () => {
     );
     expect(await client.bossPage("kq")).toEqual({ title: "Kalphite Queen", redirects: ["Kq", "KQ", "Kal queen"] });
     const first = urls[0]!.searchParams;
-    expect(Object.fromEntries(first)).toMatchObject({ action: "query", prop: "redirects|categories", titles: "kq", redirects: "1", rdnamespace: "0", rdlimit: "max", clcategories: "Category:Bosses", formatversion: "2" });
+    expect(Object.fromEntries(first)).toMatchObject({ action: "query", prop: "redirects|categories", titles: "kq", redirects: "1", rdnamespace: "0", rdlimit: "max", clcategories: "Category:Bosses|Category:Raids", formatversion: "2" });
     expect(urls[1]!.searchParams.get("rdcontinue")).toBe("108248");
   });
 
-  it("is null for a page that doesn't exist, or isn't in the Bosses category", async () => {
+  it("is null for a page that doesn't exist, or isn't in the Bosses or Raids category", async () => {
     expect(await wikiReplies({ query: { pages: [{ title: "Nope", missing: true }] } }).client.bossPage("Nope")).toBeNull();
     expect(await wikiReplies({ query: { pages: [{ title: "Abyssal whip", redirects: [{ title: "Whip" }] }] } }).client.bossPage("Abyssal whip")).toBeNull();
+  });
+
+  it("takes a raid (the Raids category), but not the Raids category's overview page", async () => {
+    const raids = [{ ns: 14, title: "Category:Raids" }];
+    const cox = { query: { pages: [{ title: "Chambers of Xeric", redirects: [{ title: "CoX" }, { title: "Raids 1" }], categories: raids }] } };
+    expect(await wikiReplies(cox).client.bossPage("cox")).toEqual({ title: "Chambers of Xeric", redirects: ["CoX", "Raids 1"] });
+    expect(await wikiReplies({ query: { pages: [{ title: "Raids", redirects: [{ title: "Raid" }], categories: raids }] } }).client.bossPage("Raids")).toBeNull();
   });
 
   it("throws WikiUnavailableError when the wiki can't be reached or answers with an error", async () => {
@@ -128,17 +135,22 @@ describe("OsrsWikiClient.bossPage", () => {
 describe("OsrsWikiClient.searchBosses", () => {
   const members = (titles: string[]) => ({ query: { categorymembers: titles.map((title) => ({ ns: 0, title })) } });
 
-  it("lists the Bosses category once, then filters it as typed, names starting with the query first", async () => {
+  it("lists the Bosses and Raids categories once, then filters them as typed, names starting with the query first", async () => {
     const { client, urls, fetchImpl } = wikiReplies(
       { continue: { cmcontinue: "page|x", continue: "-||" }, ...members(["Abyssal Sire", "Kalphite Queen"]) },
       members(["Sarachnis", "Vorkath"]),
+      // The Raids category: its overview page is left out, and a page in both categories is listed once.
+      members(["Chambers of Xeric", "Raids", "Sarachnis"]),
     );
     expect((await client.searchBosses("sar")).map((b) => b.name)).toEqual(["Sarachnis"]);
-    expect((await client.searchBosses("S")).map((b) => b.name)).toEqual(["Sarachnis", "Abyssal Sire"]);
+    expect((await client.searchBosses("S")).map((b) => b.name)).toEqual(["Sarachnis", "Abyssal Sire", "Chambers of Xeric"]);
     expect(await client.searchBosses("vork")).toEqual([{ name: "Vorkath", wikiUrl: "https://oldschool.runescape.wiki/w/Vorkath" }]);
-    expect(fetchImpl).toHaveBeenCalledTimes(2); // the listing's two pages, then no more calls
+    expect((await client.searchBosses("xeric")).map((b) => b.name)).toEqual(["Chambers of Xeric"]);
+    expect(await client.searchBosses("raids")).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3); // the Bosses listing's two pages and the Raids one, then no more calls
     expect(Object.fromEntries(urls[0]!.searchParams)).toMatchObject({ list: "categorymembers", cmtitle: "Category:Bosses", cmnamespace: "0", cmlimit: "max" });
     expect(urls[1]!.searchParams.get("cmcontinue")).toBe("page|x");
+    expect(urls[2]!.searchParams.get("cmtitle")).toBe("Category:Raids");
   });
 
   it("asks nothing for a blank query, and throws WikiUnavailableError when the wiki can't be reached", async () => {

@@ -17,11 +17,13 @@
 // rather than this service verifying each icon before returning.
 //
 // Boss tags (CONTEXT.md "Tag") use two more calls, both made only from the board editor, never at search time:
-// - the Bosses category's pages (`list=categorymembers`, main namespace), fetched whole (under 200 pages) and kept
-//   for a few hours, so the boss picker can filter it as the admin types;
+// - the Bosses and Raids categories' pages (`list=categorymembers`, main namespace), fetched whole (under 200 pages)
+//   and kept for a few hours, so the boss picker can filter them as the admin types. A raid (Chambers of Xeric) is
+//   searched for as a whole as often as its bosses are, so it can be a Boss tag too; the Raids category's overview
+//   page, "Raids", isn't one raid and is left out;
 // - one boss page's redirects (`prop=redirects`), which are the wiki's other names for it: aliases ("Sire", "kq") and
 //   the misspellings people searched for ("Abbysal sire"). `prop=categories` in the same call says whether the page
-//   is in the Bosses category, and `redirects=1` follows a title that is itself a redirect to the boss's page.
+//   is in the Bosses or Raids category, and `redirects=1` follows a title that is itself a redirect to the boss's page.
 // Unlike the item search, these fail loudly (WikiUnavailableError), so the editor can say the wiki couldn't be reached.
 import { TAG_MAX_LENGTH, tagKey, type OsrsBossSearchResult, type OsrsItemSearchResult } from "@bingo/shared";
 import { USER_AGENT } from "../config";
@@ -29,8 +31,10 @@ import { log } from "../log";
 
 const WIKI_BASE_URL = "https://oldschool.runescape.wiki";
 const WIKI_USER_AGENT = `${USER_AGENT} item search`;
-const BOSSES_CATEGORY = "Category:Bosses";
-// The Bosses category barely changes; a few hours keeps the picker from asking the wiki on every keystroke.
+const BOSS_CATEGORIES = ["Category:Bosses", "Category:Raids"];
+// Pages in those categories that aren't one boss or raid: the Raids category's overview.
+const NOT_A_BOSS = new Set(["Raids"]);
+// The categories barely change; a few hours keeps the picker from asking the wiki on every keystroke.
 const BOSS_LIST_TTL_MS = 6 * 3600_000;
 const WIKI_TIMEOUT_MS = 10_000;
 // Continuation pages followed for one listing (500 a page): far more than any boss has redirects.
@@ -131,7 +135,7 @@ export class OsrsWikiClient {
   private bossList: { at: number; titles: string[] } | null = null;
   private bossListLoading: Promise<string[]> | null = null;
 
-  /** The Bosses category's pages whose title contains the query, the ones starting with it first. */
+  /** The Bosses and Raids categories' pages whose title contains the query, the ones starting with it first. */
   async searchBosses(query: string, limit = 10): Promise<OsrsBossSearchResult[]> {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -145,7 +149,7 @@ export class OsrsWikiClient {
 
   /**
    * A boss's page (following a title that redirects to it) and every title redirecting to it, or null when there is
-   * no such page or it isn't in the Bosses category.
+   * no such page or it isn't in the Bosses or Raids category.
    */
   async bossPage(title: string): Promise<BossPage | null> {
     let pageTitle: string | null = null;
@@ -160,14 +164,14 @@ export class OsrsWikiClient {
         rdprop: "title",
         rdnamespace: "0",
         rdlimit: "max",
-        clcategories: BOSSES_CATEGORY,
+        clcategories: BOSS_CATEGORIES.join("|"),
         formatversion: "2",
         ...cont,
       });
       const found = body.query?.pages?.[0];
       if (!found || found.missing || found.invalid) return null;
       pageTitle = found.title;
-      isBoss ||= !!found.categories?.some((c) => c.title === BOSSES_CATEGORY);
+      isBoss ||= !NOT_A_BOSS.has(found.title) && !!found.categories?.some((c) => BOSS_CATEGORIES.includes(c.title));
       redirects.push(...(found.redirects ?? []).map((r) => r.title));
       cont = body.continue;
       if (!cont) break;
@@ -186,14 +190,17 @@ export class OsrsWikiClient {
 
   private async fetchBossTitles(): Promise<string[]> {
     const titles: string[] = [];
-    let cont: WikiContinue | undefined;
-    for (let i = 0; i < MAX_PAGES; i++) {
-      const body = await this.query<CategoryMembersResponse>({ list: "categorymembers", cmtitle: BOSSES_CATEGORY, cmnamespace: "0", cmlimit: "max", ...cont });
-      titles.push(...(body.query?.categorymembers ?? []).map((m) => m.title));
-      cont = body.continue;
-      if (!cont) break;
+    for (const category of BOSS_CATEGORIES) {
+      let cont: WikiContinue | undefined;
+      for (let i = 0; i < MAX_PAGES; i++) {
+        const body = await this.query<CategoryMembersResponse>({ list: "categorymembers", cmtitle: category, cmnamespace: "0", cmlimit: "max", ...cont });
+        titles.push(...(body.query?.categorymembers ?? []).map((m) => m.title));
+        cont = body.continue;
+        if (!cont) break;
+      }
     }
-    return titles;
+    // A raid boss can be in both categories; listed once.
+    return [...new Set(titles)].filter((title) => !NOT_A_BOSS.has(title));
   }
 
   /** One `action=query` call. Throws WikiUnavailableError when the wiki can't be reached or answers with an error. */
