@@ -90,6 +90,17 @@ variable "runeprofile_api_key" {
   }
 }
 
+variable "discord_bot_token" {
+  description = "The Discord application's bot token, for the Discord team sync (docs/discord-team-sync.md). Production only: staging has the clan's DISCORD_GUILD_ID too, so a token there could sync a staging bingo into the clan's server."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.discord_bot_token)) > 0
+    error_message = "discord_bot_token is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
+}
+
 # ---- settings that stay out of the repository (terraform.tfvars) --------------------------------------------------
 
 variable "discord_client_id" {
@@ -175,7 +186,7 @@ locals {
     # The same image as production with its own data. Dev-login is on (the test-data generator and "log in as" need it),
     # which needs NODE_ENV to be something other than production, so the Secure cookie flag is put back by hand. It talks
     # to the live clan API with production's key, and fetches player stats and Wise Old Man snapshots, so the clan
-    # integration can be tried there; Wise Old Man's competition sync and RuneProfile stay off (no keys).
+    # integration can be tried there; Wise Old Man's competition sync, RuneProfile and the Discord team sync stay off (no keys).
     staging = merge(local.app_common, {
       NODE_ENV                      = "staging"
       DEV_LOGIN_ENABLED             = "true"
@@ -190,6 +201,7 @@ locals {
       USER_AGENT_CONTACT            = var.user_agent_contact
       WOM_API_KEY                   = ""
       RUNEPROFILE_API_KEY           = ""
+      DISCORD_BOT_TOKEN             = ""
       PLAYER_STATS_FETCH_DISABLED   = "false"
       WOM_COMPETITION_SYNC_DISABLED = "true"
       WOM_SNAPSHOT_READS_DISABLED   = "false"
@@ -206,6 +218,7 @@ locals {
       TECTONIC_GUILD_ID    = var.tectonic_guild_id
       WOM_API_KEY          = var.wom_api_key
       RUNEPROFILE_API_KEY  = var.runeprofile_api_key
+      DISCORD_BOT_TOKEN    = var.discord_bot_token
       USER_AGENT_CONTACT   = var.user_agent_contact
       SENTRY_ENVIRONMENT   = "production"
     })

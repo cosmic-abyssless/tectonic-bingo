@@ -11,6 +11,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import * as devTestDataService from "../services/devTestDataService";
+import { removeDiscordTeams } from "../services/discordTeamService";
 import { removeUploads } from "../services/uploadFiles";
 import { mockPastCompetition } from "../services/pastWomCompetitionService";
 import { OptionsError, normalizeOptions, type RawOptions } from "../devTools/generateBingo/options";
@@ -132,6 +133,8 @@ router.delete(
     if (isGenerateJobRunning() && getGenerateJob()?.slug === req.params.slug) throw new ServiceError(409, "This bingo is still being generated");
     const result = devTestDataService.teardownTestBingo(db, req.params.slug as string);
     const files = removeUploads(UPLOADS_DIR, result.urls);
+    // Its Team roles and channels in a test Discord server, if it had any (fire-and-forget, like deleting a bingo).
+    void removeDiscordTeams(db, result.bingoId);
     console.info(`[dev] tore down ${req.params.slug}: ${result.usersDeleted} test users, ${files} files`);
     res.json({ deleted: { users: result.usersDeleted, files } });
   }),

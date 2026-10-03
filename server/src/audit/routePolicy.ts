@@ -48,6 +48,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],
+  "POST /api/bingos/:slug/admin/discord/remove": ["settings.updated", "discord.removed"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
   "DELETE /api/bingos/:slug/admin/mods/:userId": ["moderator.removed"],
   "POST /api/bingos/:slug/admin/staff": ["staff.added"],

@@ -72,6 +72,8 @@ The teardown script takes the same `--base` and `--basic-auth`.
 | `--seed` | random (printed) | the same seed and options give the same people, choices and outcomes |
 | `--slug` | `testdata-<date>-<time>` | must start with `testdata-` |
 | `--theme` | the board's own | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Without it, the bingo keeps the theme of the board it's made from (`--from`'s bingo, or the export's); the Test data tab's "Same as the board". A Historical Bingo has none of its own, so it is drawn in `default` unless given |
+| `--discord-guild` | none | a **test** Discord server's ID: the bingo's Team roles and channels are really made there once the draft finishes (`docs/discord-team-sync.md`), with the bot invited to it and `DISCORD_BOT_TOKEN` set. Never the clan's server (`DISCORD_GUILD_ID` is refused). Made-up players aren't in it, so only `--me` gets a role, if you're in that server. Teardown removes them. The Test data tab's "Test Discord server ID". Ignored for a historical bingo |
+| `--discord-category` | none | with `--discord-guild`: an existing category in that server to put the channels in, after what's already there (never edited or deleted), instead of one the bot makes. The Test data tab's "Existing category ID" |
 | `--base` | `http://localhost:3001` | the server |
 | `--from` | none | a bingo on the server to copy the board from |
 | `--export` | repo-root `tectonic-comics-bingo-export.json` | the board to send, when `--from` isn't given |
@@ -87,7 +89,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 ## What it does
 
-1. Imports the board and sets the dates (signups open, draft, reveal, start, end). Unless the board already has an
+1. Imports the board and sets the dates (signups open, draft, reveal, start, end), turning on the **Discord team
+   sync** in the same settings request, with a `{team}-loot` channel added to its channel list (never synced for a `testdata-` bingo; see below). Unless the board already has an
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
@@ -268,6 +271,10 @@ check for it):
   turning off to run it.
 - A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`), in any mode: its
   made-up players must never become a real competition.
+- Nor to the clan's Discord (`discordTeamService.ts`): its setting is on, so the settings panel shows it, but
+  without `--discord-guild` the sync says why it isn't syncing and makes nothing, and `X-Dev-Skip-Integrations`
+  keeps the generator's requests off Discord. With `--discord-guild` (a test server, never `DISCORD_GUILD_ID`) both
+  give way for that server only (`onDiscordTestServer`), and teardown removes what was made there.
 - `POST /api/dev/generate` starts a run in the server (`server/src/devTools/generateBingo/job.ts`,
   one at a time), from another bingo's board (`from: <slug>`) or a sent `document`, and
   `GET /api/dev/generate?after=<n>` reports it with the log lines after the n-th. The Test data

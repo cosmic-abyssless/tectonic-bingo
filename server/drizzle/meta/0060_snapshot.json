@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dd2e778b-9618-42f4-930c-2d0b55f9f5ea",
-  "prevId": "b2a1dd23-ff45-4e27-8a3d-6340d3524ca1",
+  "id": "e1ebcac8-c857-4861-882a-24085244d146",
+  "prevId": "dd2e778b-9618-42f4-930c-2d0b55f9f5ea",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -1279,6 +1279,13 @@
         },
         "discord_category_name": {
           "name": "discord_category_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "discord_category_id": {
+          "name": "discord_category_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

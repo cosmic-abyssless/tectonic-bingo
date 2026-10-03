@@ -16,6 +16,9 @@ import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
+import { DiscordSyncPanel } from "./DiscordSyncPanel";
+import { useAuth } from "../../context/AuthContext";
+import { DiscordChannelsEditor, discordChannelsDeleted } from "./DiscordChannelsEditor";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -49,6 +52,7 @@ export function BingoSettingsForm({
   hasSignups: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { devMode } = useAuth();
   const [form, setForm] = useState({
     name: bingo.name,
     description: bingo.description ?? "",
@@ -75,6 +79,11 @@ export function BingoSettingsForm({
     // always starts blank. Left blank on save, the existing code (if any) is
     // kept as-is.
     womGroupVerificationCode: "",
+    discordEnabled: bingo.discordEnabled,
+    discordCategoryName: bingo.discordCategoryName ?? "",
+    discordGuildId: bingo.discordGuildId ?? "",
+    discordCategoryId: bingo.discordCategoryId ?? "",
+    discordChannels: bingo.discordChannels,
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,6 +113,9 @@ export function BingoSettingsForm({
   }
 
   async function save() {
+    // Channels taken off the list (or switched between text and voice) are deleted from Discord with their messages.
+    const deleted = discordChannelsDeleted(bingo.discordChannels, form.discordChannels);
+    if (deleted.length > 0 && bingo.discordEnabled && !confirm(`Saving deletes every team's ${deleted.map((c) => `"${c.name}"`).join(", ")} channel in Discord, with its messages. Save anyway?`)) return;
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -132,6 +144,12 @@ export function BingoSettingsForm({
         womGroupId: form.womGroupId.trim() || null,
         // Omit entirely when blank so the server keeps the existing code.
         ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
+        discordEnabled: form.discordEnabled,
+        discordCategoryName: form.discordCategoryName.trim() || null,
+        discordCategoryId: form.discordCategoryId.trim() || null,
+        // Dev servers only: anywhere else the server refuses it (it's always the clan's Discord there).
+        ...(devMode ? { discordGuildId: form.discordGuildId.trim() || null } : {}),
+        discordChannels: form.discordChannels,
       });
       setForm((f) => ({ ...f, womGroupVerificationCode: "" }));
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
@@ -231,7 +249,7 @@ export function BingoSettingsForm({
         </div>
       </Section>
 
-      <WomSection enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
+      <IntegrationSection title="Wise Old Man" switchLabel="Enable Wise Old Man integration" enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
         <Notice tone="info">
           When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, then kept up to date:
           the bingo's name, its start and end dates, and every team's name and players.
@@ -259,7 +277,37 @@ export function BingoSettingsForm({
           </Notice>
         )}
         {bingo.womSyncError && <Notice tone="warn">Last WOM sync failed: {bingo.womSyncError}</Notice>}
-      </WomSection>
+      </IntegrationSection>
+
+      <IntegrationSection title="Discord" switchLabel="Enable Discord team roles and channels" enabled={form.discordEnabled} onToggle={(discordEnabled) => setForm({ ...form, discordEnabled })}>
+        <Notice tone="info">
+          When enabled, every team gets a Discord role in its color, given to its players, and the channels below, private to that role, in one
+          category: one the bot makes for this bingo, or an existing one. They're made when the draft finishes, with the Wise Old Man competition, then
+          kept up to date: renames, colors, players removed or signed up late, and changes here. Nothing is deleted when the bingo finishes; remove it
+          all below once you're done with it.
+        </Notice>
+        {devMode && (
+          <Field
+            label="Discord server ID (dev only)"
+            hint="To try the sync on a test Discord server the bot is in, instead of the clan's. Blank: the clan's. In Discord: Developer Mode, then right-click the server > Copy Server ID. Remove this bingo's roles and channels from Discord before changing it."
+          >
+            <Input value={form.discordGuildId} placeholder="The clan's server" onChange={(e) => setForm({ ...form, discordGuildId: e.target.value })} className="num" />
+          </Field>
+        )}
+        <Field
+          label="Existing category ID (optional)"
+          hint="Put every team's channels in a category the server already has, after the channels already in it. The bot never renames or deletes it. Blank: the bot makes a category for this bingo. In Discord: Developer Mode, then right-click the category > Copy Channel ID. Changing it moves the channels."
+        >
+          <Input value={form.discordCategoryId} placeholder="Make one for this bingo" onChange={(e) => setForm({ ...form, discordCategoryId: e.target.value.replace(/[^0-9]/g, "") })} className="num" />
+        </Field>
+        {!form.discordCategoryId.trim() && (
+          <Field label="Category name" hint="The category the bot makes for this bingo. Blank: the bingo's name.">
+            <Input value={form.discordCategoryName} placeholder={form.name} onChange={(e) => setForm({ ...form, discordCategoryName: e.target.value })} />
+          </Field>
+        )}
+        <DiscordChannelsEditor channels={form.discordChannels} onChange={(discordChannels) => setForm({ ...form, discordChannels })} />
+        <DiscordSyncPanel slug={slug} bingo={bingo} onRemoved={() => setForm((f) => ({ ...f, discordEnabled: false }))} />
+      </IntegrationSection>
 
       {/* What players get during Board revealed (CONTEXT.md "Sealed Tiles"). Both end by themselves at Live, so they're
           offered up to then. */}
@@ -405,16 +453,16 @@ function WomConnectionCheck({ slug, groupId, verificationCode }: { slug: string;
   );
 }
 
-function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
+function IntegrationSection({ title, switchLabel, enabled, onToggle, children }: { title: string; switchLabel: string; enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
   const [expanded, setExpanded] = useState(enabled);
   useEffect(() => setExpanded(enabled), [enabled]);
 
   return (
     <Disclosure
-      title={<span className="flex-1 text-sm font-semibold text-on-surface">Wise Old Man</span>}
+      title={<span className="flex-1 text-sm font-semibold text-on-surface">{title}</span>}
       isExpanded={expanded}
       onExpandedChange={setExpanded}
-      action={<Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />}
+      action={<Switch isSelected={enabled} onChange={onToggle} aria-label={switchLabel} />}
     >
       <div className="space-y-4">{children}</div>
     </Disclosure>

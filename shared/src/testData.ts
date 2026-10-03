@@ -42,6 +42,13 @@ export interface TestDataOptions {
    * copied from, or the export's). A Historical Bingo's bundle has none, so null draws it in the default theme.
    */
   theme: string | null;
+  /**
+   * A test Discord server (its id) to sync the Bingo's Team roles and channels to, or null for none. Never the clan's
+   * server: a test data Bingo is only ever synced to a test one (discordTeamService.onDiscordTestServer).
+   */
+  discordGuildId: string | null;
+  /** With discordGuildId: an existing category there to put the Teams' channels in, or null for one of its own. */
+  discordCategoryId: string | null;
 }
 
 export interface TestDataLogLine {
