@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, proofRequirementFor, proofStatus, type ClaimInput, type GraphNode, type ScreenshotAnalysis, type SubmissionKind } from "@bingo/shared";
-import { useAnalyzeScreenshot, useCreateSubmission, useTileTagHits } from "../api/queries";
+import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
+import { tileMatchesSearch } from "../core/board/tileSearch";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal } from "../core/board/taskClaims";
-import { collectLeaves, collectLeavesWithAncestors, tileMatchesSearch } from "../core/board/requirementTree";
+import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
 import { lockReason } from "../core/board/exclusivity";
 import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../core/board/tileProgress";
@@ -38,7 +39,7 @@ export function useSubmissionFlow({
   onClose: () => void;
   onSuccess: () => void;
 }): SubmissionFlowModel {
-  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks, viewingTeam, viewerId } = useBingoPageRaw();
+  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks, viewingTeam, viewerId, tileTags } = useBingoPageRaw();
 
   // Who the drop is for. On your own team you default to yourself and may pick a teammate; a mod on another team has to pick.
   const onViewingTeam = !!viewingTeam?.members.some((m) => m.id === viewerId);
@@ -51,10 +52,6 @@ export function useSubmissionFlow({
   const forUserId = submitterId && submitterId !== viewerId ? submitterId : undefined;
 
   const [selectedTileId, setSelectedTileId] = useState(initialTileId ?? "");
-  // The Tile picker finds a Tile as the board's search does, by its Tags (CONTEXT.md "Tag") too, which the server
-  // searches for what's typed. Submitting is only open while Live, so the Tiles are never sealed here.
-  const [tileQuery, setTileQuery] = useState("");
-  const tileTagHits = useTileTagHits(slug, tileQuery);
   const [selectedTaskId, setSelectedTaskId] = useState(initialTileId ? (initialTaskId ?? "") : "");
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [stagedClaims, setStagedClaims] = useState<StagedClaim[]>([]);
@@ -385,11 +382,12 @@ export function useSubmissionFlow({
     tile: {
       selectedId: selectedTileId,
       options: tileOptions,
+      // As the board's search finds a Tile (core/board/tileSearch.ts), by its Tags (CONTEXT.md "Tag") too. Submitting is
+      // only open while Live, so the Tiles are never sealed here.
       matches: (option, q) => {
         const tile = tiles.find((t) => t.id === option.id);
-        return !!tile && tileMatchesSearch(tile, q, tileTagHits);
+        return !!tile && tileMatchesSearch(tile, q, tileTags[tile.id]);
       },
-      setQuery: setTileQuery,
       select: (id) => {
         setSelectedTileId(id);
         setSelectedTaskId("");

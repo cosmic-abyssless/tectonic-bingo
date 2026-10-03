@@ -1,7 +1,6 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
 import type { BoardLine, PointAdjustment, SubmissionDetails, TeamNodeState, Tile, TileCategory, TileInterest } from "@bingo/shared";
-import { buildBoard } from "./boardModel";
-import { tileSearchMatcher } from "./useTileSearch";
+import { assembleBoard, buildBoardStatic } from "./boardModel";
 import { useNowTick } from "./useNowTick";
 import type { ExclusiveLocks } from "../core/board/exclusivity";
 import type { BoardModel, TileModel } from "./types";
@@ -17,8 +16,6 @@ export function BoardProvider({
   bingoStartsAt,
   bingoRows,
   bingoCols,
-  searchQuery,
-  searchTagHits,
   canSubmit,
   canToggleInterest,
   interests,
@@ -38,9 +35,6 @@ export function BoardProvider({
   bingoStartsAt: string | null;
   bingoRows: number;
   bingoCols: number;
-  searchQuery: string;
-  /** The Tiles the server found by their Tags for searchQuery (TileSearchModel.tagHits). */
-  searchTagHits?: ReadonlySet<string>;
   canSubmit: boolean;
   canToggleInterest: boolean;
   interests: TileInterest[];
@@ -66,13 +60,6 @@ export function BoardProvider({
   }, [bingoStartsAt, tiles]);
   const now = useNowTick(tickUntil);
 
-  const q = searchQuery.trim().toLowerCase();
-  const matchIds = useMemo(() => {
-    if (!q) return null;
-    const matches = tileSearchMatcher(sealed, categories);
-    return new Set(tiles.filter((t) => matches(t, q, searchTagHits)).map((t) => t.id));
-  }, [tiles, q, sealed, categories, searchTagHits]);
-
   // Carries the previous tick's TileModels so finalizeTileModels can
   // preserve object identity for tiles whose derived state didn't change —
   // see boardModel.ts's finalizeTileModels doc comment. Mutated inside the
@@ -81,33 +68,19 @@ export function BoardProvider({
   // harmless here since the same inputs always produce the same write.
   const prevRef = useRef<ReadonlyMap<string, TileModel>>(new Map());
 
+  // The expensive pass (every Tile's requirements and progress) only when the board's data changes; the cheap pass
+  // below on every tick of a countdown, reusing each Tile it didn't change so its cell doesn't re-draw. The search isn't
+  // in the board model at all (TileSearchProvider), so typing doesn't touch it.
+  const built = useMemo(
+    () => buildBoardStatic({ tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, interests, viewerUserId, viewerOnTeam, locks, sealed }),
+    [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, interests, viewerUserId, viewerOnTeam, locks, sealed],
+  );
   const board = useMemo(() => {
-    const built = buildBoard({
-      tiles,
-      categories,
-      lines,
-      nodeStates,
-      teamSubmissions,
-      bingoStartsAt,
-      bingoRows,
-      bingoCols,
-      now,
-      matchIds,
-      canSubmit,
-      canToggleInterest,
-      interests,
-      viewerUserId,
-      viewerOnTeam,
-      totalPoints,
-      adjustments,
-      locks,
-      sealed,
-      prev: prevRef.current,
-    });
-    prevRef.current = built.tileById;
-    return built;
+    const assembled = assembleBoard(built, { bingoStartsAt, bingoRows, bingoCols, now, canSubmit, canToggleInterest, totalPoints, adjustments, sealed, prev: prevRef.current });
+    prevRef.current = assembled.tileById;
+    return assembled;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, viewerOnTeam, totalPoints, adjustments, locks, sealed]);
+  }, [built, bingoStartsAt, bingoRows, bingoCols, now, canSubmit, canToggleInterest, totalPoints, adjustments, sealed]);
 
   return <BoardContext.Provider value={board}>{children}</BoardContext.Provider>;
 }

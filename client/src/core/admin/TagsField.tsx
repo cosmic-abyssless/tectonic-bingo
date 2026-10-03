@@ -33,7 +33,8 @@ export function TagsField({ slug, owner, hint, locked }: { slug: string; owner: 
       const base = all ?? { tiles: {}, parts: {} };
       return "tileId" in owner ? { ...base, tiles: { ...base.tiles, [owner.tileId]: next } } : { ...base, parts: { ...base.parts, [owner.partId]: next } };
     });
-    queryClient.invalidateQueries({ queryKey: ["tileTagSearch", slug] });
+    // The board carries the Tags for its search (BoardResponse.tileTags).
+    queryClient.invalidateQueries({ queryKey: ["board", slug] });
   }
   async function run(note: string, action: () => Promise<{ tags: Tag[] }>): Promise<boolean> {
     setError(null);

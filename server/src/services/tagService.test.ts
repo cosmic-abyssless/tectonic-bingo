@@ -7,7 +7,7 @@ import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile, deleteTask, deleteTile } from "./boardService";
 import { deleteBingo } from "./bingoService";
 import { OsrsWikiClient } from "./osrsWikiService";
-import { addBossTag, addTextTag, getBoardTags, removeTag, tileIdsMatchingTags } from "./tagService";
+import { addBossTag, addTextTag, getBoardTags, removeTag, tileSearchTags } from "./tagService";
 import { ServiceError } from "./errors";
 
 let sqlite: Database.Database;
@@ -142,21 +142,15 @@ describe("Boss tags", () => {
   });
 });
 
-describe("search by tag", () => {
-  it("finds a Tile by any of its own tags, as a case-insensitive substring", () => {
-    const { bingo, kq } = seed();
+describe("tileSearchTags (what the board's search matches)", () => {
+  it("gives each Tile its own tags and its Parts' tags, Boss tags' aliases included, and leaves out Tiles without any", async () => {
+    const { bingo, kq, sire, partB } = seed();
     addTextTag(db, bingo.id, { tileId: kq.id }, "kq");
-    expect(tileIdsMatchingTags(db, bingo.id, "kq")).toEqual([kq.id]);
-    expect(tileIdsMatchingTags(db, bingo.id, "K")).toEqual([kq.id]);
-    expect(tileIdsMatchingTags(db, bingo.id, "vork")).toEqual([]);
-    expect(tileIdsMatchingTags(db, bingo.id, "  ")).toEqual([]);
-  });
-
-  it("finds a Tile by a tag on one of its Parts", async () => {
-    const { bingo, sire, partB } = seed();
     await addBossTag(db, bingo.id, { partId: partB.id }, "Abyssal Sire", wikiWith(SIRE).wiki);
-    expect(tileIdsMatchingTags(db, bingo.id, "abbysal")).toEqual([sire.id]);
-    expect(tileIdsMatchingTags(db, bingo.id, "abyssal sire")).toEqual([sire.id]);
+    const byTile = tileSearchTags(db, bingo.id);
+    expect(byTile[kq.id]).toEqual(["kq"]);
+    expect(byTile[sire.id]).toEqual(expect.arrayContaining(["Abyssal Sire", "Sire", "Abbysal sire"]));
+    expect(Object.keys(byTile).sort()).toEqual([kq.id, sire.id].sort());
   });
 });
 

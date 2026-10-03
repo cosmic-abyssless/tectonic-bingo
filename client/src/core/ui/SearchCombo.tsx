@@ -384,17 +384,26 @@ export function ComboPopover({
  * Keeps the top match highlighted while the list is open and no other row is, so Enter picks it. react-aria clears the
  * highlight whenever the text changes, in its own effect, after this component's and without a re-render when the
  * highlight was already set; so this puts it back on the first row a frame later, once react-aria is done.
+ * A match that arrives later and goes above the highlighted top row (the board's Tag matches come from the server) takes
+ * the highlight over, unless the keyboard or pointer has moved it since.
  */
 export function ComboFocusFirst({ enabled = true }: { enabled?: boolean }) {
   const state = useContext(ComboBoxStateContext);
+  // The row this highlighted itself: while the highlight is still there, it follows the top row.
+  const highlighted = useRef<Key | null>(null);
   useEffect(() => {
-    if (!enabled || !state?.isOpen) return;
+    if (!enabled || !state?.isOpen) {
+      highlighted.current = null;
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       const { collection, selectionManager } = state;
-      if (selectionManager.focusedKey != null) return;
+      const focused = selectionManager.focusedKey;
+      if (focused != null && focused !== highlighted.current) return;
       let key = collection.getFirstKey();
       while (key != null && (collection.getItem(key)?.type !== "item" || selectionManager.isDisabled(key))) key = collection.getKeyAfter(key);
-      if (key != null) selectionManager.setFocusedKey(key);
+      if (key != null && key !== focused) selectionManager.setFocusedKey(key);
+      highlighted.current = key;
     });
     return () => cancelAnimationFrame(frame);
   });

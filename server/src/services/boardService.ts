@@ -8,6 +8,7 @@ import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, ins
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { describeTaskNode } from "../audit/describe";
 import { areTilesSealed, canViewTiles } from "./bingoService";
+import { tileSearchTags } from "./tagService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -44,9 +45,10 @@ export function getBoardLines(db: Db, bingoId: string) {
 // are sealed, only the sealed board; otherwise the full board. Whoever may see the hidden Board (view_hidden_board:
 // mods) always gets the full board.
 export function getBoardForViewer(db: Db, bingo: Bingo, seesHiddenBoard: boolean) {
-  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [] };
+  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [], tileTags: {} };
   if (!seesHiddenBoard && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
-  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id) };
+  // Tags ride along for the board's search, which runs in the browser; the sealed board above has none.
+  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id), tileTags: tileSearchTags(db, bingo.id) };
 }
 
 // The board as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): only what a

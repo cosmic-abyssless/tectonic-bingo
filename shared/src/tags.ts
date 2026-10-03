@@ -26,11 +26,6 @@ export interface BoardTagsResponse {
 /** What the board editor adds to a Tile or a Part: a Text tag, or a Boss tag by its wiki page title. */
 export type AddTagRequest = { text: string } | { boss: string };
 
-/** The Tiles a search query finds by their tags (or their Parts' tags). Empty while the Tiles are sealed. */
-export interface TileTagSearchResponse {
-  tileIds: string[];
-}
-
 /** A boss in the OSRS Wiki's Bosses category, as the board editor's boss picker lists it. */
 export interface OsrsBossSearchResult {
   name: string;

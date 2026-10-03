@@ -1,10 +1,10 @@
 // Tags (CONTEXT.md "Tag"): words the board's search finds a Tile by, on a Tile or on one of its Parts, never shown to
-// Players. The board editor reads and edits them (Admins only); a Player's search asks tileIdsMatchingTags, which
-// answers with Tile ids, never the tags. A Boss tag's aliases are fetched from the OSRS Wiki once, when it's added,
+// Players. The board editor reads and edits them (Admins only); the full board carries their texts (tileSearchTags) for the
+// search, which matches in the browser. A Boss tag's aliases are fetched from the OSRS Wiki once, when it's added,
 // and stored as Text tags marked with it: nothing here calls the wiki at search time.
 import { and, asc, eq, inArray, max } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { TAG_MAX_LENGTH, normalizeTagText, tagKey, tagsMatchSearch, type BoardTagsResponse, type ExportTag, type Tag } from "@bingo/shared";
+import { TAG_MAX_LENGTH, normalizeTagText, tagKey, type BoardTagsResponse, type ExportTag, type Tag } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { nodeEdges, nodes, tags, tiles } from "../db/schema";
 import { audit, markAuditedNoop } from "../audit/record";
@@ -178,21 +178,24 @@ export function removeTag(db: Db, bingoId: string, tagId: string): Tag[] {
 }
 
 /**
- * The Tiles whose own tags, or whose Parts' tags, contain the query (case-insensitive). The caller decides whether the
- * viewer may search tags at all (not while the Tiles are sealed for them).
+ * Each Tile's tag texts, its Parts' included, by Tile id: what the board's search matches in the browser (the full
+ * board carries them, never the sealed one). Tiles without tags are left out.
  */
-export function tileIdsMatchingTags(db: Db, bingoId: string, q: string): string[] {
-  if (!q.trim()) return [];
-  const rows = db.select({ tileId: tags.tileId, nodeId: tags.nodeId, text: tags.text }).from(tags).where(eq(tags.bingoId, bingoId)).all();
-  const hits = rows.filter((r) => tagsMatchSearch([r.text], q));
-  const tileIds = new Set(hits.flatMap((r) => (r.tileId ? [r.tileId] : [])));
-  const partIds = [...new Set(hits.flatMap((r) => (r.nodeId ? [r.nodeId] : [])))];
-  if (partIds.length > 0) {
-    // A Part's Tile: the Tile whose node is the Part's parent.
-    const owners = db.select({ tileId: tiles.id }).from(nodeEdges).innerJoin(tiles, eq(tiles.nodeId, nodeEdges.parentId)).where(inArray(nodeEdges.childId, partIds)).all();
-    for (const o of owners) tileIds.add(o.tileId);
+export function tileSearchTags(db: Db, bingoId: string): Record<string, string[]> {
+  const rows = db.select({ tileId: tags.tileId, nodeId: tags.nodeId, text: tags.text }).from(tags).where(eq(tags.bingoId, bingoId)).orderBy(asc(tags.sortOrder)).all();
+  const partIds = [...new Set(rows.flatMap((r) => (r.nodeId ? [r.nodeId] : [])))];
+  // A Part's Tile: the Tile whose node is the Part's parent.
+  const tileOfPart = new Map(
+    partIds.length > 0
+      ? db.select({ partId: nodeEdges.childId, tileId: tiles.id }).from(nodeEdges).innerJoin(tiles, eq(tiles.nodeId, nodeEdges.parentId)).where(inArray(nodeEdges.childId, partIds)).all().map((r) => [r.partId, r.tileId])
+      : [],
+  );
+  const out: Record<string, string[]> = {};
+  for (const row of rows) {
+    const tileId = row.tileId ?? (row.nodeId ? tileOfPart.get(row.nodeId) : undefined);
+    if (tileId) (out[tileId] ??= []).push(row.text);
   }
-  return [...tileIds];
+  return out;
 }
 
 // ---------------------------------------------------------------------------

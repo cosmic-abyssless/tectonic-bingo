@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { GraphNode, SealedBoardResponse, Tile, TileCategory } from "@bingo/shared";
+import type { SealedBoardResponse, TileCategory } from "@bingo/shared";
 import { buildBoard, sealedBoardAsTiles } from "./boardModel";
-import { tileSearchMatcher } from "./useTileSearch";
 
-// CONTEXT.md "Sealed Tiles": the board a Player gets while the Tiles are sealed, and how it's searched.
-
-const node = (over: Partial<GraphNode> & Pick<GraphNode, "id" | "kind">): GraphNode =>
-  ({ bingoId: "b", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName: null, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [], ...over }) as GraphNode;
+// CONTEXT.md "Sealed Tiles": the board a Player gets while the Tiles are sealed (how it's searched: core/board/tileSearch.ts).
 
 const categories: TileCategory[] = [{ id: "cat", bingoId: "b", label: "Raids", colorHex: "#123456", sortOrder: 0 }];
 
@@ -31,7 +27,6 @@ function build(board: SealedBoardResponse) {
     bingoRows: 1,
     bingoCols: 2,
     now: 0,
-    matchIds: null,
     canSubmit: false,
     canToggleInterest: false,
     interests: [],
@@ -57,52 +52,5 @@ describe("a sealed board", () => {
 
   it("keeps each line's Tiles, without its bonus", () => {
     expect(build(sealedBoard).lines).toEqual([{ id: "row0", lineType: "row", lineIndex: 0, tileIds: ["t1", "t2"], points: 0, complete: false, pointsAwarded: 0 }]);
-  });
-});
-
-describe("tileSearchMatcher", () => {
-  const tile: Tile = {
-    id: "t",
-    bingoId: "b",
-    nodeId: "n",
-    name: "Zulrah",
-    imageUrl: null,
-    categoryId: "cat",
-    boardRow: 0,
-    boardCol: 0,
-    hasFreezePeriod: false,
-    freezeDurationMinutes: 0,
-    notes: null,
-    requiresProof: false,
-    proofNote: null,
-    rulesText: null,
-    createdAt: "",
-    node: node({ id: "n", kind: "ALL", children: [node({ id: "p", kind: "ITEM", description: "Kill the snake", itemName: "Tanzanite fang" })] }),
-  };
-
-  it("while sealed, finds a Tile by its name or Category, never by an Item or Part", () => {
-    const matches = tileSearchMatcher(true, categories);
-    expect(matches(tile, "zul")).toBe(true);
-    expect(matches(tile, "raid")).toBe(true);
-    expect(matches(tile, "tanzanite")).toBe(false);
-    expect(matches(tile, "snake")).toBe(false);
-  });
-
-  it("otherwise finds a Tile by its Items and Parts too, as before", () => {
-    const matches = tileSearchMatcher(false, categories);
-    expect(matches(tile, "tanzanite")).toBe(true);
-    expect(matches(tile, "snake")).toBe(true);
-  });
-
-  // Tags (CONTEXT.md "Tag"): the server answers which Tiles a query's tags match, on the Tile or one of its Parts.
-  it("finds a Tile the server found by its Tags, or its Parts' Tags, for the query", () => {
-    const matches = tileSearchMatcher(false, categories);
-    expect(matches(tile, "snek", new Set(["t"]))).toBe(true);
-    expect(matches(tile, "snek", new Set(["other"]))).toBe(false);
-    expect(matches(tile, "snek")).toBe(false);
-  });
-
-  it("while sealed, ignores Tags", () => {
-    expect(tileSearchMatcher(true, categories)(tile, "snek", new Set(["t"]))).toBe(false);
   });
 });

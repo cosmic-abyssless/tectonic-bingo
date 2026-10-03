@@ -44,8 +44,6 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       // Grants and rules go by the stage: everyone's Actions may have changed.
       invalidate(["permissions"]);
       invalidate(["board"]);
-      // Sealed Tiles end with the reveal's stage: which Tiles a search finds by their Tags changes with it.
-      invalidate(["tileTagSearch"]);
       // Finishing can publish Wrapped (its "Publish when the Bingo finishes" setting).
       invalidate(["wrapped"]);
       // Voting opens with Live and closes on Finishing.
@@ -68,9 +66,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
     case "bingo_changed":
       invalidate(["bingo"]);
       invalidate(["board"]);
-      // Tags (CONTEXT.md "Tag"): the board editor's, and which Tiles a search finds by them.
+      // Tags (CONTEXT.md "Tag"): the board editor's (the board above carries them for its search).
       invalidate(["adminBoardTags"]);
-      invalidate(["tileTagSearch"]);
       // A board edit made while live re-scores every team, so everyone's progress moves too.
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);

@@ -1,4 +1,4 @@
-import type { GraphNode, GraphNodeInput, NodeKind, Tile } from "@bingo/shared";
+import type { GraphNode, GraphNodeInput, NodeKind } from "@bingo/shared";
 
 // The server replaces a node's full fields + subtree on every write — this
 // mirrors a loaded node into that same input shape unmodified, both for "the
@@ -176,23 +176,3 @@ export function conditionHeading(node: {
   }
 }
 
-export function collectItemNames(root: GraphNode): string[] {
-  return collectLeaves(root)
-    .map((leaf) => leaf.itemName)
-    .filter((name): name is string => name !== null);
-}
-
-// A tile's "tasks" are just the direct children of its node. `tagHits`: the Tiles the server found by their Tags
-// (CONTEXT.md "Tag"), or their Parts', for this query: Players never get the tags themselves (useTileTagHits).
-export function tileMatchesSearch(tile: Tile, q: string, tagHits?: ReadonlySet<string>): boolean {
-  if (tile.name.toLowerCase().includes(q)) return true;
-  if (tagHits?.has(tile.id)) return true;
-  return tile.node.children.some(
-    (task) => (task.description ?? "").toLowerCase().includes(q) || collectItemNames(task).some((n) => n.toLowerCase().includes(q)),
-  );
-}
-
-// While the Tiles are sealed (CONTEXT.md "Sealed Tiles") a tile can only be found by its name and its Category.
-export function sealedTileMatchesSearch(tile: Pick<Tile, "name">, categoryLabel: string | null, q: string): boolean {
-  return tile.name.toLowerCase().includes(q) || (categoryLabel ?? "").toLowerCase().includes(q);
-}

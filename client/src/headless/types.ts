@@ -224,8 +224,6 @@ export interface TileModel {
   proof: ProofModel | null;
   /** groupSubmissionsByTile() output for this tile, newest first. */
   submissions: SubmissionModel[];
-  /** Search miss. */
-  dimmed: boolean;
   /** page.canSubmit && !allComplete && !isFrozen — TileModal's submitDisabled, inverted. */
   canSubmit: boolean;
   /**
@@ -321,12 +319,12 @@ export interface TileSearchModel {
   results: { id: string; name: string }[];
   overflowCount: number;
   /** The result the open list is on, by keyboard or pointer (the comic board points it out); null with the list closed. */
-  highlightedId: string | null;
+  /** The row the list is on (arrow keys, hovering), for the board to light up that Tile (useTileSearchHighlighted). */
   setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
-  /** The Tiles the server found by their Tags (CONTEXT.md "Tag") for the query, which the board highlights too. */
-  tagHits: ReadonlySet<string>;
+  /** Every Tile the query finds (the server answers the search, Tags included), which the board highlights too; null with no query, or before the first answer. */
+  matchIds: ReadonlySet<string> | null;
 }
 
 // Open/close belongs to the slot (a RAC MenuTrigger in the default theme).
@@ -409,7 +407,6 @@ export interface BingoPageModel {
   /** Whole team, newest first (drawer). */
   submissions: SubmissionModel[];
   teamSelector: TeamSelectorModel;
-  search: TileSearchModel;
   /** Replaces both the old openTileId state and BoardGrid's own `selected` state. While the Tiles are sealed for this viewer, open() shows a note instead. */
   openTile: { id: string | null; open(id: string): void; close(): void };
   /**
@@ -497,8 +494,6 @@ export interface SubmissionFlowModel {
     select(id: string): void;
     /** Whether an option matches what's typed in the picker: as the board's search finds a Tile, by its Tags too. */
     matches(option: { id: string }, q: string): boolean;
-    /** What's typed in the picker, for the server to search the Tiles' Tags for. */
-    setQuery(q: string): void;
   };
   task: {
     selectedId: string;

@@ -108,7 +108,9 @@ beforeEach(() => {
   addTextTag(db, bingo.id, { partId: partA.id }, `${SECRET} part`);
 });
 
-describe("Players never get tags", () => {
+// Tags (CONTEXT.md "Tag") are never shown to Players, but the full board carries their texts for the board's search,
+// which matches in the browser. Nothing else a Player reads has them, and the sealed board doesn't.
+describe("tags reach Players only in the full board, for its search", () => {
   const playerRoutes = () => [
     "/b1",
     "/b1/permissions",
@@ -121,19 +123,26 @@ describe("Players never get tags", () => {
     "/b1/achievements",
     `/b1/players/${people.player.id}`,
     "/b1/draft",
-    "/b1/tile-search?q=zqx",
   ];
 
-  it("from the board, or any other route a Player reads, at every stage they can see the board", async () => {
+  it("in the board's tileTags, a Tile's own and its Parts', and in no other route a Player reads", async () => {
     for (const stage of ["reveal", "live", "complete"] as const) {
       setStage(stage);
       for (const path of playerRoutes()) {
+        if (path === "/b1/board") continue;
         const { text } = await get("player", path);
         expect(text, `${stage} ${path}`).not.toContain(SECRET);
       }
-      // Not vacuous: the board itself is there, with its Tiles and Items.
-      expect((await get("player", "/b1/board")).text).toContain("Vorki");
+      const board = (await get("player", "/b1/board")).body as unknown as { tileTags: Record<string, string[]>; tiles: { id: string }[] };
+      expect(board.tileTags[vorkath.id]).toEqual(expect.arrayContaining([`${SECRET} tile`, `${SECRET} part`]));
+      expect(board.tileTags[zulrah.id]).toBeUndefined();
     }
+  });
+
+  it("not in the sealed board, while a Moderator's full board keeps them", async () => {
+    setStage("reveal", { sealedTiles: true });
+    expect((await get("player", "/b1/board")).text).not.toContain(SECRET);
+    expect((await get("mod", "/b1/board")).text).toContain(SECRET);
   });
 
   it("nor from the admin routes, which are for Admins only", async () => {
@@ -146,26 +155,6 @@ describe("Players never get tags", () => {
     const tags = body as unknown as BoardTagsResponse;
     expect(tags.tiles[vorkath.id]!.map((t) => t.text)).toEqual([`${SECRET} tile`]);
     expect(tags.parts[partA.id]!.map((t) => t.text)).toEqual([`${SECRET} part`]);
-  });
-});
-
-describe("the board's search by tag", () => {
-  it("gives a Player the ids of the Tiles a query's tags match, on the Tile or one of its Parts", async () => {
-    expect((await get("player", "/b1/tile-search?q=zqx")).body).toEqual({ tileIds: [vorkath.id] });
-    expect((await get("player", "/b1/tile-search?q=PART")).body).toEqual({ tileIds: [vorkath.id] });
-    expect((await get("player", "/b1/tile-search?q=fang")).body).toEqual({ tileIds: [] }); // an Item: the board finds that itself
-    expect((await get("player", "/b1/tile-search?q=")).body).toEqual({ tileIds: [] });
-  });
-
-  it("finds nothing while the Tiles are sealed for the viewer, or before they can see the Tiles", async () => {
-    setStage("reveal", { sealedTiles: true });
-    expect((await get("player", "/b1/tile-search?q=zqx")).body).toEqual({ tileIds: [] });
-    // Moderators can always open the Tiles, so their search keeps tags.
-    expect((await get("mod", "/b1/tile-search?q=zqx")).body).toEqual({ tileIds: [vorkath.id] });
-    setStage("reveal", { sealedTiles: false });
-    expect((await get("player", "/b1/tile-search?q=zqx")).body).toEqual({ tileIds: [vorkath.id] });
-    setStage("draft");
-    expect((await get("player", "/b1/tile-search?q=zqx")).body).toEqual({ tileIds: [] });
   });
 });
 

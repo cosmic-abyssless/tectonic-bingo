@@ -18,7 +18,7 @@ export function SubmitterPicker({ submitter }: { submitter: SubmissionFlowModel[
 export function TilePicker({ tile }: { tile: SubmissionFlowModel["tile"] }) {
   return (
     <ComicField label="Tile" tutorial="submit-tile">
-      <SearchableSelect value={tile.selectedId} options={tile.options} placeholder="Search tiles…" onChange={tile.select} matches={tile.matches} onQueryChange={tile.setQuery} />
+      <SearchableSelect value={tile.selectedId} options={tile.options} placeholder="Search tiles…" onChange={tile.select} matches={tile.matches} />
     </ComicField>
   );
 }
