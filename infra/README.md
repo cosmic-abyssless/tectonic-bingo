@@ -120,7 +120,7 @@ anything reaches the box. A setting that isn't secret is just a line in `app-env
 
 **Bitwarden, once per machine:** install the CLI (`winget install Bitwarden.CLI`, or `npm i -g @bitwarden/cli`) and run
 `bw login`. Each value is an item named `tectonic-bingo/<NAME>`, holding the value as its password, for every name in
-`env.ps1`'s list. Those are the six login values above plus the ten app secrets (the bot token's item is `tectonic-bingo/DISCORD_BOT_TOKEN`). `env.ps1` asks for the master password once
+`env.ps1`'s list. Those are the six login values above plus the ten app secrets. `env.ps1` asks for the master password once
 (`bw unlock`); it asks for any item it can't find by hand, and says which. Run `bw lock` when you're done.
 
 ### Moving the box onto this (once)

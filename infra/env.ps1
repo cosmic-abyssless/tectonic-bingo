@@ -7,7 +7,7 @@
 # (`-Scope Process` lasts only until the window is closed; nothing about the machine's settings changes.)
 #
 # Every value comes from Bitwarden, through its CLI (`bw`, https://bitwarden.com/help/cli/): one item per value, named
-# "tectonic-bingo/<NAME>" with the value as the item's password (the list is below; an Item names one that differs). The first time on a machine, `bw login`;
+# "tectonic-bingo/<NAME>" with the value as the item's password (the list is below). The first time on a machine, `bw login`;
 # after that this script asks for the master password once (bw unlock) and reads them all. An item it cannot find, or every
 # value with -Prompt (or without bw), it asks for with hidden input instead. Nothing is echoed, saved in history, or written to
 # a file. infra/README.md says where each value is created. Run `bw lock` and close the window afterwards.
@@ -31,7 +31,7 @@ $values = @(
     @{ Name = "TF_VAR_tectonic_api_key"; Hint = "the clan API key" },
     @{ Name = "TF_VAR_wom_api_key"; Hint = "the Wise Old Man API key" },
     @{ Name = "TF_VAR_runeprofile_api_key"; Hint = "the RuneProfile API key" },
-    @{ Name = "TF_VAR_discord_bot_token"; Item = "DISCORD_BOT_TOKEN"; Hint = "Discord application > Bot > token" }
+    @{ Name = "TF_VAR_discord_bot_token"; Hint = "Discord application > Bot > token" }
 )
 
 function Read-Secret([string]$name, [string]$hint) {
@@ -72,9 +72,8 @@ $missing = @()
 foreach ($v in $values) {
     $value = $null
     if ($useBitwarden) {
-        $item = if ($v.Item) { $v.Item } else { $v.Name }
-        $value = $items["tectonic-bingo/$item"]
-        if ([string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $item }
+        $value = $items["tectonic-bingo/$($v.Name)"]
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $null; $missing += $v.Name }
     }
     if (-not $value) { $value = Read-Secret $v.Name $v.Hint }
     Set-Item -Path "env:$($v.Name)" -Value ($value.Trim())
