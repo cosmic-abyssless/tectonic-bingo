@@ -7,7 +7,8 @@ import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, itemToWeigh, pla
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
 import { Rng } from "./rng";
-import { chooseCaptains, runInOrder } from "./setup";
+import { chooseCaptains, runInOrder, type Ctx } from "./setup";
+import { runBorrowedAccount } from "./borrowedAccount";
 import { DEFAULT_CATEGORIES, planVotes } from "./superlatives";
 import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
 import { placeholderArt } from "./wrappedArt";
@@ -202,6 +203,38 @@ describe("runInOrder", () => {
     );
     expect(ran).toEqual(["one-a", "one-b", "five"]);
     expect(count).toBe(3);
+  });
+});
+
+describe("runBorrowedAccount", () => {
+  it("has the Admin put one plain Player on an account no one in the Bingo goes by, with a reason, through the endpoint", async () => {
+    const players = makePlayers(new Rng(3), 12, "testdata-x").map((p, i) => ({ ...p, userId: `u${i}`, signupAt: new Date(0) }));
+    players[0]!.isMod = true;
+    const seeds = [{ teamId: "t1", captain: players[1]!, coCaptain: null }];
+    const tl = buildTimeline("captains", { now: new Date(Date.UTC(2026, 0, 10)), progress: 0.5, days: 7 });
+    const calls: { as: string | null; method: string; url: string; body?: unknown; at?: Date }[] = [];
+    const api = {
+      as: (as: string | null) => ({
+        get: async (url: string, opts: { at?: Date }) => {
+          calls.push({ as, method: "GET", url, at: opts.at });
+          return { signups: players.map((p) => ({ signup: { id: `s-${p.userId}` }, user: { id: p.userId } })) };
+        },
+        put: async (url: string, body: unknown, opts: { at?: Date }) => void calls.push({ as, method: "PUT", url, body, at: opts.at }),
+      }),
+    };
+    const ctx = { api, rng: new Rng(3), tl, slug: "testdata-x", admin: "admin", limit: runLimit(tl), log: () => {} } as unknown as Ctx;
+
+    const { player, rsn } = await runBorrowedAccount(ctx, players, seeds);
+
+    expect(player && !player.isMod && player.index !== 1).toBe(true);
+    expect(players.some((p) => p.name.toLowerCase() === rsn!.toLowerCase())).toBe(false);
+    const put = calls.find((c) => c.method === "PUT")!;
+    expect(put).toMatchObject({ as: "admin", url: `/api/bingos/testdata-x/admin/signups/s-${player!.userId}/account`, body: { rsn, reason: expect.any(String) } });
+    // During the captains stage, before a captains-stage run stops.
+    expect(put.at!.getTime()).toBeGreaterThan(tl.captainsAt.getTime());
+    expect(put.at!.getTime()).toBeLessThanOrEqual(runLimit(tl).getTime());
+    // The same Player and account for a seed.
+    expect(await runBorrowedAccount({ ...ctx, rng: new Rng(3) }, players, seeds)).toEqual({ player, rsn });
   });
 });
 
