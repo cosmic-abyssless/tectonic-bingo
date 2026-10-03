@@ -24,6 +24,9 @@ import { useUrlParam } from "../ui/useUrlParam";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
 import { ProfilePermissions } from "./ProfilePermissions";
+import { ProfileAccount } from "./ProfileAccount";
+import { BorrowedBadge } from "../signup/BorrowedAccount";
+import { BORROWED_ACCOUNT_STAGES } from "../mod/BorrowedAccountDialog";
 
 /** The URL parameter holding the open profile's tab (PlayerName.tsx keeps the open profile in ?player=). */
 export const PROFILE_TAB_PARAM = "profileTab";
@@ -111,11 +114,14 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
   const caLoading = statsRefreshing.has(player.user.id);
   const { data: shell } = useBingo(slug);
   const canModerate = useCan("moderate_bingo", slug).allowed;
+  // Set borrowed account (CONTEXT.md "Borrowed account"): Admins, from Signups closed until Finished.
+  const canAdminister = useCan("administer_bingo", slug).allowed;
   // This bingo only exists once it has started; the answers only for mods, and for captains while scouting and
   // drafting (the server sends null otherwise). A tab that's there but has nothing to show is dimmed instead.
   const stage = shell?.bingo.stage;
   const showBingoTab = stage === "live" || stage === "complete";
   const showSignupTab = canModerate || player.answers !== null;
+  const canSetAccount = canAdminister && !!stage && BORROWED_ACCOUNT_STAGES.includes(stage) && !shell?.bingo.historical;
   // The tab in the URL (?profileTab=, so a shared link opens it), else the tab last picked in any profile: flicking
   // through players stays on the same one, unless it isn't here.
   const [savedTab, saveTab] = usePreference("profileTab");
@@ -144,6 +150,7 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
             {/* Account type leads the name, like the in-game chat badge. */}
             <AccountTypeIcon accountType={player.accountType} size={26} className="mr-1 shrink-0" />
             <span className="truncate pr-2">{player.rsn ?? name}</span>
+            {player.accountBorrowed && <BorrowedBadge ownName={name} className="mr-2" />}
           </>
         }
         subtitle={
@@ -329,7 +336,12 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           )}
           {player.access && (
             <TabPanel id="access">
-              <ProfilePermissions slug={slug} userId={player.user.id} name={player.rsn ?? name} access={player.access} />
+              <div className="space-y-6">
+                {canSetAccount && player.signupId && player.rsn && (
+                  <ProfileAccount slug={slug} target={{ signupId: player.signupId, userId: player.user.id, rsn: player.rsn, accountBorrowed: player.accountBorrowed, ownName: name }} />
+                )}
+                <ProfilePermissions slug={slug} userId={player.user.id} name={player.rsn ?? name} access={player.access} />
+              </div>
             </TabPanel>
           )}
         </Tabs>

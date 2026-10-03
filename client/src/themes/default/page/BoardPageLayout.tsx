@@ -3,6 +3,7 @@ import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
+import { BorrowedAccountNotice } from "../../../core/signup/BorrowedAccount";
 import { HistoricalBingoView } from "../../../core/historical/HistoricalBingoView";
 import { useSlot } from "../../context";
 import { ImageViewer } from "../../../core/ui/ImageViewer";
@@ -43,6 +44,7 @@ export function BoardPageLayout() {
           {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} canRate={page.canRatePicks} />}
           {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
           {page.feedback.canOpen && <FeedbackBanner responded={page.feedback.responded} onOpen={page.actions.goToFeedback} />}
+          <BorrowedAccountNotice slug={page.slug} />
           {page.stageView === "signup" ? (
             <SignupStage slug={page.slug} />
           ) : page.stageView === "notPart" ? (
