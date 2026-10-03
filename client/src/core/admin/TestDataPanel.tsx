@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { DEFAULT_THEME, THEME_KEYS, TEST_DATA_STAGES, TEST_DATA_STAGE_LABEL, STAGE_LABEL, type Stage, type TestDataBingo, type TestDataJob, type TestDataStage } from "@bingo/shared";
+import { THEME_KEYS, TEST_DATA_STAGES, TEST_DATA_STAGE_LABEL, STAGE_LABEL, type Stage, type TestDataBingo, type TestDataJob, type TestDataStage } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingos } from "../../api/queries";
 import * as devApi from "../../api/devApi";
@@ -29,7 +29,8 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
   const [teamSize, setTeamSize] = useState(14);
   const [mods, setMods] = useState(3);
   const [seed, setSeed] = useState("");
-  const [theme, setTheme] = useState<string>(DEFAULT_THEME);
+  // "": keep the board's own theme (TestDataOptions.theme).
+  const [theme, setTheme] = useState<string>("");
   const [joinAsMe, setJoinAsMe] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
         teams,
         teamSize,
         mods,
-        theme,
+        theme: theme || null,
         me: joinAsMe && user ? user.discordId : null,
         ...(seed.trim() ? { seed: Number(seed) } : {}),
       });
@@ -91,7 +92,7 @@ function GenerateForm({ running, onStarted }: { running: boolean; onStarted: () 
           <Input type="number" min={1} max={10} value={mods} onChange={(e) => setMods(Number(e.target.value))} className="num" />
         </Field>
         <Field label="Theme" hint="How its Board, Wrapped and the rest are drawn.">
-          <Select value={theme} onChange={setTheme} options={THEME_KEYS.map((key) => ({ value: key, label: key }))} />
+          <Select value={theme} onChange={setTheme} options={[{ value: "", label: "Same as the board" }, ...THEME_KEYS.map((key) => ({ value: key, label: key }))]} />
         </Field>
         <Field label="Seed" hint="Optional. The same seed and settings make the same bingo.">
           <Input value={seed} onChange={(e) => setSeed(e.target.value.replace(/[^0-9]/g, ""))} placeholder="random" className="num" />

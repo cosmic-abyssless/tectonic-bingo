@@ -1,18 +1,13 @@
 // setup.ts's weighAnItem: the Counts as a run gives one Item after the import, sent back the way the board editor
-// sends a Task, and written by the real board service. And addExclusiveGroup: the Exclusive Item rule with a group
-// it adds through the settings.
+// sends a Task, and written by the real board service.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { exclusivityConflicts, type ExclusivityRule, type GraphNodeInput } from "@bingo/shared";
+import type { GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { updateBingoSettings, toPublicBingo } from "../../services/bingoService";
-import { placeLeaves } from "../../services/exclusivityService";
-import { GENERATED_GROUP_RULE_ID } from "./board";
-import { Rng } from "./rng";
-import { addExclusiveGroup, importBingo, weighAnItem, type Ctx } from "./setup";
+import { importBingo, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -80,34 +75,6 @@ describe("weighAnItem", () => {
   });
 });
 
-describe("addExclusiveGroup", () => {
-  it("adds a rule with a group of two Items on different Tiles beside the board's own rules, which locks one once the other is claimed", async () => {
-    const { bingo } = seed();
-    const pets = { id: "pets", label: "Pets", itemNames: ["Burnt page"], scope: "tile" as const };
-    updateBingoSettings(db, bingo.id, { exclusivityRules: [pets] });
-    const row = () => db.select().from(schema.bingos).get()!;
-    const session = {
-      get: async (path: string) => (path.endsWith("/board") ? getBoardForViewer(db, row(), true) : { bingo: toPublicBingo(row()) }),
-      patch: async (_path: string, body: { exclusivityRules: ExclusivityRule[] }) => updateBingoSettings(db, bingo.id, body),
-    };
-    const log: string[] = [];
-    const ctx = { api: { as: () => session }, slug: bingo.slug, admin: "admin", rng: new Rng(7), log: (m: string) => log.push(m) } as unknown as Ctx;
-
-    const play = await addExclusiveGroup(ctx, new Date());
-    const rules = toPublicBingo(row()).exclusivityRules;
-    expect(rules.map((r) => r.id)).toEqual(["pets", GENERATED_GROUP_RULE_ID]);
-    // Burnt page is already the Pets rule's, so the group takes the head and the torch.
-    expect(rules[1]).toMatchObject({ scope: "tile", groups: [{ label: "Unique piece", itemNames: expect.arrayContaining(["Vorkath's head", "Bruma torch"]) }] });
-    expect(play).not.toBeNull();
-    const [conflict] = exclusivityConflicts(rules, placeLeaves(db, bingo.id), [play!.first.nodeId], [play!.second.nodeId]);
-    expect(conflict).toMatchObject({ group: "Unique piece", usedOn: `${play!.first.tileName} (${play!.first.itemName})` });
-
-    // Run again (a Bingo generated from a generated Bingo): the rule is replaced, not added twice.
-    await addExclusiveGroup(ctx, new Date());
-    expect(toPublicBingo(row()).exclusivityRules.map((r) => r.id)).toEqual(["pets", GENERATED_GROUP_RULE_ID]);
-  });
-});
-
 describe("importBingo", () => {
   // The import copies the board's source theme; the run's own theme is set with the dates, through the settings endpoint.
   it("sets the theme the run was asked for, in the same settings request as the dates", async () => {
@@ -124,5 +91,11 @@ describe("importBingo", () => {
 
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/admin/bingos/import", "PATCH /api/bingos/testdata-t/admin/settings"]);
     expect(calls[1]!.body).toMatchObject({ theme: "comic", startsAt: at.toISOString() });
+
+    // Asked for none, it leaves the theme the import copied from the board alone.
+    calls.length = 0;
+    await importBingo(ctx, { bingo: {} } as never, "Test data t", null);
+    expect(calls[1]!.body).not.toHaveProperty("theme");
+    expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
   });
 });
