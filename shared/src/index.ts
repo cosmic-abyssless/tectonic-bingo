@@ -152,6 +152,12 @@ export interface Bingo {
   womGroupId: string | null;
   womCompetitionId: number | null;
   womSyncError: string | null;
+  // Discord team sync (server/src/services/discordTeamService.ts): a role and private channels per Team.
+  discordEnabled: boolean;
+  /** An existing Discord role that may see every Team's channels (e.g. the clan's staff role). */
+  discordStaffRoleId: string | null;
+  discordSyncError: string | null;
+  discordSyncedAt: string | null;
   draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
@@ -168,6 +174,26 @@ export interface Bingo {
   hideRules: boolean;
   /** A Historical Bingo (CONTEXT.md): imported from another website, always Finished and read-only. See historical.ts. */
   historical: boolean;
+}
+
+/** One Team's Discord role and channels, as the Discord team sync made them (null: not made yet). */
+export interface DiscordTeamLinks {
+  teamId: string;
+  teamName: string;
+  roleId: string | null;
+  textChannelId: string | null;
+  voiceChannelId: string | null;
+}
+
+/** What the Discord team sync has made for a Bingo, for its settings panel (GET .../admin/discord). */
+export interface DiscordSyncStatus {
+  /** Why it isn't syncing now, or null when it is. */
+  blocker: string | null;
+  guildId: string | null;
+  categoryId: string | null;
+  teams: DiscordTeamLinks[];
+  /** How many roles and channels the sync has made for this Bingo, Teams that are gone included. */
+  resourceCount: number;
 }
 
 /**

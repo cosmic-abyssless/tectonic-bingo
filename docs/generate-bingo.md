@@ -87,7 +87,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 ## What it does
 
-1. Imports the board and sets the dates (signups open, draft, reveal, start, end). Unless the board already has an
+1. Imports the board and sets the dates (signups open, draft, reveal, start, end), turning on the **Discord team
+   sync** in the same settings request (never synced for a `testdata-` bingo; see below). Unless the board already has an
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
@@ -268,6 +269,9 @@ check for it):
   turning off to run it.
 - A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`), in any mode: its
   made-up players must never become a real competition.
+- Nor to Discord (`discordTeamService.ts`): its setting is on, so the settings panel shows it, but the sync
+  says why it isn't syncing ("A test data bingo is never synced to Discord") and makes no roles or channels.
+  The generator's requests skip it anyway (`X-Dev-Skip-Integrations`).
 - `POST /api/dev/generate` starts a run in the server (`server/src/devTools/generateBingo/job.ts`,
   one at a time), from another bingo's board (`from: <slug>`) or a sent `document`, and
   `GET /api/dev/generate?after=<n>` reports it with the log lines after the n-th. The Test data

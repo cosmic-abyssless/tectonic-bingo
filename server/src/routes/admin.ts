@@ -25,6 +25,7 @@ import * as memberPickService from "../services/memberPickService";
 import { getTectonicMembership, matchRsn } from "../services/tectonicMembership";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
+import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
@@ -95,6 +96,11 @@ router.patch(
       const code = body.womGroupVerificationCode ? String(body.womGroupVerificationCode).trim() : "";
       if (code) params.womGroupVerificationCode = code;
     }
+    if ("discordEnabled" in body) {
+      if (typeof body.discordEnabled !== "boolean") throw new ServiceError(400, "discordEnabled must be a boolean");
+      params.discordEnabled = body.discordEnabled;
+    }
+    if ("discordStaffRoleId" in body) params.discordStaffRoleId = body.discordStaffRoleId ? String(body.discordStaffRoleId).trim() : null;
     // Achievements (CONTEXT.md "Achievement"): the master switch, and/or a partial map of per-Achievement switches.
     if ("showScreenshotsWhenFinished" in body) {
       if (typeof body.showScreenshotsWhenFinished !== "boolean") throw new ServiceError(400, "showScreenshotsWhenFinished must be a boolean");
@@ -124,6 +130,8 @@ router.patch(
     if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
+    // The Discord category carries the bingo's name; turning the sync on (or changing the staff role) syncs everything.
+    if (params.name !== undefined || params.discordEnabled || params.discordStaffRoleId !== undefined) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
@@ -140,6 +148,39 @@ router.post(
     const groupId = String(body.groupId || req.bingo!.womGroupId || "").trim();
     const verificationCode = String(body.verificationCode || req.bingo!.womGroupVerificationCode || "").trim();
     res.json(await checkWomGroup(groupId, verificationCode));
+  }),
+);
+
+// Discord team sync (discordTeamService.ts): what it has made for this bingo, with ids for links into Discord, and
+// why it isn't syncing when it isn't.
+router.get(
+  "/discord",
+  asyncHandler(async (req, res) => {
+    res.json(getDiscordSyncStatus(db, req.bingo!));
+  }),
+);
+
+// Sync now: re-sends everything, which also puts back a role or channel someone changed or deleted by hand. Waits for
+// the sync, so the panel shows how it went. The sync records what it changed itself.
+router.post(
+  "/discord/sync",
+  auditSkip("the Discord sync records what it changed itself"),
+  asyncHandler(async (req, res) => {
+    await syncDiscordTeams(db, req.bingo!.id, { force: true });
+    const bingo = bingoService.getBingoBySlug(db, req.bingo!.slug)!;
+    res.json({ status: getDiscordSyncStatus(db, bingo), bingo: bingoService.toPublicBingo(bingo) });
+  }),
+);
+
+// Turns the sync off and deletes every role and channel it made for this bingo (e.g. once it's over).
+router.post(
+  "/discord/remove",
+  asyncHandler(async (req, res) => {
+    if (req.bingo!.discordEnabled) bingoService.updateBingoSettings(db, req.bingo!.id, { discordEnabled: false });
+    const result = await removeDiscordTeams(db, req.bingo!.id);
+    if (!result.ok) throw new ServiceError(502, `Removed ${result.deleted}, then Discord refused: ${result.message}`);
+    const bingo = bingoService.getBingoBySlug(db, req.bingo!.slug)!;
+    res.json({ deleted: result.deleted, status: getDiscordSyncStatus(db, bingo), bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
 
@@ -615,6 +656,7 @@ router.post(
     if (!captainUserId) throw new ServiceError(400, "captainUserId is required");
     const team = teamService.createTeam(db, { bingoId: req.bingo!.id, captainUserId, coCaptainUserId, name });
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.status(201).json({ team });
   }),
 );
@@ -626,6 +668,8 @@ router.patch(
     // Keep the WOM competition's team names in sync with renames made
     // from the admin panel too, not just the captain self-service route.
     if (name !== undefined) void syncWomCompetition(db, req.bingo!.id);
+    // The Team's Discord role carries its name and color, its channels its name.
+    if (name !== undefined || color !== undefined) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ team });
   }),
 );
@@ -636,6 +680,7 @@ router.post(
     if (!userId) throw new ServiceError(400, "userId is required");
     const member = teamService.addTeamMember(db, req.params.id as string, userId, req.bingo!.id);
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.status(201).json({ member });
   }),
 );
@@ -644,6 +689,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     teamService.deleteTeam(db, req.params.id as string);
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.status(204).end();
   }),
 );
@@ -657,6 +703,7 @@ router.delete(
     if (replacementUserId !== undefined && replacementUserId !== null && typeof replacementUserId !== "string") throw new ServiceError(400, "replacementUserId must be a string");
     teamService.removeTeamMember(db, req.params.id as string, req.params.userId as string, { bingoId: req.bingo!.id, reason, replacementUserId });
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
   }),
@@ -698,6 +745,7 @@ router.post(
     const signup = signupService.createLateSignup(db, req.bingo!, { userId, rsn, teamId: teamId || null, ...matchRsn(member, rsn) });
     void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, { discordId: user.discordId, linkedRsns: (member?.rsns ?? []).map((r) => r.rsn) });
     if (teamId) void syncWomCompetition(db, req.bingo!.id);
+    if (teamId) void syncDiscordTeams(db, req.bingo!.id);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ signup });
   }),
@@ -736,6 +784,7 @@ router.post(
     }
     const result = cutReviewService.applyCutReview(db, req.bingo!, changes, req.user!.id);
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.json(result);
   }),
 );

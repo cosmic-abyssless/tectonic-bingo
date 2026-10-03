@@ -601,6 +601,8 @@ export interface UpdateBingoSettingsParams {
   womEnabled?: boolean;
   womGroupId?: string | null;
   womGroupVerificationCode?: string | null;
+  discordEnabled?: boolean;
+  discordStaffRoleId?: string | null;
   // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
   achievementsEnabled?: boolean;
@@ -626,6 +628,9 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
+    }
+    if (params.discordStaffRoleId != null && !/^\d{15,25}$/.test(params.discordStaffRoleId)) {
+      throw new ServiceError(400, "The Discord staff role ID must be a role's numeric ID (Developer Mode > right-click the role > Copy Role ID)");
     }
     const { exclusivityRules, achievements: _achievements, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };

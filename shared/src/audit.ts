@@ -111,6 +111,8 @@ export interface AuditDetailsMap {
       womEnabled: boolean;
       womGroupId: string | null;
       womGroupVerificationCode: string;
+      discordEnabled: boolean;
+      discordStaffRoleId: string | null;
       achievementsEnabled: boolean;
       sealedTiles: boolean;
       hideRules: boolean;
@@ -272,6 +274,13 @@ export interface AuditDetailsMap {
   /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
   "wom.participants_updated": { competitionId: number };
   "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
+
+  /** The Discord team sync (discordTeamService.ts) changed something: labels of what it made, edited or deleted. */
+  "discord.synced": { created: string[]; updated: string[]; deleted: string[]; membersAdded: number; membersRemoved: number };
+  /** Recorded once per distinct failure (a broken setup would otherwise add one per change). */
+  "discord.sync_failed": { message: string };
+  /** An Admin removed every Discord role and channel the sync made for the Bingo. */
+  "discord.removed": { deleted: number };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -952,6 +961,25 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
+  "discord.synced": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Discord synced",
+    label: (i) => {
+      const d = i.details;
+      const parts = [
+        d.created.length ? `created ${joinList(d.created)}` : null,
+        d.updated.length ? `updated ${joinList(d.updated)}` : null,
+        d.deleted.length ? `deleted ${joinList(d.deleted)}` : null,
+        d.membersAdded ? `gave ${d.membersAdded} ${d.membersAdded === 1 ? "player" : "players"} their team role` : null,
+        d.membersRemoved ? `took the team role from ${d.membersRemoved} ${d.membersRemoved === 1 ? "player" : "players"}` : null,
+      ].filter((p): p is string => !!p);
+      return parts.length ? `Discord: ${parts.join("; ")}` : "Synced the teams to Discord";
+    },
+  },
+  "discord.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "Discord sync failed", label: (i) => `Discord sync failed: ${i.details.message}` },
+  "discord.removed": { category: "system", tone: "warn", visibility: "mods", title: "Discord removed", label: (i) => `Removed ${i.details.deleted} Discord roles and channels` },
   "mcp.tool_called": {
     category: "system",
     tone: "neutral",

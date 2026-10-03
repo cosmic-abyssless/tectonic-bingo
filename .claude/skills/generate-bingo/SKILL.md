@@ -70,7 +70,7 @@ Hard rules (do not reopen):
 - Skip OCR per request with `X-Dev-Skip-Ocr: 1`, and the outside services with
   `X-Dev-Skip-Integrations: 1` (the request context, `audit/context.ts`), not by
   turning them off globally.
-- A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`).
+- A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`) or Discord (`discordTeamService.ts`).
 - The generator runs inside the server (`job.ts`) and reads no repo files: keep it
   that way, or it stops working on staging.
 - All randomness goes through the seeded `Rng` in `rng.ts`.

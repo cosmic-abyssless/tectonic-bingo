@@ -41,6 +41,7 @@ import { applyRosterNames, partiesInPairingState } from "../services/pairingName
 import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomCompetition } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
 import { refreshPricesAndFill } from "../services/gpValueService";
@@ -902,6 +903,7 @@ router.post(
     const picks = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     const [first] = picks;
     broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
+    void syncDiscordTeams(db, bingo.id);
     res.status(201).json({ picks });
   }),
 );
@@ -915,6 +917,7 @@ router.post(
     const bingo = req.bingo!;
     const undone = draftService.undoLastPick(db, { bingo, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     broadcast({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
+    void syncDiscordTeams(db, bingo.id);
     res.json({ undone });
   }),
 );
@@ -941,6 +944,7 @@ router.patch(
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
     broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.json({ team: updated });
   }),
 );

@@ -178,6 +178,15 @@ export const bingos = sqliteTable('bingos', {
   // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
   historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
+  // Discord team sync (discordTeamService.ts): when on, every Team gets a Discord role (its name, color and members)
+  // and its own text and voice channels, under a category named after the Bingo, kept up to date from the Draft on.
+  // Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
+  discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
+  // An existing guild role (e.g. the clan's staff role) that may see every Team's channels. Null: only the Team does.
+  discordStaffRoleId: text('discord_staff_role_id'),
+  // Last sync failure, surfaced in the settings panel; cleared by the next successful sync.
+  discordSyncError: text('discord_sync_error'),
+  discordSyncedAt: integer('discord_synced_at', { mode: 'timestamp' }),
 });
 
 // A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
@@ -417,6 +426,25 @@ export const teams = sqliteTable('teams', {
 }, (t) => [
   uniqueIndex('teams_bingo_captain_unq').on(t.bingoId, t.captainUserId),
   uniqueIndex('teams_bingo_codeword_unq').on(t.bingoId, t.codeword),
+]);
+
+// What the Discord team sync (discordTeamService.ts) made in the guild: one row per Discord object, so it can be updated
+// or deleted later. No foreign keys on purpose: a row outlives its Team or Bingo being deleted, so the sync can still
+// delete the role and channels left behind. `applied_json` is what was last sent (name, color, permissions, and for a
+// role its members), compared with what's wanted so only real changes reach Discord: it allows a channel only two
+// renames per 10 minutes.
+export const discordResources = sqliteTable('discord_resources', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull(),
+  // Null for the Bingo's category.
+  teamId: text('team_id'),
+  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
+  discordId: text('discord_id').notNull(),
+  appliedJson: text('applied_json').notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  index('discord_resources_bingo_idx').on(t.bingoId),
 ]);
 
 export const teamMembers = sqliteTable('team_members', {

@@ -90,6 +90,10 @@ export const SQL_TABLES: Record<string, TableClass> = {
       wrapped_credits_json: "Unused",
       wrapped_art_credits_json: "",
       historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
+      discord_enabled: "Discord team sync on (a role and private channels per Team)",
+      discord_staff_role_id: "Discord role that may see every Team's channels",
+      discord_sync_error: "",
+      discord_synced_at: TS,
     },
   },
   bingo_moderators: {
@@ -262,6 +266,19 @@ export const SQL_TABLES: Record<string, TableClass> = {
   historical_standings: {
     note: "Final places (and points, when known) of a Historical Bingo's Teams, as recorded on the old site.",
     columns: { id: "", bingo_id: "", team_id: "", place: "1 is first", points: "Null when the old site didn't record them" },
+  },
+  discord_resources: {
+    note: "The Discord roles and channels the Discord team sync made: one row per Discord object. Kept after its Team or Bingo is deleted, until they're removed from Discord.",
+    columns: {
+      id: "",
+      bingo_id: "No foreign key: outlives the Bingo",
+      team_id: "Null for the Bingo's category. No foreign key: outlives the Team",
+      kind: "category, role, text_channel or voice_channel",
+      discord_id: "The role's or channel's Discord id",
+      applied_json: "What was last sent to Discord (name, color, permissions; a role's member Discord ids), JSON",
+      created_at: TS,
+      updated_at: TS,
+    },
   },
   wom_past_competitions: {
     note: "Final results of Wise Old Man competitions, kept after WOM's own record changes.",

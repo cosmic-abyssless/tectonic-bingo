@@ -16,6 +16,7 @@ import { THEME_KEYS } from "../../themes/keys";
 import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
+import { DiscordSyncPanel } from "./DiscordSyncPanel";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -75,6 +76,8 @@ export function BingoSettingsForm({
     // always starts blank. Left blank on save, the existing code (if any) is
     // kept as-is.
     womGroupVerificationCode: "",
+    discordEnabled: bingo.discordEnabled,
+    discordStaffRoleId: bingo.discordStaffRoleId ?? "",
   });
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -132,6 +135,8 @@ export function BingoSettingsForm({
         womGroupId: form.womGroupId.trim() || null,
         // Omit entirely when blank so the server keeps the existing code.
         ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
+        discordEnabled: form.discordEnabled,
+        discordStaffRoleId: form.discordStaffRoleId.trim() || null,
       });
       setForm((f) => ({ ...f, womGroupVerificationCode: "" }));
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
@@ -231,7 +236,7 @@ export function BingoSettingsForm({
         </div>
       </Section>
 
-      <WomSection enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
+      <IntegrationSection title="Wise Old Man" switchLabel="Enable Wise Old Man integration" enabled={form.womEnabled} onToggle={(womEnabled) => setForm({ ...form, womEnabled })}>
         <Notice tone="info">
           When enabled, a Wise Old Man group competition is created automatically for this bingo's teams once the draft finishes, then kept up to date:
           the bingo's name, its start and end dates, and every team's name and players.
@@ -259,7 +264,19 @@ export function BingoSettingsForm({
           </Notice>
         )}
         {bingo.womSyncError && <Notice tone="warn">Last WOM sync failed: {bingo.womSyncError}</Notice>}
-      </WomSection>
+      </IntegrationSection>
+
+      <IntegrationSection title="Discord" switchLabel="Enable Discord team roles and channels" enabled={form.discordEnabled} onToggle={(discordEnabled) => setForm({ ...form, discordEnabled })}>
+        <Notice tone="info">
+          When enabled, every team gets a Discord role in its color, given to its players, and its own private text and voice channels, under a category
+          named after the bingo. It starts with the draft and keeps up from then on: renames, colors, players drafted, removed or signed up late. Nothing
+          is deleted when the bingo finishes; remove it all below once you're done with it.
+        </Notice>
+        <Field label="Staff role ID (optional)" hint="A Discord role that may see every team's channels, e.g. the clan's staff. In Discord: Developer Mode, then right-click the role > Copy Role ID.">
+          <Input value={form.discordStaffRoleId} onChange={(e) => setForm({ ...form, discordStaffRoleId: e.target.value })} className="num" />
+        </Field>
+        <DiscordSyncPanel slug={slug} bingo={bingo} onRemoved={() => setForm((f) => ({ ...f, discordEnabled: false }))} />
+      </IntegrationSection>
 
       {/* What players get during Board revealed (CONTEXT.md "Sealed Tiles"). Both end by themselves at Live, so they're
           offered up to then. */}
@@ -405,16 +422,16 @@ function WomConnectionCheck({ slug, groupId, verificationCode }: { slug: string;
   );
 }
 
-function WomSection({ enabled, onToggle, children }: { enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
+function IntegrationSection({ title, switchLabel, enabled, onToggle, children }: { title: string; switchLabel: string; enabled: boolean; onToggle: (value: boolean) => void; children: ReactNode }) {
   const [expanded, setExpanded] = useState(enabled);
   useEffect(() => setExpanded(enabled), [enabled]);
 
   return (
     <Disclosure
-      title={<span className="flex-1 text-sm font-semibold text-on-surface">Wise Old Man</span>}
+      title={<span className="flex-1 text-sm font-semibold text-on-surface">{title}</span>}
       isExpanded={expanded}
       onExpandedChange={setExpanded}
-      action={<Switch isSelected={enabled} onChange={onToggle} aria-label="Enable Wise Old Man integration" />}
+      action={<Switch isSelected={enabled} onChange={onToggle} aria-label={switchLabel} />}
     >
       <div className="space-y-4">{children}</div>
     </Disclosure>
