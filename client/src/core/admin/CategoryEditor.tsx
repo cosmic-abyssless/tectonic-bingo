@@ -5,6 +5,7 @@ import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { queryKeys } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
+import { ColorInput } from "../ui/ColorInput";
 import { Input } from "../ui/Field";
 import { XIcon } from "../ui/icons";
 
@@ -41,7 +42,7 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
         <div className="mb-3 flex flex-wrap gap-2">
           {categories.map((cat) => (
             <div key={cat.id} className="flex h-8 items-center gap-1.5 rounded-full border border-outline bg-surface pl-1.5 pr-1">
-              <input type="color" aria-label={`${cat.label} color`} value={cat.colorHex ?? "#64748b"} onChange={(e) => recolor(cat.id, e.target.value)} className="size-5 cursor-pointer rounded-full border-none bg-transparent" />
+              <ColorInput aria-label={`${cat.label} color`} value={cat.colorHex ?? "#64748b"} onCommit={(hex) => recolor(cat.id, hex)} className="size-5 cursor-pointer rounded-full border-none bg-transparent" />
               <span className="text-sm text-on-surface">{cat.label}</span>
               <IconButton size="sm" label={`Remove ${cat.label}`} onPress={() => remove(cat.id)}>
                 <XIcon size={12} />
