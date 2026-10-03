@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSetUrlParams } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
@@ -11,7 +11,8 @@ import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { OPEN_PARAM, TEAM_PARAM, TILE_PARAM, resolveBoardUrl, type BoardDialog } from "./boardUrlState";
 import { useBingoCan, useCloseOnLoss } from "./permissions";
 import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
-import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
+import { TileSearchProvider } from "./TileSearchProvider";
+import { tileSearchMatcher } from "../core/board/tileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
@@ -34,18 +35,21 @@ interface BingoPageRaw {
   viewerId: string;
   /** Item nodes the viewed team can't claim because it used them elsewhere (exclusive items). */
   locks: ExclusiveLocks;
+  /** Each Tile's Tags, its Parts' included, for searching the Tiles (BoardResponse.tileTags); none while sealed. */
+  tileTags: Readonly<Record<string, string[]>>;
 }
 
 const BingoPageContext = createContext<BingoPageModel | null>(null);
 const BingoPageRawContext = createContext<BingoPageRaw | null>(null);
 
 const EMPTY_TILES: Tile[] = [];
+const EMPTY_CATEGORIES: TileCategory[] = [];
+const NO_TILE_TAGS: Readonly<Record<string, string[]>> = {};
 const EMPTY_LINES: BoardLine[] = [];
 const EMPTY_NODE_STATES: TeamNodeState[] = [];
 const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
 const EMPTY_ADJUSTMENTS: PointAdjustment[] = [];
-const EMPTY_CATEGORIES: TileCategory[] = [];
 
 // Clicking a sealed tile says so, once: a click on another replaces the note instead of stacking a new one.
 let sealedNoteKey: string | null = null;
@@ -79,6 +83,11 @@ export function BingoPageProvider({
     () => (!boardData ? { tiles: EMPTY_TILES, lines: EMPTY_LINES } : boardData.sealed ? sealedBoardAsTiles(boardData, bingoId) : boardData),
     [boardData, bingoId],
   );
+  // The board's search matches in the browser (core/board/tileSearch.ts), with the full board's Tags; the sealed board
+  // has none, and while sealed a Tile is found by its name and Category only.
+  const tileTags = (boardData && !boardData.sealed ? boardData.tileTags : undefined) ?? NO_TILE_TAGS;
+  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
+  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories, tileTags), [sealed, shellCategories, tileTags]);
 
   const can = useBingoCan(slug);
   const { data: permissions, dataUpdatedAt: permissionsAt } = usePermissions(slug);
@@ -170,16 +179,15 @@ export function BingoPageProvider({
     if (rulesOpen && eligibleForOpens) recordOpened.mutate({ kind: "rules" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rulesOpen, eligibleForOpens]);
-  const openTileTracked = (tileId: string | null) => {
+  // One function for the page's whole life: every Tile cell gets it, and a new one each render would re-draw them all.
+  const openTileLatest = useRef<(tileId: string | null) => void>(() => {});
+  openTileLatest.current = (tileId) => {
     if (!tileId) return closeParam(TILE_PARAM);
     // A sealed tile doesn't open: the note says when it will.
     if (sealed) return showSealedNote();
     openParam(TILE_PARAM, tileId);
   };
-
-  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
-  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
-  const search = useTileSearch(tiles, matchTile, openTileTracked);
+  const openTileTracked = useCallback((tileId: string | null) => openTileLatest.current(tileId), []);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -300,7 +308,6 @@ export function BingoPageProvider({
     showEndCountdown: bingo.stage === "live" && !!bingo.endsAt,
     submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
-    search,
     openTile: { id: openTileId, open: openTileTracked, close: () => closeParam(TILE_PARAM) },
     sealed: { forMe: sealed, forPlayers: areTilesSealed(bingo) },
     rules: { open: rulesOpen, show: () => showDialog("rules"), hide: () => hideDialog("rules") },
@@ -352,9 +359,11 @@ export function BingoPageProvider({
     codeword: bingo.stage === "live" ? (myTeamModel?.codeword ?? null) : null,
   };
 
-  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };
+  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks, tileTags };
 
   return (
+    // The search keeps its own state below the page (TileSearchProvider), so typing doesn't re-render the page.
+    <TileSearchProvider tiles={canSee ? tiles : EMPTY_TILES} matches={matchTile} onChoose={openTileTracked}>
     <BingoPageRawContext.Provider value={raw}>
       <BingoPageContext.Provider value={pageModel}>
         <BoardProvider
@@ -366,7 +375,6 @@ export function BingoPageProvider({
           bingoStartsAt={bingo.effectiveStartsAt}
           bingoRows={bingo.boardRows}
           bingoCols={bingo.boardCols}
-          searchQuery={search.query}
           canSubmit={canSubmit}
           canToggleInterest={canToggleInterest}
           interests={interests}
@@ -381,6 +389,7 @@ export function BingoPageProvider({
         </BoardProvider>
       </BingoPageContext.Provider>
     </BingoPageRawContext.Provider>
+    </TileSearchProvider>
   );
 }
 

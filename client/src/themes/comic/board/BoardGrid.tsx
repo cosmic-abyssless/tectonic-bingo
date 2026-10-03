@@ -3,6 +3,7 @@ import { useTime } from "motion/react";
 import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 import { LineCompletionWash } from "./LineCompletionWash";
+import { TileSearchSlot, useTileDimmed } from "../../../headless/TileSearchProvider";
 import { BOOST_MS, buildStopsByTileId } from "./linePulse";
 
 // Smallest a tile is allowed to get when the board shrinks to fit the
@@ -149,11 +150,11 @@ export function BoardGrid({
                 if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
                 const stops = stopsByTileId.get(tile.id);
                 return (
-                  <div key={tile.id} data-tile-id={tile.id} className="relative aspect-square w-full">
-                    {stops && !tile.dimmed && <LineCompletionWash time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
+                  <TileSearchSlot key={tile.id} tileId={tile.id} className="relative aspect-square w-full" dimmedClassName="pointer-events-none opacity-20 saturate-0">
+                    {stops && <UndimmedWash tileId={tile.id} time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
                     <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
                     {tileOverlay?.(tile)}
-                  </div>
+                  </TileSearchSlot>
                 );
               })}
             </div>
@@ -162,4 +163,9 @@ export function BoardGrid({
       </div>
     </div>
   );
+}
+
+/** A line's completion wash over a Tile, but not one the board's search dims (it reads that on its own, TileSearchProvider). */
+function UndimmedWash({ tileId, ...wash }: { tileId: string } & Parameters<typeof LineCompletionWash>[0]) {
+  return useTileDimmed(tileId) ? null : <LineCompletionWash {...wash} />;
 }

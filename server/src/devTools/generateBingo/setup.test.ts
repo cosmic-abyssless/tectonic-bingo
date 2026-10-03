@@ -3,10 +3,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { GraphNodeInput } from "@bingo/shared";
+import type { BingoExportDocument, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
+import { exportBingo, importBingo as realImport } from "../../services/bingoExportService";
+import { getBoardTags } from "../../services/tagService";
 import { importBingo, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
@@ -104,5 +106,34 @@ describe("importBingo", () => {
     await importBingo(ctx, { bingo: {} } as never, "Test data t", null, "700000000000000000");
     expect(calls[1]!.body).toMatchObject({ discordGuildId: "700000000000000000", discordEnabled: true });
     expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
+  });
+});
+
+// Tags (CONTEXT.md "Tag"): a run adds none of its own. The generated Bingo has exactly its board's, which the import
+// carries, and the wiki is never asked.
+describe("tags", () => {
+  it("come across from the board unchanged, and nothing asks the wiki", async () => {
+    const { bingo, task } = seed();
+    const vork = getBoardTiles(db, bingo.id).find((t) => t.name === "Vorkath")!;
+    db.insert(schema.tags).values({ bingoId: bingo.id, tileId: vork.id, kind: "text", text: "vork", sortOrder: 0 }).run();
+    const boss = db.insert(schema.tags).values({ bingoId: bingo.id, nodeId: task.id, kind: "boss", text: "Wintertodt", sortOrder: 0 }).returning().get();
+    db.insert(schema.tags).values({ bingoId: bingo.id, nodeId: task.id, kind: "text", text: "WT", bossTagId: boss.id, sortOrder: 1 }).run();
+    const document = exportBingo(db, bingo.id);
+
+    const session = {
+      post: async (_path: string, body: { slug: string; name: string; document: BingoExportDocument }) => ({ bingo: realImport(db, body.document, { slug: body.slug, name: body.name, createdByUserId: bingo.createdByUserId }) }),
+      patch: async () => ({}),
+    };
+    const at = new Date("2026-09-19T12:00:00Z");
+    const tl = { createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const ctx = { api: { as: () => session }, slug: "testdata-tags", admin: "admin", tl, log: () => {} } as unknown as Ctx;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await importBingo(ctx, document, "Test data tags", null);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+
+    const generated = db.select().from(schema.bingos).all().find((b) => b.slug === "testdata-tags")!;
+    expect(exportBingo(db, generated.id).tiles.map((t) => [t.tags, t.tasks.map((x) => x.tags)])).toEqual(document.tiles.map((t) => [t.tags, t.tasks.map((x) => x.tags)]));
+    expect(getBoardTags(db, generated.id).tiles).not.toEqual({});
   });
 });

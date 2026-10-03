@@ -58,8 +58,16 @@ export interface ExportNode {
    * Absent in files exported before this existed, where every node is its own copy.
    */
   reuse?: boolean;
+  /** A Part's (a Tile's direct child) Tags (CONTEXT.md). Absent in older files, and on every other node: none. */
+  tags?: ExportTag[];
   children: ExportNode[];
 }
+
+/**
+ * A Tag (CONTEXT.md) on a Tile or a Part, in the order they were added. A Boss tag carries the Text tags it added (the
+ * wiki's names for the boss) as `aliases`, as they stood when exported: import restores them without asking the wiki.
+ */
+export type ExportTag = { kind: "text"; text: string } | { kind: "boss"; text: string; aliases: string[] };
 
 export interface ExportCategory {
   localId: number;
@@ -97,6 +105,8 @@ export interface ExportTile {
   proofNote?: string | null;
   /** Present only when the export included images and this tile has one. */
   image?: ExportImage;
+  /** The Tile's own Tags (CONTEXT.md); its Parts' are on each task. Absent in older files: none. */
+  tags?: ExportTag[];
   tasks: ExportNode[];
 }
 

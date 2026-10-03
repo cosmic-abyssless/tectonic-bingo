@@ -395,7 +395,6 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       bingoStartsAt={raw.bingo.effectiveStartsAt}
       bingoRows={raw.bingo.boardRows}
       bingoCols={raw.bingo.boardCols}
-      searchQuery=""
       canSubmit={false}
       canToggleInterest={false}
       interests={EMPTY_INTERESTS}

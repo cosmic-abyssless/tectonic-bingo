@@ -66,6 +66,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
     case "bingo_changed":
       invalidate(["bingo"]);
       invalidate(["board"]);
+      // Tags (CONTEXT.md "Tag"): the board editor's (the board above carries them for its search).
+      invalidate(["adminBoardTags"]);
       // A board edit made while live re-scores every team, so everyone's progress moves too.
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);

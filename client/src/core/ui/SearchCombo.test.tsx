@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SearchCombo } from "./SearchCombo";
+import { ComboBox, ListBox, ListBoxItem } from "react-aria-components";
+import { ComboFocusFirst, ComboInput, ComboPopover, SearchCombo } from "./SearchCombo";
 import { SearchableSelect } from "./SearchableSelect";
 
 afterEach(cleanup);
@@ -151,5 +152,73 @@ describe("SearchableSelect", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(input.value).toBe("Apple");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The Submit flow's Tile picker: a Tile is found by more than its name (its Items, its Tags), and the Tags need the
+  // server, which is asked for what's typed.
+  it("filters with the caller's matcher, and tells the caller what's typed", async () => {
+    const user = userEvent.setup();
+    const onQueryChange = vi.fn();
+    const tagged = new Set(["c"]);
+    render(
+      <SearchableSelect
+        value="a"
+        options={options}
+        placeholder="Pick a fruit"
+        onChange={() => {}}
+        matches={(o, q) => o.label.toLowerCase().includes(q) || (q === "red" && tagged.has(o.id))}
+        onQueryChange={onQueryChange}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    expect(onQueryChange).toHaveBeenLastCalledWith("");
+    await user.keyboard("Red");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Cherry"]);
+    expect(onQueryChange).toHaveBeenLastCalledWith("red");
+  });
+});
+
+describe("ComboFocusFirst", () => {
+  /** The board's Tile search: rows found at once, and a later match (a Tag match, from the server) that goes first. */
+  function Tiles({ late }: { late: boolean }) {
+    const [text, setText] = useState("");
+    const rootRef = useRef<HTMLDivElement>(null);
+    const rows = text ? [...(late ? ["Gauntlet"] : []), "Pets", "Zulrah"] : [];
+    return (
+      <ComboBox ref={rootRef} aria-label="Tiles" inputValue={text} onInputChange={setText} items={rows.map((id) => ({ id }))} allowsCustomValue>
+        <ComboFocusFirst />
+        <ComboInput />
+        <ComboPopover anchorRef={rootRef}>
+          <ListBox>{(row: { id: string }) => <ListBoxItem id={row.id}>{row.id}</ListBoxItem>}</ListBox>
+        </ComboPopover>
+      </ComboBox>
+    );
+  }
+  const highlighted = (input: HTMLInputElement) => document.getElementById(input.getAttribute("aria-activedescendant") ?? "")?.textContent;
+
+  it("moves the highlight to a match that arrives above the top row it highlighted", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Tiles late={false} />);
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    await user.keyboard("cg");
+    await waitFor(() => expect(highlighted(input)).toBe("Pets"));
+    rerender(<Tiles late />);
+    await waitFor(() => expect(highlighted(input)).toBe("Gauntlet"));
+  });
+
+  it("leaves a highlight the keyboard moved", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Tiles late={false} />);
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    await user.keyboard("cg");
+    await waitFor(() => expect(highlighted(input)).toBe("Pets"));
+    await user.keyboard("{ArrowDown}");
+    expect(highlighted(input)).toBe("Zulrah");
+    rerender(<Tiles late />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(highlighted(input)).toBe("Zulrah");
   });
 });

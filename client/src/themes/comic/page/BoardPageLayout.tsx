@@ -1,4 +1,6 @@
-import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel } from "../../../headless";
+import type { ComponentType } from "react";
+import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel, useTileSearchModel } from "../../../headless";
+import type { TileSearchModel } from "../../../headless/types";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
@@ -12,14 +14,15 @@ import { ArtViewer } from "../board/PinnedArt";
 import { useComic } from "../ui/useComic";
 import { ScreenshotViewerHost } from "../../../core/submissions/screenshotViewer";
 
+// The Tile search box, reading its model from TileSearchProvider itself: typing re-renders it, not this layout.
+function BoardSearch({ TileSearch }: { TileSearch: ComponentType<{ search: TileSearchModel }> }) {
+  return <TileSearch search={useTileSearchModel()} />;
+}
+
 export function BoardPageLayout() {
   const page = useBingoPage();
   const board = useBoardModel();
   const modalTile = useTileModel(page.openTile.id);
-  // Whichever tile the search dropdown currently has highlighted (arrow-key
-  // nav or hovering a suggestion), so BoardGrid can give that tile the same
-  // "hover" treatment on the board itself, tying the two together.
-  const highlightedTileId = page.search.highlightedId;
   const { dragActive } = useScreenshotCapture(page);
   const { colors } = useComic();
 
@@ -71,7 +74,7 @@ export function BoardPageLayout() {
             <>
               {page.canModerate && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
               <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
-                <TileSearch search={page.search} />
+                <BoardSearch TileSearch={TileSearch} />
                 {/* One control for the team: identity, score, the team dialog,
                     and (mods, and everyone once Finished) the team switcher.
                     Someone who can pick a team but hasn't yet still gets it,
@@ -96,7 +99,7 @@ export function BoardPageLayout() {
                 )}
               </div>
 
-              <BoardGrid board={board} onOpenTile={page.openTile.open} highlightedTileId={highlightedTileId} />
+              <BoardGrid board={board} onOpenTile={page.openTile.open} />
             </>
           )}
         </main>

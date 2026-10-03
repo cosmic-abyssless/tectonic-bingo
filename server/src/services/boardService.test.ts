@@ -296,6 +296,6 @@ describe("getBoardForViewer", () => {
 
   it("gives a player nothing before the reveal", () => {
     const { bingo } = seedBoard({ sealedTiles: true, stage: "draft" });
-    expect(getBoardForViewer(db, bingo, false)).toEqual({ sealed: false, tiles: [], lines: [] });
+    expect(getBoardForViewer(db, bingo, false)).toEqual({ sealed: false, tiles: [], lines: [], tileTags: {} });
   });
 });
