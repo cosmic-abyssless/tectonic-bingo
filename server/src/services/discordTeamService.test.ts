@@ -690,3 +690,37 @@ describe("an existing category", () => {
     expect(guild.roles.size).toBe(0);
   });
 });
+
+describe("never takes the server down", () => {
+  it("a sync resolves even when something outside Discord throws", async () => {
+    const { bingo } = seed();
+    const broken = () => {
+      throw new Error("database is locked");
+    };
+    await expect(syncDiscordTeams(db, bingo.id, {}, broken)).resolves.toBeUndefined();
+  });
+
+  it("removal resolves with the failure instead of rejecting", async () => {
+    const { bingo } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const broken = () => {
+      throw new Error("database is locked");
+    };
+    expect(await removeDiscordTeams(db, bingo.id, broken)).toEqual({ ok: false, deleted: 0, message: "database is locked" });
+  });
+});
+
+describe("two bingos in one existing category", () => {
+  it("settle: neither keeps moving its channels after the other's", async () => {
+    const CATEGORY = "800000000000000000";
+    guild.channels.set(CATEGORY, { name: "Bingos", type: ChannelType.GuildCategory, permission_overwrites: [] });
+    const a = seed({ discordCategoryId: CATEGORY });
+    const b = seed({ slug: "autumn", name: "Autumn Bingo", discordCategoryId: CATEGORY });
+    await syncDiscordTeams(db, a.bingo.id, {}, guild);
+    await syncDiscordTeams(db, b.bingo.id, {}, guild);
+    guild.calls = [];
+    await syncDiscordTeams(db, a.bingo.id, {}, guild);
+    await syncDiscordTeams(db, b.bingo.id, {}, guild);
+    expect(guild.calls).toEqual([]);
+  });
+});

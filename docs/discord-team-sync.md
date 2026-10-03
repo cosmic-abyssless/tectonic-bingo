@@ -6,8 +6,8 @@ Code: `server/src/services/discordTeamService.ts`. Settings: a Bingo's **Setting
 
 ## What it makes
 
-Per Bingo, one **category** the bot makes for it (named after the Bingo, or the **Category name** set in the
-settings). Per Team, in it:
+Per Bingo, one **category**: one the bot makes for it (named after the Bingo, or the **Category name** set in the
+settings), or an existing one (see [Where new channels go](#where-new-channels-go)). Per Team, in it:
 
 | Per Team | Name | Who can see it |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ channels above its voice channels.
   competition is made, while the Bingo's **Discord** switch is on.
 - After everything that changes a Team from then on: a Team created, renamed, recolored or deleted, a Player removed
   from a Team or signed up late, a Cut review applied, a stage change, and the Bingo's name or Discord settings (switch,
-  category name, channel list) being saved.
+  category, channel list) being saved.
 - Each sync compares what the Bingo wants with what it last sent and only sends the difference: a rename edits one role
   and that Team's channels, and nothing else is touched.
 - Discord allows a channel **two renames per 10 minutes**. A third waits for Discord: instead of holding every other
@@ -75,6 +75,9 @@ channels above its voice channels.
   given the role on a later sync once they've joined.
 - Everything, when the Bingo is Finished. **Remove from Discord** in the settings turns the sync off and deletes every
   role and channel it made for the Bingo (and their messages). Deleting a Bingo does the same by itself.
+
+If Discord refuses partway through **Remove from Discord**, the sync is still turned off, the panel says what was
+refused, and what's left stays listed so it can be removed again.
 
 A failure (missing permission, Discord down) is shown in the settings panel and recorded once in the audit log
 (`discord.sync_failed`); what was changed is recorded as `discord.synced`. It never blocks the change that set it off.

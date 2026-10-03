@@ -3,7 +3,8 @@
 //   - a role named after the Team, in the Team's color, given to each of its Players;
 //   - the channels the Bingo's admins listed in Settings > Discord (bingos.discordChannelsJson, by default one text and
 //     one voice channel, named after the Team), which only that role and the bot can see;
-// all under one category the sync makes for the Bingo, named after it (or bingos.discordCategoryName). They're made as
+// all in one category: one the sync makes for the Bingo (named after it, or bingos.discordCategoryName), or an existing
+// one the admins picked (bingos.discordCategoryId), which it never edits or deletes. They're made as
 // the Draft finishes, when the Wise Old Man competition is, and kept up to date from then on: a Team renamed or
 // recolored, a Player removed or signed up late, a Team added or deleted, the channel list edited. Nothing is deleted
 // when the Bingo is Finished; an Admin removes them from the settings panel (removeDiscordTeams) when done with them.
@@ -350,7 +351,13 @@ export function syncDiscordTeams(db: Db, bingoId: string, options: DiscordSyncOp
   if (pending && !options.force && (!pending.skipIntegrations || options.skipIntegrations)) return pending.run;
   const run = enqueue(bingoId, async () => {
     if (pendingSyncs.get(bingoId)?.run === run) pendingSyncs.delete(bingoId);
-    await syncNow(db, bingoId, options, api);
+    try {
+      await syncNow(db, bingoId, options, api);
+    } catch (err) {
+      // syncNow keeps Discord's failures for the settings panel; this is anything else (the database, a bingo deleted
+      // mid-sync). Callers don't wait for it, so a rejection here would be unhandled and take the server down.
+      log.error("discord team sync crashed", { bingoId, err });
+    }
   });
   pendingSyncs.set(bingoId, { run, skipIntegrations: !!options.skipIntegrations });
   return run;
@@ -446,7 +453,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
 
   // The category every channel the sync makes goes in, so it always knows where they go: an existing one the admins
   // picked (never edited or deleted here), or one the sync makes for the Bingo.
-  const category = bingo.discordCategoryId ? await existingCategory(api, bingo.discordCategoryId, new Set(rows.map((r) => r.discordId))) : await ownCategory();
+  const category = bingo.discordCategoryId ? await existingCategory(api, bingo.discordCategoryId, syncedChannelIds(db, api.guildId)) : await ownCategory();
   async function ownCategory(): Promise<{ id: string; firstPosition: number }> {
     const body: ChannelBody = {
       name: discordCategoryName(bingo.discordCategoryName, bingo.name),
@@ -520,15 +527,23 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
 }
 
 /**
+ * Every channel the sync made in a server, for any Bingo: never counted as an existing category's own channels, or two
+ * Bingos sharing one would each keep moving theirs after the other's.
+ */
+function syncedChannelIds(db: Db, guildId: string): Set<string> {
+  return new Set(db.select({ id: discordResources.discordId }).from(discordResources).where(eq(discordResources.guildId, guildId)).all().map((r) => r.id));
+}
+
+/**
  * An existing category the admins picked: it must be a category in this server that the bot can see. The Teams'
  * channels go after whatever else is in it, so they don't get mixed in with the server's own.
  */
-async function existingCategory(api: DiscordGuildApi, categoryId: string, ours: Set<string>): Promise<{ id: string; firstPosition: number }> {
+async function existingCategory(api: DiscordGuildApi, categoryId: string, synced: Set<string>): Promise<{ id: string; firstPosition: number }> {
   const channels = await api.listChannels();
   if (!channels.some((c) => c.id === categoryId && c.type === ChannelType.GuildCategory)) {
     throw new Error(`Discord category ${categoryId} isn't a category in this server, or the bot can't see it.`);
   }
-  const others = channels.filter((c) => c.parent_id === categoryId && !ours.has(c.id)).map((c) => c.position);
+  const others = channels.filter((c) => c.parent_id === categoryId && !synced.has(c.id)).map((c) => c.position);
   return { id: categoryId, firstPosition: others.length ? Math.max(...others) + 1 : 0 };
 }
 
@@ -624,32 +639,38 @@ export type DiscordRemoveResult = { ok: true; deleted: number } | { ok: false; d
  * is deleted (its rows outlive it). The caller turns the sync off first, or the next change makes them all again.
  */
 export function removeDiscordTeams(db: Db, bingoId: string, source?: DiscordApiSource): Promise<DiscordRemoveResult> {
-  return enqueue(bingoId, async () => {
-    const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingoId)).all();
-    if (rows.length === 0) return { ok: true, deleted: 0 } as const;
-    // Each from the server it was made in.
-    const apis = new Map(rows.map((r) => [r.guildId, resolveApi(source, r.guildId)]));
-    if ([...apis.values()].some((a) => !a)) return { ok: false, deleted: 0, message: "The server has no Discord bot set up (DISCORD_BOT_TOKEN)." } as const;
-    const bingo = db.select({ name: bingos.name }).from(bingos).where(eq(bingos.id, bingoId)).get();
-    const reason = `Tectonic Bingo: ${bingo?.name ?? "deleted bingo"} removed`.slice(0, 512);
-    let deleted = 0;
-    try {
-      for (const row of orphanOrder(rows)) {
-        await deleteResource(db, row, reason, apis.get(row.guildId)!);
-        deleted++;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn("discord team removal failed", { bingoId, err: message });
-      if (bingo) db.update(bingos).set({ discordSyncError: message }).where(eq(bingos.id, bingoId)).run();
-      return { ok: false, deleted, message } as const;
-    }
-    if (bingo) {
-      db.update(bingos).set({ discordSyncError: null, discordSyncedAt: null }).where(eq(bingos.id, bingoId)).run();
-      audit(db, { action: "discord.removed", bingoId, entity: { type: "bingo", id: bingoId, label: bingo.name }, details: { deleted }, actor: "system" });
-    }
-    return { ok: true, deleted } as const;
+  // Never rejects: deleting a bingo calls it without waiting (see syncDiscordTeams).
+  return enqueue(bingoId, () => removeNow(db, bingoId, source)).catch((err: unknown) => {
+    log.error("discord team removal crashed", { bingoId, err });
+    return { ok: false, deleted: 0, message: err instanceof Error ? err.message : String(err) } as const;
   });
+}
+
+async function removeNow(db: Db, bingoId: string, source: DiscordApiSource): Promise<DiscordRemoveResult> {
+  const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingoId)).all();
+  if (rows.length === 0) return { ok: true, deleted: 0 } as const;
+  // Each from the server it was made in.
+  const apis = new Map(rows.map((r) => [r.guildId, resolveApi(source, r.guildId)]));
+  if ([...apis.values()].some((a) => !a)) return { ok: false, deleted: 0, message: "The server has no Discord bot set up (DISCORD_BOT_TOKEN)." } as const;
+  const bingo = db.select({ name: bingos.name }).from(bingos).where(eq(bingos.id, bingoId)).get();
+  const reason = `Tectonic Bingo: ${bingo?.name ?? "deleted bingo"} removed`.slice(0, 512);
+  let deleted = 0;
+  try {
+    for (const row of orphanOrder(rows)) {
+      await deleteResource(db, row, reason, apis.get(row.guildId)!);
+      deleted++;
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn("discord team removal failed", { bingoId, err: message });
+    if (bingo) db.update(bingos).set({ discordSyncError: message }).where(eq(bingos.id, bingoId)).run();
+    return { ok: false, deleted, message } as const;
+  }
+  if (bingo) {
+    db.update(bingos).set({ discordSyncError: null, discordSyncedAt: null }).where(eq(bingos.id, bingoId)).run();
+    audit(db, { action: "discord.removed", bingoId, entity: { type: "bingo", id: bingoId, label: bingo.name }, details: { deleted }, actor: "system" });
+  }
+  return { ok: true, deleted } as const;
 }
 
 // ---------------------------------------------------------------------------

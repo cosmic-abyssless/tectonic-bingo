@@ -122,7 +122,7 @@ export function syncDiscord(slug: string) {
 }
 /** Turns the sync off and deletes every role and channel it made for this bingo. */
 export function removeDiscord(slug: string) {
-  return api.post<{ deleted: number; status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/remove`, {});
+  return api.post<{ deleted: number; error: string | null; status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/remove`, {});
 }
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);

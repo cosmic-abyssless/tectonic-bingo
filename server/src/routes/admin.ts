@@ -181,15 +181,16 @@ router.post(
   }),
 );
 
-// Turns the sync off and deletes every role and channel it made for this bingo (e.g. once it's over).
+// Turns the sync off and deletes every role and channel it made for this bingo (e.g. once it's over). The sync is off
+// even when Discord refuses partway, so the answer is a success either way, with what was left and why (`error`): the
+// panel's switch follows, and Remove from Discord can be tried again for the rest.
 router.post(
   "/discord/remove",
   asyncHandler(async (req, res) => {
     if (req.bingo!.discordEnabled) bingoService.updateBingoSettings(db, req.bingo!.id, { discordEnabled: false });
     const result = await removeDiscordTeams(db, req.bingo!.id);
-    if (!result.ok) throw new ServiceError(502, `Removed ${result.deleted}, then Discord refused: ${result.message}`);
     const bingo = bingoService.getBingoBySlug(db, req.bingo!.slug)!;
-    res.json({ deleted: result.deleted, status: getDiscordSyncStatus(db, bingo), bingo: bingoService.toPublicBingo(bingo) });
+    res.json({ deleted: result.deleted, error: result.ok ? null : result.message, status: getDiscordSyncStatus(db, bingo), bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
 

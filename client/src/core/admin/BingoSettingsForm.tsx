@@ -281,10 +281,10 @@ export function BingoSettingsForm({
 
       <IntegrationSection title="Discord" switchLabel="Enable Discord team roles and channels" enabled={form.discordEnabled} onToggle={(discordEnabled) => setForm({ ...form, discordEnabled })}>
         <Notice tone="info">
-          When enabled, every team gets a Discord role in its color, given to its players, and the channels below, private to that role, all in one
-          category the bot makes for this bingo. They're made when the draft finishes, with the Wise Old Man competition, then kept up to date: renames,
-          colors, players removed or signed up late, and changes to this list. Nothing is deleted when the bingo finishes; remove it all below once
-          you're done with it.
+          When enabled, every team gets a Discord role in its color, given to its players, and the channels below, private to that role, in one
+          category: one the bot makes for this bingo, or an existing one. They're made when the draft finishes, with the Wise Old Man competition, then
+          kept up to date: renames, colors, players removed or signed up late, and changes here. Nothing is deleted when the bingo finishes; remove it
+          all below once you're done with it.
         </Notice>
         {devMode && (
           <Field

@@ -42,6 +42,8 @@ export function DiscordSyncPanel({ slug, bingo, onRemoved }: { slug: string; bin
         const result = await adminApi.removeDiscord(slug);
         setStatus(result.status);
         setRemoved(result.deleted);
+        // The sync is off either way; what Discord refused is still listed, and can be removed again.
+        if (result.error) setError(`Discord refused the rest: ${result.error}`);
         onRemoved();
       }
       await queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
@@ -104,7 +106,11 @@ export function DiscordSyncPanel({ slug, bingo, onRemoved }: { slug: string; bin
           </Button>
         )}
       </div>
-      {removed !== null && <Notice tone="ok">Removed {removed} Discord roles and channels, and turned the sync off.</Notice>}
+      {removed !== null && (
+        <Notice tone={error ? "warn" : "ok"}>
+          Removed {removed} Discord roles and channels, and turned the sync off.
+        </Notice>
+      )}
       {error && <Notice tone="danger">{error}</Notice>}
     </div>
   );
