@@ -271,6 +271,18 @@ describe("updateSignup / withdrawSignup", () => {
     expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Newer", womId: null, rsnVerified: false }));
   });
 
+  it("keeps a Borrowed account (and its WOM id) through a save, until the player saves an RSN of their own", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Own", answers: [] });
+    db.update(schema.signups).set({ rsn: "Bob", womId: "200", accountBorrowed: true }).where(eq(schema.signups.id, signup.id)).run();
+
+    updateSignup(db, bingo, signup.id, { rsn: "Bob", timezone: "Europe/London" });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Bob", womId: "200", accountBorrowed: true }));
+
+    updateSignup(db, bingo, signup.id, { rsn: "Own", womId: "1135", rsnVerified: true });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Own", womId: "1135", rsnVerified: true, accountBorrowed: false }));
+  });
+
   it("marks a signup withdrawn", () => {
     const { bingo, memberId } = seedBingo();
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [] });

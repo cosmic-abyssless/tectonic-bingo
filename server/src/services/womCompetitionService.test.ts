@@ -337,6 +337,18 @@ describe("syncWomCompetition", () => {
     expect(putBody(edited)!.teams).toEqual([{ name: "Renamed Team", participants: ["NewName"] }]);
   });
 
+  it("swaps a Borrowed account in for the account the player was on (its WOM id no longer matches the old one's)", async () => {
+    const { bingo, captain } = seedBingoWithTeam({ womCompetitionId: 42 });
+    // WOM has the captain's own account (WOM id 7); an Admin then put their Signup on the borrowed account Bob (id 8).
+    db.update(schema.signups).set({ rsn: "Bob", womId: "8", accountBorrowed: true }).where(eq(schema.signups.userId, captain.id)).run();
+    const own = womState({ participations: [{ teamName: "Team One", player: { id: 7, username: "captainrsn", displayName: "CaptainRsn" } }] });
+    const fetchImpl = mockFetch([{ body: own }, { body: {} }]);
+
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Team One", participants: ["Bob"] }] });
+  });
+
   it("sends the bingo's start and end dates when they differ", async () => {
     const startsAt = new Date("2026-03-02T18:00:00.000Z");
     const endsAt = new Date("2026-03-12T20:00:00.000Z");

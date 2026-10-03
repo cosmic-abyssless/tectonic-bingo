@@ -110,6 +110,23 @@ describe("readPlayer", () => {
     expect(await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) })).toBe("failed");
     expect(db.select().from(schema.womReads).get()?.lastError).toMatch(/no snapshots/);
   });
+
+  it("on a different account (a Borrowed account set mid-Bingo) drops what it had and reads the new one from the start", async () => {
+    const { bingoId, userIds } = seed();
+    const userId = userIds[0]!;
+    const own = fakeWom([raw(at(-2), 1), raw(at(10), 3)]);
+    await readPlayer(db, own.client, { bingoId, userId }, { now: at(12) });
+    expect(stored(bingoId).map((s) => s.ehb)).toEqual([1, 3]);
+
+    db.update(schema.signups).set({ rsn: "Bob", accountBorrowed: true }).where(eq(schema.signups.userId, userId)).run();
+    const borrowed = fakeWom([raw(at(-5), 40), raw(at(6), 44)]);
+    expect(await readPlayer(db, borrowed.client, { bingoId, userId }, { now: at(13) })).toBe("read");
+    // Asked for by the borrowed account's name, from shortly before the start again, not from the last stored snapshot.
+    expect(borrowed.urls()[0]!.pathname).toContain("/players/Bob/snapshots");
+    expect(borrowed.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(stored(bingoId).map((s) => s.ehb)).toEqual([40, 44]);
+    expect(db.select().from(schema.womReads).get()).toMatchObject({ rsn: "Bob" });
+  });
 });
 
 describe("Leech (an Achievement read from the clue counts)", () => {

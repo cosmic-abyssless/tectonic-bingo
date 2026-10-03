@@ -815,6 +815,8 @@ router.get(
     const player: PlayerProfile = {
       user,
       rsn: signup?.rsn ?? null,
+      signupId: signup?.signupId ?? null,
+      accountBorrowed: signup?.accountBorrowed ?? false,
       womStats: signup?.womStats ?? null,
       accountType: signup?.accountType ?? null,
       caCurrent: signup?.caCurrent ?? null,
