@@ -176,7 +176,7 @@ A distinct top-level section, milestone, or page within a Tile.
 - **Engineering note:** Corresponds to the immediate children of the Tile's root node in the requirement graph (`tile.node.children`).
 
 ### Tag
-A word a Tile or Part is found by in the board's search, never shown to Players. A **Text tag** is any text. A **Boss tag** is a boss or a raid (Chambers of Xeric) from the wiki; adding one adds the wiki's names for it (aliases and common misspellings) as Text tags, which can be removed one by one, and removing the Boss tag removes them. Not searched while the Tiles are sealed.
+A word a Tile or Part is found by in the board's search, never shown to Players. A **Text tag** is any text. A **Boss tag** is a boss, raid or minigame from the wiki (Vorkath, Chambers of Xeric, The Gauntlet); adding one adds the wiki's names for it (aliases and common misspellings) as Text tags, which can be removed one by one, and removing the Boss tag removes them. Not searched while the Tiles are sealed.
 
 ### Task
 A concrete objective, check, or nested requirement that must be satisfied.

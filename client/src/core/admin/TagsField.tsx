@@ -191,7 +191,7 @@ function BossPicker({ slug, onPick, disabled }: { slug: string; onPick: (boss: O
         clearOnPick
         loading={searching && (!fresh || isFetching)}
         emptyText={error ? "Couldn't reach the OSRS Wiki" : "No boss by that name"}
-        placeholder="Search the wiki's bosses and raids…"
+        placeholder="Search the wiki's bosses, raids and minigames…"
         aria-label="Boss"
         inputRef={inputRef}
         readOnly={disabled}

@@ -106,7 +106,7 @@ describe("OsrsWikiClient.bossPage", () => {
     );
     expect(await client.bossPage("kq")).toEqual({ title: "Kalphite Queen", redirects: ["Kq", "KQ", "Kal queen"] });
     const first = urls[0]!.searchParams;
-    expect(Object.fromEntries(first)).toMatchObject({ action: "query", prop: "redirects|categories", titles: "kq", redirects: "1", rdnamespace: "0", rdlimit: "max", clcategories: "Category:Bosses|Category:Raids", formatversion: "2" });
+    expect(Object.fromEntries(first)).toMatchObject({ action: "query", prop: "redirects|categories", titles: "kq", redirects: "1", rdnamespace: "0", rdlimit: "max", clcategories: "Category:Bosses|Category:Raids|Category:Minigames", formatversion: "2" });
     expect(urls[1]!.searchParams.get("rdcontinue")).toBe("108248");
   });
 
@@ -115,11 +115,15 @@ describe("OsrsWikiClient.bossPage", () => {
     expect(await wikiReplies({ query: { pages: [{ title: "Abyssal whip", redirects: [{ title: "Whip" }] }] } }).client.bossPage("Abyssal whip")).toBeNull();
   });
 
-  it("takes a raid (the Raids category), but not the Raids category's overview page", async () => {
+  it("takes a raid or a minigame (the Raids and Minigames categories), but not those categories' overview pages", async () => {
     const raids = [{ ns: 14, title: "Category:Raids" }];
     const cox = { query: { pages: [{ title: "Chambers of Xeric", redirects: [{ title: "CoX" }, { title: "Raids 1" }], categories: raids }] } };
     expect(await wikiReplies(cox).client.bossPage("cox")).toEqual({ title: "Chambers of Xeric", redirects: ["CoX", "Raids 1"] });
     expect(await wikiReplies({ query: { pages: [{ title: "Raids", redirects: [{ title: "Raid" }], categories: raids }] } }).client.bossPage("Raids")).toBeNull();
+    const minigames = [{ ns: 14, title: "Category:Minigames" }];
+    const gauntlet = { query: { pages: [{ title: "The Gauntlet", redirects: [{ title: "Gauntlet" }, { title: "CG" }], categories: minigames }] } };
+    expect(await wikiReplies(gauntlet).client.bossPage("gauntlet")).toEqual({ title: "The Gauntlet", redirects: ["Gauntlet", "CG"] });
+    expect(await wikiReplies({ query: { pages: [{ title: "Minigames", categories: minigames }] } }).client.bossPage("Minigames")).toBeNull();
   });
 
   it("throws WikiUnavailableError when the wiki can't be reached or answers with an error", async () => {
@@ -135,22 +139,28 @@ describe("OsrsWikiClient.bossPage", () => {
 describe("OsrsWikiClient.searchBosses", () => {
   const members = (titles: string[]) => ({ query: { categorymembers: titles.map((title) => ({ ns: 0, title })) } });
 
-  it("lists the Bosses and Raids categories once, then filters them as typed, names starting with the query first", async () => {
+  it("lists the Bosses, Raids and Minigames categories once, then filters them as typed, names starting with the query first", async () => {
     const { client, urls, fetchImpl } = wikiReplies(
       { continue: { cmcontinue: "page|x", continue: "-||" }, ...members(["Abyssal Sire", "Kalphite Queen"]) },
       members(["Sarachnis", "Vorkath"]),
       // The Raids category: its overview page is left out, and a page in both categories is listed once.
       members(["Chambers of Xeric", "Raids", "Sarachnis"]),
+      // The Minigames category, its overview page left out too.
+      members(["Fortis Colosseum", "Minigames", "The Gauntlet"]),
     );
     expect((await client.searchBosses("sar")).map((b) => b.name)).toEqual(["Sarachnis"]);
-    expect((await client.searchBosses("S")).map((b) => b.name)).toEqual(["Sarachnis", "Abyssal Sire", "Chambers of Xeric"]);
+    expect((await client.searchBosses("S")).map((b) => b.name)).toEqual(["Sarachnis", "Abyssal Sire", "Chambers of Xeric", "Fortis Colosseum"]);
     expect(await client.searchBosses("vork")).toEqual([{ name: "Vorkath", wikiUrl: "https://oldschool.runescape.wiki/w/Vorkath" }]);
     expect((await client.searchBosses("xeric")).map((b) => b.name)).toEqual(["Chambers of Xeric"]);
     expect(await client.searchBosses("raids")).toEqual([]);
-    expect(fetchImpl).toHaveBeenCalledTimes(3); // the Bosses listing's two pages and the Raids one, then no more calls
+    expect((await client.searchBosses("gaunt")).map((b) => b.name)).toEqual(["The Gauntlet"]);
+    expect((await client.searchBosses("colo")).map((b) => b.name)).toEqual(["Fortis Colosseum"]);
+    expect(await client.searchBosses("minigames")).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // the Bosses listing's two pages, then the Raids and Minigames ones, then no more calls
     expect(Object.fromEntries(urls[0]!.searchParams)).toMatchObject({ list: "categorymembers", cmtitle: "Category:Bosses", cmnamespace: "0", cmlimit: "max" });
     expect(urls[1]!.searchParams.get("cmcontinue")).toBe("page|x");
     expect(urls[2]!.searchParams.get("cmtitle")).toBe("Category:Raids");
+    expect(urls[3]!.searchParams.get("cmtitle")).toBe("Category:Minigames");
   });
 
   it("asks nothing for a blank query, and throws WikiUnavailableError when the wiki can't be reached", async () => {
