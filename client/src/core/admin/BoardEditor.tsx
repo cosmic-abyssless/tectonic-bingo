@@ -1,19 +1,24 @@
 import { ExclusiveItemsProvider } from "./exclusiveItems";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { isBoardEditingLocked, type Bingo, type BoardResponse, type Tile, type TileCategory } from "@bingo/shared";
-import { fullBoard, useBoard, queryKeys } from "../../api/queries";
+import { isBoardEditingLocked, type Bingo, type DraftBoardResponse, type Tile } from "@bingo/shared";
+import { adminQueryKeys, optimisticDraftBoard, useBoardDraft } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
-import { optimisticUpdate } from "../../api/optimistic";
 import { previewGraphNode } from "../board/requirementTree";
 import { Notice } from "../ui/Card";
 import { LockIcon, PlusIcon } from "../ui/icons";
 import { CategoryEditor } from "./CategoryEditor";
 import { thumbUrl } from "../../api/imageVariants";
 import { TileEditorPanel } from "./TileEditorPanel";
+import { UnpublishedChangesBar } from "./UnpublishedChangesBar";
+import { BoardRulesEditor } from "./BoardRulesEditor";
 
-export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: Bingo; categories: TileCategory[] }) {
-  const tiles = fullBoard(useBoard(slug).data)?.tiles ?? [];
+// The board the editor shows and edits is the Draft board (CONTEXT.md "Draft board"): every change goes to it, and
+// Players see it once an Admin publishes it from the bar at the top.
+export function BoardEditor({ slug, bingo }: { slug: string; bingo: Bingo }) {
+  const { data: draft } = useBoardDraft(slug);
+  const tiles = draft?.board.tiles ?? [];
+  const categories = draft?.categories ?? [];
   const queryClient = useQueryClient();
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +29,6 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
     : bingo.historical
       ? "This is a Historical Bingo, imported from another website: its Board can be looked through but not changed."
       : "The board is locked because the bingo is complete. Step the stage back to edit it.";
-  const live = bingo.stage === "live";
 
   const grid = new Map<string, Tile>();
   for (const tile of tiles) grid.set(`${tile.boardRow},${tile.boardCol}`, tile);
@@ -53,16 +57,16 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
       node: previewGraphNode(bingo.id, { kind: "ALL" }),
     };
     try {
-      await optimisticUpdate<BoardResponse>(
+      await optimisticDraftBoard(
         queryClient,
-        queryKeys.board(slug),
+        slug,
         (board) => ({ ...board, tiles: [...board.tiles, placeholder] }),
         async () => {
           const { tile } = await adminApi.createTile(slug, { name: placeholder.name, boardRow: row, boardCol: col });
           // Swap the placeholder for the real row so the editor can open before the
           // refetch lands. POST /tiles returns the bare row, so keep the empty node.
-          queryClient.setQueryData<BoardResponse>(queryKeys.board(slug), (board) =>
-            board && { ...board, tiles: board.tiles.map((t) => (t.id === placeholder.id ? { ...tile, node: placeholder.node } : t)) },
+          queryClient.setQueryData<DraftBoardResponse>(adminQueryKeys.boardDraft(slug), (draft) =>
+            draft && { ...draft, board: { ...draft.board, tiles: draft.board.tiles.map((t) => (t.id === placeholder.id ? { ...tile, node: placeholder.node } : t)) } },
           );
           setSelectedTileId(tile.id);
         },
@@ -73,16 +77,18 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
   }
 
   return (
-    <ExclusiveItemsProvider value={bingo.exclusivityRules}>
+    <ExclusiveItemsProvider value={draft?.exclusivityRules ?? bingo.exclusivityRules}>
     <div className="space-y-6">
+      {draft && !bingo.historical && <UnpublishedChangesBar slug={slug} bingo={bingo} draft={draft} locked={locked} />}
       {lockedReason && (
         <Notice tone="warn" icon={<LockIcon />}>
           {lockedReason}
         </Notice>
       )}
-      {live && (
-        <Notice tone="warn">
-          The bingo is live: changes apply immediately for everyone and re-score every team. A requirement teams have already submitted proof for can be edited but not removed.
+      {bingo.stage === "live" && (
+        <Notice tone="info">
+          The bingo is live: changes reach Players, and rescore every Team, only once they're published. Removing an Item teams have claimed stops their Claims counting (the Publish screen
+          says how many); a requirement a Proof screenshot was posted for can be edited but not removed.
         </Notice>
       )}
       {error && <Notice tone="danger">{error}</Notice>}
@@ -134,6 +140,8 @@ export function BoardEditor({ slug, bingo, categories }: { slug: string; bingo: 
       </div>
 
       <TileEditorPanel slug={slug} themeKey={bingo.theme} tile={selectedTile} categories={categories} locked={lockedReason} onClose={() => setSelectedTileId(null)} />
+
+      {draft && !bingo.historical && <BoardRulesEditor slug={slug} rulesMarkdown={draft.rulesMarkdown} exclusivityRules={draft.exclusivityRules} locked={locked} />}
     </div>
     </ExclusiveItemsProvider>
   );

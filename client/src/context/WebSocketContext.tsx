@@ -70,6 +70,10 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);
       invalidate(["adminLines"]);
+      // The Draft board (CONTEXT.md): another Admin's edit, Publish or Discard. (An open Publish screen keeps its
+      // preview: a Publish made from it after the draft changed is refused and the new one shown.)
+      invalidate(["adminBoardDraft"]);
+      invalidate(["adminBoardDraftStatus"]);
       invalidate(["adminQuestions"]);
       // The Feedback form's questions are edited there too.
       invalidate(["feedback"]);

@@ -1,6 +1,6 @@
 import type {
   AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
-  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
+  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit, BoardDraftStatus, DraftBoardResponse, ExclusivityRule, PublishPreview,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -138,6 +138,29 @@ export function addStaff(slug: string, userId: string) {
 }
 export function removeStaff(slug: string, userId: string) {
   return api.delete(`${base(slug)}/staff/${userId}`);
+}
+
+// The Draft board (CONTEXT.md "Draft board", "Publish"): every board edit below goes to it, and reaches Players only
+// once an Admin publishes it.
+export function getBoardDraft(slug: string) {
+  return api.get<DraftBoardResponse>(`${base(slug)}/board-draft`);
+}
+export function getBoardDraftStatus(slug: string) {
+  return api.get<{ status: BoardDraftStatus }>(`${base(slug)}/board-draft/status`);
+}
+export function getPublishPreview(slug: string) {
+  return api.get<{ preview: PublishPreview }>(`${base(slug)}/board-draft/preview`);
+}
+/** Publishes exactly the draft `revision` names; refused (code STALE_PREVIEW_CODE) if it has changed since. */
+export function publishBoardDraft(slug: string, revision: string) {
+  return api.post<{ preview: PublishPreview }>(`${base(slug)}/board-draft/publish`, { revision });
+}
+export function discardBoardDraft(slug: string) {
+  return api.post(`${base(slug)}/board-draft/discard`);
+}
+/** The Exclusive Item rules and the Rules text, saved to the draft. */
+export function updateDraftRules(slug: string, payload: { rulesMarkdown?: string | null; exclusivityRules?: ExclusivityRule[] }) {
+  return api.patch<{ status: BoardDraftStatus }>(`${base(slug)}/board-draft/rules`, payload);
 }
 
 export function createCategory(slug: string, payload: { label: string; colorHex?: string; sortOrder?: number }) {

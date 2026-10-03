@@ -108,6 +108,15 @@ export interface TeamScorePreview {
   lost: CompletionChange[];
 }
 
+/** An Item whose Valued as the draft changes, with Submissions already priced from the old one: re-priced only if the Admin asks, once published. */
+export interface RepriceableItem {
+  nodeId: string;
+  name: string;
+  tileName: string | null;
+  /** Submissions with a Drop value from it. */
+  submissions: number;
+}
+
 /** GET .../admin/board-draft/preview: what Publish would do. Publish names `revision` and is refused if the draft has changed since. */
 export interface PublishPreview {
   revision: string;
@@ -116,6 +125,8 @@ export interface PublishPreview {
   summary: string[];
   removedClaims: RemovedClaimsWarning;
   teams: TeamScorePreview[];
+  /** Offered for re-pricing after the Publish (CONTEXT.md "Valued as"). */
+  repriceable: RepriceableItem[];
 }
 
 /** The ServiceError code of a Publish refused because the draft changed after its preview was made. */

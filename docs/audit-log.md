@@ -41,8 +41,11 @@ whose awarded points changed on an approval or an undone review gets a
 `points.earned` / `points.lost` entry (`source`: `task`, `tile_bonus` or
 `line`), written just after the `submission.*` entry so the log is in causal
 order (a newest-first feed lists the points above the approval that awarded
-them). A board edit made while the
-bingo is live records a net `points.rescored` per team whose total moved.
+them). A board edit is made to the Draft board (CONTEXT.md) and isn't audited
+on its own (its routes are `auditSkip`ped: Moderators read the log, and the draft
+is for Admins only). Its Publish writes one `board.published` entry (a summary of
+what changed and every team's points before and after), then a net
+`points.rescored` per team whose total moved; a Discard writes `board.discarded`.
 `submission.created` labels name what was submitted (`describeClaims`).
 
 Every read goes through `server/src/audit/query.ts`'s `queryAuditLog` /

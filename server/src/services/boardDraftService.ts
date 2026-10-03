@@ -25,6 +25,7 @@ import {
   type DraftBoardResponse,
   type PublishPreview,
   type RemovedClaimsWarning,
+  type RepriceableItem,
   type TeamScorePreview,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -38,6 +39,7 @@ import { getBoardLines, getBoardTiles, getCategories } from "./boardService";
 import { normalizeExclusivityRules, parseExclusivityRules, unreferencedUploads } from "./bingoService";
 import { assertNoProofsFor } from "./graphService";
 import { rescoreBingoTx, scoreTeam } from "./scoringService";
+import { countPricedSubmissions } from "./gpRepriceService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -544,11 +546,36 @@ function previewScores(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): T
   });
 }
 
+/** Items whose Valued as the draft changes and that already have priced Submissions (re-priced only on request). */
+function repriceable(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): RepriceableItem[] {
+  const tileOf = (id: string) => {
+    for (const t of d.rows.tiles) {
+      const stack = [t.nodeId];
+      const seen = new Set<string>();
+      while (stack.length) {
+        const n = stack.pop()!;
+        if (n === id) return t.name;
+        if (seen.has(n)) continue;
+        seen.add(n);
+        stack.push(...(d.children.get(n) ?? []));
+      }
+    }
+    return null;
+  };
+  return d.rows.nodes
+    .filter((n) => {
+      const old = p.node.get(n.id);
+      return n.kind === "ITEM" && old && !sameFields(old, n, ["valuedAsItemName", "valuedAsDivisor"]);
+    })
+    .map((n) => ({ nodeId: n.id, name: nodeName(n), tileName: tileOf(n.id), submissions: countPricedSubmissions(tx as unknown as Db, bingoId, n.id) }))
+    .filter((i) => i.submissions > 0);
+}
+
 function buildPreview(tx: Tx, bingoId: string, revision: string): PublishPreview {
   const p = modelOf(loadRows(tx, bingoId, PUBLISHED_BOARD));
   const d = modelOf(loadRows(tx, bingoId, DRAFT_BOARD));
   const diff = diffBoards(p, d);
-  return { revision, diff, summary: summarizeDiff(diff), removedClaims: removedClaims(tx, p, d), teams: previewScores(tx, bingoId, p, d) };
+  return { revision, diff, summary: summarizeDiff(diff), removedClaims: removedClaims(tx, p, d), teams: previewScores(tx, bingoId, p, d), repriceable: repriceable(tx, bingoId, p, d) };
 }
 
 function requireDraft(q: Queryable, bingoId: string) {

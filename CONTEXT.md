@@ -156,6 +156,26 @@ The group of Players a Captain leads, formed by the Draft. Has a name, a color, 
 ### Board
 The full grid of Tiles presented to players for a Bingo.
 - **Geometry:** Configurable grid of rows and columns (e.g. 5x5).
+- **Two copies:** Admins edit the Draft board; everyone else sees the Published board. "The board", unqualified, is the Published board.
+
+### Draft board
+The Admins' working copy of a Bingo's Board (its Tiles, Parts, Tasks, points, lines, Categories and Tile images, plus its Exclusive Item rules and Rules text). Edits go here; nobody else sees it. One per Bingo, shared by every Admin.
+- **Rules:** Any Admin edits it, and it records who changed it last and when. Any Admin can Publish or Discard it. While it differs from the Published board, the Board tab says so ("Unpublished changes") with who changed it last, to Admins only. Admins can preview it as Players would see it. It works the same in every stage; a Finished Bingo's board stays locked.
+- **What goes through it:** The Board, the Exclusive Item rules and the Rules text. Every other setting (name, theme, dates, signups, Pot, Wise Old Man, reveal options, Once Finished) saves at once.
+- **Tile images:** One uploaded to the draft is stored at once, but shown to Players only once published.
+
+### Published board
+The Board everyone plays on: what Players see, what Moderators review against, what scores, and what is exported. Changes only by Publishing.
+- **Rules:** An imported Bingo's board is its Published board, with no draft.
+
+### Publish
+Applies the Draft board to the Published board, after showing what changes and how every Team's points move.
+- **The Publish screen:** Every Tile, Part and Task added, removed or changed, with old and new values, plus changed line bonuses, Categories, Exclusive Item rules and Rules text; a warning about Claims on Items it removes; and each Team's points before and after, with the Tiles and Parts it gains or loses as complete. Points share isn't previewed.
+- **Rules:** It publishes exactly the draft the screen showed: if the draft changed since, it's refused and the new changes are shown. Publishing rescores every Team. A Tile, Part, Task or Item on both boards stays the same one, so its Claims and points stay with it. Claims on an Item it removes stop counting; their Submissions are kept. Players' boards refresh, with no announcement. Recorded in the audit log as "Board published" (who, what changed, each Team's points before and after), for Moderators and Admins.
+- **Valued as:** An Item whose Valued as it changes can have the Submissions already priced re-priced, once published, if the Admin asks.
+
+### Discard
+Throws the Draft board away, back to the Published board, after confirming. Nothing Players see changes. Recorded in the audit log as "Board discarded" (who, and what was thrown away), for Moderators and Admins.
 
 ### Tile
 A single visual cell on the Board.
@@ -272,8 +292,8 @@ How multi-part Tiles handle identical or overlapping item lists between Parts:
 An Item a Team may use in **one place only**: a Claim on it locks the same Item everywhere else for that Team, but still counts only where it was submitted.
 - **Example:** A pet counts on its boss's Tile *or* on the Pets Tile, not both. Several of the same pet on one Tile all count. On Slayer Bosses, a unique used for Page 1 is spent for Page 2.
 - **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
-- **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
-- **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
+- **Set up:** Per Bingo, in the Board tab with the Draft board (they apply once published), as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
+- **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is published after Claims exist, the earliest Claim's place is the one that scores.
 - **Groups:** A rule can name a group of its items that count as one Item for locking (not an Item Group, which only starts a rule), e.g. "Bludgeon piece": the axon, claw and spine. A Claim on any member locks every member elsewhere in the rule's scope, shown with the piece used: "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)". Several members in the same place stay allowed, and a rejection frees the group. An item is in at most one group per rule, and a group belongs to its rule. Whether several members in one place all *count* is up to the Requirement Tree.
 - **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 

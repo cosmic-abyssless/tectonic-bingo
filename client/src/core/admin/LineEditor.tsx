@@ -1,21 +1,24 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { BoardLine } from "@bingo/shared";
+import { isBoardEditingLocked, type Bingo, type BoardLine } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
-import { adminQueryKeys, useLines } from "../../api/adminQueries";
+import { adminQueryKeys, invalidateBoardDraft, useBoardDraft, useLines } from "../../api/adminQueries";
+import { UnpublishedChangesBar } from "./UnpublishedChangesBar";
 import { Button, IconButton } from "../ui/Button";
 import { Field, Input } from "../ui/Field";
 import { XIcon } from "../ui/icons";
 
-export function LineEditor({ slug }: { slug: string }) {
+export function LineEditor({ slug, bingo }: { slug: string; bingo: Bingo }) {
   const { data } = useLines(slug);
+  const { data: draft } = useBoardDraft(slug);
   const lines = data?.lines ?? [];
   const queryClient = useQueryClient();
   const [pointsPerLine, setPointsPerLine] = useState(15);
   const [generating, setGenerating] = useState(false);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: adminQueryKeys.lines(slug) });
+  // Lines are part of the Draft board (CONTEXT.md): an edit here is published with the rest of it.
+  const invalidate = () => invalidateBoardDraft(queryClient, slug);
 
   async function generate() {
     setGenerating(true);
@@ -36,11 +39,12 @@ export function LineEditor({ slug }: { slug: string }) {
       adminQueryKeys.lines(slug),
       (data) => ({ lines: data.lines.filter((l) => l.id !== id) }),
       () => adminApi.deleteLine(slug, id),
-    );
+    ).finally(invalidate);
   }
 
   return (
     <div className="max-w-2xl space-y-4">
+      {draft && <UnpublishedChangesBar slug={slug} bingo={bingo} draft={draft} locked={isBoardEditingLocked(bingo.stage)} />}
       <div className="flex items-end gap-3">
         <Field label="Points per line">
           <Input type="number" value={pointsPerLine} onChange={(e) => setPointsPerLine(Number(e.target.value) || 0)} className="num w-28" />

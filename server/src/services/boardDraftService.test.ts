@@ -264,6 +264,16 @@ describe("Publish", () => {
     expect(db.select().from(schema.auditLog).where(and(eq(schema.auditLog.action, "points.rescored"), eq(schema.auditLog.teamId, s.teamA.id))).all()).toHaveLength(1);
   });
 
+  it("lists Items whose Valued as changed and already have priced Submissions, to re-price once published", () => {
+    const s = seed();
+    const sub = claim(s, s.head.id, "Vorkath's head");
+    db.update(schema.claims).set({ gpValue: 1000 }).where(eq(schema.claims.submissionId, sub.id)).run();
+    asDraft(s, (t) => updateNode(db, s.head.id, { kind: "ITEM", label: "Head", points: 40, itemName: "Vorkath's head", valuedAs: { itemName: "Vorkath's head", divisor: 2 } }, t));
+    const preview = getPublishPreview(db, s.bingo.id);
+    expect(preview.repriceable).toEqual([{ nodeId: s.head.id, name: "Head", tileName: "Vorkath", submissions: 1 }]);
+    expect(preview.diff.tiles[0]!.nodes[0]!.fields).toEqual([{ field: "Valued as", before: "None", after: "Vorkath's head ÷ 2" }]);
+  });
+
   it("refuses with nothing to publish", () => {
     const s = seed();
     expect(() => getPublishPreview(db, s.bingo.id)).toThrow(ServiceError);

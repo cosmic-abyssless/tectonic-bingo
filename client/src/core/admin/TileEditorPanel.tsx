@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
-import { queryKeys } from "../../api/queries";
+import { invalidateBoardDraft } from "../../api/adminQueries";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
@@ -72,7 +72,7 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
     setError(null);
     try {
       await action();
-      queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
+      invalidateBoardDraft(queryClient, slug);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
     }

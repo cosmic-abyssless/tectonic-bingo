@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, TileCategory } from "@bingo/shared";
+import type { DraftBoardResponse, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
-import { queryKeys } from "../../api/queries";
+import { adminQueryKeys, invalidateBoardDraft } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
 import { Input } from "../ui/Field";
 import { XIcon } from "../ui/icons";
@@ -13,7 +13,8 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
   const [label, setLabel] = useState("");
   const [colorHex, setColorHex] = useState("#6366f1");
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
+  // The Draft board's Categories (CONTEXT.md "Draft board"), published with the rest of it.
+  const invalidate = () => invalidateBoardDraft(queryClient, slug);
 
   async function add() {
     if (!label.trim()) return;
@@ -22,12 +23,12 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
     invalidate();
   }
   function remove(id: string) {
-    return optimisticUpdate<BingoShellResponse>(
+    return optimisticUpdate<DraftBoardResponse>(
       queryClient,
-      queryKeys.bingo(slug),
-      (shell) => ({ ...shell, categories: shell.categories.filter((c) => c.id !== id) }),
+      adminQueryKeys.boardDraft(slug),
+      (draft) => ({ ...draft, categories: draft.categories.filter((c) => c.id !== id) }),
       () => adminApi.deleteCategory(slug, id),
-    );
+    ).finally(invalidate);
   }
   async function recolor(id: string, hex: string) {
     await adminApi.updateCategory(slug, id, { colorHex: hex });
