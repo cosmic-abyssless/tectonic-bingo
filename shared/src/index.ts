@@ -10,6 +10,7 @@
 // derived at read time, never stored (see TeamNodeState).
 
 import type { ExclusivityRule } from "./exclusivity.ts";
+import type { DiscordChannelTemplate } from "./discord.ts";
 import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
@@ -152,6 +153,18 @@ export interface Bingo {
   womGroupId: string | null;
   womCompetitionId: number | null;
   womSyncError: string | null;
+  // Discord team sync (server/src/services/discordTeamService.ts): a role and private channels per Team.
+  discordEnabled: boolean;
+  /** The name of the Discord category the sync makes; null: the Bingo's name. Unused with discordCategoryId. */
+  discordCategoryName: string | null;
+  /** An existing Discord category to put the Teams' channels in instead (never edited or deleted). Null: make one. */
+  discordCategoryId: string | null;
+  /** Dev servers only: a Discord server to try the sync on instead of the clan's. Null: the clan's. */
+  discordGuildId: string | null;
+  /** The channels every Team gets (Settings > Discord). See discord.ts. */
+  discordChannels: DiscordChannelTemplate[];
+  discordSyncError: string | null;
+  discordSyncedAt: string | null;
   draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
@@ -1591,6 +1604,7 @@ export * from "./achievements.ts";
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
+export * from "./discord.ts";
 export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";

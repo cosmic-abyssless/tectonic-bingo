@@ -41,6 +41,7 @@ import { applyRosterNames, partiesInPairingState } from "../services/pairingName
 import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomCompetition } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
 import { refreshPricesAndFill } from "../services/gpValueService";
@@ -941,6 +942,7 @@ router.patch(
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
     broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
     void syncWomCompetition(db, req.bingo!.id);
+    void syncDiscordTeams(db, req.bingo!.id);
     res.json({ team: updated });
   }),
 );

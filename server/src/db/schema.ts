@@ -178,6 +178,23 @@ export const bingos = sqliteTable('bingos', {
   // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
   historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
+  // Discord team sync (discordTeamService.ts): when on, every Team gets a Discord role (its name, color and members)
+  // and its own channels, under a category named after the Bingo (or discordCategoryName), from the moment the Draft
+  // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
+  discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
+  discordCategoryName: text('discord_category_name'),
+  // An existing category in the Discord server to put every Team's channels in, instead of one the sync makes (and
+  // names discordCategoryName). The sync never edits or deletes it.
+  discordCategoryId: text('discord_category_id'),
+  // Dev servers only (isDevModeActive): another Discord server to sync to instead of DISCORD_GUILD_ID, for trying it
+  // out on a test server. Ignored elsewhere. Can't change while anything made in the old one is left.
+  discordGuildId: text('discord_guild_id'),
+  // The channels every Team gets: a JSON array of DiscordChannelTemplate (shared/src/discord.ts), parsed by
+  // bingoService.parseDiscordChannels and exposed as `discordChannels`. Starts as a text and a voice channel.
+  discordChannelsJson: text('discord_channels_json').notNull().default('[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]'),
+  // Last sync failure, surfaced in the settings panel; cleared by the next successful sync.
+  discordSyncError: text('discord_sync_error'),
+  discordSyncedAt: integer('discord_synced_at', { mode: 'timestamp' }),
 });
 
 // A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
@@ -417,6 +434,29 @@ export const teams = sqliteTable('teams', {
 }, (t) => [
   uniqueIndex('teams_bingo_captain_unq').on(t.bingoId, t.captainUserId),
   uniqueIndex('teams_bingo_codeword_unq').on(t.bingoId, t.codeword),
+]);
+
+// What the Discord team sync (discordTeamService.ts) made in the guild: one row per Discord object, so it can be updated
+// or deleted later. No foreign keys on purpose: a row outlives its Team or Bingo being deleted, so the sync can still
+// delete the role and channels left behind. `applied_json` is what was last sent (name, color, permissions, and for a
+// role its members), compared with what's wanted so only real changes reach Discord: it allows a channel only two
+// renames per 10 minutes.
+export const discordResources = sqliteTable('discord_resources', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull(),
+  // The Discord server it was made in, so it's always edited and deleted there.
+  guildId: text('guild_id').notNull(),
+  // Null for the Bingo's category.
+  teamId: text('team_id'),
+  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
+  // A channel's entry in bingos.discord_channels_json (its `key`); null for the category and a role.
+  channelKey: text('channel_key'),
+  discordId: text('discord_id').notNull(),
+  appliedJson: text('applied_json').notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  index('discord_resources_bingo_idx').on(t.bingoId),
 ]);
 
 export const teamMembers = sqliteTable('team_members', {

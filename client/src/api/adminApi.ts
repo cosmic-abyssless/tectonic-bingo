@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, Bingo, BingoExportDocument, DiscordSyncStatus, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -111,6 +111,18 @@ export type WomGroupCheck = { ok: true; groupName: string } | { ok: false; probl
 /** Checks a WOM group id and code without changing anything. Blank fields fall back to the saved ones. */
 export function checkWomGroup(slug: string, payload: { groupId?: string; verificationCode?: string }) {
   return api.post<WomGroupCheck>(`${base(slug)}/settings/wom-check`, payload);
+}
+/** What the Discord team sync has made for this bingo, and why it isn't syncing if it isn't. */
+export function getDiscordStatus(slug: string) {
+  return api.get<DiscordSyncStatus>(`${base(slug)}/discord`);
+}
+/** Syncs now, re-sending everything (puts back what was changed or deleted by hand in Discord). */
+export function syncDiscord(slug: string) {
+  return api.post<{ status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/sync`, {});
+}
+/** Turns the sync off and deletes every role and channel it made for this bingo. */
+export function removeDiscord(slug: string) {
+  return api.post<{ deleted: number; error: string | null; status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/remove`, {});
 }
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);

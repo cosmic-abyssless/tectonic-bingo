@@ -20,6 +20,7 @@ import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
 import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 import { getWomReadQueue, queueBingoReads } from "../services/womReadService";
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
@@ -202,6 +203,9 @@ router.post(
     if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
     // With no start date set, the bingo starts when it goes live: the competition's start moves to match.
     if (toStage === "live") void syncWomCompetition(db, bingo.id);
+    // Discord roles and channels are made as the draft finishes, alongside the WOM competition; later stage changes
+    // (back to the Draft too, which undoes Teams) keep them in step.
+    void syncDiscordTeams(db, bingo.id);
     // Same fire-and-forget convention: snapshot the bingo's WOM competition
     // once it's actually over, so its per-player gains survive independently
     // of WOM's own record. No-ops when the bingo has no linked competition.
