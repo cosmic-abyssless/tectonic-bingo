@@ -34,10 +34,21 @@ Saving applies it to every Team at once:
 
 ### Where new channels go
 
-Always in the Bingo's own category, which the sync made itself and remembers (`discord_resources`, kind `category`). If
-someone deletes it in Discord, the next sync (or **Sync now**) makes it again and moves the channels back in. Inside
-it, Teams follow their draft order and each Team's channels the list's order (each channel's `position`), so a channel
-added later lands next to its Team's others rather than at the bottom. Discord itself always shows a category's text
+Into **one category per Bingo**, either:
+
+- **one the sync makes** (the default), named after the Bingo or the **Category name**. It remembers it
+  (`discord_resources`, kind `category`); if someone deletes it in Discord, the next sync makes it again and moves the
+  channels back in; or
+- **an existing category** whose ID is set as **Existing category ID** (Developer Mode, right-click the category, Copy
+  Channel ID). The sync never renames, re-permissions or deletes it, and **Remove from Discord** leaves it (and the
+  server's own channels in it) alone. Each sync checks it's a category in the server; if not, it stops and says so.
+
+Changing between them, or to another existing category, moves every Team's channel there (messages kept); a category
+the sync had made is deleted once its channels have moved out.
+
+Inside the category, Teams follow their draft order and each Team's channels the list's order (each channel's
+`position`), so a channel added later lands next to its Team's others rather than at the bottom. In an existing
+category the Teams' channels go after the channels already in it. Discord itself always shows a category's text
 channels above its voice channels.
 
 ## When
@@ -105,7 +116,7 @@ in another server, it stops and says so.
 
 ## Data
 
-- `bingos.discord_enabled`, `discord_guild_id` (dev servers only), `discord_category_name`, `discord_channels_json` (the channel list, `DiscordChannelTemplate`
+- `bingos.discord_enabled`, `discord_guild_id` (dev servers only), `discord_category_id`, `discord_category_name`, `discord_channels_json` (the channel list, `DiscordChannelTemplate`
   in `shared/src/discord.ts`), `discord_sync_error`, `discord_synced_at`.
 - `discord_resources`: one row per category, role or channel made, with the server it's in (`guild_id`), a channel with its list entry's `channel_key`, and
   what was last sent (`applied_json`; for a role, the Discord ids it was given to). No foreign keys, so the rows outlive a deleted Team or Bingo and the sync can still

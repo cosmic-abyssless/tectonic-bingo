@@ -128,7 +128,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     },
   };
 
-  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme, options.discordGuildId);
+  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme, options.discordGuildId, options.discordCategoryId);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   const feedbackQuestions = await ensureFeedbackQuestions(api, adminDiscordId, slug, new Date(tl.createdAt.getTime() + 25 * 60_000));

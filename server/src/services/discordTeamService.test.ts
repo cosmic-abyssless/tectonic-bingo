@@ -89,6 +89,9 @@ class FakeGuild implements DiscordGuildApi {
     this.maybeFail(`deleteChannel ${this.channels.get(channelId)?.name}`);
     if (!this.channels.delete(channelId)) throw new DiscordSyncApiError("Unknown Channel", 404, 10003);
   }
+  async listChannels() {
+    return [...this.channels].map(([id, c]) => ({ id, type: c.type, parent_id: c.parent_id ?? null, position: c.position ?? 0 }));
+  }
   roleNamed(name: string) {
     return [...this.roles].find(([, r]) => r.name === name);
   }
@@ -633,5 +636,57 @@ describe("a test Discord server (dev servers only)", () => {
     expect(clan.roles.size + clan.channels.size).toBe(0);
     await syncDiscordTeams(db, bingo.id, {}, source);
     expect(test.roles.size).toBe(1);
+  });
+});
+
+describe("an existing category", () => {
+  const CLAN_CATEGORY = "800000000000000000";
+  /** A category the server already has, with two channels of its own in it. */
+  function clanCategory() {
+    guild.channels.set(CLAN_CATEGORY, { name: "Bingo", type: ChannelType.GuildCategory, permission_overwrites: [] });
+    guild.channels.set("800000000000000001", { name: "rules", type: ChannelType.GuildText, parent_id: CLAN_CATEGORY, position: 3, permission_overwrites: [] });
+    guild.channels.set("800000000000000002", { name: "signups", type: ChannelType.GuildText, parent_id: CLAN_CATEGORY, position: 7, permission_overwrites: [] });
+  }
+  const teamChannels = () => [...guild.channels.values()].filter((c) => c.parent_id === CLAN_CATEGORY && !["rules", "signups"].includes(c.name));
+
+  it("puts the Teams' channels in it, after what's already there, and never edits it", async () => {
+    clanCategory();
+    const { bingo } = seed({ discordCategoryId: CLAN_CATEGORY });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(teamChannels().map((c) => c.name).sort()).toEqual(["Red Dragons", "red-dragons"]);
+    expect(Math.min(...teamChannels().map((c) => c.position!))).toBe(8);
+    expect([...guild.channels.values()].filter((c) => c.type === ChannelType.GuildCategory)).toHaveLength(1);
+    expect(guild.calls.some((c) => c.includes("Bingo"))).toBe(false);
+    expect(getDiscordSyncStatus(db, bingoRow(bingo.id), guild).categoryId).toBe(CLAN_CATEGORY);
+
+    // Remove from Discord leaves it, and the server's own channels in it, alone.
+    await removeDiscordTeams(db, bingo.id, guild);
+    expect(guild.channels.has(CLAN_CATEGORY)).toBe(true);
+    expect(guild.channels.size).toBe(3);
+  });
+
+  it("moves the channels in when picked later, deleting the category the sync had made, and back out again", async () => {
+    clanCategory();
+    const { bingo } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const [ownId] = guild.channelNamed("Spring Bingo", ChannelType.GuildCategory)!;
+    const [textId] = guild.channelNamed("red-dragons", ChannelType.GuildText)!;
+
+    updateBingoSettings(db, bingo.id, { discordCategoryId: CLAN_CATEGORY });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(guild.channels.get(textId)!.parent_id).toBe(CLAN_CATEGORY);
+    expect(guild.channels.has(ownId)).toBe(false);
+
+    updateBingoSettings(db, bingo.id, { discordCategoryId: null });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const [newOwnId] = guild.channelNamed("Spring Bingo", ChannelType.GuildCategory)!;
+    expect(guild.channels.get(textId)!.parent_id).toBe(newOwnId);
+  });
+
+  it("says so when the ID isn't a category in the server", async () => {
+    const { bingo } = seed({ discordCategoryId: "800000000000000009" });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(bingoRow(bingo.id).discordSyncError).toMatch(/isn't a category in this server/);
+    expect(guild.roles.size).toBe(0);
   });
 });

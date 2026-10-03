@@ -92,6 +92,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
       discord_enabled: "Discord team sync on (a role and private channels per Team)",
       discord_guild_id: "Dev servers only: a Discord server to try the sync on instead of the clan's",
+      discord_category_id: "An existing Discord category the Teams' channels go in; null: one the sync makes",
       discord_category_name: "Name of the Discord category the Teams' channels go in; null: the Bingo's name",
       discord_channels_json: "The channels every Team gets: JSON array of {key, type (text or voice), name ({team} is the Team's name)}",
       discord_sync_error: "",

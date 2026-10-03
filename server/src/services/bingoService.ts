@@ -636,6 +636,7 @@ export interface UpdateBingoSettingsParams {
   womGroupVerificationCode?: string | null;
   discordEnabled?: boolean;
   discordCategoryName?: string | null;
+  discordCategoryId?: string | null;
   discordGuildId?: string | null;
   discordChannels?: unknown;
   // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
@@ -671,6 +672,9 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
       // What was made stays in the server it was made in; moving on would leave it behind untracked.
       const made = tx.select({ id: discordResources.id }).from(discordResources).where(eq(discordResources.bingoId, bingoId)).get();
       if (made) throw new ServiceError(400, "Remove this bingo's roles and channels from Discord before changing its Discord server");
+    }
+    if (params.discordCategoryId != null && !/^\d{15,25}$/.test(params.discordCategoryId)) {
+      throw new ServiceError(400, "The Discord category ID is a number (Developer Mode, then right-click the category > Copy Channel ID)");
     }
     if (params.discordCategoryName != null && params.discordCategoryName.length > DISCORD_NAME_MAX) {
       throw new ServiceError(400, `The Discord category name is at most ${DISCORD_NAME_MAX} characters`);

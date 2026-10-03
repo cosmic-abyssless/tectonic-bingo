@@ -50,6 +50,10 @@ export function normalizeOptions(raw: RawOptions, now = new Date(), names: Parti
   if (discordGuildId !== null && !/^\d{15,25}$/.test(discordGuildId)) throw new OptionsError(`${label("discordGuildId")} must be a Discord server ID (a long number)`);
   if (discordGuildId !== null && discordGuildId === process.env.DISCORD_GUILD_ID) throw new OptionsError(`${label("discordGuildId")} must be a test server, not the clan's (DISCORD_GUILD_ID)`);
 
+  const discordCategoryId = str("discordCategoryId");
+  if (discordCategoryId !== null && !/^\d{15,25}$/.test(discordCategoryId)) throw new OptionsError(`${label("discordCategoryId")} must be a Discord category ID (a long number)`);
+  if (discordCategoryId !== null && discordGuildId === null) throw new OptionsError(`${label("discordCategoryId")} needs ${label("discordGuildId")} (the test server it's in)`);
+
   return {
     stage,
     progress: num("progress", 0.5, 0.02, 1),
@@ -62,5 +66,6 @@ export function normalizeOptions(raw: RawOptions, now = new Date(), names: Parti
     slug,
     theme,
     discordGuildId,
+    discordCategoryId,
   };
 }

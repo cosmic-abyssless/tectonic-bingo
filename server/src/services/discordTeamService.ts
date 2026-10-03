@@ -97,6 +97,13 @@ function isUnknownMember(err: unknown): boolean {
   return err instanceof DiscordSyncApiError && (err.code === UNKNOWN_MEMBER || err.code === UNKNOWN_USER);
 }
 
+export interface GuildChannelInfo {
+  id: string;
+  type: number;
+  parent_id?: string | null;
+  position: number;
+}
+
 /** Everything the sync does in the guild. The real one is RestDiscordGuildApi; tests use a fake guild. */
 export interface DiscordGuildApi {
   readonly guildId: string;
@@ -109,6 +116,8 @@ export interface DiscordGuildApi {
   createChannel(body: ChannelBody, reason: string): Promise<string>;
   editChannel(channelId: string, body: ChannelBody, reason: string): Promise<void>;
   deleteChannel(channelId: string, reason: string): Promise<void>;
+  /** Every channel in the server: to check an existing category and place the Teams' channels after what's in it. */
+  listChannels(): Promise<GuildChannelInfo[]>;
 }
 
 /** Discord's REST API with the bot's token. @discordjs/rest queues requests to stay inside Discord's rate limits. */
@@ -160,6 +169,10 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
     // A channel's type can't be changed; Discord rejects the field on an edit.
     const { type: _type, ...edit } = body;
     await this.call(() => this.rest.patch(Routes.channel(channelId), { body: edit, reason }));
+  }
+
+  async listChannels(): Promise<GuildChannelInfo[]> {
+    return (await this.call(() => this.rest.get(Routes.guildChannels(this.guildId)))) as GuildChannelInfo[];
   }
 
   async deleteChannel(channelId: string, reason: string): Promise<void> {
@@ -431,16 +444,21 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
     return { id, recreated: true };
   }
 
-  // The category everything sits under. Every channel the sync makes goes in it, so it always knows where they go.
-  const categoryBody: ChannelBody = {
-    name: discordCategoryName(bingo.discordCategoryName, bingo.name),
-    type: ChannelType.GuildCategory,
-    permission_overwrites: overwrites(api.guildId, botId, []),
-  };
-  const category = await ensure({ teamId: null, kind: "category" }, `category "${categoryBody.name}"`, categoryBody, {
-    create: () => api.createChannel(categoryBody, reason),
-    edit: (id) => api.editChannel(id, categoryBody, reason),
-  });
+  // The category every channel the sync makes goes in, so it always knows where they go: an existing one the admins
+  // picked (never edited or deleted here), or one the sync makes for the Bingo.
+  const category = bingo.discordCategoryId ? await existingCategory(api, bingo.discordCategoryId, new Set(rows.map((r) => r.discordId))) : await ownCategory();
+  async function ownCategory(): Promise<{ id: string; firstPosition: number }> {
+    const body: ChannelBody = {
+      name: discordCategoryName(bingo.discordCategoryName, bingo.name),
+      type: ChannelType.GuildCategory,
+      permission_overwrites: overwrites(api.guildId, botId, []),
+    };
+    const { id } = await ensure({ teamId: null, kind: "category" }, `category "${body.name}"`, body, {
+      create: () => api.createChannel(body, reason),
+      edit: (id) => api.editChannel(id, body, reason),
+    });
+    return { id, firstPosition: 0 };
+  }
 
   const templates = parseDiscordChannels(bingo.discordChannelsJson);
   // Teams in their draft order, so each Team's channels sit together in the category in the same order as on the site.
@@ -476,7 +494,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
     await syncRoleMembers(db, rowFor(team.id, "role")!, role.id, members, !!options.force || role.recreated, reason, api, changes);
 
     for (const [templateIndex, template] of templates.entries()) {
-      const body = channelBody(template, team.name, category.id, teamIndex * templates.length + templateIndex, overwrites(api.guildId, botId, [{ id: role.id, allow: template.type === "text" ? TEXT_ACCESS : VOICE_ACCESS }]));
+      const body = channelBody(template, team.name, category.id, category.firstPosition + teamIndex * templates.length + templateIndex, overwrites(api.guildId, botId, [{ id: role.id, allow: template.type === "text" ? TEXT_ACCESS : VOICE_ACCESS }]));
       await ensure({ teamId: team.id, kind: channelKind(template), channelKey: template.key }, `${template.type} channel "${body.name}"`, body, {
         create: () => api.createChannel(body, reason),
         edit: (id) => api.editChannel(id, body, reason),
@@ -488,12 +506,30 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
   // Team's channel for an entry taken off the list (or whose type changed, which Discord can only do by replacing it).
   const teamIds = new Set(teamRows.map((t) => t.id));
   const wantedChannels = new Set(templates.map((t) => `${channelKind(t)}:${t.key}`));
-  const orphans = rows.filter((r) => r.teamId !== null && (!teamIds.has(r.teamId) || (r.kind !== "role" && !wantedChannels.has(`${r.kind}:${r.channelKey}`))));
+  const orphans = rows.filter(
+    (r) =>
+      (r.teamId !== null && (!teamIds.has(r.teamId) || (r.kind !== "role" && !wantedChannels.has(`${r.kind}:${r.channelKey}`)))) ||
+      // The sync's own category, once the channels have moved to an existing one (deleted last: see orphanOrder).
+      (r.kind === "category" && !!bingo.discordCategoryId),
+  );
   for (const row of orphanOrder(orphans)) {
     await deleteResource(db, row, reason, api);
     const name = parseApplied<ChannelBody & RoleBody>(row).name;
     changes.deleted.push(`${row.kind.replace("_", " ")}${name ? ` "${name}"` : ""}`);
   }
+}
+
+/**
+ * An existing category the admins picked: it must be a category in this server that the bot can see. The Teams'
+ * channels go after whatever else is in it, so they don't get mixed in with the server's own.
+ */
+async function existingCategory(api: DiscordGuildApi, categoryId: string, ours: Set<string>): Promise<{ id: string; firstPosition: number }> {
+  const channels = await api.listChannels();
+  if (!channels.some((c) => c.id === categoryId && c.type === ChannelType.GuildCategory)) {
+    throw new Error(`Discord category ${categoryId} isn't a category in this server, or the bot can't see it.`);
+  }
+  const others = channels.filter((c) => c.parent_id === categoryId && !ours.has(c.id)).map((c) => c.position);
+  return { id: categoryId, firstPosition: others.length ? Math.max(...others) + 1 : 0 };
 }
 
 function channelKind(template: Pick<DiscordChannelTemplate, "type">): "text_channel" | "voice_channel" {
@@ -630,7 +666,7 @@ export function getDiscordSyncStatus(db: Db, bingo: Bingo, source?: DiscordApiSo
     blocker: discordSyncBlocker(bingo, source) ?? (rows.some((r) => r.guildId !== target) ? "Its roles and channels are still in another Discord server. Remove them from Discord first." : null),
     // Where what's been made is (for the links), else where it will go.
     guildId: rows[0]?.guildId ?? target,
-    categoryId: db.select().from(discordResources).where(and(eq(discordResources.bingoId, bingo.id), isNull(discordResources.teamId), eq(discordResources.kind, "category"))).get()?.discordId ?? null,
+    categoryId: bingo.discordCategoryId ?? db.select().from(discordResources).where(and(eq(discordResources.bingoId, bingo.id), isNull(discordResources.teamId), eq(discordResources.kind, "category"))).get()?.discordId ?? null,
     teams: teamRows.map((t) => ({
       teamId: t.id,
       teamName: t.name,

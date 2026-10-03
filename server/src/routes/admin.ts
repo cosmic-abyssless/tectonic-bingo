@@ -106,6 +106,7 @@ router.patch(
       if (!isDevModeActive()) throw new ServiceError(400, "The Discord server can only be changed on a dev server");
       params.discordGuildId = body.discordGuildId ? String(body.discordGuildId).trim() || null : null;
     }
+    if ("discordCategoryId" in body) params.discordCategoryId = body.discordCategoryId ? String(body.discordCategoryId).trim() || null : null;
     if ("discordCategoryName" in body) params.discordCategoryName = body.discordCategoryName ? String(body.discordCategoryName).trim() || null : null;
     // Validated and given keys by the service (normalizeDiscordChannels).
     if ("discordChannels" in body) params.discordChannels = body.discordChannels;
@@ -139,7 +140,7 @@ router.patch(
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
     // The Discord category carries the bingo's name; turning the sync on, or editing its category or channels, applies them.
-    if (params.name !== undefined || params.discordEnabled || params.discordGuildId !== undefined || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    if (params.name !== undefined || params.discordEnabled || params.discordGuildId !== undefined || params.discordCategoryId !== undefined || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

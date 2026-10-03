@@ -47,6 +47,8 @@ export interface TestDataOptions {
    * server: a test data Bingo is only ever synced to a test one (discordTeamService.onDiscordTestServer).
    */
   discordGuildId: string | null;
+  /** With discordGuildId: an existing category there to put the Teams' channels in, or null for one of its own. */
+  discordCategoryId: string | null;
 }
 
 export interface TestDataLogLine {

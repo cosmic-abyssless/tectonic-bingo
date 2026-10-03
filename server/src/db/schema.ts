@@ -183,6 +183,9 @@ export const bingos = sqliteTable('bingos', {
   // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
   discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
   discordCategoryName: text('discord_category_name'),
+  // An existing category in the Discord server to put every Team's channels in, instead of one the sync makes (and
+  // names discordCategoryName). The sync never edits or deletes it.
+  discordCategoryId: text('discord_category_id'),
   // Dev servers only (isDevModeActive): another Discord server to sync to instead of DISCORD_GUILD_ID, for trying it
   // out on a test server. Ignored elsewhere. Can't change while anything made in the old one is left.
   discordGuildId: text('discord_guild_id'),

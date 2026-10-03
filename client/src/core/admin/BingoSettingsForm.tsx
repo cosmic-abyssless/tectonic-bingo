@@ -82,6 +82,7 @@ export function BingoSettingsForm({
     discordEnabled: bingo.discordEnabled,
     discordCategoryName: bingo.discordCategoryName ?? "",
     discordGuildId: bingo.discordGuildId ?? "",
+    discordCategoryId: bingo.discordCategoryId ?? "",
     discordChannels: bingo.discordChannels,
   });
   const [showPreview, setShowPreview] = useState(false);
@@ -145,6 +146,7 @@ export function BingoSettingsForm({
         ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
         discordEnabled: form.discordEnabled,
         discordCategoryName: form.discordCategoryName.trim() || null,
+        discordCategoryId: form.discordCategoryId.trim() || null,
         // Dev servers only: anywhere else the server refuses it (it's always the clan's Discord there).
         ...(devMode ? { discordGuildId: form.discordGuildId.trim() || null } : {}),
         discordChannels: form.discordChannels,
@@ -292,9 +294,17 @@ export function BingoSettingsForm({
             <Input value={form.discordGuildId} placeholder="The clan's server" onChange={(e) => setForm({ ...form, discordGuildId: e.target.value })} className="num" />
           </Field>
         )}
-        <Field label="Category name" hint="Where every team's channels go. Blank: the bingo's name.">
-          <Input value={form.discordCategoryName} placeholder={form.name} onChange={(e) => setForm({ ...form, discordCategoryName: e.target.value })} />
+        <Field
+          label="Existing category ID (optional)"
+          hint="Put every team's channels in a category the server already has, after the channels already in it. The bot never renames or deletes it. Blank: the bot makes a category for this bingo. In Discord: Developer Mode, then right-click the category > Copy Channel ID. Changing it moves the channels."
+        >
+          <Input value={form.discordCategoryId} placeholder="Make one for this bingo" onChange={(e) => setForm({ ...form, discordCategoryId: e.target.value.replace(/[^0-9]/g, "") })} className="num" />
         </Field>
+        {!form.discordCategoryId.trim() && (
+          <Field label="Category name" hint="The category the bot makes for this bingo. Blank: the bingo's name.">
+            <Input value={form.discordCategoryName} placeholder={form.name} onChange={(e) => setForm({ ...form, discordCategoryName: e.target.value })} />
+          </Field>
+        )}
         <DiscordChannelsEditor channels={form.discordChannels} onChange={(discordChannels) => setForm({ ...form, discordChannels })} />
         <DiscordSyncPanel slug={slug} bingo={bingo} onRemoved={() => setForm((f) => ({ ...f, discordEnabled: false }))} />
       </IntegrationSection>

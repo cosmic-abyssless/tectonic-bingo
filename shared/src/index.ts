@@ -155,8 +155,10 @@ export interface Bingo {
   womSyncError: string | null;
   // Discord team sync (server/src/services/discordTeamService.ts): a role and private channels per Team.
   discordEnabled: boolean;
-  /** The Discord category's name; null: the Bingo's name. */
+  /** The name of the Discord category the sync makes; null: the Bingo's name. Unused with discordCategoryId. */
   discordCategoryName: string | null;
+  /** An existing Discord category to put the Teams' channels in instead (never edited or deleted). Null: make one. */
+  discordCategoryId: string | null;
   /** Dev servers only: a Discord server to try the sync on instead of the clan's. Null: the clan's. */
   discordGuildId: string | null;
   /** The channels every Team gets (Settings > Discord). See discord.ts. */

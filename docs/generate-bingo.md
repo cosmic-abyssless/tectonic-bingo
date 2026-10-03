@@ -73,6 +73,7 @@ The teardown script takes the same `--base` and `--basic-auth`.
 | `--slug` | `testdata-<date>-<time>` | must start with `testdata-` |
 | `--theme` | the board's own | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Without it, the bingo keeps the theme of the board it's made from (`--from`'s bingo, or the export's); the Test data tab's "Same as the board". A Historical Bingo has none of its own, so it is drawn in `default` unless given |
 | `--discord-guild` | none | a **test** Discord server's ID: the bingo's Team roles and channels are really made there once the draft finishes (`docs/discord-team-sync.md`), with the bot invited to it and `DISCORD_BOT_TOKEN` set. Never the clan's server (`DISCORD_GUILD_ID` is refused). Made-up players aren't in it, so only `--me` gets a role, if you're in that server. Teardown removes them. The Test data tab's "Test Discord server ID". Ignored for a historical bingo |
+| `--discord-category` | none | with `--discord-guild`: an existing category in that server to put the channels in, after what's already there (never edited or deleted), instead of one the bot makes. The Test data tab's "Existing category ID" |
 | `--base` | `http://localhost:3001` | the server |
 | `--from` | none | a bingo on the server to copy the board from |
 | `--export` | repo-root `tectonic-comics-bingo-export.json` | the board to send, when `--from` isn't given |

@@ -35,6 +35,11 @@ describe("parseArgs", () => {
     }
   });
 
+  it("takes an existing category in the test server, only with one", () => {
+    expect(parseArgs(["--discord-guild", "700000000000000000", "--discord-category", "800000000000000000"], now, noEnv).discordCategoryId).toBe("800000000000000000");
+    expect(() => parseArgs(["--discord-category", "800000000000000000"], now, noEnv)).toThrow(/needs --discord-guild/);
+  });
+
   it("takes the staging password from the flag or the environment", () => {
     expect(parseArgs(["--basic-auth", "team:pw"], now, noEnv).basicAuth).toBe("team:pw");
     expect(parseArgs([], now, { GENERATE_BINGO_BASIC_AUTH: "team:pw" }).basicAuth).toBe("team:pw");
