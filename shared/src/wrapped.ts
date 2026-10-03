@@ -217,6 +217,11 @@ export interface BingoWrapped {
   /** Approved Submissions, and the Drop value of every approved Claim. */
   totalSubmissions: number;
   totalGp: number;
+  /**
+   * Every approved drop, counted by item (a drop is one, whatever its quantity), most dropped first: what the comic
+   * Wrapped rains down. Missing from Wrapped published before it was stored.
+   */
+  dropItems?: { itemName: string; drops: number }[];
   /** The drop with the best Luck in the Bingo. */
   rarestDrop: WrappedDrop | null;
   /** The approved Submission with the most Reactions. */

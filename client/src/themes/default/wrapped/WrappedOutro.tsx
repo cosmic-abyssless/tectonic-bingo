@@ -6,7 +6,7 @@ import { WrappedCategoryArt } from "../../../core/wrapped/WrappedParts";
 import { WrappedShareCards } from "../../../core/wrapped/ShareCards";
 import { useSlot } from "../../context";
 
-export function WrappedOutro({ section, preview, onRewind, onBoard }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }) {
+export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void; feedback: { responded: boolean; onOpen: () => void } | null }) {
   const ShareCard = useSlot("WrappedShareCard");
   const hasCredits = section.art.credits.length > 0 || section.art.images.some((image) => image.name);
   return (
@@ -31,6 +31,11 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
           <Button variant="secondary" onPress={onBoard}>
             Back to the Board
           </Button>
+          {feedback && (
+            <Button variant="secondary" onPress={feedback.onOpen}>
+              {feedback.responded ? "Edit your feedback" : "Give feedback"}
+            </Button>
+          )}
         </div>
       </Reveal>
     </WrappedScene>

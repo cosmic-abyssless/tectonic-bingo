@@ -39,6 +39,8 @@ const PULL_SECONDS = 0.8;
 const PAN_SECONDS = 0.65;
 /** How long the camera holds on a spread it has panned to before it goes in on the first panel (ms). */
 const PAN_HOLD_MS = 260;
+/** How long after its last move the world stops being its own layer (ms): longer than the holds between a flight's moves. */
+const DEMOTE_AFTER_MS = PAN_HOLD_MS + 140;
 /** The room (px, desk coordinates) the pull-back leaves around a spread: on a wide screen, the side images beside it. */
 const PULL_PAD: Record<StageMode, number> = { wide: 70, phone: 16 };
 /** The paper a narration inset is cut out with, round it (px). */
@@ -139,6 +141,7 @@ export class BookController {
   private reached: number[] = [];
   private camera: Camera = { scale: 1, x: 0, y: 0, angle: 0 };
   private camTween: Tween | null = null;
+  private demoteTimer: ReturnType<typeof setTimeout> | undefined;
   private token = 0;
   private signature = "";
   private backReported = false;
@@ -168,6 +171,7 @@ export class BookController {
   detach() {
     this.token++;
     this.camTween?.cancel();
+    clearTimeout(this.demoteTimer);
     this.observer?.disconnect();
     this.observer = null;
     this.env = null;
@@ -488,17 +492,37 @@ export class BookController {
       this.applyCamera(to);
       return token === this.token;
     }
+    this.promote();
     const move = tween(seconds, (t) => this.applyCamera(mixCamera(from, to, curve(t))));
     this.camTween = move;
     const completed = await move.done;
     if (this.camTween === move) {
       this.camTween = null;
+      this.demoteSoon();
       if (this.relayoutAfter) {
         this.relayoutAfter = false;
         this.relayout();
       }
     }
     return completed && token === this.token;
+  }
+
+  /**
+   * While the camera moves, the world is its own compositor layer, so each frame only moves a picture of it instead of
+   * repainting the desk (its clipped panels, shadows and halftones). Not at rest: a layer keeps the scale it was drawn at,
+   * so the panel the camera has zoomed in on would stay blurred. A flight is several moves in a row, so the layer stays
+   * between them and goes a moment after the last.
+   */
+  private promote() {
+    clearTimeout(this.demoteTimer);
+    this.env!.world.style.willChange = "transform";
+  }
+
+  private demoteSoon() {
+    clearTimeout(this.demoteTimer);
+    this.demoteTimer = setTimeout(() => {
+      if (!this.camTween && this.env) this.env.world.style.willChange = "";
+    }, DEMOTE_AFTER_MS);
   }
 
   /** Tells every Scene how much of it is reached, and which is current. */

@@ -963,6 +963,11 @@ export interface WrappedBingoModel {
   totalSubmissions: number;
   totalSubmissionsLabel: string;
   totalGpLabel: string;
+  /**
+   * Every drop of the Bingo by item, most dropped first, for a theme to rain them down: `drops` is how many of that item
+   * (a drop counts once, whatever its quantity). Null when there were none, or on a Wrapped published before they were stored.
+   */
+  dropRain: { items: { itemName: string; drops: number }[]; dropsLabel: string; kindsLabel: string } | null;
   rarestDrop: WrappedDropModel | null;
   mostReacted: { drop: WrappedDropModel; reactionsLabel: string } | null;
   leaderboard: { teamId: string; name: string; color: string | null; placement: number; placementLabel: string; pointsLabel: string; isMine: boolean }[];
@@ -1115,8 +1120,13 @@ export interface WrappedModel {
    * jump straight to the share cards. False on a first visit, and whenever the browser couldn't remember.
    */
   outroReachedBefore: boolean;
+  /**
+   * The Feedback form (CONTEXT.md "Feedback form") while it's open to this viewer, for the Outro to invite them to it:
+   * `responded` once they have answered (then it offers to edit). Null when it isn't open to them.
+   */
+  feedback: { responded: boolean } | null;
   /** `outroReached` remembers, for next time, that the viewer got to the Outro. */
-  actions: { goToBoard(): void; goToRewind(): void; outroReached(): void };
+  actions: { goToBoard(): void; goToRewind(): void; goToFeedback(): void; outroReached(): void };
 }
 
 /** The Tutorial's explanation card for the current step (the TutorialCard slot draws it; core places it). */

@@ -35,11 +35,13 @@ export function WrappedProvider({ slug, children, renderLoading, renderError }: 
               endsAt: page.bingo.endsAt,
               outroReachedBefore,
             },
-            { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`), outroReached: () => rememberOutroReached(slug) },
+            { goToBoard: () => navigate(`/b/${slug}`), goToRewind: () => navigate(`/b/${slug}/rewind`), goToFeedback: () => navigate(`/b/${slug}/feedback`), outroReached: () => rememberOutroReached(slug) },
             slug,
+            // The Feedback form, while it's open to this viewer (the Board's page model asked the server).
+            page.feedback.canOpen ? { responded: page.feedback.responded } : null,
           )
         : null,
-    [data, user, page.user.displayName, page.user.avatarUrl, page.bingo.startsAt, page.bingo.endsAt, navigate, slug, outroReachedBefore],
+    [data, user, page.user.displayName, page.user.avatarUrl, page.bingo.startsAt, page.bingo.endsAt, navigate, slug, outroReachedBefore, page.feedback.canOpen, page.feedback.responded],
   );
 
   if (error) return <>{renderError(error instanceof Error ? error.message : "Couldn't load Wrapped")}</>;

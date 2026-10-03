@@ -6,12 +6,14 @@ import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
 import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
 import { Gp, PanelBody } from "./sectionParts-you-duo-captain-moderator";
+import { DropRain } from "./DropRain";
 
 /**
  * The comic Bingo section (#421): the Bingo-wide story, and for some viewers (a Moderator who didn't play) the only section,
  * so its first page reads on its own straight after the contents page. Up to four pages, each Reveal one panel, in the
  * default section's order:
  *   1. Everyone, together: the splash, the totals, the leaderboard.
+ *   1½. It rained loot: every drop of the Bingo, its icon raining down into a pile filling the page.
  *   2. The highlights: the race, the rarest drop, the crowd favourite.
  *   3. The draft's Steal, then Behind the scenes: who moderated (the Moderators category's art and credits), the wait times.
  *   4. The reviewers, then every Team's Superlatives, a few Teams to a page, dealt evenly over as many pages as they need.
@@ -49,6 +51,30 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
           </Reveal>
         </div>
       </WrappedScene>
+
+      {b.dropRain && (
+        <WrappedScene steps={1}>
+          <Reveal step={0} emphasis="highlight" className={`flex-1 ${PADDED_PANEL}`}>
+            <PanelBody tone="blue" rays="50% -20%" align="start" gap={0}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <Kicker>Every drop</Kicker>
+                  <PanelHeading className="mt-2" size={34}>
+                    It rained loot
+                  </PanelHeading>
+                </div>
+                <Sfx size={26} tilt={8} className="mt-1">
+                  Clink!
+                </Sfx>
+              </div>
+              <p className="mt-1.5 text-[14px] font-semibold">
+                {b.dropRain.dropsLabel}, {b.dropRain.kindsLabel}.
+              </p>
+              <DropRain items={b.dropRain.items} step={0} className="mt-2 min-h-[380px] flex-1" />
+            </PanelBody>
+          </Reveal>
+        </WrappedScene>
+      )}
 
       {count(highlights) > 0 && (
         <WrappedScene steps={count(highlights)}>
@@ -144,8 +170,9 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
               {/* Each Team's picks a panel of its own, all at one step: the camera takes them in together. */}
               {teams.length > 0 && (
                 <div className={`grid flex-1 auto-rows-fr gap-3 ${teams.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
-                  {teams.map((t) => (
-                    <Reveal key={t.teamId} step={reviewers ? 1 : 0} className={PADDED_PANEL}>
+                  {teams.map((t, i) => (
+                    // An odd one out takes the whole last row, not half of it beside a gap.
+                    <Reveal key={t.teamId} step={reviewers ? 1 : 0} className={`${PADDED_PANEL} ${teams.length > 1 && teams.length % 2 === 1 && i === teams.length - 1 ? "col-span-2" : ""}`}>
                       <TeamPicks team={t} />
                     </Reveal>
                   ))}

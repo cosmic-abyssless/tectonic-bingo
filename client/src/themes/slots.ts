@@ -309,7 +309,8 @@ export interface ThemeSlots {
   // The closing screen: a way on to Rewind and back to the Board, then the viewer's share cards (section.cards), drawn
   // with core/wrapped's WrappedShareCards and the WrappedShareCard slot. WrappedShareCards previews each card, adds
   // Copy image, Download and Share, and (preview) the "Preview" watermark every card carries in a Moderator's preview.
-  WrappedOutro: ComponentType<{ section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void }>;
+  /** `feedback`: the Feedback form while it's open to the viewer (null when not), and how to open it. */
+  WrappedOutro: ComponentType<{ section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void; feedback: { responded: boolean; onOpen: () => void } | null }>;
   // One share card, the image a Player shares (CONTEXT.md "Wrapped"): drawn at exactly 540×675 CSS px (4:5; made into a
   // 1080×1350 PNG in the viewer's browser, never on the server, by redrawing this DOM, so what's drawn is what's shared).
   // It must stand on its own: its own background, the Bingo's name and the site in its footer, nothing outside its box,

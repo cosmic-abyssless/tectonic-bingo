@@ -143,6 +143,13 @@ export function duoMoments(mine: WrappedDrop[], theirs: WrappedDrop[], tileOf: (
   return moments;
 }
 
+/** Every drop counted by its item, most dropped first (then by name, so the order is the same every time). */
+function countDropItems(drops: WrappedDrop[]): { itemName: string; drops: number }[] {
+  const counts = new Map<string, number>();
+  for (const d of drops) counts.set(d.itemName, (counts.get(d.itemName) ?? 0) + 1);
+  return [...counts].map(([itemName, n]) => ({ itemName, drops: n })).sort((a, b) => b.drops - a.drops || a.itemName.localeCompare(b.itemName));
+}
+
 /** Review stats over some reviewed Submissions (approved or rejected, with who reviewed them and when). */
 function reviewStats(reviews: { reviewerId: string; status: string; submittedAt: Date; reviewedAt: Date }[], userById: Map<string, AvatarUser>): WrappedReviewStats {
   const waits = reviews.map((r) => Math.max(0, r.reviewedAt.getTime() - r.submittedAt.getTime()));
@@ -293,6 +300,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     bingoName: bingo.name,
     totalSubmissions: approvedSubs.length,
     totalGp: drops.reduce((sum, d) => sum + (d.gpValue ?? 0), 0),
+    dropItems: countDropItems(drops),
     rarestDrop: rarest ?? null,
     mostReacted: mostReactedDrop ? { drop: mostReactedDrop, reactions: reactionsOf(mostReacted!) } : null,
     teams: wrappedTeams,

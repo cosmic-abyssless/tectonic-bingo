@@ -221,41 +221,46 @@ export function WrappedPage() {
   const WrappedBingo = useSlot("WrappedBingo");
   const WrappedOutro = useSlot("WrappedOutro");
 
-  const render = (section: WrappedSectionModel): ReactNode => {
-    switch (section.kind) {
-      case "intro":
-        return <WrappedIntro section={section} preview={wrapped.preview} />;
-      case "you":
-        return <WrappedYou section={section} />;
-      case "duo":
-        return <WrappedDuo section={section} />;
-      case "captain":
-        return <WrappedCaptain section={section} />;
-      case "moderator":
-        return <WrappedModerator section={section} />;
-      case "team":
-        return <WrappedTeam section={section} />;
-      case "bingo":
-        return <WrappedBingo section={section} />;
-      case "outro":
-        return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} />;
-    }
-  };
+  // The book's pages, made once per Wrapped: the camera's every step re-renders this page (its snapshot), and remaking
+  // the sections' elements with it would re-render the whole book mid-flight, a frame or several dropped at each step.
+  const book = useMemo(() => {
+    const render = (section: WrappedSectionModel): ReactNode => {
+      switch (section.kind) {
+        case "intro":
+          return <WrappedIntro section={section} preview={wrapped.preview} />;
+        case "you":
+          return <WrappedYou section={section} />;
+        case "duo":
+          return <WrappedDuo section={section} />;
+        case "captain":
+          return <WrappedCaptain section={section} />;
+        case "moderator":
+          return <WrappedModerator section={section} />;
+        case "team":
+          return <WrappedTeam section={section} />;
+        case "bingo":
+          return <WrappedBingo section={section} />;
+        case "outro":
+          return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} feedback={wrapped.feedback && { responded: wrapped.feedback.responded, onOpen: wrapped.actions.goToFeedback }} />;
+      }
+    };
 
-  // The book: the Intro as its front cover, then the contents page the book adds, then the rest.
-  const book = wrapped.sections.map((s) => (
-    <div key={s.id} data-wrapped-section={s.id} className="contents">
-      {render(s.section)}
-    </div>
-  ));
-  const contentsAt = wrapped.sections.findIndex((s) => s.id === "intro") + 1;
-  book.splice(
-    contentsAt,
-    0,
-    <div key={CONTENTS_SECTION} data-wrapped-section={CONTENTS_SECTION} className="contents">
-      <ContentsPage />
-    </div>,
-  );
+    // The book: the Intro as its front cover, then the contents page the book adds, then the rest.
+    const pages = wrapped.sections.map((s) => (
+      <div key={s.id} data-wrapped-section={s.id} className="contents">
+        {render(s.section)}
+      </div>
+    ));
+    const contentsAt = wrapped.sections.findIndex((s) => s.id === "intro") + 1;
+    pages.splice(
+      contentsAt,
+      0,
+      <div key={CONTENTS_SECTION} data-wrapped-section={CONTENTS_SECTION} className="contents">
+        <ContentsPage />
+      </div>,
+    );
+    return pages;
+  }, [wrapped, WrappedIntro, WrappedYou, WrappedDuo, WrappedCaptain, WrappedModerator, WrappedTeam, WrappedBingo, WrappedOutro]);
 
   const atStart = !prevStop(snap.pages, snap.pos);
   const atEnd = !nextStop(snap.pages, snap.pos);

@@ -174,7 +174,7 @@ export function draftGrade(captain: WrappedCaptain): { letter: string; line: str
 }
 
 /** Builds the whole story. `actions` come from the page (navigation). */
-export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOptions, actions: WrappedModel["actions"], slug: string): WrappedModel {
+export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOptions, actions: WrappedModel["actions"], slug: string, feedback: WrappedModel["feedback"] = null): WrappedModel {
   const { bingo, player } = data;
   const teamById = new Map(bingo.teams.map((t) => [t.teamId, t]));
   const myTeamId = player?.teamId ?? null;
@@ -392,6 +392,13 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     totalSubmissions: bingo.totalSubmissions,
     totalSubmissionsLabel: bingo.totalSubmissions.toLocaleString(),
     totalGpLabel: formatGp(bingo.totalGp),
+    dropRain: bingo.dropItems?.length
+      ? {
+          items: bingo.dropItems,
+          dropsLabel: plural(bingo.dropItems.reduce((sum, i) => sum + i.drops, 0), "drop"),
+          kindsLabel: plural(bingo.dropItems.length, "different item"),
+        }
+      : null,
     rarestDrop: bingo.rarestDrop && dropLuck(bingo.rarestDrop.luckOneIn, bingo.rarestDrop.luckKills) ? drop(bingo.rarestDrop) : null,
     mostReacted: bingo.mostReacted ? { drop: drop(bingo.mostReacted.drop), reactionsLabel: plural(bingo.mostReacted.reactions, "reaction") } : null,
     leaderboard: bingo.teams.map((t) => ({ teamId: t.teamId, name: t.name, color: t.color, placement: t.placement, placementLabel: ordinal(t.placement), pointsLabel: t.points.toLocaleString(), isMine: t.teamId === myTeamId })),
@@ -441,6 +448,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     publishedLabel: !data.preview && data.state.publishedAt ? `Published ${dateLabel(Date.parse(data.state.publishedAt), false)}` : null,
     sections: sections.map((section) => ({ id: section.kind, label: SECTION_LABEL[section.kind], section })),
     outroReachedBefore: opts.outroReachedBefore ?? false,
+    feedback,
     actions,
   };
 }

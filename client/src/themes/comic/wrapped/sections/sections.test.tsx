@@ -51,6 +51,7 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
   totalSubmissions: 64,
   totalSubmissionsLabel: "64",
   totalGpLabel: "1.4b",
+  dropRain: { items: [{ itemName: "Zulrah's scales", drops: 40 }, { itemName: "Tanzanite fang", drops: 2 }], dropsLabel: "42 drops", kindsLabel: "2 different items" },
   rarestDrop: drop("r1", "Jar of souls"),
   mostReacted: { drop: drop("m1", "Dragon warhammer"), reactionsLabel: "6 reactions" },
   leaderboard: [
@@ -145,6 +146,22 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
     });
   }
 
+  it("gives an odd one out of a page's Teams the whole last row: five Teams, two by the reviewers and three after", () => {
+    const five = bingo({ teamSuperlatives: bingo().teamSuperlatives.slice(0, 5) });
+    const { container, unmount } = render(
+      <WrappedProgressProvider source={createWrappedProgressStore()} reveal={ComicReveal}>
+        <WrappedBingo section={five} />
+      </WrappedProgressProvider>,
+    );
+    const pages = [...container.querySelectorAll("[data-wrapped-scene]")].filter((scene) => scene.textContent?.includes("Team 1") || scene.textContent?.includes("Team 3"));
+    const spans = pages.map((scene) => [...scene.querySelectorAll(".wrapped-panel")].filter((p) => p.textContent?.startsWith("Team")).map((p) => p.classList.contains("col-span-2")));
+    expect(spans).toEqual([
+      [false, false],
+      [false, false, true],
+    ]);
+    unmount();
+  });
+
   it("draws one Scene per page and a Reveal per panel, none left empty", () => {
     const store = createWrappedProgressStore();
     const { container, unmount } = render(
@@ -153,8 +170,9 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
       </WrappedProgressProvider>,
     );
     const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
-    // Everyone; the highlights; the Steal and Behind the scenes; the reviewers and the first two Teams; the other five Teams over two pages.
-    expect(scenes.length).toBe(6);
+    // Everyone; the rain of drops; the highlights; the Steal and Behind the scenes; the reviewers and the first two Teams; the
+    // other five Teams over two pages.
+    expect(scenes.length).toBe(7);
     for (const scene of scenes) {
       const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
       expect(steps.length).toBeGreaterThan(0);

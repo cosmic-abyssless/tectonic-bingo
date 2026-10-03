@@ -363,6 +363,10 @@ describe("computeWrapped", () => {
 
     expect(bingo.totalSubmissions).toBe(4);
     expect(bingo.totalGp).toBe(10_000_100);
+    // Every drop counted by its item, most dropped first.
+    const items = bingo.dropItems!;
+    expect(items.map((i) => i.itemName)).toEqual(expect.arrayContaining(["Vorkath's head", "Zulrah's scales"]));
+    expect(items.map((i) => i.drops)).toEqual([...items.map((i) => i.drops)].sort((x, y) => y - x));
     const [first, second] = bingo.teams;
     expect(first).toMatchObject({ teamId: fx.teamA.id, placement: 1, mvp: { player: { id: fx.dave.id } }, topGpEarner: { player: { id: fx.dave.id } } });
     expect(first!.biggestDrop?.itemName).toBe("Vorkath's head");
