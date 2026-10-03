@@ -3,7 +3,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isBlankAnswer, parseChoiceAnswer, parseChoices, parseMemberPicks, type GraphNode, type SignupQuestion, type Tile } from "@bingo/shared";
 import { answerQuestions } from "./answers";
-import { DIFFICULTY, GENERATED_GROUP_RULE_ID, buildBoard, chooseExclusiveGroup, deadlockedParts, difficultyOf, itemToWeigh, planSubmissions, type Claim, type PartModel } from "./board";
+import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, itemToWeigh, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
 import { Rng } from "./rng";
@@ -162,11 +162,11 @@ describe("normalizeOptions", () => {
     expect(defaultSlug(now)).toBe("testdata-20260919-1432");
   });
 
-  it("draws in the default theme unless asked, and checks a theme against the known ones", () => {
-    expect(normalizeOptions({}, now).theme).toBe("default");
+  it("keeps the board's own theme unless asked, and checks a theme against the known ones", () => {
+    expect(normalizeOptions({}, now).theme).toBeNull();
     expect(normalizeOptions({ theme: "comic" }, now).theme).toBe("comic");
     expect(normalizeOptions({ theme: " comic " }, now).theme).toBe("comic");
-    expect(normalizeOptions({ theme: "" }, now).theme).toBe("default");
+    expect(normalizeOptions({ theme: "" }, now).theme).toBeNull();
     expect(() => normalizeOptions({ theme: "neon" }, now)).toThrow(/theme must be one of default, comic/);
     expect(() => normalizeOptions({ theme: "neon" }, now, { theme: "--theme" })).toThrow(/^--theme must be one of/);
     expect(() => normalizeOptions({ theme: 3 }, now)).toThrow(OptionsError);
@@ -419,32 +419,6 @@ describe("exclusive items on the board", () => {
     const grouped = [{ ...rules[0]!, groups: [{ label: "Pet", itemNames: ["Pet snakeling", "Nid"] }] }];
     const [conflict] = buildBoard(tiles, [], grouped).exclusivityConflicts(["zul-snake"], ["pets-nid"]);
     expect(conflict).toMatchObject({ nodeId: "pets-nid", usedOn: "ZULRAH (Pet snakeling)", group: "Pet" });
-  });
-});
-
-describe("chooseExclusiveGroup", () => {
-  const item = (id: string, itemName: string): GraphNode => ({ id, bingoId: "b", kind: "ITEM", label: null, description: null, notes: null, points: 0, minCount: null, quantity: null, itemName, countsAs: 1, pointsGateNodeId: null, submitGateNodeId: null, allowsPreLoad: false, valuedAs: null, requiresProof: false, proofNote: null, children: [] });
-  const part = (id: string, children: GraphNode[], gate: string | null = null): GraphNode => ({ ...item(id, ""), kind: "SUM", label: id, itemName: null, quantity: 1, points: 10, submitGateNodeId: gate, children });
-  const tile = (id: string, col: number, parts: GraphNode[], frozen = false): Tile =>
-    ({ id, name: id.toUpperCase(), boardRow: 0, boardCol: col, hasFreezePeriod: frozen, freezeDurationMinutes: frozen ? 120 : 0, node: { ...part(`${id}-root`, parts), kind: "ALL" } }) as unknown as Tile;
-
-  it("groups two Items no rule names, on two Tiles without a Freeze Period, both submittable from the start", () => {
-    const tiles = [
-      tile("raid", 0, [part("raid-p1", [item("raid-twisted", "Twisted bow")])], true),
-      tile("zul", 1, [part("zul-p1", [item("zul-snake", "Pet snakeling"), item("zul-tanz", "Tanzanite fang")])]),
-      tile("vork", 2, [part("vork-p1", [item("vork-head", "Vorkath's head")]), part("vork-p2", [item("vork-visage", "Draconic visage")], "vork-p1")]),
-    ];
-    const rules = [{ id: "pets", label: "Pets", itemNames: ["Pet snakeling"], scope: "tile" as const }];
-    for (let seed = 1; seed <= 20; seed++) {
-      const choice = chooseExclusiveGroup(tiles, rules, new Rng(seed))!;
-      expect([choice.first.nodeId, choice.second.nodeId].sort()).toEqual(["vork-head", "zul-tanz"]);
-      expect(choice.rule).toMatchObject({ id: GENERATED_GROUP_RULE_ID, scope: "tile", groups: [{ label: "Unique piece" }] });
-      expect(choice.rule.groups![0]!.itemNames).toEqual(choice.rule.itemNames);
-    }
-  });
-
-  it("finds nothing when every open Item is on one Tile", () => {
-    expect(chooseExclusiveGroup([tile("zul", 0, [part("zul-p1", [item("a", "Tanzanite fang"), item("b", "Magic fang")])])], [], new Rng(1))).toBeNull();
   });
 });
 

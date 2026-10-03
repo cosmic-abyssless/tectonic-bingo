@@ -3,7 +3,7 @@
 import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
-import { GENERATED_GROUP_RULE_ID, chooseExclusiveGroup, itemToWeigh, type BoardInfo, type PartModel, type PlacedItem } from "./board";
+import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
 import type { Player } from "./people";
 import type { Rng } from "./rng";
 import { HOUR, MINUTE, fmt, type Timeline } from "./timeline";
@@ -47,14 +47,17 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
   ctx.log(`stage -> ${toStage} at ${fmt(at)}`);
 }
 
-/** Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates. */
-export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string): Promise<void> {
+/**
+ * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, and its
+ * theme when one was asked for (the import keeps the board's own otherwise).
+ */
+export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
   const { tl } = ctx;
   await ctx.api.as(ctx.admin).patch(
     path(ctx, "/admin/settings"),
     {
-      theme,
+      ...(theme ? { theme } : {}),
       signupOpensAt: tl.signupOpensAt.toISOString(),
       draftScheduledAt: tl.draftAt.toISOString(),
       revealScheduledAt: tl.revealAt.toISOString(),
@@ -63,7 +66,7 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
     },
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );
-  ctx.log(`imported ${ctx.slug} in the ${theme} theme (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
+  ctx.log(`imported ${ctx.slug} in ${theme ? `the ${theme} theme` : "its board's own theme"} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
 }
 
 /** A Task as the board editor sends it back: every field and child as loaded, ids and all, so nothing else changes. */
@@ -340,24 +343,6 @@ export async function runDraft(ctx: Ctx, players: Player[], seeds: TeamSeed[], o
 export async function fetchExclusivityRules(ctx: Ctx): Promise<ExclusivityRule[]> {
   const shell = await ctx.api.as(ctx.admin).get<{ bingo: { exclusivityRules?: ExclusivityRule[] } }>(path(ctx, ""));
   return shell.bingo.exclusivityRules ?? [];
-}
-
-/**
- * An Admin adds an Exclusive Item rule with a group (board.chooseExclusiveGroup) beside the board's own rules, so every
- * generated Bingo has one; the Live play then claims one piece and is refused the other. Replaces the rule a Bingo
- * generated from a generated Bingo already carries. Null when the board has no two Items to group.
- */
-export async function addExclusiveGroup(ctx: Ctx, at: Date): Promise<{ first: PlacedItem; second: PlacedItem } | null> {
-  const board = await fetchBoard(ctx);
-  const rules = (await fetchExclusivityRules(ctx)).filter((r) => r.id !== GENERATED_GROUP_RULE_ID);
-  const choice = chooseExclusiveGroup(board.tiles, rules, ctx.rng.fork("exclusive-group"));
-  if (!choice) {
-    ctx.log("exclusive item group: no two Items on different Tiles to group");
-    return null;
-  }
-  await ctx.api.as(ctx.admin).patch(path(ctx, "/admin/settings"), { exclusivityRules: [...rules, choice.rule] }, { at });
-  ctx.log(`exclusive item group "${choice.rule.groups![0]!.label}": ${choice.first.itemName} (${choice.first.tileName}) and ${choice.second.itemName} (${choice.second.tileName}), one tile`);
-  return { first: choice.first, second: choice.second };
 }
 
 export async function fetchTeams(ctx: Ctx): Promise<TeamWithMembers[]> {

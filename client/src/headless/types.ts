@@ -84,7 +84,7 @@ export interface RequirementNodeModel {
   items: { name: string; iconUrl: string | null; count: number; countsAs: number; lockedBy: string | null }[];
   /** ITEM leaves only: the item's wiki icon (via our cache), when it has a name to look up. */
   iconUrl: string | null;
-  /** ITEM leaves only: set when the team has used this item somewhere else and a rule says it counts in one place only, e.g. "Used on DT2 ISSUE 1". Not `dim`: it isn't done, it is unavailable. */
+  /** ITEM leaves: set when the team has used this item somewhere else and a rule says it counts in one place only, e.g. "Used on DT2 ISSUE 1". Not `dim`: it isn't done, it is unavailable. Also an `itemGroup` whose pieces are all locked with the same tag (an Exclusive Item group), which then says it once for them. */
   lockedBy: string | null;
   isLeaf: boolean;
   status: NodeStatus;

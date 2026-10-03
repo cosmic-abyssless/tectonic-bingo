@@ -158,9 +158,14 @@ export function buildRequirementTree(
       // An "any one of" group of Items among a condition's options is one option: a row with its own box, its name kept
       // ("Bludgeon pieces (any one of)"), and no "OR" between its pieces, which the heading already says.
       if (model && isItemGroup(child)) {
+        // Locked as one (an Exclusive Item group used on another Part locks every piece with the same tag), it says so
+        // once, on its own row; its pieces then show only that they're unavailable (see RequirementNodeModel.lockedBy).
+        const locks = model.children.map((piece) => piece.lockedBy);
+        const lockedBy = locks.length > 0 && locks.every((lock) => lock !== null && lock === locks[0]) ? locks[0]! : null;
         return {
           ...model,
           label: child.label ? `${child.label} (any one of)` : model.label,
+          lockedBy,
           itemGroup: true,
           dim: model.complete || childAncestorSatisfied,
           divider: null,
