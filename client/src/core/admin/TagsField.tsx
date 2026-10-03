@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TAG_MAX_LENGTH, type BoardTagsResponse, type OsrsBossSearchResult, type Tag } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -166,6 +166,9 @@ function BossTag({ boss, aliases, onRemove, disabled }: { boss: Tag; aliases: Ta
 // Searches the OSRS Wiki's Bosses category as the admin types (the server keeps the category's list).
 function BossPicker({ slug, onPick, disabled }: { slug: string; onPick: (boss: OsrsBossSearchResult) => void; disabled: boolean }) {
   const [text, setText] = useState("");
+  // Opened to be typed in.
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
   const q = useDebouncedValue(text.trim(), 250);
   const { data, error, isFetching } = useQuery({
     queryKey: ["adminBossSearch", slug, q],
@@ -190,6 +193,7 @@ function BossPicker({ slug, onPick, disabled }: { slug: string; onPick: (boss: O
         emptyText={error ? "Couldn't reach the OSRS Wiki" : "No boss by that name"}
         placeholder="Search the wiki's bosses…"
         aria-label="Boss"
+        inputRef={inputRef}
         readOnly={disabled}
       />
     </div>
