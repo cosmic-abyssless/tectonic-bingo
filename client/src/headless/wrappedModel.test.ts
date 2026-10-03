@@ -68,7 +68,7 @@ function response(player: PlayerWrapped | null, extra: Partial<MyWrappedResponse
 
 const player = (you: Partial<WrappedYou> = {}): PlayerWrapped => ({ userId: "me", teamId: "a", you: { ...emptyYou, ...you }, duo: null, captain: null });
 const opts = { viewerId: "me", viewerName: "me rsn", viewerAvatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png", startsAt: T0, endsAt: T0 + 24 * HOUR };
-const actions = { goToBoard: () => {}, goToRewind: () => {}, outroReached: () => {} };
+const actions = { goToBoard: () => {}, goToRewind: () => {}, goToFeedback: () => {}, outroReached: () => {} };
 const story = (data: MyWrappedResponse) => buildWrappedStory(data, opts, actions, "winter");
 const kinds = (data: MyWrappedResponse) => story(data).sections.map((s) => s.id);
 

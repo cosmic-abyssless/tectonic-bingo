@@ -29,7 +29,7 @@ export function WrappedIntro({ section, preview }: { section: WrappedIntroModel;
 
           <div className="relative flex flex-1 flex-col px-5 pt-5 pb-4">
             <CoverCaption tilt={-2} fill={COVER.YELLOW} size={17} style={{ alignSelf: "flex-start" }}>
-              {preview ? "Moderator's preview" : section.playerName ? "Your year in the Bingo" : "The Bingo, start to finish"}
+              {preview ? "Moderator's preview" : section.playerName ? "Your Bingo in review" : "The Bingo, start to finish"}
             </CoverCaption>
             <div className="mt-3">
               <CoverTitle as="h1" size={coverTitleSize(section.bingoName)}>

@@ -1,98 +1,111 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { animate, useReducedMotion } from "motion/react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import type { WrappedRevealProps } from "../../../core/wrapped/sceneProgress";
-import { BRUSH_SIZE, brushMaskUrl, brushPosition } from "./brush";
 
-/** How long the brush takes to paint a panel in (s), and its easing: it picks up speed, then slows through the bristles. */
-const BRUSH_SECONDS = 0.8;
-const BRUSH_EASE = [0.4, 0.05, 0.25, 1] as const;
+// A Reveal drawn as a comic panel. Until the camera reaches it, it is a frame pencilled in on the page and nothing more.
+// When the camera arrives it is drawn in, in beats: the ink goes over the pencil, the colour lands a little off register
+// and settles, then what the panel says lands a piece at a time, each by its `data-beat` (sectionParts: a title slams in,
+// a sound effect pops, a caption rises). Its frame's shape (a slanted quad) is the book's to give: BookController clips
+// the panel to it and draws the frame's lines along it.
 
-/** Which panel the camera is on: the one that is lit while the others on the page are dimmed. Set by the book. */
-export interface PanelFocus {
-  sceneId: string | null;
-  step: number;
+/** How the beats are paced (ms): the ink, the colour landing after it, and each beat after that. */
+const INK_MS = 170;
+const COLOUR_AT = 110;
+const COLOUR_MS = 260;
+const BEATS_AT = 330;
+const BEAT_GAP = 140;
+
+/** The beats a piece of a panel lands with: how it moves in (it fades in over the first part of it as well). */
+const BEATS: Record<string, { frames: Keyframe[]; ms: number; easing: string }> = {
+  slam: {
+    frames: [
+      { transform: "scale(2.4) rotate(-6deg)" },
+      { transform: "scale(0.92) rotate(1deg)", offset: 0.55, easing: "steps(2, end)" },
+      { transform: "none" },
+    ],
+    ms: 320,
+    easing: "cubic-bezier(.2, .9, .3, 1.2)",
+  },
+  pop: {
+    frames: [
+      { transform: "scale(0) rotate(-22deg)" },
+      { transform: "scale(1.2) rotate(4deg)", offset: 0.65 },
+      { transform: "none" },
+    ],
+    ms: 320,
+    easing: "cubic-bezier(.2, .9, .3, 1.2)",
+  },
+  rise: {
+    frames: [
+      { transform: "translateY(22px)" },
+      { transform: "none" },
+    ],
+    ms: 220,
+    easing: "steps(3, end)",
+  },
+};
+
+/** Draws a panel in, beat by beat (Web Animations; a browser without them just shows it). */
+function drawIn(panel: HTMLElement) {
+  if (typeof panel.animate !== "function") return;
+  const hold = { fill: "backwards" } as const;
+  panel.querySelector<SVGElement>(":scope > .wrapped-panel-frame .wrapped-panel-ink")?.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: INK_MS, easing: "ease-out", ...hold });
+  const content = panel.querySelector<HTMLElement>(":scope > .wrapped-panel-content");
+  if (!content) return;
+  content.animate(
+    [
+      { opacity: 0, transform: "translate(8px, -6px)", filter: "drop-shadow(7px 0 0 #00a3dd) drop-shadow(-7px 0 0 #e4007c)" },
+      { opacity: 1, transform: "translate(3px, -2px)", filter: "drop-shadow(3px 0 0 #00a3dd) drop-shadow(-3px 0 0 #e4007c)", offset: 0.5 },
+      { opacity: 1, transform: "none", filter: "none" },
+    ],
+    { duration: COLOUR_MS, delay: COLOUR_AT, easing: "steps(3, end)", ...hold },
+  );
+  content.querySelectorAll<HTMLElement>("[data-beat]").forEach((el, i) => {
+    const beat = BEATS[el.dataset.beat ?? ""];
+    if (!beat) return;
+    const delay = BEATS_AT + i * BEAT_GAP;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: beat.ms * 0.35, delay, ...hold });
+    // The move is added to what the piece already has (a tilt), so it lands at its own angle.
+    el.animate(beat.frames, { duration: beat.ms, delay, easing: beat.easing, composite: "add", ...hold });
+  });
 }
-export const PanelFocusContext = createContext<PanelFocus>({ sceneId: null, step: 0 });
 
-type Paint = "empty" | "painting" | "drawn";
+type Ink = "pencil" | "inked";
 
 /**
- * Draws `children` under a brush stroke: invisible while `revealed` is false; when it turns true the stroke sweeps over it
- * and leaves it drawn. Already revealed when it first appears, it's simply drawn. With reduced motion it is drawn
- * outright, with no stroke.
+ * The comic book's Reveal (WrappedProgressProvider's `reveal`). The section's classes lay the panel out on its page. A
+ * `bare` Reveal brings its own frame (a cover), so it gets no frame, only the beats.
  */
-export function BrushReveal({ revealed, className, children }: { revealed: boolean; className?: string; children: ReactNode }) {
+export function ComicReveal({ step, revealed, bare, emphasis, className, children }: WrappedRevealProps) {
   const reduceMotion = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const [paint, setPaint] = useState<Paint>(revealed ? "drawn" : "empty");
-  const brush = useRef<{ stop(): void } | null>(null);
+  // Already reached when it first appears (a page already passed), it is simply drawn.
+  const [ink, setInk] = useState<Ink>(revealed ? "inked" : "pencil");
 
-  // Before paint, so the first frame of the stroke is the empty one and the content is never seen whole first.
+  // Before paint, so the first frame of the beats is the empty one and the content is never seen whole first.
   useLayoutEffect(() => {
     if (!revealed) {
-      brush.current?.stop();
-      setPaint("empty");
+      setInk("pencil");
       return;
     }
-    if (paint !== "empty") return;
-    if (reduceMotion) {
-      setPaint("drawn");
-      return;
-    }
-    setPaint("painting");
-  }, [revealed, reduceMotion, paint]);
+    if (ink === "inked") return;
+    setInk("inked");
+    if (!reduceMotion && ref.current) drawIn(ref.current);
+  }, [revealed, reduceMotion, ink]);
 
-  useEffect(() => {
-    if (paint !== "painting") return;
-    const el = ref.current;
-    if (!el) return;
-    el.style.setProperty("--brush-position", `${brushPosition(0)}%`);
-    const controls = animate(0, 1, {
-      duration: BRUSH_SECONDS,
-      ease: BRUSH_EASE,
-      onUpdate: (t) => el.style.setProperty("--brush-position", `${brushPosition(t)}%`),
-      onComplete: () => setPaint("drawn"),
-    });
-    brush.current = controls;
-    return () => controls.stop();
-  }, [paint]);
-
-  const style: CSSProperties =
-    paint === "drawn"
-      ? {}
-      : paint === "empty"
-        ? { visibility: "hidden" }
-        : {
-            ["--brush-position" as string]: `${brushPosition(0)}%`,
-            maskImage: brushMaskUrl(),
-            WebkitMaskImage: brushMaskUrl(),
-            maskSize: `${BRUSH_SIZE * 100}% 100%`,
-            WebkitMaskSize: `${BRUSH_SIZE * 100}% 100%`,
-            maskRepeat: "no-repeat",
-            WebkitMaskRepeat: "no-repeat",
-            maskPosition: "var(--brush-position) 0%",
-            WebkitMaskPosition: "var(--brush-position) 0%",
-          };
   return (
-    <div ref={ref} className={className} style={style} data-paint={paint}>
-      {children}
-    </div>
-  );
-}
-
-/**
- * A Reveal drawn as a comic panel: an inked frame that is empty until the camera arrives, then painted in by the brush
- * stroke. The section's classes lay the panel out on its page. A `bare` Reveal brings its own frame (a cover), so only the
- * brush is applied.
- */
-export function ComicReveal({ sceneId, step, revealed, bare, className, children }: WrappedRevealProps) {
-  const focus = useContext(PanelFocusContext);
-  const focused = focus.sceneId === sceneId && focus.step === step;
-  return (
-    <div className={`wrapped-panel ${bare ? "wrapped-panel-bare" : ""} ${className ?? ""}`} data-wrapped-step={step} data-revealed={revealed} data-focused={focused} data-bare={bare}>
-      <BrushReveal revealed={revealed} className="wrapped-panel-content">
+    <div ref={ref} className={`wrapped-panel ${bare ? "wrapped-panel-bare" : ""} ${className ?? ""}`} data-wrapped-step={step} data-revealed={revealed} data-ink={ink} data-bare={bare} data-emphasis={emphasis}>
+      {!bare && <span aria-hidden className="wrapped-panel-paper" />}
+      {/* Hidden two ways: a part that makes itself visible (a share card, once it has measured itself) still can't show. */}
+      <div className="wrapped-panel-content" style={ink === "pencil" ? { visibility: "hidden", opacity: 0 } : undefined}>
         {children}
-      </BrushReveal>
+      </div>
+      {!bare && (
+        <svg aria-hidden className="wrapped-panel-frame">
+          <polygon className="wrapped-panel-pencil" />
+          <polygon className="wrapped-panel-ink" pathLength={1} />
+        </svg>
+      )}
     </div>
   );
 }

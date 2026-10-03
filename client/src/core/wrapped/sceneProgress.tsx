@@ -102,6 +102,13 @@ export function useWrappedScenes(store: WrappedProgressStore): readonly WrappedS
   return useSyncExternalStore(store.subscribeScenes, store.getScenes);
 }
 
+/**
+ * How a Reveal stands in its Scene, for a page that stages them: the `splash` is the Scene's big opening line, a
+ * `highlight` a line worth a moment of its own (the Team's top scorer), and `narration` a line that only says more about
+ * the one before it. A page that doesn't stage its Reveals ignores it.
+ */
+export type WrappedRevealEmphasis = "splash" | "highlight" | "narration";
+
 /** What a page-supplied Reveal is given to draw itself with (see WrappedProgressProvider's `reveal`). */
 export interface WrappedRevealProps {
   /** The Scene the Reveal is in (a WrappedSceneInfo's `id`) and the step it belongs to. */
@@ -111,6 +118,8 @@ export interface WrappedRevealProps {
   revealed: boolean;
   /** The Reveal's `bare` prop: the section draws its own frame, so the page adds none. */
   bare: boolean;
+  /** The Reveal's `emphasis` prop, for a page that stages its Reveals (a comic's splash, or a caption set in as an inset). */
+  emphasis?: WrappedRevealEmphasis;
   /** The classes the section gave the Reveal: how it lays itself out in its Scene. */
   className?: string;
   children: ReactNode;

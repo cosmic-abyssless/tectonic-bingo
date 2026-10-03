@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useReducedMotion } from "motion/react";
 import { useBingoHeader, useBingoMenuEntries, useWrappedModel } from "../../../headless";
@@ -8,37 +8,36 @@ import { Badge } from "../../../core/ui/Card";
 import { ArrowRightIcon } from "../../../core/ui/icons";
 import { createWrappedProgressStore, useWrappedScenes, WrappedProgressProvider } from "../../../core/wrapped/sceneProgress";
 import { useSlot } from "../../context";
-import { pageColors } from "../board/colors";
+import { getColors } from "../board/colors";
 import { PageFooter } from "../board/PageFooter";
-import { PageEdgeTicks } from "../board/ClosedBook";
-import { useEdgeSwipe } from "../board/useEdgeSwipe";
 import { ComicPage } from "../fx/ComicPage";
 import { sfx } from "../fx/SfxLayer";
 import { comicHeaderProps } from "../page/headerStyle";
 import { ModPanelLink } from "../page/Masthead";
 import { ComicButton } from "../ui/ComicButton";
 import { comicVars, PageColorsContext, useComic } from "../ui/useComic";
-import { BookController, type BookEnv } from "./BookController";
+import { BookController, type BookEnv, type CameraEffects } from "./BookController";
 import { BookContext, pageTokenVars } from "./bookContext";
-import { DeskStickers as Desk } from "./Desk";
-import { ComicReveal, PanelFocusContext } from "./ComicReveal";
+import { CameraFx, DeskStickers } from "./Desk";
+import { ComicReveal } from "./ComicReveal";
 import { ContentsPage } from "./ContentsPage";
 import { INTERACTIVE_SELECTOR, isTap, keyNav, swipeNav, tapNav, WheelGesture, wheelPixels, type Nav } from "./controls";
 import { CONTENTS_SECTION, nextStop, prevStop, sectionIds, sectionOfAnchor } from "./guide";
 import { Hud, announcement } from "./Hud";
 import { stageMode, WRAPPED_PAGE_WIDTH, type Insets, type Size, type StageMode } from "./camera";
-import { FoldLayer } from "./pageTurn";
 
-/** The room the HUD and the edges leave around the book in the stage. */
+/** The room the HUD and the edges leave around what the camera frames in the stage. */
 const INSETS: Record<StageMode, Insets> = {
-  phone: { top: 10, right: 10, bottom: 62, left: 10 },
-  wide: { top: 14, right: 24, bottom: 82, left: 24 },
+  phone: { top: 8, right: 8, bottom: 62, left: 8 },
+  wide: { top: 14, right: 24, bottom: 76, left: 24 },
 };
-/** The page's border (px), which a peel's fold-back outlines at the same weight. */
-const PAGE_BORDER = 3;
-/** The strips along a phone's page edges that turn it by touch (as the Tile book's: clear of the OS's own edge swipe). */
-const EDGE_ZONE_INSET = 4;
-const EDGE_ZONE_WIDTH = 44;
+
+/** The book is printed paper, the same in the light scheme and the dark: only the desk it lies on follows the scheme. */
+const PRINT = getColors("light");
+const DESK: Record<"light" | "dark", CSSProperties> = {
+  light: { ["--wrapped-desk" as string]: "#9fb3b8", ["--wrapped-desk-deep" as string]: "#86999f", ["--wrapped-desk-dot" as string]: "rgb(11 11 13 / 0.16)" },
+  dark: { ["--wrapped-desk" as string]: "#1c1b22", ["--wrapped-desk-deep" as string]: "#111015", ["--wrapped-desk-dot" as string]: "rgb(255 255 255 / 0.05)" },
+};
 
 /** Keeps the URL's anchor on the section being read, replacing the history entry rather than adding to it. */
 function replaceAnchor(sectionId: string) {
@@ -53,9 +52,11 @@ function replaceAnchor(sectionId: string) {
 
 /**
  * Wrapped as a comic book, read in a guided view (#419): the Intro is the front cover, an "In this issue" page follows,
- * each section is a page or two of panels, and the Outro is the back cover. The camera moves from panel to panel, pulling
- * back at the end of a page before the page is turned. Nothing scrolls: the sections are the ordinary Wrapped sections
- * (WrappedScene and Reveal), told by this page how far they are reached (core/wrapped/sceneProgress), and drawn as panels.
+ * each section is a page or two of panels, and the Outro is the back cover. The pages lie on a desk, a spread at a time
+ * on a wide screen and a page at a time on a phone, and the camera flies from panel to panel, filling the screen with
+ * each, pulls back to show the whole spread at its end, then pans across the desk to the next. Nothing scrolls: the
+ * sections are the ordinary Wrapped sections (WrappedScene and Reveal), told by this page how far they are reached
+ * (core/wrapped/sceneProgress), and drawn as panels.
  */
 export function WrappedPage() {
   const wrapped = useWrappedModel();
@@ -67,17 +68,18 @@ export function WrappedPage() {
   useEffect(() => controller.subscribe(() => setSnap(controller.getSnapshot())), [controller]);
   const scenes = useWrappedScenes(store);
   const reduceMotion = !!useReducedMotion();
-  const { colors } = useComic();
-  const page = pageColors(colors);
+  const { scheme } = useComic();
+  const page = PRINT;
 
   // What the controller reads while it runs, kept current without re-attaching it.
-  const live = useRef({ reduceMotion, page, actions: wrapped.actions });
-  live.current = { reduceMotion, page, actions: wrapped.actions };
+  const live = useRef({ reduceMotion, actions: wrapped.actions });
+  live.current = { reduceMotion, actions: wrapped.actions };
   const labels = useMemo(() => Object.fromEntries(wrapped.sections.map((s) => [s.id, s.label])), [wrapped.sections]);
 
   const stageRef = useRef<HTMLDivElement>(null);
+  const shakeRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
-  const bookRef = useRef<HTMLDivElement>(null);
+  const effects = useRef<CameraEffects>(null);
   const [stageSize, setStageSize] = useState<Size>({ w: 0, h: 0 });
 
   useLayoutEffect(() => {
@@ -85,12 +87,11 @@ export function WrappedPage() {
     const env: BookEnv = {
       stage,
       world: worldRef.current!,
-      book: bookRef.current!,
       store,
       labels,
       reduceMotion: () => live.current.reduceMotion,
       insets: (mode) => INSETS[mode],
-      peelStyle: () => ({ paper: live.current.page.PAPER, ink: live.current.page.LINE, borderWidth: PAGE_BORDER }),
+      effects: { impact: () => effects.current?.impact() },
       startSection: (sections) => sectionOfAnchor(window.location.hash, sections),
       onStop: (_stop, p) => replaceAnchor(p.sectionId),
       onBackCover: () => live.current.actions.outroReached(),
@@ -179,7 +180,7 @@ export function WrappedPage() {
   // Touch: a swipe left goes forward, right back; a tap on the right of the stage forward, on the left back.
   const touch = useRef<{ id: number; x: number; y: number; t: number } | null>(null);
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0) || (e.target as HTMLElement).closest("[data-edge-zone]")) return;
+    if (!e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
     touch.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp };
   };
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -220,53 +221,52 @@ export function WrappedPage() {
   const WrappedBingo = useSlot("WrappedBingo");
   const WrappedOutro = useSlot("WrappedOutro");
 
-  const render = (section: WrappedSectionModel): ReactNode => {
-    switch (section.kind) {
-      case "intro":
-        return <WrappedIntro section={section} preview={wrapped.preview} />;
-      case "you":
-        return <WrappedYou section={section} />;
-      case "duo":
-        return <WrappedDuo section={section} />;
-      case "captain":
-        return <WrappedCaptain section={section} />;
-      case "moderator":
-        return <WrappedModerator section={section} />;
-      case "team":
-        return <WrappedTeam section={section} />;
-      case "bingo":
-        return <WrappedBingo section={section} />;
-      case "outro":
-        return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} />;
-    }
-  };
+  // The book's pages, made once per Wrapped: the camera's every step re-renders this page (its snapshot), and remaking
+  // the sections' elements with it would re-render the whole book mid-flight, a frame or several dropped at each step.
+  const book = useMemo(() => {
+    const render = (section: WrappedSectionModel): ReactNode => {
+      switch (section.kind) {
+        case "intro":
+          return <WrappedIntro section={section} preview={wrapped.preview} />;
+        case "you":
+          return <WrappedYou section={section} />;
+        case "duo":
+          return <WrappedDuo section={section} />;
+        case "captain":
+          return <WrappedCaptain section={section} />;
+        case "moderator":
+          return <WrappedModerator section={section} />;
+        case "team":
+          return <WrappedTeam section={section} />;
+        case "bingo":
+          return <WrappedBingo section={section} />;
+        case "outro":
+          return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} feedback={wrapped.feedback && { responded: wrapped.feedback.responded, onOpen: wrapped.actions.goToFeedback }} />;
+      }
+    };
 
-  // The book: the Intro as its front cover (on a hinge, so it opens), then the contents page the book adds, then the rest.
-  const book = wrapped.sections.map((s) =>
-    s.id === "intro" ? (
-      <div key={s.id} data-wrapped-section={s.id} data-cover-hinge className="wrapped-cover-hinge">
-        {render(s.section)}
-        <div aria-hidden className="wrapped-cover-inside" />
-      </div>
-    ) : (
+    // The book: the Intro as its front cover, then the contents page the book adds, then the rest.
+    const pages = wrapped.sections.map((s) => (
       <div key={s.id} data-wrapped-section={s.id} className="contents">
         {render(s.section)}
       </div>
-    ),
-  );
-  const contentsAt = wrapped.sections.findIndex((s) => s.id === "intro") + 1;
-  book.splice(
-    contentsAt,
-    0,
-    <div key={CONTENTS_SECTION} data-wrapped-section={CONTENTS_SECTION} className="contents">
-      <ContentsPage />
-    </div>,
-  );
+    ));
+    const contentsAt = wrapped.sections.findIndex((s) => s.id === "intro") + 1;
+    pages.splice(
+      contentsAt,
+      0,
+      <div key={CONTENTS_SECTION} data-wrapped-section={CONTENTS_SECTION} className="contents">
+        <ContentsPage />
+      </div>,
+    );
+    return pages;
+  }, [wrapped, WrappedIntro, WrappedYou, WrappedDuo, WrappedCaptain, WrappedModerator, WrappedTeam, WrappedBingo, WrappedOutro]);
 
   const atStart = !prevStop(snap.pages, snap.pos);
   const atEnd = !nextStop(snap.pages, snap.pos);
-  const backIndex = snap.pages.findIndex((p) => p.kind === "back");
-  const offerSkip = snap.ready && wrapped.outroReachedBefore && backIndex >= 0 && snap.pos.page < backIndex;
+  // Back for another look, a reader who has been to the end can skip to it: the Outro, the share cards then the back cover.
+  const outroIndex = snap.pages.findIndex((p) => p.sectionId === "outro");
+  const offerSkip = snap.ready && wrapped.outroReachedBefore && outroIndex >= 0 && snap.pos.page < outroIndex;
   const mode = snap.ready ? snap.mode : stageMode(stageSize.w);
 
   return (
@@ -281,60 +281,46 @@ export function WrappedPage() {
           aria-label="Wrapped, read as a comic book"
           tabIndex={-1}
           className="wrapped-stage relative min-h-0 flex-1 overflow-hidden outline-none"
-          style={{ touchAction: "none" }}
+          style={{ touchAction: "none", ...DESK[scheme] }}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={() => (touch.current = null)}
         >
           <BookContext.Provider value={controller}>
-            <PanelFocusContext.Provider value={snap.focus}>
-              {snap.ready && mode === "wide" && wrapped.sideArt.length > 0 && (
-                <Desk art={wrapped.sideArt} page={snap.pos.page} stage={stageSize} insets={INSETS.wide} bookHeight={snap.bookHeight} reduceMotion={reduceMotion} />
-              )}
-              <div ref={worldRef} className="wrapped-world" style={{ width: WRAPPED_PAGE_WIDTH }}>
+            <div ref={shakeRef} className="absolute inset-0">
+              <div ref={worldRef} className="wrapped-world">
+                {snap.ready && mode === "wide" && <DeskStickers art={wrapped.sideArt} groups={snap.groups} />}
                 <div
-                  ref={bookRef}
                   className="wrapped-book"
                   data-mode={mode}
                   data-ready={snap.ready}
                   data-reduced={reduceMotion}
-                  style={{ ...comicVars(page), ...pageTokenVars(page), width: WRAPPED_PAGE_WIDTH, ["--bw" as string]: `${WRAPPED_PAGE_WIDTH}px`, ["--wrapped-paper-alt" as string]: page.PAPER_ALT }}
+                  style={{ ...comicVars(page), ...pageTokenVars(page), ["--bw" as string]: `${WRAPPED_PAGE_WIDTH}px`, ["--wrapped-paper-alt" as string]: page.PAPER_ALT }}
                 >
                   <PageColorsContext.Provider value={page}>
                     <WrappedProgressProvider source={store} reveal={ComicReveal}>
                       {book}
                     </WrappedProgressProvider>
-                    {/* Each page's footer and edge ticks, drawn inside the page whose Scene the section made. */}
-                    {snap.pages.map((p) => {
+                    {/* Each page's footer, drawn inside the page whose Scene the section made. */}
+                    {snap.pages.map((p, i) => {
                       const el = scenes.find((s) => s.id === p.sceneId)?.element;
                       if (!el || p.no === null) return null;
-                      return createPortal(
-                        <>
-                          <PageEdgeTicks colors={page} side="front" />
-                          <PageFooter colors={page} side="right" no={p.no} role={p.role} />
-                        </>,
-                        el,
-                        p.sceneId,
-                      );
+                      // The number on the outer edge: a spread's left page on its left, any other page on its right.
+                      const spread = snap.groups[p.group]?.pages ?? [];
+                      const side = spread.length > 1 && spread[0] === i ? "left" : "right";
+                      return createPortal(<PageFooter colors={page} side={side} no={p.no} role={p.role} />, el, p.sceneId);
                     })}
                   </PageColorsContext.Provider>
-                  <FoldLayer />
                 </div>
               </div>
-            </PanelFocusContext.Provider>
+            </div>
           </BookContext.Provider>
-
-          {mode === "phone" && snap.ready && (
-            <>
-              <EdgeZone side="right" controller={controller} onTap={move} />
-              <EdgeZone side="left" controller={controller} onTap={move} />
-            </>
-          )}
+          <CameraFx ref={effects} shake={shakeRef} />
 
           {offerSkip && (
             <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-3" data-hud>
-              <ComicButton variant="yellow" size="sm" sfx={false} className="pointer-events-auto" onPress={() => controller.goToBackCover()}>
-                Skip to the back cover
+              <ComicButton variant="yellow" size="sm" sfx={false} className="pointer-events-auto" onPress={() => controller.goToSection("outro")}>
+                Skip to the end
                 <ArrowRightIcon />
               </ComicButton>
             </div>
@@ -347,46 +333,5 @@ export function WrappedPage() {
         </div>
       </div>
     </ComicPage>
-  );
-}
-
-/**
- * A strip down one edge of the phone's screen that turns the page: a drag toward the spine peels it, as the Tile book's
- * edge swipe does. Taps on it are taps on that side of the stage.
- */
-function EdgeZone({ side, controller, onTap }: { side: "left" | "right"; controller: BookController; onTap: (nav: Nav) => void }) {
-  const forward = side === "right";
-  // The page isn't taken in hand until the finger has moved across: a tap on the strip is a tap, not a turn that is let go.
-  const begun = useRef(false);
-  const handlers = useEdgeSwipe({
-    dir: forward ? -1 : 1,
-    onBegin: () => controller.canDrag(forward),
-    onProgress: (travel, y) => {
-      if (!begun.current) begun.current = controller.beginDrag(forward);
-      if (begun.current) controller.dragTo(travel, y);
-    },
-    onEnd: (result) => {
-      if (!begun.current) return;
-      begun.current = false;
-      void controller.endDrag(result);
-    },
-    onScroll: () => {},
-    onScrollEnd: () => {},
-    onTap: ({ x, y }, zone) => {
-      // What's under the strip takes the tap if it is a control; otherwise it's a tap on this side.
-      const under = document.elementsFromPoint(x, y).find((el) => !zone.contains(el));
-      const control = under?.closest<HTMLElement>(INTERACTIVE_SELECTOR);
-      if (control) control.click();
-      else onTap(forward ? "next" : "prev");
-    },
-  });
-  return (
-    <div
-      aria-hidden
-      data-edge-zone={side}
-      className="absolute inset-y-0 z-20"
-      style={{ width: EDGE_ZONE_WIDTH, touchAction: "none", [side]: EDGE_ZONE_INSET }}
-      {...handlers}
-    />
   );
 }

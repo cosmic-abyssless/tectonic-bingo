@@ -310,6 +310,8 @@ describe("computeWrapped", () => {
       [fx.mod2.id, 1, 0, 0, 120 * MIN],
     ]);
     expect(moderation.busiestHour!.reviews).toBeGreaterThanOrEqual(1);
+    expect(moderation.busiestClockHour!.reviews).toBeGreaterThanOrEqual(1);
+    expect(new Date(moderation.busiestClockHour!.at).getUTCMinutes()).toBe(0);
   });
 
   it("ranks every Player's Points share across the whole Bingo, ties sharing a rank and a Duo's halves ranked apart", () => {
@@ -361,6 +363,10 @@ describe("computeWrapped", () => {
 
     expect(bingo.totalSubmissions).toBe(4);
     expect(bingo.totalGp).toBe(10_000_100);
+    // Every drop counted by its item, most dropped first.
+    const items = bingo.dropItems!;
+    expect(items.map((i) => i.itemName)).toEqual(expect.arrayContaining(["Vorkath's head", "Zulrah's scales"]));
+    expect(items.map((i) => i.drops)).toEqual([...items.map((i) => i.drops)].sort((x, y) => y - x));
     const [first, second] = bingo.teams;
     expect(first).toMatchObject({ teamId: fx.teamA.id, placement: 1, mvp: { player: { id: fx.dave.id } }, topGpEarner: { player: { id: fx.dave.id } } });
     expect(first!.biggestDrop?.itemName).toBe("Vorkath's head");

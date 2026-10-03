@@ -90,7 +90,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
               {m.medianLabel && <MiniStat value={m.medianLabel} label="median wait" />}
               {m.fastestLabel && <MiniStat value={m.fastestLabel} label="fastest review" />}
               {m.withinHourLabel && <MiniStat value={m.withinHourLabel} label="within an hour" />}
-              {m.busiestHourLabel && <MiniStat value={m.busiestHourLabel} label="busiest hour" />}
+              {m.busiestHourLabel && <MiniStat value={m.busiestHourLabel} label={m.busiestHourDayLabel ? `busiest hour, ${m.busiestHourDayLabel}` : "busiest hour"} />}
             </Reveal>
             {m.reviewers.length > 0 && (
               <Reveal step={2} className="mt-12">

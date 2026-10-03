@@ -1,0 +1,867 @@
+<title>Comic Wrapped Guided View</title>
+<!--
+  PROTOTYPE, throwaway. Answers: "What should comic Wrapped's guided view look and move like?"
+  Three page compositions (A slanted tiers, B classic grid with insets, C splash page), switchable from the bottom bar,
+  with full or sparse fake You data. The camera, panel beats and print look are shared, since they were settled.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@700&family=Sofia+Sans+Extra+Condensed:wght@800;900&display=swap">
+<style>
+:root {
+  /* Print palette: the page is printed paper in both themes. */
+  --paper: #efe9d6;
+  --paper-2: #e6dfc7;
+  --ink: #17141c;
+  --c: #00a3dd;
+  --m: #e4007c;
+  --y: #ffe100;
+  --k-soft: #2b2730;
+  --green: #2fae5a;
+  --orange: #ff7a1a;
+  --pencil: #7fb8e8;
+  /* The room around the book: these follow the theme. */
+  --desk: #9fb3b8;
+  --desk-2: #8aa1a7;
+  --desk-ink: rgba(23, 20, 28, .18);
+  --bar: #17141c;
+  --bar-fg: #f5f2ea;
+  --bar-dim: #9a95a3;
+  --bar-hi: #ffe100;
+  --display: "Sofia Sans Extra Condensed", "Arial Narrow", Impact, sans-serif;
+  --sfx: "Bangers", Impact, "Arial Black", sans-serif;
+  --letter: "Comic Neue", "Comic Sans MS", "Chalkboard SE", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --desk: #1b1a21;
+    --desk-2: #121117;
+    --desk-ink: rgba(255, 255, 255, .05);
+    --bar: #f5f2ea;
+    --bar-fg: #17141c;
+    --bar-dim: #6b6674;
+    --bar-hi: #e4007c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --desk: #1b1a21;
+  --desk-2: #121117;
+  --desk-ink: rgba(255, 255, 255, .05);
+  --bar: #f5f2ea;
+  --bar-fg: #17141c;
+  --bar-dim: #6b6674;
+  --bar-hi: #e4007c;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--desk);
+  background-image: radial-gradient(var(--desk-ink) 1px, transparent 1.4px), radial-gradient(ellipse at 50% 40%, var(--desk) 30%, var(--desk-2) 100%);
+  background-size: 22px 22px, 100% 100%;
+  font-family: var(--letter);
+  color: var(--ink);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#stage { position: fixed; inset: 0 0 64px 0; overflow: hidden; outline: none; }
+#shake { position: absolute; inset: 0; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+
+/* ---------- Pages ---------- */
+.page {
+  position: absolute; width: 1000px; height: 1500px; overflow: visible;
+  background-color: var(--paper);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .4  0 0 0 0 .35  0 0 0 0 .25  0 0 0 .22 0'/></filter><rect width='300' height='300' filter='url(%23n)'/></svg>");
+  box-shadow: 0 30px 60px -20px rgba(0,0,0,.45), 0 2px 0 rgba(0,0,0,.08);
+}
+.page.left { box-shadow: inset -40px 0 50px -30px rgba(0,0,0,.28), 0 30px 60px -20px rgba(0,0,0,.45); }
+.page.right { box-shadow: inset 40px 0 50px -30px rgba(0,0,0,.28), 0 30px 60px -20px rgba(0,0,0,.45); }
+.folio {
+  position: absolute; bottom: 14px; font: 900 34px/1 var(--display); letter-spacing: .04em; color: var(--ink);
+  padding: 2px 12px; border: 4px solid var(--ink); background: var(--paper);
+}
+.page.left .folio, .page.single .folio { left: 50px; }
+.page.right .folio { right: 50px; }
+.folio small { font-size: 22px; color: var(--m); margin-left: 8px; }
+
+/* ---------- Panels ---------- */
+.panel { position: absolute; }
+.panel svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.panel .pencil polygon { fill: none; stroke: var(--pencil); stroke-width: 3; stroke-dasharray: 14 6; opacity: .9; }
+.panel .ink polygon { fill: none; stroke: var(--ink); stroke-width: 9; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.panel.inset .ink polygon { stroke-width: 8; }
+.panel.inset .halo polygon { fill: none; stroke: var(--paper); stroke-width: 26; stroke-linejoin: round; }
+.panel .clip { position: absolute; inset: 0; opacity: 0; }
+.panel .bg { position: absolute; inset: 0; }
+.panel .content { position: absolute; container-type: size; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2.5cqmin; text-align: center; }
+.panel .pop { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.panel.drawn .clip, .panel.drawn .pop { opacity: 1; }
+.panel.drawn .ink polygon { stroke-dashoffset: 0; }
+.panel.drawn .pencil { opacity: 0; }
+[data-b] { will-change: transform; }
+
+/* Tones: flat CMYK fills with Ben-Day dots and rays. */
+.t-paper { background: var(--paper); }
+.t-cyan { background:
+  radial-gradient(circle, rgba(0,60,120,.38) 30%, transparent 33%) 0 0 / 16px 16px,
+  repeating-conic-gradient(from 0deg at var(--rx, 70%) var(--ry, 30%), rgba(255,255,255,.22) 0 5deg, transparent 5deg 13deg),
+  var(--c); }
+.t-yellow { background:
+  radial-gradient(circle, rgba(228,0,124,.42) 30%, transparent 33%) 0 0 / 15px 15px,
+  repeating-conic-gradient(from 0deg at var(--rx, 50%) var(--ry, 50%), rgba(255,255,255,.35) 0 6deg, transparent 6deg 14deg),
+  var(--y); }
+.t-magenta { background:
+  radial-gradient(circle, rgba(255,225,0,.5) 26%, transparent 29%) 0 0 / 14px 14px,
+  var(--m); }
+.t-green { background:
+  radial-gradient(circle, rgba(255,225,0,.45) 30%, transparent 33%) 0 0 / 16px 16px,
+  repeating-conic-gradient(from 0deg at var(--rx, 20%) var(--ry, 50%), rgba(255,255,255,.18) 0 5deg, transparent 5deg 12deg),
+  var(--green); }
+.t-orange { background:
+  radial-gradient(circle, rgba(228,0,124,.5) 30%, transparent 33%) 0 0 / 14px 14px,
+  var(--orange); }
+.t-ink { background:
+  radial-gradient(circle, rgba(0,163,221,.55) 22%, transparent 25%) 0 0 / 18px 18px,
+  var(--ink); color: var(--paper); }
+.t-dots { background:
+  radial-gradient(circle, rgba(0,163,221,.35) 30%, transparent 33%) 0 0 / 14px 14px,
+  var(--paper); }
+.t-ink .lbl, .t-ink .body { color: var(--paper); }
+.t-magenta .lbl, .t-magenta .body { color: var(--paper); }
+
+/* Lettering */
+.num {
+  font: 900 30cqmin/0.82 var(--display); letter-spacing: -.01em; color: var(--y);
+  -webkit-text-stroke: .045em var(--ink); paint-order: stroke fill;
+  text-shadow: .05em .05em 0 var(--ink), -.025em .015em 0 rgba(0,163,221,.75), .025em -.015em 0 rgba(228,0,124,.7);
+  text-transform: uppercase;
+}
+.num.white { color: #fff; }
+.num.sm { font-size: 19cqmin; }
+.num.xs { font-size: 13cqmin; }
+.lbl { font: 900 9cqmin/0.95 var(--display); text-transform: uppercase; letter-spacing: .03em; color: var(--ink); }
+.body { font: 700 5.4cqmin/1.2 var(--letter); text-transform: uppercase; color: var(--ink); max-width: 92%; }
+.cap {
+  position: absolute; left: 0; top: 0; background: var(--y); border: .9cqmin solid var(--ink); padding: 1.2cqmin 2.4cqmin;
+  font: 700 4.6cqmin/1.1 var(--letter); text-transform: uppercase; text-align: left; max-width: 70%;
+  box-shadow: 1cqmin 1cqmin 0 var(--ink);
+}
+.cap.mid { position: relative; left: auto; top: auto; font-size: 6cqmin; max-width: 92%; padding: 2.4cqmin 3.6cqmin; }
+.cap.paper { background: #fffbea; }
+.cap.cyan { background: var(--c); color: #fff; }
+.kick { font: 400 8cqmin/1 var(--sfx); letter-spacing: .04em; color: var(--ink); background: var(--paper); border: .8cqmin solid var(--ink); padding: .8cqmin 2.4cqmin; rotate: -2deg; text-transform: uppercase; }
+.kick.red { background: var(--m); color: #fff; }
+
+.bubble {
+  position: relative; background: #fff; border: 1cqmin solid var(--ink); border-radius: 50%;
+  padding: 7cqmin 8cqmin; font: 700 6.4cqmin/1.1 var(--letter); text-transform: uppercase; max-width: 86%;
+}
+.bubble::after {
+  content: ""; position: absolute; width: 14cqmin; height: 14cqmin; background: #fff; border: 1cqmin solid var(--ink);
+  border-top: 0; border-left: 0; clip-path: polygon(0 0, 100% 100%, 100% 0); left: 12%; top: -9cqmin; rotate: -20deg;
+}
+.bubble.shout { border-radius: 0; clip-path: none; background: #fff;
+  border: none; filter: drop-shadow(0 0 0 var(--ink));
+}
+.stamp { font: 400 7cqmin/1 var(--sfx); letter-spacing: .05em; color: var(--green); border: .9cqmin solid currentColor; padding: 1cqmin 2.4cqmin; rotate: -6deg; background: rgba(255,255,255,.6); }
+
+.burst { display: grid; place-items: center; aspect-ratio: 1; width: 62cqmin; background: #fff; }
+.burst.yellow { background: var(--y); }
+.burst-wrap { filter: drop-shadow(1.2cqmin 1.2cqmin 0 var(--ink)); }
+
+.sfx {
+  position: absolute; font: 400 120px/1 var(--sfx); letter-spacing: .03em; color: var(--y);
+  -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 7px 7px 0 var(--ink);
+  white-space: nowrap;
+}
+.sfx.m { color: var(--m); }
+.sfx.c { color: var(--c); }
+
+.drops { display: flex; flex-direction: column; gap: 2cqmin; width: 100%; align-items: stretch; }
+.drop { display: flex; align-items: center; gap: 3cqmin; background: #fff; border: .8cqmin solid var(--ink); padding: 1.6cqmin 2.4cqmin; box-shadow: 1cqmin 1cqmin 0 var(--ink); text-align: left; }
+.drop:nth-child(2) { rotate: .8deg; } .drop:nth-child(3) { rotate: -.6deg; }
+.drop b { font: 900 7.2cqmin/1 var(--display); text-transform: uppercase; flex: 1; }
+.drop span { font: 900 7.2cqmin/1 var(--display); color: var(--m); }
+.drop.big { flex-direction: column; text-align: center; gap: 1.6cqmin; }
+.drop small { font: 700 4cqmin/1 var(--letter); text-transform: uppercase; color: var(--k-soft); }
+.ico { flex: none; width: 10cqmin; aspect-ratio: 1; display: grid; place-items: center; }
+.ico svg { width: 100%; height: 100%; }
+.row { display: flex; gap: 3cqmin; align-items: center; justify-content: center; width: 100%; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 4cqmin; width: 100%; height: 100%; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 2cqmin; justify-content: center; }
+.chip { background: #fff; border: .7cqmin solid var(--ink); padding: 1.2cqmin 2.4cqmin; font: 900 6cqmin/1 var(--display); text-transform: uppercase; box-shadow: .8cqmin .8cqmin 0 var(--ink); }
+.chip i { font: 700 3.6cqmin/1 var(--letter); font-style: normal; color: var(--m); display: block; margin-top: .6cqmin; }
+
+/* Wrapped art: character cut-outs as stickers on torn paper. */
+.sticker { position: absolute; }
+.sticker .torn { position: absolute; inset: -8% -12%; background: #fbf7ea; box-shadow: 0 10px 18px rgba(0,0,0,.3); }
+.sticker svg { position: relative; display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 0 #fff) drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff); }
+.sticker .credit { position: absolute; left: 50%; bottom: -14%; translate: -50% 0; font: 400 22px/1 var(--sfx); background: var(--ink); color: var(--y); padding: 4px 10px; white-space: nowrap; }
+.desk-sticker { position: absolute; width: 380px; height: 480px; }
+
+/* ---------- Cover, contents, back cover ---------- */
+.cover { position: absolute; inset: 0; overflow: hidden; background:
+  radial-gradient(circle, rgba(255,225,0,.55) 24%, transparent 27%) 0 0 / 22px 22px,
+  repeating-conic-gradient(from 0deg at 55% 62%, rgba(255,255,255,.18) 0 6deg, transparent 6deg 14deg), var(--m); }
+.cover .mast { position: absolute; left: 40px; right: 40px; top: 70px; font: 900 330px/.78 var(--display); color: var(--y); -webkit-text-stroke: 12px var(--ink); paint-order: stroke fill; text-shadow: 14px 14px 0 var(--ink), -6px 3px 0 rgba(0,163,221,.8); letter-spacing: -.02em; text-transform: uppercase; }
+.cover .sub { position: absolute; left: 52px; top: 360px; font: 400 92px/1 var(--sfx); color: #fff; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; text-shadow: 6px 6px 0 var(--ink); letter-spacing: .04em; }
+.cover .issue { position: absolute; right: 40px; top: 20px; background: #fff; border: 6px solid var(--ink); padding: 10px 16px; font: 900 34px/1 var(--display); text-align: center; text-transform: uppercase; }
+.cover .issue b { display: block; font-size: 64px; color: var(--m); }
+.cover .blurb { position: absolute; left: 60px; bottom: 150px; width: 470px; background: var(--y); border: 6px solid var(--ink); padding: 18px 22px; font: 700 40px/1.1 var(--letter); text-transform: uppercase; rotate: -3deg; box-shadow: 10px 10px 0 var(--ink); }
+.cover .barcode { position: absolute; left: 50px; bottom: 30px; width: 170px; height: 90px; background: repeating-linear-gradient(90deg, var(--ink) 0 4px, #fff 4px 7px, var(--ink) 7px 9px, #fff 9px 14px); border: 8px solid #fff; }
+.cover .star { position: absolute; right: 50px; bottom: 120px; width: 300px; aspect-ratio: 1; display: grid; place-items: center; background: var(--y); font: 400 52px/1 var(--sfx); text-align: center; rotate: 10deg; filter: drop-shadow(8px 8px 0 var(--ink)); }
+.contents { position: absolute; inset: 60px 60px 90px; display: flex; flex-direction: column; gap: 26px; }
+.contents h2 { margin: 0; font: 900 150px/.85 var(--display); text-transform: uppercase; color: var(--ink); text-shadow: -5px 3px 0 rgba(0,163,221,.75), 5px -2px 0 rgba(228,0,124,.7); }
+.toc { display: flex; flex-direction: column; gap: 18px; }
+.toc button { all: unset; cursor: pointer; display: grid; grid-template-columns: 120px 1fr auto; align-items: center; gap: 24px; padding: 14px 20px; background: #fff; border: 6px solid var(--ink); box-shadow: 9px 9px 0 var(--ink); font: 900 64px/1 var(--display); text-transform: uppercase; }
+.toc button:nth-child(odd) { rotate: -.7deg; } .toc button:nth-child(even) { rotate: .6deg; }
+.toc button:focus-visible { outline: 6px solid var(--c); outline-offset: 6px; }
+.toc button[disabled] { cursor: default; opacity: .45; }
+.toc .thumb { height: 90px; border: 5px solid var(--ink); }
+.toc em { font: 700 26px/1 var(--letter); font-style: normal; text-transform: uppercase; color: var(--m); display: block; margin-top: 6px; }
+.toc .pg { font-size: 80px; color: var(--m); }
+.back { position: absolute; inset: 60px 60px 90px; display: flex; flex-direction: column; gap: 34px; align-items: center; }
+.back h2 { margin: 0; font: 400 120px/1 var(--sfx); color: var(--y); -webkit-text-stroke: 8px var(--ink); paint-order: stroke fill; text-shadow: 9px 9px 0 var(--ink); letter-spacing: .03em; }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; }
+.card { aspect-ratio: 4 / 5; border: 7px solid var(--ink); box-shadow: 12px 12px 0 var(--ink); position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 22px; }
+.card .lbl2 { font: 900 64px/.9 var(--display); color: #fff; -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-transform: uppercase; }
+.card-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.cbtn { font: 400 40px/1 var(--sfx); letter-spacing: .04em; background: var(--y); border: 5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); padding: 10px 16px; text-align: center; }
+.cbtn.alt { background: #fff; }
+
+/* ---------- Camera FX overlays ---------- */
+#speed, #flash { position: fixed; inset: 0 0 64px 0; pointer-events: none; opacity: 0; }
+#speed::before {
+  content: ""; position: absolute; left: -50%; top: -50%; width: 200%; height: 200%;
+  rotate: var(--a, 0deg);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 22px, rgba(23,20,28,.55) 22px 24px, transparent 24px 61px, rgba(23,20,28,.35) 61px 62px, transparent 62px 97px),
+    radial-gradient(circle, rgba(228,0,124,.35) 30%, transparent 34%) 0 0 / 60px 12px;
+}
+#flash { background: var(--ink); }
+#flash::before { content: ""; position: absolute; inset: 0; background: repeating-conic-gradient(from 0deg at 50% 50%, #fff 0 3deg, transparent 3deg 11deg); }
+
+/* ---------- HUD and the prototype bar ---------- */
+#hud { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: 16px; display: flex; gap: 8px; z-index: 5; }
+.hbtn { font: 400 20px/1 var(--sfx); letter-spacing: .05em; background: var(--y); color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); padding: 7px 12px; cursor: pointer; }
+.hbtn:focus-visible { outline: 3px solid var(--c); outline-offset: 2px; }
+#bar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 64px; padding: 0 16px env(safe-area-inset-bottom, 0px);
+  background: var(--bar); color: var(--bar-fg); display: flex; align-items: center; justify-content: center; gap: 14px;
+  font: 600 13px/1.2 ui-sans-serif, system-ui, sans-serif; z-index: 10; overflow-x: auto; white-space: nowrap;
+}
+#bar button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--bar-dim); }
+#bar button:focus-visible { outline: 2px solid var(--bar-hi); }
+#bar button[aria-pressed="true"] { background: var(--bar-hi); color: #17141c; border-color: var(--bar-hi); }
+#bar .grp { display: flex; align-items: center; gap: 6px; }
+#bar .lab { color: var(--bar-dim); font-weight: 500; }
+#bar #vname { min-width: 150px; text-align: center; font-weight: 700; }
+#readout { color: var(--bar-dim); font: 500 12px/1.2 ui-monospace, monospace; }
+@media (max-width: 760px) { #readout { display: none; } #bar { justify-content: flex-start; } #bar #vname { min-width: 110px; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+
+<div id="stage" tabindex="0" aria-label="Comic book. Use the arrow keys, Space, scroll, a tap or a swipe to move panel by panel.">
+  <div id="shake"><div id="world"></div></div>
+</div>
+<div id="speed"></div>
+<div id="flash"></div>
+<div id="hud"><button class="hbtn" id="toContents" type="button">Contents</button></div>
+<p class="sr" aria-live="polite" id="live"></p>
+<div id="bar" role="toolbar" aria-label="Prototype controls">
+  <span class="lab">PROTOTYPE</span>
+  <div class="grp">
+    <button type="button" id="vprev" aria-label="Previous composition">‹</button>
+    <span id="vname"></span>
+    <button type="button" id="vnext" aria-label="Next composition">›</button>
+  </div>
+  <div class="grp"><span class="lab">Data</span><button type="button" data-data="full">Full</button><button type="button" data-data="sparse">Sparse</button></div>
+  <div class="grp"><span class="lab">Motion</span><button type="button" data-motion="full">Full</button><button type="button" data-motion="reduced">Reduced</button></div>
+  <span id="readout"></span>
+</div>
+
+<script>
+"use strict";
+const W = 1000, H = 1500, BAR = 64;
+
+// ---------- Placeholder art ----------
+const charSvg = (body, trim, weapon) => `<svg viewBox="0 0 120 160" aria-hidden="true">
+  <rect x="44" y="14" width="32" height="30" fill="#e8b48a" stroke="#17141c" stroke-width="4"/>
+  <path d="M40 22 L60 2 L80 22 Z" fill="${trim}" stroke="#17141c" stroke-width="4"/>
+  <rect x="34" y="44" width="52" height="56" fill="${body}" stroke="#17141c" stroke-width="4"/>
+  <rect x="34" y="62" width="52" height="8" fill="${trim}"/>
+  <rect x="18" y="46" width="16" height="44" fill="${body}" stroke="#17141c" stroke-width="4"/>
+  <rect x="86" y="46" width="16" height="44" fill="${body}" stroke="#17141c" stroke-width="4"/>
+  <rect x="38" y="100" width="18" height="50" fill="#3a3550" stroke="#17141c" stroke-width="4"/>
+  <rect x="64" y="100" width="18" height="50" fill="#3a3550" stroke="#17141c" stroke-width="4"/>
+  ${weapon === "staff" ? '<rect x="104" y="6" width="8" height="120" fill="#7a4b21" stroke="#17141c" stroke-width="3"/><circle cx="108" cy="10" r="11" fill="#00a3dd" stroke="#17141c" stroke-width="4"/>' : '<path d="M100 92 L112 8 L118 12 L106 94 Z" fill="#cfd6dc" stroke="#17141c" stroke-width="3"/><rect x="96" y="86" width="18" height="7" fill="#7a4b21" stroke="#17141c" stroke-width="3"/>'}
+  <rect x="50" y="24" width="6" height="6" fill="#17141c"/><rect x="64" y="24" width="6" height="6" fill="#17141c"/>
+</svg>`;
+const CHARS = [
+  charSvg("#e4007c", "#ffe100", "sword"),
+  charSvg("#00a3dd", "#efe9d6", "staff"),
+  charSvg("#2fae5a", "#ff7a1a", "sword"),
+  charSvg("#6b3fa0", "#ffe100", "staff"),
+];
+const torn = () => {
+  const pts = [];
+  for (let i = 0; i <= 10; i++) pts.push(`${i * 10}% ${Math.random() * 5}%`);
+  for (let i = 0; i <= 10; i++) pts.push(`${100 - Math.random() * 4}% ${i * 10}%`);
+  for (let i = 10; i >= 0; i--) pts.push(`${i * 10}% ${100 - Math.random() * 5}%`);
+  for (let i = 10; i >= 0; i--) pts.push(`${Math.random() * 4}% ${i * 10}%`);
+  return `polygon(${pts.join(",")})`;
+};
+const sticker = (i, style, credit) => `<div class="sticker" style="${style}"><div class="torn" style="clip-path:${torn()}"></div>${CHARS[i % CHARS.length]}${credit ? `<span class="credit">${credit}</span>` : ""}</div>`;
+const ico = (hue, shape = "gem") => `<span class="ico"><svg viewBox="0 0 40 40" aria-hidden="true">${
+  shape === "coin" ? `<circle cx="20" cy="22" r="13" fill="#ffd400" stroke="#17141c" stroke-width="3"/><circle cx="20" cy="22" r="7" fill="none" stroke="#b08900" stroke-width="3"/>`
+  : shape === "staff" ? `<rect x="17" y="6" width="6" height="30" fill="#7a4b21" stroke="#17141c" stroke-width="2.5" transform="rotate(30 20 20)"/><circle cx="27" cy="8" r="7" fill="hsl(${hue} 90% 55%)" stroke="#17141c" stroke-width="3"/>`
+  : `<path d="M20 4 L34 16 L20 36 L6 16 Z" fill="hsl(${hue} 85% 55%)" stroke="#17141c" stroke-width="3"/><path d="M6 16 H34 M20 4 L14 16 L20 36 L26 16 Z" fill="none" stroke="#17141c" stroke-width="1.6"/>`
+}</svg></span>`;
+const star = (spikes = 16, inner = 0.74) => {
+  const pts = [];
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 ? inner : 1, a = (Math.PI * i) / spikes;
+    pts.push(`${50 + 50 * r * Math.cos(a)}% ${50 + 50 * r * Math.sin(a)}%`);
+  }
+  return `polygon(${pts.join(",")})`;
+};
+
+// ---------- Fake You data (shaped like WrappedYouModel) ----------
+const DATA = {
+  full: {
+    player: "Iron Vex",
+    submissions: { countLabel: "214", unit: "Submissions", comparison: "2.3× the Bingo average" },
+    points: { shareLabel: "4.8%", comparison: "Twice the Bingo average", teamPercentLabel: "31% of your Team's points", rankLabel: null, isTop: true },
+    gp: { gainedLabel: "1.48B", buyInLabel: "25M", coveredBuyIn: true },
+    topDrops: [
+      { name: "Tumeken's shadow", value: "1.21B", hue: 280, shape: "staff" },
+      { name: "Elder maul", value: "118.3M", hue: 30, shape: "gem" },
+      { name: "Dragon warhammer", value: "41.7M", hue: 120, shape: "gem" },
+    ],
+    luckiestDrop: { name: "Tumeken's shadow", value: "1.21B", hue: 280, shape: "staff", sentence: "23 raids at 1/440 combined: only 1 in 20 get it that fast" },
+    driestStreak: { boss: "Vorkath", killsLabel: "612 kills", rateLabel: "1/127", chanceLabel: "1 in 124" },
+    firstLast: { first: { name: "Abyssal whip", date: "3 Mar", hue: 0, shape: "gem" }, last: { name: "Zenyte shard", date: "29 Mar", hue: 45, shape: "gem" } },
+    mostActiveDay: { dateLabel: "Sat 14 Mar", submissionsLabel: "19 Submissions", drops: [
+      { name: "Bandos chestplate", hue: 210 }, { name: "Zenyte shard", hue: 45 }, { name: "Dragon pickaxe", hue: 0 }, { name: "Onyx", hue: 300 } ] },
+    titles: [{ name: "The Grinder", text: "Most kills of one boss" }, { name: "Dry Spell Survivor", text: "Longest dry streak, and still smiling" }],
+    achievements: [{ name: "Raid Rookie", earned: "4 Mar" }, { name: "Pet Hunter", earned: "11 Mar" }, { name: "Gold Rush", earned: "20 Mar" }],
+    wom: { ehbLabel: "212.4", bosses: [{ name: "Vorkath", kills: "612 kills" }, { name: "Tombs of Amascut", kills: "118 kills" }, { name: "Zulrah", kills: "90 kills" }] },
+    draft: { pickLabel: "Pick 7", positionLabel: "3rd" },
+  },
+  sparse: {
+    player: "Pebble Toes",
+    submissions: { countLabel: "3", unit: "Submissions", comparison: null },
+    points: { shareLabel: "0.4%", comparison: null, teamPercentLabel: null, rankLabel: null, isTop: false },
+    gp: { gainedLabel: "412K", buyInLabel: "25M", coveredBuyIn: false },
+    topDrops: [{ name: "Granite maul", value: "412K", hue: 200, shape: "gem" }],
+    luckiestDrop: null,
+    driestStreak: null,
+    firstLast: { first: { name: "Granite maul", date: "18 Mar", hue: 200, shape: "gem" }, last: null },
+    mostActiveDay: null,
+    titles: [],
+    achievements: [{ name: "First Blood", earned: "18 Mar" }],
+    wom: { ehbLabel: "3.1", bosses: [] },
+    draft: { pickLabel: "Pick 41", positionLabel: "9th" },
+  },
+};
+
+// ---------- Panels: one per Reveal step. Each says what it weighs and what it draws. ----------
+// kind: "hero" (the section's splash), "stat", "text" (narration only, a light panel). impact: a big moment.
+function youPanels(y) {
+  const P = [];
+  P.push({ id: "splash", kind: "hero", impact: true, tone: "t-cyan", rays: "75% 35%",
+    html: `<span class="cap">You</span><div class="num" data-b="slam">${y.submissions.countLabel}</div><div class="lbl" data-b="rise">${y.submissions.unit}</div>`,
+    pop: sticker(0, "right:-34px;top:-46px;width:170px;height:220px;rotate:8deg", "") + `<span class="sfx" data-b="pop" style="right:20px;bottom:10px;rotate:-10deg">Pow!</span>` });
+  if (y.submissions.comparison)
+    P.push({ id: "subs-cmp", kind: "text", tone: "t-paper",
+      html: `<div class="bubble" data-b="bubble">${y.submissions.comparison}!</div>` });
+  const meta = [y.points.comparison, y.points.teamPercentLabel, y.points.rankLabel].filter(Boolean);
+  P.push({ id: "points", kind: "stat", impact: y.points.isTop, tone: y.points.isTop ? "t-yellow" : "t-dots", rays: "25% 50%",
+    html: `<div class="row"><div class="burst-wrap" data-b="slam"><div class="burst" style="clip-path:${star(18, .78)}"><div class="num sm white">${y.points.shareLabel}</div></div></div>
+      <div style="display:flex;flex-direction:column;gap:3cqmin;align-items:center"><div class="lbl" data-b="rise">Points share</div>
+      ${y.points.isTop ? `<div class="stamp" data-b="pop">Your Team's top scorer.</div>` : ""}</div></div>` });
+  if (meta.length)
+    P.push({ id: "points-meta", kind: "text", tone: "t-magenta",
+      html: `<div class="cap mid paper" data-b="rise">${meta.join(" · ")}.</div>` });
+  if (y.gp) {
+    const line = y.gp.coveredBuyIn ? `That's your ${y.gp.buyInLabel} buy-in covered.` : `Not quite the ${y.gp.buyInLabel} buy-in. There's always next Bingo.`;
+    P.push({ id: "gp", kind: "stat", tone: "t-green", rays: "15% 60%",
+      html: `<div class="num sm" data-b="slam">${y.gp.gainedLabel}</div><div class="lbl" data-b="rise">Total drop value</div><div class="cap mid" data-b="rise" style="font-size:5cqmin">${line}</div>`,
+      pop: y.gp.coveredBuyIn ? `<span class="sfx c" data-b="pop" style="right:-10px;top:-30px;rotate:9deg;font-size:96px">Ka-ching!</span>` : "" });
+  }
+  if (y.topDrops.length)
+    P.push({ id: "drops", kind: "stat", weight: 1.3, tone: "t-paper",
+      html: `<span class="cap cyan">Your biggest drops</span><div class="drops" style="margin-top:9cqmin">${y.topDrops.map((d) => `<div class="drop" data-b="rise">${ico(d.hue, d.shape)}<b>${d.name}</b><span>${d.value}</span></div>`).join("")}</div>` });
+  if (y.luckiestDrop) {
+    const d = y.luckiestDrop;
+    P.push({ id: "luckiest", kind: "stat", impact: true, tone: "t-yellow", rays: "85% 20%",
+      html: `<div class="kick" data-b="rise">Your luckiest drop</div><div class="drop big" data-b="slam" style="width:70%">${ico(d.hue, d.shape).replace('class="ico"', 'class="ico" style="width:24cqmin"')}<b style="font-size:11cqmin">${d.name}</b><span style="font-size:9cqmin">${d.value}</span></div>`,
+      pop: `<span class="sfx m" data-b="pop" style="left:-20px;top:-40px;rotate:-12deg">Lucky!</span>` });
+    P.push({ id: "luck-text", kind: "text", tone: "t-paper",
+      html: `<div class="bubble" data-b="bubble">${d.sentence}.</div>` });
+  }
+  if (y.driestStreak) {
+    const s = y.driestStreak;
+    P.push({ id: "driest", kind: "stat", tone: "t-orange",
+      html: `<div class="kick red" data-b="rise">Your driest streak</div><div class="num sm" data-b="slam">${s.killsLabel}</div><div class="lbl" data-b="rise">of ${s.boss}</div>`,
+      pop: `<span class="sfx" data-b="pop" style="right:6px;bottom:-26px;rotate:7deg;font-size:84px">Sigh…</span>` });
+    P.push({ id: "driest-text", kind: "text", tone: "t-ink",
+      html: `<div class="cap mid" data-b="rise">Without a single Board drop. They drop at ${s.rateLabel} combined there: only ${s.chanceLabel} go that dry.</div>` });
+  }
+  if (y.firstLast) {
+    const f = y.firstLast;
+    const card = (k, d, tilt) => `<div style="display:flex;flex-direction:column;gap:3cqmin;align-items:center"><div class="kick" style="rotate:${tilt}deg" data-b="rise">${k}</div><div class="drop big" data-b="slam">${ico(d.hue, d.shape).replace('class="ico"', 'class="ico" style="width:18cqmin"')}<b>${d.name}</b><small>${d.date}</small></div></div>`;
+    P.push({ id: "first-last", kind: "stat", tone: "t-dots",
+      html: f.last ? `<div class="split">${card("Your first drop", f.first, -2)}${card("And your last", f.last, 2)}</div>` : card("Your first drop", f.first, -2) });
+  }
+  if (y.mostActiveDay) {
+    const d = y.mostActiveDay;
+    P.push({ id: "day", kind: "stat", tone: "t-cyan", rays: "50% 100%",
+      html: `<div class="kick" data-b="rise">Your biggest day</div><div class="num sm" data-b="slam">${d.dateLabel}</div><div class="lbl" data-b="rise">${d.submissionsLabel}</div>` });
+    P.push({ id: "day-drops", kind: "stat", weight: 0.8, tone: "t-paper",
+      html: `<div class="chips">${d.drops.map((x) => `<div class="chip" data-b="pop">${ico(x.hue).replace('class="ico"', 'class="ico" style="width:9cqmin;display:inline-grid;vertical-align:middle;margin-right:1cqmin"')}${x.name}</div>`).join("")}</div>` });
+  }
+  if (y.titles.length)
+    P.push({ id: "titles", kind: "stat", tone: "t-magenta",
+      html: `<div class="kick" data-b="rise">Your Titles</div>${y.titles.map((t, i) => `<div data-b="slam" style="rotate:${i ? 1.5 : -1.5}deg"><div class="num xs">${t.name}</div><div class="body">${t.text}</div></div>`).join("")}` });
+  if (y.achievements.length)
+    P.push({ id: "achievements", kind: "stat", tone: "t-paper",
+      html: `<span class="cap">Achievements</span><div class="chips" style="margin-top:8cqmin">${y.achievements.map((a) => `<div class="chip" data-b="pop">${a.name}<i>${a.earned}</i></div>`).join("")}</div>` });
+  if (y.wom)
+    P.push({ id: "wom", kind: "stat", tone: "t-ink",
+      html: `<div class="lbl" data-b="rise" style="color:var(--paper)">Wise Old Man</div><div class="num sm" data-b="slam">${y.wom.ehbLabel} EHB</div>${y.wom.bosses.length ? `<div class="body" data-b="rise">${y.wom.bosses.map((b) => `${b.name} ${b.kills}`).join(" · ")}</div>` : ""}` });
+  if (y.draft)
+    P.push({ id: "draft", kind: "stat", weight: 0.8, tone: "t-yellow", rays: "50% 50%",
+      html: `<div class="kick" data-b="rise">Draft day</div><div class="row"><div class="num xs" data-b="slam">${y.draft.pickLabel}</div><div class="stamp" style="color:var(--m)" data-b="pop">Drafted ${y.draft.positionLabel}</div></div>` });
+  return P;
+}
+const teaserPanels = () => [
+  { id: "tbc", kind: "text", tone: "t-ink", html: `<div class="cap mid" data-b="rise">To be continued…</div>` },
+  { id: "rewind", kind: "hero", tone: "t-magenta", rays: "50% 50%",
+    html: `<div class="kick" data-b="rise">Next issue!</div><div class="num" data-b="slam" style="font-size:24cqmin">Rewind</div><div class="body" data-b="rise">Every drop, day by day.</div><div class="cbtn" data-b="pop" style="font-size:7cqmin">Open Rewind</div>` },
+  { id: "board", kind: "stat", tone: "t-cyan",
+    html: `<div class="kick" data-b="rise">Also showing</div><div class="num sm" data-b="slam">The Board</div><div class="cbtn alt" data-b="pop" style="font-size:7cqmin">Open the Board</div>` },
+];
+
+const weight = (p) => p.weight ?? (p.kind === "hero" ? 2 : p.kind === "text" ? 0.6 : 1);
+
+// Pages: fill each to a budget; a narration panel stays with the panel it explains, and a last scrap joins the page before.
+function paginate(panels, cap = 4.6) {
+  const pages = [[]];
+  let w = 0;
+  panels.forEach((p, i) => {
+    const pw = weight(p);
+    const rest = panels.slice(i).reduce((s, x) => s + weight(x), 0);
+    const keepWith = p.kind === "text" && w + pw <= cap + 0.7;
+    if (w + pw > cap && !keepWith && !(rest < 1.2) && pages.at(-1).length) { pages.push([]); w = 0; }
+    pages.at(-1).push(p);
+    w += pw;
+  });
+  return pages;
+}
+
+// ---------- Compositions (the variants): panels on a page -> quads in page coordinates ----------
+function hLine(y0, s, m) { const b = (-2 * s) / (W - 2 * m); return { a: y0 + s - b * m, b }; }
+function vLine(x0, t, y1, y2) { const d = (-2 * t) / Math.max(1, y2 - y1); return { c: x0 + t - d * y1, d }; }
+function meet(h, v) { const x = (v.c + v.d * h.a) / (1 - v.d * h.b); return [x, h.a + h.b * x]; }
+const shiftH = (h, dy) => ({ a: h.a + dy, b: h.b });
+const shiftV = (v, dx) => ({ c: v.c + dx, d: v.d });
+
+/** Tiers of cells, with slanted tier boundaries (slant) and slanted dividers (lean). */
+function tiers(rows, { m = 50, g = 24, slant = 0, lean = 0, top = m, bottom = H - 90 }) {
+  const quads = new Map();
+  const total = rows.reduce((s, r) => s + r.h, 0);
+  let y = top;
+  const ys = [top];
+  rows.forEach((r) => { y += ((bottom - top) * r.h) / total; ys.push(y); });
+  const hs = ys.map((yy, k) => hLine(yy, k === 0 || k === rows.length ? 0 : (k % 2 ? slant : -slant), m));
+  rows.forEach((r, k) => {
+    const T = hs[k], B = hs[k + 1];
+    const tw = r.cells.reduce((s, c) => s + c.w, 0);
+    let x = m;
+    const xs = [m];
+    r.cells.forEach((c) => { x += ((W - 2 * m) * c.w) / tw; xs.push(x); });
+    const vs = xs.map((xx, j) => vLine(xx, j === 0 || j === r.cells.length ? 0 : ((j + k) % 2 ? lean : -lean), ys[k], ys[k + 1]));
+    r.cells.forEach((c, j) => {
+      const t = shiftH(T, k === 0 ? 0 : g / 2), b = shiftH(B, k === rows.length - 1 ? 0 : -g / 2);
+      const l = shiftV(vs[j], j === 0 ? 0 : g / 2), rr = shiftV(vs[j + 1], j === r.cells.length - 1 ? 0 : -g / 2);
+      quads.set(c.p, { pts: [meet(t, l), meet(t, rr), meet(b, rr), meet(b, l)] });
+    });
+  });
+  return quads;
+}
+const rect = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+
+const VARIANTS = {
+  A: { name: "Slash", note: "slanted tiers",
+    layout(panels) {
+      const rows = [];
+      for (const p of panels) {
+        const last = rows.at(-1);
+        if (p.kind === "hero") rows.push({ h: 1.7, cells: [{ p, w: 1 }] });
+        else if (p.kind === "text" && last && last.cells.length === 1 && last.cells[0].p.kind === "stat") { last.cells.push({ p, w: 0.6 }); if (last.h < 1) last.h = 1; }
+        else if (last && last.cells.length === 1 && last.cells[0].p.kind !== "hero" && !last.full) { last.cells.push({ p, w: p.kind === "text" ? 0.6 : 1 }); last.h = Math.max(last.h, 1); }
+        else rows.push({ h: p.kind === "text" ? 0.55 : 1, cells: [{ p, w: 1 }] });
+      }
+      return tiers(rows, { slant: 34, lean: 46 });
+    } },
+  B: { name: "Grid + insets", note: "classic tiers, narration as insets",
+    layout(panels) {
+      const rows = [], insets = [];
+      let flip = false;
+      panels.forEach((p, i) => {
+        const prev = panels[i - 1];
+        if (p.kind === "text" && prev && prev.kind !== "text") { insets.push({ p, host: prev }); return; }
+        const last = rows.at(-1);
+        if (p.kind === "hero") rows.push({ h: 1.6, cells: [{ p, w: 1 }], lock: true });
+        else if (last && !last.lock && last.cells.length === 1) { last.cells.push({ p, w: flip ? 1.4 : 1 }); last.cells[0].w = flip ? 1 : 1.4; flip = !flip; last.lock = true; }
+        else rows.push({ h: 1, cells: [{ p, w: 1 }] });
+      });
+      const q = tiers(rows, { m: 56, g: 20 });
+      // A narration panel sits over its panel's lower corner, breaking into the gutter.
+      insets.forEach(({ p, host }, k) => {
+        const hq = q.get(host);
+        const xs = hq.pts.map((pt) => pt[0]), ys = hq.pts.map((pt) => pt[1]);
+        const x1 = Math.min(...xs), x2 = Math.max(...xs), y2 = Math.max(...ys), y1 = Math.min(...ys);
+        const w = Math.min(470, Math.max(300, (x2 - x1) * 0.52)), h = Math.min(250, Math.max(170, (y2 - y1) * 0.34));
+        const left = k % 2 === 0;
+        q.set(p, { pts: rect(left ? x1 - 18 : x2 - w + 18, y2 - h + 30, w, h), inset: true });
+      });
+      return q;
+    } },
+  C: { name: "Splash page", note: "one big splash, the rest as strips",
+    layout(panels) {
+      const [first, ...rest] = panels;
+      const q = new Map();
+      const splashH = rest.length ? (rest.length > 3 ? 760 : 900) : H - 90;
+      q.set(first, { pts: [[0, 0], [W, 0], [W, splashH + 40], [0, splashH - 40]], bleed: true });
+      if (rest.length) {
+        const rows = rest.map((p) => ({ h: p.kind === "text" ? 0.55 : 1, cells: [{ p, w: 1 }] }));
+        // Pair a narration strip beside the strip before it, so text never gets a full-width band of its own.
+        const merged = [];
+        rows.forEach((r) => { const l = merged.at(-1); if (r.cells[0].p.kind === "text" && l && l.cells.length === 1) { l.cells.push({ p: r.cells[0].p, w: 0.7 }); } else merged.push(r); });
+        tiers(merged, { m: 50, g: 22, slant: 14, lean: 30, top: splashH + 40 + 26, bottom: H - 90 }).forEach((v, k) => q.set(k, v));
+      }
+      return q;
+    } },
+};
+const VKEYS = Object.keys(VARIANTS);
+
+// ---------- State ----------
+const store = { get(k, d) { try { return localStorage.getItem("cwp-" + k) ?? d; } catch { return d; } }, set(k, v) { try { localStorage.setItem("cwp-" + k, v); } catch {} } };
+const S = {
+  variant: VARIANTS[store.get("variant", "A")] ? store.get("variant", "A") : "A",
+  data: store.get("data", "full") === "sparse" ? "sparse" : "full",
+  reduced: store.get("motion", "") ? store.get("motion", "") === "reduced" : matchMedia("(prefers-reduced-motion: reduce)").matches,
+  mode: "wide",
+  stops: [], cur: 0, drawn: new Set(), cam: { x: 0, y: 0, s: 0.3 }, token: 0,
+};
+const $ = (s, r = document) => r.querySelector(s);
+const world = $("#world"), shakeEl = $("#shake");
+
+// ---------- Build the book ----------
+let PAGES = [], GROUPS = [];
+function build() {
+  S.mode = innerWidth < 760 ? "phone" : "wide";
+  const y = DATA[S.data];
+  const youPages = paginate(youPanels(y));
+  PAGES = [
+    { kind: "cover" },
+    { kind: "contents", section: "contents" },
+    ...youPages.map((panels, i) => ({ kind: "comic", section: "you", panels, first: i === 0 })),
+    { kind: "comic", section: "teaser", panels: teaserPanels() },
+    { kind: "back" },
+  ];
+  PAGES.forEach((p, i) => { p.n = i + 1; p.key = p.kind === "comic" ? `${p.section}-${i}` : p.kind; });
+  // Groups: what one pull-back shows. Wide: the cover alone, then spreads of two, the back cover alone. Phone: page by page.
+  GROUPS = [];
+  if (S.mode === "phone") PAGES.forEach((p) => GROUPS.push([p]));
+  else {
+    GROUPS.push([PAGES[0]]);
+    const mid = PAGES.slice(1, -1);
+    for (let i = 0; i < mid.length; i += 2) GROUPS.push(mid.slice(i, i + 2));
+    GROUPS.push([PAGES.at(-1)]);
+  }
+  const gap = S.mode === "phone" ? 320 : 900;
+  let x = 0, html = "";
+  GROUPS.forEach((g, gi) => {
+    g.forEach((p, pi) => {
+      p.x = x + pi * W; p.y = 0; p.group = gi;
+      p.side = g.length === 1 ? "single" : pi === 0 ? "left" : "right";
+      html += renderPage(p);
+    });
+    g.x = x; g.w = g.length * W;
+    if (S.mode === "wide") {
+      const flip = gi % 2;
+      html += `<div class="desk-sticker" style="left:${flip ? x + g.w + 140 : x - 520}px;top:${flip ? 760 : 240}px">${sticker(gi + 1, `inset:0;rotate:${flip ? 7 : -6}deg`, "Side image")}</div>`;
+    }
+    x += g.w + gap;
+  });
+  world.innerHTML = html;
+  world.style.width = x + "px"; world.style.height = H + "px";
+  world.querySelectorAll(".panel").forEach((el) => { if (S.drawn.has(el.dataset.id) || S.reduced) el.classList.add("drawn"); });
+  world.querySelectorAll("[data-jump]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); jumpTo(b.dataset.jump); }));
+
+  // Stops, in reading order.
+  S.stops = [];
+  GROUPS.forEach((g, gi) => {
+    let panels = 0;
+    g.forEach((p) => {
+      if (p.kind !== "comic") { S.stops.push({ key: p.key, group: gi, page: p, rect: pad({ x: p.x, y: 0, w: W, h: H }, 40), kind: "page" }); return; }
+      p.order.forEach((pp) => { panels++; S.stops.push({ key: pp.id, group: gi, page: p, panel: pp, rect: pad(pp.box, 34), kind: "panel", impact: pp.impact }); });
+    });
+    const multi = g.length > 1 || panels > 1;
+    if (multi) S.stops.push({ key: "pull-" + g.map((p) => p.key).join("+"), group: gi, rect: pad({ x: g.x, y: 0, w: g.w, h: H }, S.mode === "wide" ? 130 : 40), kind: "pull" });
+  });
+  // One impact cut per group at most: the first one wins.
+  const seen = new Set();
+  S.stops.forEach((s) => { if (s.impact) { if (seen.has(s.group)) s.impact = false; else seen.add(s.group); } });
+}
+const pad = (r, p) => ({ x: r.x - p, y: r.y - p, w: r.w + 2 * p, h: r.h + 2 * p });
+
+function renderPage(p) {
+  const folio = (label = "") => `<div class="folio">${p.n}${label ? `<small>${label}</small>` : ""}</div>`;
+  let inner = "";
+  if (p.kind === "cover") {
+    const y = DATA[S.data];
+    inner = `<div class="cover">
+      <div class="issue">No.<b>7</b>Spring 2026</div>
+      <div class="mast">Tectonic</div>
+      <div class="sub">Bingo Wrapped!</div>
+      ${sticker(0, "left:300px;top:520px;width:420px;height:560px;rotate:-4deg")}
+      ${sticker(1, "left:640px;top:600px;width:280px;height:370px;rotate:9deg")}
+      <div class="blurb">Starring ${y.player}, in the story of your Bingo.</div>
+      <div class="star" style="clip-path:${star(14, .72)}">Your<br>story!</div>
+      <div class="barcode"></div></div>`;
+  } else if (p.kind === "contents") {
+    const youPage = PAGES.find((x) => x.section === "you");
+    const row = (name, note, pg, tone, jump) => `<button type="button" ${jump ? `data-jump="${jump}"` : "disabled"}><span class="thumb ${tone}"></span><span>${name}${note ? `<em>${note}</em>` : ""}</span><span class="pg">${pg}</span></button>`;
+    inner = `<div class="contents"><h2>In this<br>issue</h2><div class="toc">
+      ${row("You", "", youPage.n, "t-cyan", youPage.panels[0].id)}
+      ${row("Your Duo", "Not in this prototype", "–", "t-yellow")}
+      ${row("Your Team", "Not in this prototype", "–", "t-magenta")}
+      ${row("The Bingo", "Not in this prototype", "–", "t-green")}
+      ${row("Next issue", "", PAGES.at(-2).n, "t-ink", PAGES.at(-2).panels[0].id)}
+    </div></div>${folio()}`;
+  } else if (p.kind === "back") {
+    inner = `<div class="back"><h2>The End!</h2><div class="cards">
+      <div><div class="card t-cyan" style="--rx:50%;--ry:30%">${sticker(0, "left:18%;top:8%;width:64%;height:62%;rotate:-3deg")}<div class="lbl2">Player card</div></div>
+        <div class="card-actions"><div class="cbtn">Copy image</div><div class="cbtn alt">Download</div><div class="cbtn alt">Share</div></div></div>
+      <div><div class="card t-magenta">${sticker(2, "left:18%;top:8%;width:64%;height:62%;rotate:4deg")}<div class="lbl2">Team card</div></div>
+        <div class="card-actions"><div class="cbtn">Copy image</div><div class="cbtn alt">Download</div><div class="cbtn alt">Share</div></div></div>
+    </div></div>`;
+  } else {
+    const quads = VARIANTS[S.variant].layout(p.panels);
+    p.order = [];
+    p.panels.forEach((pp, i) => {
+      const q = quads.get(pp);
+      if (!q) return;
+      inner += renderPanel(pp, q, p, i);
+      p.order.push(pp);
+    });
+    inner += folio(p.first ? "You" : p.section === "teaser" ? "Next issue" : "");
+  }
+  return `<section class="page ${p.side}" style="left:${p.x}px;top:${p.y}px" data-page="${p.key}">${inner}</section>`;
+}
+
+function renderPanel(pp, q, page, i) {
+  const xs = q.pts.map((p) => p[0]), ys = q.pts.map((p) => p[1]);
+  const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
+  const local = q.pts.map(([x, y]) => [x - bx, y - by]);
+  pp.box = { x: page.x + bx, y: page.y + by, w: bw, h: bh };
+  // The content keeps to the rectangle inside the quad, with room for the ink.
+  const il = Math.max(local[0][0], local[3][0]), ir = Math.min(local[1][0], local[2][0]);
+  const it = Math.max(local[0][1], local[1][1]), ib = Math.min(local[2][1], local[3][1]);
+  const p = pp.kind === "text" ? 22 : 34;
+  const poly = local.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const clip = `polygon(${local.map(([x, y]) => `${x.toFixed(1)}px ${y.toFixed(1)}px`).join(",")})`;
+  const rays = pp.rays ? `--rx:${pp.rays.split(" ")[0]};--ry:${pp.rays.split(" ")[1]}` : "";
+  return `<div class="panel${q.inset ? " inset" : ""}" data-id="${pp.id}" style="left:${bx}px;top:${by}px;width:${bw}px;height:${bh}px;z-index:${q.inset ? 3 : 1}">
+    ${q.inset ? `<svg class="halo" viewBox="0 0 ${bw} ${bh}"><polygon points="${poly}"/></svg>` : ""}
+    <svg class="pencil" viewBox="0 0 ${bw} ${bh}"><polygon points="${poly}"/></svg>
+    <div class="clip" style="clip-path:${clip}"><div class="bg ${pp.tone}" style="${rays}"></div>
+      <div class="content" style="left:${il + p}px;top:${it + p}px;width:${Math.max(40, ir - il - 2 * p)}px;height:${Math.max(40, ib - it - 2 * p)}px">${pp.html}</div></div>
+    <svg class="ink" viewBox="0 0 ${bw} ${bh}"><polygon points="${poly}" pathLength="1"/></svg>
+    <div class="pop">${pp.pop || ""}</div></div>`;
+}
+
+// ---------- Camera ----------
+const T = (c) => `translate(${c.x}px, ${c.y}px) scale(${c.s})`;
+function fit(r) {
+  const sw = innerWidth, sh = innerHeight - BAR, m = S.mode === "phone" ? 8 : 24;
+  const s = Math.min((sw - 2 * m) / r.w, (sh - 2 * m) / r.h, 1.7);
+  return { s, x: sw / 2 - (r.x + r.w / 2) * s, y: sh / 2 - (r.y + r.h / 2) * s };
+}
+const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, s: a.s + (b.s - a.s) * t });
+let worldAnim = null;
+function setCam(c) { worldAnim?.cancel(); worldAnim = null; S.cam = c; world.style.transform = T(c); }
+function camTo(to, frames, opts) {
+  const from = S.cam;
+  worldAnim?.cancel();
+  S.cam = to;
+  world.style.transform = T(to);
+  worldAnim = world.animate(frames(from, to), opts);
+  speedLines(from, to, opts.duration);
+  return worldAnim.finished.catch(() => {});
+}
+// Whip: fast in, a little past, then settles on twos.
+const whip = (to, dur = 520) => camTo(to, (a, b) => [
+  { transform: T(a), easing: "cubic-bezier(.8,0,.25,1)" },
+  { transform: T(lerp(a, b, 1.07)), offset: 0.62, easing: "steps(3, end)" },
+  { transform: T(b) },
+], { duration: dur });
+const pull = (to) => camTo(to, (a, b) => [{ transform: T(a), easing: "cubic-bezier(.25,.7,.15,1)" }, { transform: T(b) }], { duration: 820 });
+const pan = (to) => camTo(to, (a, b) => [{ transform: T(a), easing: "cubic-bezier(.85,0,.15,1)" }, { transform: T(b) }], { duration: 640 });
+
+function speedLines(a, b, dur) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (Math.hypot(dx, dy) < 40 && Math.abs(a.s - b.s) < 0.05) return;
+  const el = $("#speed");
+  el.style.setProperty("--a", `${(Math.atan2(dy, dx) * 180) / Math.PI}deg`);
+  el.animate([{ opacity: 0 }, { opacity: 0.9, offset: 0.35 }, { opacity: 0 }], { duration: dur * 0.75, easing: "steps(4, end)" });
+}
+function impact(to) {
+  setCam(to);
+  $("#flash").animate([{ opacity: 1, background: "#17141c" }, { opacity: 1, offset: 0.45, background: "#17141c" }, { opacity: 1, offset: 0.46, background: "#fff" }, { opacity: 0, offset: 0.9 }, { opacity: 0 }], { duration: 170 });
+  shakeEl.animate([
+    { transform: "translate(0,0)" }, { transform: "translate(-16px, 10px)" }, { transform: "translate(12px,-8px)" },
+    { transform: "translate(-6px, 5px)" }, { transform: "translate(3px,-2px)" }, { transform: "translate(0,0)" },
+  ], { duration: 320, easing: "steps(5, end)", delay: 80 });
+}
+
+// ---------- Panel beats ----------
+function panelEl(id) { return world.querySelector(`.panel[data-id="${CSS.escape(id)}"]`); }
+function beats(id) {
+  const el = panelEl(id);
+  if (!el || S.drawn.has(id)) return;
+  S.drawn.add(id);
+  el.classList.add("drawn");
+  if (S.reduced) return;
+  const bf = { fill: "backwards" };
+  el.querySelector(".ink polygon").animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: 170, easing: "ease-out", ...bf });
+  el.querySelector(".clip").animate([
+    { opacity: 0, transform: "translate(10px,-7px)", filter: "drop-shadow(8px 0 0 #00a3dd) drop-shadow(-8px 0 0 #e4007c)" },
+    { opacity: 1, transform: "translate(3px,-2px)", filter: "drop-shadow(4px 0 0 #00a3dd) drop-shadow(-4px 0 0 #e4007c)", offset: 0.5 },
+    { opacity: 1, transform: "none", filter: "none" },
+  ], { duration: 260, delay: 110, easing: "steps(3, end)", ...bf });
+  el.querySelector(".pop").animate([{ opacity: 0 }, { opacity: 1 }], { duration: 1, delay: 300, ...bf });
+  const bg = el.querySelector(".bg");
+  bg.animate([{ backgroundPosition: "0 0" }, { backgroundPosition: "7px 7px" }, { backgroundPosition: "0 0" }], { duration: 700, delay: 900, easing: "steps(6, end)" });
+  [...el.querySelectorAll("[data-b]")].forEach((b, i) => {
+    const delay = 330 + i * 140, kind = b.dataset.b;
+    const k = {
+      slam: [{ transform: "scale(2.6) rotate(-7deg)", opacity: 0 }, { transform: "scale(.9) rotate(1deg)", opacity: 1, offset: 0.55, easing: "steps(2, end)" }, { transform: "none", opacity: 1 }],
+      pop: [{ transform: "scale(0) rotate(-25deg)", opacity: 0 }, { transform: "scale(1.25) rotate(5deg)", opacity: 1, offset: 0.65 }, { transform: "none", opacity: 1 }],
+      bubble: [{ transform: "scale(.15)", opacity: 0 }, { transform: "scale(1.1)", opacity: 1, offset: 0.7 }, { transform: "none", opacity: 1 }],
+      rise: [{ transform: "translateY(36px)", opacity: 0 }, { transform: "none", opacity: 1 }],
+    }[kind];
+    b.animate(k, { duration: kind === "rise" ? 220 : 330, delay, easing: kind === "rise" ? "steps(3, end)" : "cubic-bezier(.2,.9,.3,1.2)", ...bf });
+  });
+}
+
+// ---------- Moving ----------
+async function goTo(i, { jump = false } = {}) {
+  i = Math.max(0, Math.min(S.stops.length - 1, i));
+  if (i === S.cur && !jump) return;
+  const a = S.stops[S.cur], b = S.stops[i], forward = i > S.cur;
+  S.cur = i;
+  const token = ++S.token;
+  readout();
+  const target = fit(b.rect);
+  if (S.reduced) { setCam(target); if (b.panel) beats(b.panel.id); return; }
+  if (a.group !== b.group || jump) {
+    // Out of one spread and into the next: pan across the desk to it, hold, then dive into the panel.
+    const overview = S.stops.find((s) => s.group === b.group && s.kind === "pull");
+    if (overview && b.kind !== "pull" && a.group !== b.group) {
+      await pan(fit(overview.rect));
+      if (token !== S.token) return;
+      await new Promise((r) => setTimeout(r, 260));
+      if (token !== S.token) return;
+      if (b.impact && forward && !S.drawn.has(b.panel.id)) impact(target); else await whip(target);
+    } else if (a.group !== b.group) await pan(target);
+    else await whip(target);
+  } else if (b.kind === "pull") await pull(target);
+  else if (b.impact && forward && b.panel && !S.drawn.has(b.panel.id)) impact(target);
+  else await whip(target);
+  if (token !== S.token) return;
+  if (b.panel) beats(b.panel.id);
+}
+function jumpTo(key) { const i = S.stops.findIndex((s) => s.key === key); if (i >= 0) goTo(i, { jump: true }); }
+const next = () => goTo(S.cur + 1), prev = () => goTo(S.cur - 1);
+
+function readout() {
+  const s = S.stops[S.cur];
+  const pg = s.page ? `page ${s.page.n}` : `spread ${s.group + 1}`;
+  const what = s.kind === "panel" ? `panel ${s.page.order.indexOf(s.panel) + 1}/${s.page.order.length} · ${s.panel.id}${s.impact ? " · impact" : ""}` : s.kind === "pull" ? "pull-back" : s.key;
+  $("#readout").textContent = `stop ${S.cur + 1}/${S.stops.length} · ${pg} · ${what} · ${S.mode}`;
+  $("#live").textContent = s.kind === "panel" ? `Page ${s.page.n}, panel ${s.page.order.indexOf(s.panel) + 1}` : s.kind === "pull" ? "The whole spread" : s.key;
+}
+
+// Rebuild, keeping the place.
+function rebuild() {
+  const key = S.stops[S.cur]?.key;
+  build();
+  let i = S.stops.findIndex((s) => s.key === key);
+  if (i < 0) i = 0;
+  S.cur = i;
+  setCam(fit(S.stops[i].rect));
+  if (S.stops[i].panel) beats(S.stops[i].panel.id);
+  readout();
+  syncBar();
+}
+
+// ---------- Controls ----------
+const stage = $("#stage");
+addEventListener("keydown", (e) => {
+  if (e.target.closest?.("#bar, #hud, button")) { if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return; }
+  if (["ArrowRight", "ArrowDown", " ", "PageDown"].includes(e.key)) { e.preventDefault(); next(); }
+  else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); prev(); }
+  else if (e.key === "]") cycle(1);
+  else if (e.key === "[") cycle(-1);
+});
+// One scroll gesture moves one panel: the wheel is locked until it has been quiet for a moment.
+let wheelAcc = 0, wheelLock = false, wheelQuiet = 0;
+stage.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  clearTimeout(wheelQuiet);
+  wheelQuiet = setTimeout(() => { wheelLock = false; wheelAcc = 0; }, 200);
+  if (wheelLock) return;
+  wheelAcc += Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  if (Math.abs(wheelAcc) > 24) { wheelLock = true; wheelAcc > 0 ? next() : prev(); }
+}, { passive: false });
+let down = null;
+stage.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+stage.addEventListener("pointerup", (e) => {
+  if (!down) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  down = null;
+  if (e.target.closest("button")) return;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) { dx < 0 ? next() : prev(); return; }
+  if (Math.hypot(dx, dy) < 10) (e.clientX > innerWidth / 3 ? next : prev)();
+});
+$("#toContents").addEventListener("click", () => jumpTo("contents"));
+
+// Prototype bar
+function cycle(d) { S.variant = VKEYS[(VKEYS.indexOf(S.variant) + d + VKEYS.length) % VKEYS.length]; store.set("variant", S.variant); rebuild(); }
+$("#vprev").addEventListener("click", () => cycle(-1));
+$("#vnext").addEventListener("click", () => cycle(1));
+document.querySelectorAll("[data-data]").forEach((b) => b.addEventListener("click", () => { S.data = b.dataset.data; store.set("data", S.data); S.drawn.clear(); S.cur = 0; rebuild(); }));
+document.querySelectorAll("[data-motion]").forEach((b) => b.addEventListener("click", () => { S.reduced = b.dataset.motion === "reduced"; store.set("motion", b.dataset.motion); rebuild(); }));
+function syncBar() {
+  const v = VARIANTS[S.variant];
+  $("#vname").textContent = `${S.variant} · ${v.name}`;
+  $("#vname").title = v.note;
+  document.querySelectorAll("[data-data]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.data === S.data)));
+  document.querySelectorAll("[data-motion]").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.motion === "reduced") === S.reduced)));
+}
+let lastMode = null, rz = 0;
+addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { const m = innerWidth < 760 ? "phone" : "wide"; if (m !== lastMode) { lastMode = m; rebuild(); } else setCam(fit(S.stops[S.cur].rect)); }, 120); });
+
+lastMode = innerWidth < 760 ? "phone" : "wide";
+rebuild();
+stage.focus();
+</script>

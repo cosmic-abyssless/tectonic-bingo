@@ -1,49 +1,80 @@
-import { AnimatePresence, motion } from "motion/react";
+import { forwardRef, useImperativeHandle, useRef, type RefObject } from "react";
 import type { WrappedArtFrames } from "@bingo/shared";
 import { StickerArt } from "../../../core/wrapped/StickerArt";
-import { overviewCamera, WRAPPED_PAGE_WIDTH, type Insets, type Size } from "./camera";
+import type { DeskGroup } from "./deskLayout";
+import type { CameraEffects } from "./BookController";
 
-/** The least room (px) beside the book that a sticker is drawn in. */
-const MIN_ROOM = 150;
-/** The most a sticker takes of it, and how far it tucks in under the book's edge. */
-const MAX_WIDTH = 380;
-const TUCK = 14;
-const GAP = 12;
+/** A side image's size on the desk (px, desk coordinates), and how far from its spread it lies. */
+const STICKER_W = 300;
+const STICKER_H = 430;
+const STICKER_GAP = 60;
 
 /**
- * The side images, as stickers slapped on the desk around the open book: one per page, changing as the pages turn, on the
- * left of the book for one page and the right for the next. Wide screens only (the page says when): a phone has no desk.
- * Where the book leaves too little room beside it, there is none.
+ * The side images, as stickers slapped on the desk beside the spreads: one per spread, taking the side images in turn,
+ * on the spread's left for one and its right for the next, lying at the spread's angle and a little more. They are part
+ * of the desk, so the camera shows them as it pulls back from a spread and pans to the next. Wide screens only (the page
+ * says when): a phone reads a page at a time, with no room beside it.
  */
-export function DeskStickers({ art, page, stage, insets, bookHeight, reduceMotion }: { art: WrappedArtFrames[]; page: number; stage: Size; insets: Insets; bookHeight: number; reduceMotion: boolean }) {
-  if (art.length === 0 || stage.w === 0) return null;
-  const camera = overviewCamera(stage, { w: WRAPPED_PAGE_WIDTH, h: bookHeight }, insets);
-  const left = camera.x;
-  const right = camera.x + WRAPPED_PAGE_WIDTH * camera.scale;
-  const side: "left" | "right" = page % 2 === 0 ? "left" : "right";
-  const room = side === "left" ? left - GAP + TUCK : stage.w - right - GAP + TUCK;
-  if (room < MIN_ROOM) return null;
-  const width = Math.min(room, MAX_WIDTH);
-  const height = Math.min(stage.h * 0.72, width * 1.45);
-  const tilt = side === "left" ? -5 : 5;
-  const x = side === "left" ? left + TUCK - width : right - TUCK;
-  const y = Math.max(insets.top, stage.h - insets.bottom - height - 4);
-  const frames = art[page % art.length]!;
+export function DeskStickers({ art, groups }: { art: WrappedArtFrames[]; groups: readonly DeskGroup[] }) {
+  if (art.length === 0) return null;
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      <AnimatePresence mode="popLayout">
-        <motion.div
-          key={page}
-          className="absolute"
-          style={{ left: x, top: y, width, height }}
-          initial={reduceMotion ? false : { opacity: 0, y: 36, rotate: tilt * 2.2, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, rotate: tilt, scale: 1 }}
-          exit={reduceMotion ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: -24, rotate: tilt * 2.2, scale: 0.94, transition: { duration: 0.25 } }}
-          transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 240, damping: 22, delay: 0.25 }}
-        >
-          <StickerArt frames={frames} className="size-full" phase={side === "left" ? 0 : 0.5} />
-        </motion.div>
-      </AnimatePresence>
+    <div aria-hidden className="pointer-events-none absolute top-0 left-0">
+      {groups.map((g, n) => {
+        const left = n % 2 === 0;
+        const x = left ? -STICKER_W - STICKER_GAP : g.w + STICKER_GAP;
+        const y = Math.max(0, g.h - STICKER_H - 30 - (n % 3) * 40);
+        const tilt = (left ? -5 : 6) + (n % 3) - 1;
+        return (
+          <div
+            key={n}
+            className="absolute top-0 left-0 origin-top-left"
+            style={{ width: STICKER_W, height: STICKER_H, transform: `translate(${g.place.x}px, ${g.place.y}px) rotate(${g.place.angle}deg) translate(${x}px, ${y}px) rotate(${tilt}deg)` }}
+          >
+            <StickerArt frames={art[n % art.length]!} className="size-full" phase={left ? 0 : 0.5} />
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+/**
+ * What the camera's moves draw over the stage: the impact of a hard cut, a black-and-white flash and a shake of the
+ * stage. Driven by the book (CameraEffects) through a ref.
+ */
+export const CameraFx = forwardRef<CameraEffects, { shake: RefObject<HTMLElement | null> }>(function CameraFx({ shake }, ref) {
+  const flash = useRef<HTMLDivElement>(null);
+  useImperativeHandle(
+    ref,
+    () => ({
+      impact() {
+        const el = flash.current;
+        if (el && typeof el.animate === "function") {
+          el.animate(
+            [
+              { opacity: 1, background: "#0b0b0d" },
+              { opacity: 1, background: "#0b0b0d", offset: 0.45 },
+              { opacity: 1, background: "#ffffff", offset: 0.46 },
+              { opacity: 0, offset: 0.9 },
+              { opacity: 0 },
+            ],
+            { duration: 170 },
+          );
+        }
+        shake.current?.animate?.(
+          [
+            { transform: "translate(0, 0)" },
+            { transform: "translate(-14px, 9px)" },
+            { transform: "translate(11px, -7px)" },
+            { transform: "translate(-5px, 4px)" },
+            { transform: "translate(3px, -2px)" },
+            { transform: "translate(0, 0)" },
+          ],
+          { duration: 320, delay: 80, easing: "steps(5, end)" },
+        );
+      },
+    }),
+    [shake],
+  );
+  return <div ref={flash} aria-hidden className="wrapped-flash pointer-events-none absolute inset-0 z-20 opacity-0" />;
+});
