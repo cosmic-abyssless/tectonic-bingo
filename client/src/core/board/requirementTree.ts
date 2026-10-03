@@ -182,9 +182,11 @@ export function collectItemNames(root: GraphNode): string[] {
     .filter((name): name is string => name !== null);
 }
 
-// A tile's "tasks" are just the direct children of its node.
-export function tileMatchesSearch(tile: Tile, q: string): boolean {
+// A tile's "tasks" are just the direct children of its node. `tagHits`: the Tiles the server found by their Tags
+// (CONTEXT.md "Tag"), or their Parts', for this query: Players never get the tags themselves (useTileTagHits).
+export function tileMatchesSearch(tile: Tile, q: string, tagHits?: ReadonlySet<string>): boolean {
   if (tile.name.toLowerCase().includes(q)) return true;
+  if (tagHits?.has(tile.id)) return true;
   return tile.node.children.some(
     (task) => (task.description ?? "").toLowerCase().includes(q) || collectItemNames(task).some((n) => n.toLowerCase().includes(q)),
   );

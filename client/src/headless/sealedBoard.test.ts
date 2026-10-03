@@ -93,4 +93,16 @@ describe("tileSearchMatcher", () => {
     expect(matches(tile, "tanzanite")).toBe(true);
     expect(matches(tile, "snake")).toBe(true);
   });
+
+  // Tags (CONTEXT.md "Tag"): the server answers which Tiles a query's tags match, on the Tile or one of its Parts.
+  it("finds a Tile the server found by its Tags, or its Parts' Tags, for the query", () => {
+    const matches = tileSearchMatcher(false, categories);
+    expect(matches(tile, "snek", new Set(["t"]))).toBe(true);
+    expect(matches(tile, "snek", new Set(["other"]))).toBe(false);
+    expect(matches(tile, "snek")).toBe(false);
+  });
+
+  it("while sealed, ignores Tags", () => {
+    expect(tileSearchMatcher(true, categories)(tile, "snek", new Set(["t"]))).toBe(false);
+  });
 });

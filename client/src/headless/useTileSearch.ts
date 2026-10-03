@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { Tile, TileCategory } from "@bingo/shared";
 import { sealedTileMatchesSearch, tileMatchesSearch } from "../core/board/requirementTree";
+import { useTileTagHits } from "../api/queries";
 import type { TileSearchModel } from "./types";
 
 const SUGGESTION_CAP = 8;
 
-export type TileMatcher = (tile: Tile, q: string) => boolean;
+/** `tagHits`: the Tiles the server found by their Tags for the query (useTileTagHits). */
+export type TileMatcher = (tile: Tile, q: string, tagHits?: ReadonlySet<string>) => boolean;
 
-/** How the board's search finds a tile: by its name, Parts and Items, or while sealed by its name and Category only. */
+/**
+ * How the board's search finds a tile: by its name, Parts, Items and Tags, or while sealed by its name and Category
+ * only.
+ */
 export function tileSearchMatcher(sealed: boolean, categories: TileCategory[]): TileMatcher {
   if (!sealed) return tileMatchesSearch;
   const labelById = new Map(categories.map((c) => [c.id, c.label]));
@@ -32,14 +37,17 @@ const OPEN_DIALOG = '[role="dialog"], [role="alertdialog"], [aria-modal="true"],
 
 // The board's Tile search: the query, the Tiles it matches (the first few) and which one the list is on. Each theme
 // draws it on react-aria's ComboBox, which owns the keyboard. `onChoose` is called with the picked tile's id.
-export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (tileId: string) => void): TileSearchModel {
+// `tagSlug`: the bingo whose Tags (CONTEXT.md "Tag") the server searches for the query; null where they aren't searched
+// (while the Tiles are sealed).
+export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (tileId: string) => void, tagSlug: string | null = null): TileSearchModel {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const sq = query.trim().toLowerCase();
-  const allMatching = sq ? tiles.filter((t) => matches(t, sq)) : [];
+  const tagHits = useTileTagHits(tagSlug, sq);
+  const allMatching = sq ? tiles.filter((t) => matches(t, sq, tagHits)) : [];
   const matching = allMatching.slice(0, SUGGESTION_CAP);
 
   function choose(tileId: string) {
@@ -72,5 +80,6 @@ export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (ti
     setHighlightedId,
     choose,
     inputRef,
+    tagHits,
   };
 }

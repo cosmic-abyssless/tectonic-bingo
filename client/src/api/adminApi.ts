@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, AddTagRequest, Bingo, BingoExportDocument, BoardTagsResponse, OsrsBossSearchResult, Tag, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -222,6 +222,24 @@ export function repriceNodeClaims(slug: string, nodeId: string) {
 export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);
 }
+
+// Tags (CONTEXT.md "Tag"): on a Tile, or on a Part by its node id. Each change answers with the Tile's or Part's tags.
+export function getBoardTags(slug: string) {
+  return api.get<BoardTagsResponse>(`${base(slug)}/tags`);
+}
+export function addTag(slug: string, owner: TagOwner, request: AddTagRequest) {
+  const path = "tileId" in owner ? `tiles/${owner.tileId}` : `parts/${owner.partId}`;
+  return api.post<{ tags: Tag[] }>(`${base(slug)}/${path}/tags`, request);
+}
+export function removeTag(slug: string, id: string) {
+  return api.delete<{ tags: Tag[] }>(`${base(slug)}/tags/${id}`);
+}
+/** The OSRS Wiki's Bosses category, filtered by what's typed: the board editor's boss picker. */
+export function searchBosses(slug: string, q: string) {
+  return api.get<{ bosses: OsrsBossSearchResult[] }>(`${base(slug)}/bosses?q=${encodeURIComponent(q)}`);
+}
+/** What a tag is on: a Tile, or one of its Parts. */
+export type TagOwner = { tileId: string } | { partId: string };
 
 export function getLines(slug: string) {
   return api.get<{ lines: BoardLine[] }>(`${base(slug)}/lines`);

@@ -152,4 +152,28 @@ describe("SearchableSelect", () => {
     expect(input.value).toBe("Apple");
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  // The Submit flow's Tile picker: a Tile is found by more than its name (its Items, its Tags), and the Tags need the
+  // server, which is asked for what's typed.
+  it("filters with the caller's matcher, and tells the caller what's typed", async () => {
+    const user = userEvent.setup();
+    const onQueryChange = vi.fn();
+    const tagged = new Set(["c"]);
+    render(
+      <SearchableSelect
+        value="a"
+        options={options}
+        placeholder="Pick a fruit"
+        onChange={() => {}}
+        matches={(o, q) => o.label.toLowerCase().includes(q) || (q === "red" && tagged.has(o.id))}
+        onQueryChange={onQueryChange}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    await user.click(input);
+    expect(onQueryChange).toHaveBeenLastCalledWith("");
+    await user.keyboard("Red");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Cherry"]);
+    expect(onQueryChange).toHaveBeenLastCalledWith("red");
+  });
 });

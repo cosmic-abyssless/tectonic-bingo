@@ -1,9 +1,10 @@
+import { useMemo } from "react";
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
-  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
+  MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, TileTagSearchResponse, ViewerBoardResponse,
 } from "@bingo/shared";
 import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
@@ -19,6 +20,7 @@ export const queryKeys = {
   bingo: (slug: string) => ["bingo", slug] as const,
   permissions: (slug: string) => ["permissions", slug] as const,
   board: (slug: string) => ["board", slug] as const,
+  tileTagSearch: (slug: string, q: string) => ["tileTagSearch", slug, q] as const,
   teamProgress: (slug: string, teamId: string) => ["teamProgress", slug, teamId] as const,
   teamSubmissions: (slug: string, teamId: string) => ["teamSubmissions", slug, teamId] as const,
   modSubmissions: (slug: string) => ["modSubmissions", slug] as const,
@@ -146,6 +148,24 @@ export function useBoard(slug: string | undefined) {
     initialData: () => (userId && slug ? readBoardCache<ViewerBoardResponse>(userId, slug, __BUILD_ID__) : undefined),
     initialDataUpdatedAt: 0,
   });
+}
+
+const NO_TAG_HITS: ReadonlySet<string> = new Set();
+
+/**
+ * The Tiles a search query finds by their Tags (CONTEXT.md "Tag"), or their Parts': only the server knows, since
+ * Players never get the tags themselves. Pass a null slug where tags aren't searched (while the Tiles are sealed).
+ * Empty until the answer for this query arrives.
+ */
+export function useTileTagHits(slug: string | null, q: string): ReadonlySet<string> {
+  const query = q.trim().toLowerCase();
+  const { data } = useQuery({
+    queryKey: queryKeys.tileTagSearch(slug ?? "", query),
+    queryFn: () => api.get<TileTagSearchResponse>(`/api/bingos/${slug}/tile-search?q=${encodeURIComponent(query)}`),
+    enabled: !!slug && query !== "",
+    staleTime: 60_000,
+  });
+  return useMemo(() => (data?.tileIds.length ? new Set(data.tileIds) : NO_TAG_HITS), [data]);
 }
 
 /**

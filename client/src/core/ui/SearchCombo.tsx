@@ -47,6 +47,13 @@ export interface SearchComboProps<T> {
    * undefined to search instead: the caller owns the text (inputValue) and passes `items` already matched to it.
    */
   selectedKey?: string | null;
+  /**
+   * Picking one from a list: whether an item matches the text typed (lowercased, trimmed), when that's more than its
+   * text containing it (a Tile found by its Items or Tags). `onQueryChange` hears that text as it's typed ("" while the
+   * whole list shows), for a caller that has to look something up for it.
+   */
+  itemMatches?: (item: T, q: string) => boolean;
+  onQueryChange?: (q: string) => void;
   /** Searching: the box's text, which the caller matches `items` against. */
   inputValue?: string;
   onInputChange?: (value: string) => void;
@@ -80,6 +87,8 @@ export function SearchCombo<T>({
   renderItem,
   onPick,
   selectedKey,
+  itemMatches,
+  onQueryChange,
   inputValue,
   onInputChange,
   clearOnPick,
@@ -120,7 +129,11 @@ export function SearchCombo<T>({
 
   const query = choosing ? text : (inputValue ?? "");
   const q = query.trim().toLowerCase();
-  const shown = choosing && filtering && q ? items.filter((item) => itemText(item).toLowerCase().includes(q)) : items;
+  const shown = choosing && filtering && q ? items.filter((item) => (itemMatches ? itemMatches(item, q) : itemText(item).toLowerCase().includes(q))) : items;
+  const filterQuery = choosing && filtering ? q : "";
+  const onQueryChangeRef = useRef(onQueryChange);
+  onQueryChangeRef.current = onQueryChange;
+  useEffect(() => onQueryChangeRef.current?.(filterQuery), [filterQuery]);
 
   // Put the input away: focus goes to the enclosing dialog (or, with none, nowhere). Not to <body>: a modal's focus
   // trap would just hand focus back to the first field. A frame later: react-aria puts focus back on the box after a pick.

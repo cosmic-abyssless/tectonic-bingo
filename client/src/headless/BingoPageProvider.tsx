@@ -179,7 +179,8 @@ export function BingoPageProvider({
 
   const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
   const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
-  const search = useTileSearch(tiles, matchTile, openTileTracked);
+  // Tags (CONTEXT.md "Tag") are searched by the server, and not while the Tiles are sealed for this viewer.
+  const search = useTileSearch(tiles, matchTile, openTileTracked, canSee && !sealed ? slug : null);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -367,6 +368,7 @@ export function BingoPageProvider({
           bingoRows={bingo.boardRows}
           bingoCols={bingo.boardCols}
           searchQuery={search.query}
+          searchTagHits={search.tagHits}
           canSubmit={canSubmit}
           canToggleInterest={canToggleInterest}
           interests={interests}

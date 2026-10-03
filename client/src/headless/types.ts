@@ -325,6 +325,8 @@ export interface TileSearchModel {
   setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
+  /** The Tiles the server found by their Tags (CONTEXT.md "Tag") for the query, which the board highlights too. */
+  tagHits: ReadonlySet<string>;
 }
 
 // Open/close belongs to the slot (a RAC MenuTrigger in the default theme).
@@ -489,7 +491,15 @@ export interface SubmissionFlowModel {
       detected: { itemName: string; tileName: string } | null;
     } | null;
   };
-  tile: { selectedId: string; options: { id: string; label: string; group?: string }[]; select(id: string): void };
+  tile: {
+    selectedId: string;
+    options: { id: string; label: string; group?: string }[];
+    select(id: string): void;
+    /** Whether an option matches what's typed in the picker: as the board's search finds a Tile, by its Tags too. */
+    matches(option: { id: string }, q: string): boolean;
+    /** What's typed in the picker, for the server to search the Tiles' Tags for. */
+    setQuery(q: string): void;
+  };
   task: {
     selectedId: string;
     options: { id: string; label: string }[];

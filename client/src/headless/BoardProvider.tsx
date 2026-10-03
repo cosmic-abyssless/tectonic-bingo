@@ -18,6 +18,7 @@ export function BoardProvider({
   bingoRows,
   bingoCols,
   searchQuery,
+  searchTagHits,
   canSubmit,
   canToggleInterest,
   interests,
@@ -38,6 +39,8 @@ export function BoardProvider({
   bingoRows: number;
   bingoCols: number;
   searchQuery: string;
+  /** The Tiles the server found by their Tags for searchQuery (TileSearchModel.tagHits). */
+  searchTagHits?: ReadonlySet<string>;
   canSubmit: boolean;
   canToggleInterest: boolean;
   interests: TileInterest[];
@@ -67,8 +70,8 @@ export function BoardProvider({
   const matchIds = useMemo(() => {
     if (!q) return null;
     const matches = tileSearchMatcher(sealed, categories);
-    return new Set(tiles.filter((t) => matches(t, q)).map((t) => t.id));
-  }, [tiles, q, sealed, categories]);
+    return new Set(tiles.filter((t) => matches(t, q, searchTagHits)).map((t) => t.id));
+  }, [tiles, q, sealed, categories, searchTagHits]);
 
   // Carries the previous tick's TileModels so finalizeTileModels can
   // preserve object identity for tiles whose derived state didn't change —
