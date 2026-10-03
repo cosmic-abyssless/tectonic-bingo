@@ -157,6 +157,8 @@ export interface Bingo {
   discordEnabled: boolean;
   /** The Discord category's name; null: the Bingo's name. */
   discordCategoryName: string | null;
+  /** Dev servers only: a Discord server to try the sync on instead of the clan's. Null: the clan's. */
+  discordGuildId: string | null;
   /** The channels every Team gets (Settings > Discord). See discord.ts. */
   discordChannels: DiscordChannelTemplate[];
   discordSyncError: string | null;

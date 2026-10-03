@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "cc2b519d-91d8-49c0-b18b-0b24c4bb3b4e",
+  "id": "dd2e778b-9618-42f4-930c-2d0b55f9f5ea",
   "prevId": "b2a1dd23-ff45-4e27-8a3d-6340d3524ca1",
   "tables": {
     "achievement_activity": {
@@ -1284,6 +1284,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "discord_guild_id": {
+          "name": "discord_guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "discord_channels_json": {
           "name": "discord_channels_json",
           "type": "text",
@@ -1550,6 +1557,13 @@
         },
         "bingo_id": {
           "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "guild_id": {
+          "name": "guild_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

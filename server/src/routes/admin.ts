@@ -25,6 +25,7 @@ import * as memberPickService from "../services/memberPickService";
 import { getTectonicMembership, matchRsn } from "../services/tectonicMembership";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
+import { isDevModeActive } from "../devMode";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
@@ -100,6 +101,11 @@ router.patch(
       if (typeof body.discordEnabled !== "boolean") throw new ServiceError(400, "discordEnabled must be a boolean");
       params.discordEnabled = body.discordEnabled;
     }
+    // Trying the sync on another Discord server is for dev servers only: in production it's always the clan's.
+    if ("discordGuildId" in body) {
+      if (!isDevModeActive()) throw new ServiceError(400, "The Discord server can only be changed on a dev server");
+      params.discordGuildId = body.discordGuildId ? String(body.discordGuildId).trim() || null : null;
+    }
     if ("discordCategoryName" in body) params.discordCategoryName = body.discordCategoryName ? String(body.discordCategoryName).trim() || null : null;
     // Validated and given keys by the service (normalizeDiscordChannels).
     if ("discordChannels" in body) params.discordChannels = body.discordChannels;
@@ -133,7 +139,7 @@ router.patch(
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
     // The Discord category carries the bingo's name; turning the sync on, or editing its category or channels, applies them.
-    if (params.name !== undefined || params.discordEnabled || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    if (params.name !== undefined || params.discordEnabled || params.discordGuildId !== undefined || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

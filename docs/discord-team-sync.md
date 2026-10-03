@@ -87,10 +87,26 @@ A failure (missing permission, Discord down) is shown in the settings panel and 
 4. Set `DISCORD_BOT_TOKEN` on the server (and `DISCORD_GUILD_ID`, which login already uses). Restart.
 5. In a Bingo's **Settings > Discord**, turn it on, adjust the category name and channel list if you like, and save.
 
+## Trying it on a test Discord server (dev servers only)
+
+On a dev server (`DEV_LOGIN_ENABLED=true` and not `NODE_ENV=production`, so local and staging), Settings > Discord also
+has a **Discord server ID**: the bingo then syncs there instead of `DISCORD_GUILD_ID`. Production never shows it and
+refuses it, and ignores one already stored.
+
+1. Make a Discord server (or use one you own) and invite the bot to it with the link above.
+2. Copy its ID (Developer Mode, right-click the server, Copy Server ID) into the field, turn the sync on, save.
+3. Players get their Team's role only if they're in that server (`users.in_guild` is about the clan's server, so it's
+   not used there; Discord's "Unknown Member" answer is). Join it with your own account to see your Team's channels.
+
+Every role and channel remembers the server it was made in (`discord_resources.guild_id`) and is edited and deleted
+there, so **Remove from Discord** always cleans up the right server. The server ID can't be changed while anything is
+left in the old one (remove first), and a sync never splits a bingo across two servers: if it finds the bingo's things
+in another server, it stops and says so.
+
 ## Data
 
-- `bingos.discord_enabled`, `discord_category_name`, `discord_channels_json` (the channel list, `DiscordChannelTemplate`
+- `bingos.discord_enabled`, `discord_guild_id` (dev servers only), `discord_category_name`, `discord_channels_json` (the channel list, `DiscordChannelTemplate`
   in `shared/src/discord.ts`), `discord_sync_error`, `discord_synced_at`.
-- `discord_resources`: one row per category, role or channel made, a channel with its list entry's `channel_key`, and
+- `discord_resources`: one row per category, role or channel made, with the server it's in (`guild_id`), a channel with its list entry's `channel_key`, and
   what was last sent (`applied_json`; for a role, the Discord ids it was given to). No foreign keys, so the rows outlive a deleted Team or Bingo and the sync can still
   delete what was left behind.

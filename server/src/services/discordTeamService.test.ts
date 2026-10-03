@@ -167,7 +167,7 @@ describe("names and colors", () => {
 });
 
 describe("discordSyncBlocker", () => {
-  const base = { slug: "spring", stage: "reveal" as const, historical: false, discordEnabled: true };
+  const base = { slug: "spring", stage: "reveal" as const, historical: false, discordEnabled: true, discordGuildId: null };
   it("syncs once the Draft has finished, with the Wise Old Man competition", () => {
     expect(discordSyncBlocker(base, guild)).toBeNull();
     expect(discordSyncBlocker({ ...base, stage: "live" }, guild)).toBeNull();
@@ -547,5 +547,64 @@ describe("RestDiscordGuildApi rate limits", () => {
     } finally {
       server.close();
     }
+  });
+});
+
+describe("a test Discord server (dev servers only)", () => {
+  const TEST_GUILD = "700000000000000000";
+  /** The clan's server and a test server, each its own fake. */
+  function guilds() {
+    const clan = guild;
+    const test = new FakeGuild();
+    (test as { guildId: string }).guildId = TEST_GUILD;
+    return { clan, test, source: (id: string) => (id === GUILD ? clan : id === TEST_GUILD ? test : null) };
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("DISCORD_GUILD_ID", GUILD);
+    vi.stubEnv("NODE_ENV", "development");
+  });
+
+  it("syncs to the picked server on a dev server, everyone included (in_guild is about the clan's)", async () => {
+    vi.stubEnv("DEV_LOGIN_ENABLED", "true");
+    const { clan, test, source } = guilds();
+    const { bingo, team } = seed({ discordGuildId: TEST_GUILD });
+    const away = user("away", { inGuild: false });
+    db.insert(schema.teamMembers).values({ teamId: team.id, userId: away.id }).run();
+    await syncDiscordTeams(db, bingo.id, {}, source);
+    expect(clan.calls).toEqual([]);
+    expect(test.roles.size).toBe(1);
+    expect(test.calls).toContain(`addMemberRole ${away.discordId}`);
+    expect(db.select().from(schema.discordResources).all().every((r) => r.guildId === TEST_GUILD)).toBe(true);
+    expect(getDiscordSyncStatus(db, bingoRow(bingo.id), source).guildId).toBe(TEST_GUILD);
+  });
+
+  it("ignores the picked server anywhere but a dev server", async () => {
+    vi.stubEnv("DEV_LOGIN_ENABLED", "false");
+    const { clan, test, source } = guilds();
+    const { bingo } = seed({ discordGuildId: TEST_GUILD });
+    await syncDiscordTeams(db, bingo.id, {}, source);
+    expect(test.calls).toEqual([]);
+    expect(clan.roles.size).toBe(1);
+  });
+
+  it("won't change server while anything made in the old one is left, nor sync half into another", async () => {
+    vi.stubEnv("DEV_LOGIN_ENABLED", "true");
+    const { clan, test, source } = guilds();
+    const { bingo } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, source);
+    expect(() => updateBingoSettings(db, bingo.id, { discordGuildId: TEST_GUILD })).toThrow(/Remove/);
+
+    // Even if it were changed underneath, the sync refuses rather than splitting the bingo across servers.
+    db.update(schema.bingos).set({ discordGuildId: TEST_GUILD }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, source);
+    expect(test.calls).toEqual([]);
+    expect(bingoRow(bingo.id).discordSyncError).toMatch(/another Discord server/);
+
+    // Removal deletes each thing from the server it was made in, and then the new server is free to use.
+    expect(await removeDiscordTeams(db, bingo.id, source)).toEqual({ ok: true, deleted: 4 });
+    expect(clan.roles.size + clan.channels.size).toBe(0);
+    await syncDiscordTeams(db, bingo.id, {}, source);
+    expect(test.roles.size).toBe(1);
   });
 });

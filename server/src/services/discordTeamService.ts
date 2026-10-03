@@ -29,6 +29,7 @@ import { skipsIntegrations } from "../audit/context";
 import { now as clockNow } from "../clock";
 import { log } from "../log";
 import { TESTDATA_PREFIX } from "./devTestDataService";
+import { isDevModeActive } from "../devMode";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof bingos.$inferSelect;
@@ -179,15 +180,41 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
   }
 }
 
-let _api: { token: string; guildId: string; api: RestDiscordGuildApi } | undefined;
+const _apis = new Map<string, RestDiscordGuildApi>();
 
-/** Null unless the server has a bot token and a guild: the sync is then off everywhere, whatever a Bingo's setting. */
-export function getDiscordGuildApi(): DiscordGuildApi | null {
+/** The bot in one Discord server; null without a bot token, when the sync is off everywhere, whatever a Bingo's setting. */
+export function getDiscordGuildApi(guildId: string): DiscordGuildApi | null {
   const token = process.env.DISCORD_BOT_TOKEN;
-  const guildId = process.env.DISCORD_GUILD_ID;
-  if (!token || !guildId) return null;
-  if (!_api || _api.token !== token || _api.guildId !== guildId) _api = { token, guildId, api: new RestDiscordGuildApi(token, guildId) };
-  return _api.api;
+  if (!token) return null;
+  const key = `${token}:${guildId}`;
+  if (!_apis.has(key)) _apis.set(key, new RestDiscordGuildApi(token, guildId));
+  return _apis.get(key)!;
+}
+
+/**
+ * Where a Bingo's roles and channels go: the clan's server (DISCORD_GUILD_ID), or on a dev server the one its admins
+ * picked to try the sync on (bingos.discordGuildId).
+ */
+export function discordGuildIdFor(bingo: Pick<Bingo, "discordGuildId">): string | null {
+  return (isDevModeActive() && bingo.discordGuildId) || process.env.DISCORD_GUILD_ID || null;
+}
+
+/**
+ * Which bot to use. Left out: the real one for the guild. Tests pass a fake guild (used whatever the guild), or a
+ * function giving one per guild id.
+ */
+export type DiscordApiSource = DiscordGuildApi | ((guildId: string) => DiscordGuildApi | null) | null | undefined;
+
+function resolveApi(source: DiscordApiSource, guildId: string | null): DiscordGuildApi | null {
+  if (source === null) return null;
+  if (source === undefined) return guildId ? getDiscordGuildApi(guildId) : null;
+  if (typeof source === "function") return guildId ? source(guildId) : null;
+  return source;
+}
+
+/** A Discord server other than `guildId` that still holds some of the Bingo's roles and channels, or null. */
+function strayGuildId(db: Db, bingoId: string, guildId: string): string | null {
+  return db.select({ guildId: discordResources.guildId }).from(discordResources).where(eq(discordResources.bingoId, bingoId)).all().find((r) => r.guildId !== guildId)?.guildId ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,8 +281,8 @@ function syncDisabled(): boolean {
 }
 
 /** Why a Bingo isn't synced right now, or null if it is. Shown in the settings panel. */
-export function discordSyncBlocker(bingo: Pick<Bingo, "slug" | "stage" | "historical" | "discordEnabled">, api: DiscordGuildApi | null = getDiscordGuildApi()): string | null {
-  if (!api) return "The server has no Discord bot set up (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID).";
+export function discordSyncBlocker(bingo: Pick<Bingo, "slug" | "stage" | "historical" | "discordEnabled" | "discordGuildId">, source?: DiscordApiSource): string | null {
+  if (!resolveApi(source, discordGuildIdFor(bingo))) return "The server has no Discord bot set up (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID).";
   if (!bingo.discordEnabled) return "Turned off for this bingo.";
   // A test data Bingo's made-up Players and Teams must never reach the real server.
   if (bingo.slug.startsWith(TESTDATA_PREFIX)) return "A test data bingo is never synced to Discord.";
@@ -290,8 +317,8 @@ export interface DiscordSyncOptions {
  * and resolves once the sync (or the one already waiting, which it joins) is done. A no-op unless discordSyncBlocker
  * says the Bingo is synced, or when a request asked to keep off the outside services (the test data generator's).
  */
-export function syncDiscordTeams(db: Db, bingoId: string, options: DiscordSyncOptions = {}, api: DiscordGuildApi | null = getDiscordGuildApi()): Promise<void> {
-  if (syncDisabled() || skipsIntegrations() || !api) return Promise.resolve();
+export function syncDiscordTeams(db: Db, bingoId: string, options: DiscordSyncOptions = {}, api?: DiscordApiSource): Promise<void> {
+  if (syncDisabled() || skipsIntegrations() || api === null || (api === undefined && !process.env.DISCORD_BOT_TOKEN)) return Promise.resolve();
   const pending = pendingSyncs.get(bingoId);
   if (pending && !options.force) return pending;
   const run = enqueue(bingoId, async () => {
@@ -310,11 +337,15 @@ interface SyncChanges {
   membersRemoved: number;
 }
 
-async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, api: DiscordGuildApi): Promise<void> {
+async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, source: DiscordApiSource): Promise<void> {
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
-  if (!bingo || discordSyncBlocker(bingo, api)) return;
+  if (!bingo || discordSyncBlocker(bingo, source)) return;
+  const api = resolveApi(source, discordGuildIdFor(bingo))!;
   const changes: SyncChanges = { created: [], updated: [], deleted: [], membersAdded: 0, membersRemoved: 0 };
   try {
+    // Never half in one server and half in another (the guild picked on a dev server changed, or DISCORD_GUILD_ID did).
+    const stray = strayGuildId(db, bingo.id, api.guildId);
+    if (stray) throw new Error(`Its roles and channels are still in another Discord server (${stray}). Remove them from Discord first.`);
     await reconcile(db, bingo, api, options, changes);
     db.update(bingos).set({ discordSyncError: null, discordSyncedAt: clockNow() }).where(eq(bingos.id, bingoId)).run();
   } catch (err) {
@@ -327,7 +358,7 @@ async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, api
             ? err.message
             : String(err);
     if (err instanceof DiscordSyncApiError && err.retryAfterMs !== null) {
-      setTimeout(() => void syncDiscordTeams(db, bingoId, {}, api), err.retryAfterMs + 1000).unref();
+      setTimeout(() => void syncDiscordTeams(db, bingoId, {}, source), err.retryAfterMs + 1000).unref();
     }
     log.warn("discord team sync failed", { bingoId, err: message });
     // Recorded once per distinct failure: a broken setup would otherwise add one per change.
@@ -377,7 +408,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
       row.discordId = id;
       row.appliedJson = appliedJson;
     } else {
-      const values = { bingoId: bingo.id, teamId: where.teamId, kind: where.kind, channelKey: where.channelKey ?? null, discordId: id, appliedJson, createdAt: clockNow(), updatedAt: clockNow() };
+      const values = { bingoId: bingo.id, guildId: api.guildId, teamId: where.teamId, kind: where.kind, channelKey: where.channelKey ?? null, discordId: id, appliedJson, createdAt: clockNow(), updatedAt: clockNow() };
       rows.push(db.insert(discordResources).values(values).returning().get());
     }
     changes.created.push(label);
@@ -412,10 +443,12 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
         .all()
     : [];
 
+  // users.in_guild is about the clan's server; in a test server picked on a dev server, Discord says who's there.
+  const clanServer = !process.env.DISCORD_GUILD_ID || api.guildId === process.env.DISCORD_GUILD_ID;
   for (const [teamIndex, team] of teamRows.entries()) {
     // A Player who isn't in the server can't hold a role (a Historical import's are the only ones without one).
     const members = memberRows
-      .filter((m) => m.teamId === team.id && m.inGuild !== false && /^\d+$/.test(m.discordId))
+      .filter((m) => m.teamId === team.id && (m.inGuild !== false || !clanServer) && /^\d+$/.test(m.discordId))
       .map((m) => m.discordId)
       .sort();
 
@@ -538,17 +571,19 @@ export type DiscordRemoveResult = { ok: true; deleted: number } | { ok: false; d
  * Deletes every role and channel the sync made for a Bingo and forgets them. Also the way to clean up after a Bingo
  * is deleted (its rows outlive it). The caller turns the sync off first, or the next change makes them all again.
  */
-export function removeDiscordTeams(db: Db, bingoId: string, api: DiscordGuildApi | null = getDiscordGuildApi()): Promise<DiscordRemoveResult> {
+export function removeDiscordTeams(db: Db, bingoId: string, source?: DiscordApiSource): Promise<DiscordRemoveResult> {
   return enqueue(bingoId, async () => {
     const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingoId)).all();
     if (rows.length === 0) return { ok: true, deleted: 0 } as const;
-    if (!api) return { ok: false, deleted: 0, message: "The server has no Discord bot set up (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID)." } as const;
+    // Each from the server it was made in.
+    const apis = new Map(rows.map((r) => [r.guildId, resolveApi(source, r.guildId)]));
+    if ([...apis.values()].some((a) => !a)) return { ok: false, deleted: 0, message: "The server has no Discord bot set up (DISCORD_BOT_TOKEN)." } as const;
     const bingo = db.select({ name: bingos.name }).from(bingos).where(eq(bingos.id, bingoId)).get();
     const reason = `Tectonic Bingo: ${bingo?.name ?? "deleted bingo"} removed`.slice(0, 512);
     let deleted = 0;
     try {
       for (const row of orphanOrder(rows)) {
-        await deleteResource(db, row, reason, api);
+        await deleteResource(db, row, reason, apis.get(row.guildId)!);
         deleted++;
       }
     } catch (err) {
@@ -569,14 +604,16 @@ export function removeDiscordTeams(db: Db, bingoId: string, api: DiscordGuildApi
 // What the settings panel shows
 // ---------------------------------------------------------------------------
 
-export function getDiscordSyncStatus(db: Db, bingo: Bingo, api: DiscordGuildApi | null = getDiscordGuildApi()): DiscordSyncStatus {
+export function getDiscordSyncStatus(db: Db, bingo: Bingo, source?: DiscordApiSource): DiscordSyncStatus {
   const rows = db.select().from(discordResources).where(eq(discordResources.bingoId, bingo.id)).all();
   const teamRows = db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingo.id)).all();
   const templates = parseDiscordChannels(bingo.discordChannelsJson);
+  const target = resolveApi(source, discordGuildIdFor(bingo))?.guildId ?? discordGuildIdFor(bingo);
   const idOf = (teamId: string, kind: ResourceKind, channelKey: string | null = null) => rows.find((r) => r.teamId === teamId && r.kind === kind && r.channelKey === channelKey)?.discordId ?? null;
   return {
-    blocker: discordSyncBlocker(bingo, api),
-    guildId: api?.guildId ?? process.env.DISCORD_GUILD_ID ?? null,
+    blocker: discordSyncBlocker(bingo, source) ?? (rows.some((r) => r.guildId !== target) ? "Its roles and channels are still in another Discord server. Remove them from Discord first." : null),
+    // Where what's been made is (for the links), else where it will go.
+    guildId: rows[0]?.guildId ?? target,
     categoryId: db.select().from(discordResources).where(and(eq(discordResources.bingoId, bingo.id), isNull(discordResources.teamId), eq(discordResources.kind, "category"))).get()?.discordId ?? null,
     teams: teamRows.map((t) => ({
       teamId: t.id,

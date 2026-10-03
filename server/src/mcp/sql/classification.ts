@@ -91,6 +91,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       wrapped_art_credits_json: "",
       historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
       discord_enabled: "Discord team sync on (a role and private channels per Team)",
+      discord_guild_id: "Dev servers only: a Discord server to try the sync on instead of the clan's",
       discord_category_name: "Name of the Discord category the Teams' channels go in; null: the Bingo's name",
       discord_channels_json: "The channels every Team gets: JSON array of {key, type (text or voice), name ({team} is the Team's name)}",
       discord_sync_error: "",
@@ -273,6 +274,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
     columns: {
       id: "",
       bingo_id: "No foreign key: outlives the Bingo",
+      guild_id: "The Discord server it was made in",
       team_id: "Null for the Bingo's category. No foreign key: outlives the Team",
       kind: "category, role, text_channel or voice_channel",
       channel_key: "A channel's entry in bingos.discord_channels_json (its key); null for the category and a role",

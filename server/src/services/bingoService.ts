@@ -45,6 +45,7 @@ import {
   womReads,
   womSnapshots,
   wrappedArt,
+  discordResources,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
@@ -635,6 +636,7 @@ export interface UpdateBingoSettingsParams {
   womGroupVerificationCode?: string | null;
   discordEnabled?: boolean;
   discordCategoryName?: string | null;
+  discordGuildId?: string | null;
   discordChannels?: unknown;
   // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
@@ -661,6 +663,14 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
+    }
+    if (params.discordGuildId != null && !/^\d{15,25}$/.test(params.discordGuildId)) {
+      throw new ServiceError(400, "The Discord server ID is a number (Developer Mode, then right-click the server > Copy Server ID)");
+    }
+    if (params.discordGuildId !== undefined && params.discordGuildId !== existing.discordGuildId) {
+      // What was made stays in the server it was made in; moving on would leave it behind untracked.
+      const made = tx.select({ id: discordResources.id }).from(discordResources).where(eq(discordResources.bingoId, bingoId)).get();
+      if (made) throw new ServiceError(400, "Remove this bingo's roles and channels from Discord before changing its Discord server");
     }
     if (params.discordCategoryName != null && params.discordCategoryName.length > DISCORD_NAME_MAX) {
       throw new ServiceError(400, `The Discord category name is at most ${DISCORD_NAME_MAX} characters`);

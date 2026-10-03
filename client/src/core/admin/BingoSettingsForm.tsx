@@ -17,6 +17,7 @@ import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
 import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
 import { DiscordSyncPanel } from "./DiscordSyncPanel";
+import { useAuth } from "../../context/AuthContext";
 import { DiscordChannelsEditor, discordChannelsDeleted } from "./DiscordChannelsEditor";
 
 function toLocalInput(iso: string | null): string {
@@ -51,6 +52,7 @@ export function BingoSettingsForm({
   hasSignups: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { devMode } = useAuth();
   const [form, setForm] = useState({
     name: bingo.name,
     description: bingo.description ?? "",
@@ -79,6 +81,7 @@ export function BingoSettingsForm({
     womGroupVerificationCode: "",
     discordEnabled: bingo.discordEnabled,
     discordCategoryName: bingo.discordCategoryName ?? "",
+    discordGuildId: bingo.discordGuildId ?? "",
     discordChannels: bingo.discordChannels,
   });
   const [showPreview, setShowPreview] = useState(false);
@@ -142,6 +145,8 @@ export function BingoSettingsForm({
         ...(form.womGroupVerificationCode.trim() ? { womGroupVerificationCode: form.womGroupVerificationCode.trim() } : {}),
         discordEnabled: form.discordEnabled,
         discordCategoryName: form.discordCategoryName.trim() || null,
+        // Dev servers only: anywhere else the server refuses it (it's always the clan's Discord there).
+        ...(devMode ? { discordGuildId: form.discordGuildId.trim() || null } : {}),
         discordChannels: form.discordChannels,
       });
       setForm((f) => ({ ...f, womGroupVerificationCode: "" }));
@@ -279,6 +284,14 @@ export function BingoSettingsForm({
           colors, players removed or signed up late, and changes to this list. Nothing is deleted when the bingo finishes; remove it all below once
           you're done with it.
         </Notice>
+        {devMode && (
+          <Field
+            label="Discord server ID (dev only)"
+            hint="To try the sync on a test Discord server the bot is in, instead of the clan's. Blank: the clan's. In Discord: Developer Mode, then right-click the server > Copy Server ID. Remove this bingo's roles and channels from Discord before changing it."
+          >
+            <Input value={form.discordGuildId} placeholder="The clan's server" onChange={(e) => setForm({ ...form, discordGuildId: e.target.value })} className="num" />
+          </Field>
+        )}
         <Field label="Category name" hint="Where every team's channels go. Blank: the bingo's name.">
           <Input value={form.discordCategoryName} placeholder={form.name} onChange={(e) => setForm({ ...form, discordCategoryName: e.target.value })} />
         </Field>

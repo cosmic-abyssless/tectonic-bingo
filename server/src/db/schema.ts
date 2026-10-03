@@ -183,6 +183,9 @@ export const bingos = sqliteTable('bingos', {
   // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
   discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
   discordCategoryName: text('discord_category_name'),
+  // Dev servers only (isDevModeActive): another Discord server to sync to instead of DISCORD_GUILD_ID, for trying it
+  // out on a test server. Ignored elsewhere. Can't change while anything made in the old one is left.
+  discordGuildId: text('discord_guild_id'),
   // The channels every Team gets: a JSON array of DiscordChannelTemplate (shared/src/discord.ts), parsed by
   // bingoService.parseDiscordChannels and exposed as `discordChannels`. Starts as a text and a voice channel.
   discordChannelsJson: text('discord_channels_json').notNull().default('[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]'),
@@ -438,6 +441,8 @@ export const teams = sqliteTable('teams', {
 export const discordResources = sqliteTable('discord_resources', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull(),
+  // The Discord server it was made in, so it's always edited and deleted there.
+  guildId: text('guild_id').notNull(),
   // Null for the Bingo's category.
   teamId: text('team_id'),
   kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
