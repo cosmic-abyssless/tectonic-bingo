@@ -1599,6 +1599,7 @@ export * from "./permissions.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
 export * from "./superlative.ts";
+export * from "./tags.ts";
 export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";

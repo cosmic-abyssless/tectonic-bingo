@@ -15,17 +15,74 @@
 // guaranteed for every title (redirects/disambiguation can break it); the
 // client is expected to fall back to a placeholder on image load failure
 // rather than this service verifying each icon before returning.
-import type { OsrsItemSearchResult } from "@bingo/shared";
+//
+// Boss tags (CONTEXT.md "Tag") use two more calls, both made only from the board editor, never at search time:
+// - the Bosses category's pages (`list=categorymembers`, main namespace), fetched whole (under 200 pages) and kept
+//   for a few hours, so the boss picker can filter it as the admin types;
+// - one boss page's redirects (`prop=redirects`), which are the wiki's other names for it: aliases ("Sire", "kq") and
+//   the misspellings people searched for ("Abbysal sire"). `prop=categories` in the same call says whether the page
+//   is in the Bosses category, and `redirects=1` follows a title that is itself a redirect to the boss's page.
+// Unlike the item search, these fail loudly (WikiUnavailableError), so the editor can say the wiki couldn't be reached.
+import { TAG_MAX_LENGTH, tagKey, type OsrsBossSearchResult, type OsrsItemSearchResult } from "@bingo/shared";
 import { USER_AGENT } from "../config";
 import { log } from "../log";
 
 const WIKI_BASE_URL = "https://oldschool.runescape.wiki";
 const WIKI_USER_AGENT = `${USER_AGENT} item search`;
+const BOSSES_CATEGORY = "Category:Bosses";
+// The Bosses category barely changes; a few hours keeps the picker from asking the wiki on every keystroke.
+const BOSS_LIST_TTL_MS = 6 * 3600_000;
+const WIKI_TIMEOUT_MS = 10_000;
+// Continuation pages followed for one listing (500 a page): far more than any boss has redirects.
+const MAX_PAGES = 10;
 
 type FetchLike = typeof fetch;
 
+/** The OSRS Wiki couldn't be reached, or answered with an error. */
+export class WikiUnavailableError extends Error {
+  constructor(message = "The OSRS Wiki couldn't be reached") {
+    super(message);
+  }
+}
+
 interface WikiSearchResponse {
   query?: { search?: { title: string }[] };
+}
+
+type WikiContinue = Record<string, string>;
+
+interface CategoryMembersResponse {
+  continue?: WikiContinue;
+  query?: { categorymembers?: { ns: number; title: string }[] };
+}
+
+interface RedirectsResponse {
+  continue?: WikiContinue;
+  query?: { pages?: { title: string; missing?: boolean; invalid?: boolean; redirects?: { title: string }[]; categories?: { title: string }[] }[] };
+}
+
+/** A boss page and the titles that redirect to it. */
+export interface BossPage {
+  title: string;
+  redirects: string[];
+}
+
+/**
+ * The Text tags a Boss tag adds, from the titles redirecting to its page: in the wiki's order, trimmed, without
+ * subpages (a "/" in the title, e.g. "Money making guide/vorkath"), without the boss's own name in other capitals, and
+ * each name once whatever its capitals. A name longer than a tag may be is left out too.
+ */
+export function bossAliases(bossTitle: string, redirects: readonly string[]): string[] {
+  const seen = new Set([tagKey(bossTitle)]);
+  const aliases: string[] = [];
+  for (const raw of redirects) {
+    const alias = raw.trim();
+    const key = tagKey(alias);
+    if (!alias || alias.includes("/") || alias.length > TAG_MAX_LENGTH || seen.has(key)) continue;
+    seen.add(key);
+    aliases.push(alias);
+  }
+  return aliases;
 }
 
 function iconUrlFor(title: string): string {
@@ -69,6 +126,96 @@ export class OsrsWikiClient {
       log.warn("osrs-wiki search failed", { err });
       return [];
     }
+  }
+
+  private bossList: { at: number; titles: string[] } | null = null;
+  private bossListLoading: Promise<string[]> | null = null;
+
+  /** The Bosses category's pages whose title contains the query, the ones starting with it first. */
+  async searchBosses(query: string, limit = 10): Promise<OsrsBossSearchResult[]> {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const titles = await this.bossTitles();
+    const matching = titles.filter((title) => title.toLowerCase().includes(q));
+    const starting = matching.filter((title) => title.toLowerCase().startsWith(q));
+    return [...starting, ...matching.filter((title) => !title.toLowerCase().startsWith(q))]
+      .slice(0, limit)
+      .map((name) => ({ name, wikiUrl: wikiUrlFor(name) }));
+  }
+
+  /**
+   * A boss's page (following a title that redirects to it) and every title redirecting to it, or null when there is
+   * no such page or it isn't in the Bosses category.
+   */
+  async bossPage(title: string): Promise<BossPage | null> {
+    let pageTitle: string | null = null;
+    let isBoss = false;
+    const redirects: string[] = [];
+    let cont: WikiContinue | undefined;
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const body = await this.query<RedirectsResponse>({
+        prop: "redirects|categories",
+        titles: title,
+        redirects: "1",
+        rdprop: "title",
+        rdnamespace: "0",
+        rdlimit: "max",
+        clcategories: BOSSES_CATEGORY,
+        formatversion: "2",
+        ...cont,
+      });
+      const found = body.query?.pages?.[0];
+      if (!found || found.missing || found.invalid) return null;
+      pageTitle = found.title;
+      isBoss ||= !!found.categories?.some((c) => c.title === BOSSES_CATEGORY);
+      redirects.push(...(found.redirects ?? []).map((r) => r.title));
+      cont = body.continue;
+      if (!cont) break;
+    }
+    return pageTitle && isBoss ? { title: pageTitle, redirects } : null;
+  }
+
+  private async bossTitles(): Promise<string[]> {
+    if (this.bossList && Date.now() - this.bossList.at < BOSS_LIST_TTL_MS) return this.bossList.titles;
+    // One listing at a time: the picker's keystrokes all wait on the same request.
+    this.bossListLoading ??= this.fetchBossTitles().finally(() => (this.bossListLoading = null));
+    const titles = await this.bossListLoading;
+    this.bossList = { at: Date.now(), titles };
+    return titles;
+  }
+
+  private async fetchBossTitles(): Promise<string[]> {
+    const titles: string[] = [];
+    let cont: WikiContinue | undefined;
+    for (let i = 0; i < MAX_PAGES; i++) {
+      const body = await this.query<CategoryMembersResponse>({ list: "categorymembers", cmtitle: BOSSES_CATEGORY, cmnamespace: "0", cmlimit: "max", ...cont });
+      titles.push(...(body.query?.categorymembers ?? []).map((m) => m.title));
+      cont = body.continue;
+      if (!cont) break;
+    }
+    return titles;
+  }
+
+  /** One `action=query` call. Throws WikiUnavailableError when the wiki can't be reached or answers with an error. */
+  private async query<T>(params: Record<string, string>): Promise<T> {
+    const search = new URLSearchParams({ action: "query", format: "json", ...params });
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${WIKI_BASE_URL}/api.php?${search}`, { headers: { "User-Agent": WIKI_USER_AGENT }, signal: AbortSignal.timeout(WIKI_TIMEOUT_MS) });
+    } catch (err) {
+      log.warn("osrs-wiki query failed", { err });
+      throw new WikiUnavailableError();
+    }
+    if (!res.ok) {
+      log.warn("osrs-wiki query failed", { status: res.status });
+      throw new WikiUnavailableError();
+    }
+    const body = (await res.json().catch(() => null)) as (T & { error?: unknown }) | null;
+    if (!body || body.error) {
+      log.warn("osrs-wiki query failed", { error: body?.error });
+      throw new WikiUnavailableError();
+    }
+    return body;
   }
 }
 

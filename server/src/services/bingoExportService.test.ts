@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -16,7 +16,9 @@ import { getBingoBySlug, toPublicBingo, updateBingoSettings } from "./bingoServi
 import * as achievementService from "./achievementService";
 import { additionalCredits, setAdditionalCredits } from "./wrappedArtService";
 import { ServiceError } from "./errors";
-import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument } from "@bingo/shared";
+import { ACHIEVEMENT_KEYS, exclusivityConflicts, type BingoExportDocument, type Tag } from "@bingo/shared";
+import * as tagService from "./tagService";
+import { OsrsWikiClient } from "./osrsWikiService";
 import { placeLeaves } from "./exclusivityService";
 
 let sqlite: Database.Database;
@@ -839,5 +841,106 @@ describe("importing tile images", () => {
     // "source" is already taken, so the import fails after the images were stored.
     await expect(importBingoWithImages(db, doc, { slug: "source", createdByUserId: admin.id }, dir)).rejects.toThrow(/already exists/);
     expect(tileFiles(tilesDir)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tags (CONTEXT.md "Tag")
+// ---------------------------------------------------------------------------
+
+describe("tags", () => {
+  // Tags on Tile A and on Part B, a Boss tag (with the aliases the stubbed wiki gives) on Part A, one alias removed.
+  async function withTags() {
+    const seeded = seedFullBingo();
+    const { bingo, tileA, partA, partB } = seeded;
+    const wiki = new OsrsWikiClient((async () =>
+      new Response(JSON.stringify({ query: { pages: [{ title: "Vorkath", redirects: [{ title: "Vork" }, { title: "Vorki boss" }, { title: "Vorkath/" }], categories: [{ title: "Category:Bosses" }] }] } }))) as unknown as typeof fetch);
+    tagService.addTextTag(db, bingo.id, { tileId: tileA.id }, "dragon");
+    tagService.addTextTag(db, bingo.id, { tileId: tileA.id }, "vorky");
+    const bossTags = await tagService.addBossTag(db, bingo.id, { partId: partA.id }, "Vorkath", wiki);
+    tagService.removeTag(db, bingo.id, bossTags.find((t) => t.text === "Vorki boss")!.id);
+    tagService.addTextTag(db, bingo.id, { partId: partA.id }, "head");
+    tagService.addTextTag(db, bingo.id, { partId: partB.id }, "visage");
+    return seeded;
+  }
+
+  // A bingo's tags by where they are (Tile name, Part label), with each alias's Boss tag by name, for comparing two bingos.
+  function tagsByPlace(bingoId: string) {
+    const all = tagService.getBoardTags(db, bingoId);
+    const textOf = new Map([...Object.values(all.tiles), ...Object.values(all.parts)].flat().map((t) => [t.id, t.text]));
+    const show = (list: Tag[] | undefined) => (list ?? []).map((t) => [t.kind, t.text, t.bossTagId ? textOf.get(t.bossTagId) : null]);
+    return getBoardTiles(db, bingoId).map((tile) => ({
+      tile: tile.name,
+      tags: show(all.tiles[tile.id]),
+      parts: tile.node.children.map((part) => ({ part: part.label, tags: show(all.parts[part.id]) })),
+    }));
+  }
+
+  it("are exported on their Tile and Part, a Boss tag with the aliases it still has", async () => {
+    const { bingo } = await withTags();
+    const tile = exportBingo(db, bingo.id).tiles.find((t) => t.name === "Tile A")!;
+    expect(tile.tags).toEqual([
+      { kind: "text", text: "dragon" },
+      { kind: "text", text: "vorky" },
+    ]);
+    expect(tile.tasks.find((t) => t.label === "Part A")!.tags).toEqual([
+      { kind: "boss", text: "Vorkath", aliases: ["Vork"] },
+      { kind: "text", text: "head" },
+    ]);
+    expect(tile.tasks.find((t) => t.label === "Part B")!.tags).toEqual([{ kind: "text", text: "visage" }]);
+    // Nowhere else: a Tile or Part without tags has none in the file.
+    expect(exportBingo(db, bingo.id).tiles.find((t) => t.name === "Tile B")).not.toHaveProperty("tags");
+  });
+
+  it("survive an export and import unchanged, Boss tags and their aliases included, without asking the wiki", async () => {
+    const { bingo, admin } = await withTags();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const imported = importBingo(db, JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument, { slug: "tagged", createdByUserId: admin.id });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    expect(tagsByPlace(imported.id)).toEqual(tagsByPlace(bingo.id));
+    expect(tagsByPlace(imported.id).find((t) => t.tile === "Tile A")!.parts[0]!.tags).toEqual([
+      ["boss", "Vorkath", null],
+      ["text", "Vork", "Vorkath"],
+      ["text", "head", null],
+    ]);
+    // ...and exporting the copy gives the same tags again.
+    const tagsOf = (doc: BingoExportDocument) => doc.tiles.map((t) => [t.tags, t.tasks.map((task) => task.tags)]);
+    expect(tagsOf(exportBingo(db, imported.id))).toEqual(tagsOf(exportBingo(db, bingo.id)));
+  });
+
+  it("are absent in a file exported before tags existed, which still imports, with none", async () => {
+    const { bingo, admin } = await withTags();
+    const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+    for (const tile of doc.tiles) {
+      delete tile.tags;
+      for (const task of tile.tasks) delete task.tags;
+    }
+    const imported = importBingo(db, doc, { slug: "untagged", createdByUserId: admin.id });
+    expect(tagService.getBoardTags(db, imported.id)).toEqual({ tiles: {}, parts: {} });
+  });
+
+  it("that aren't tags are refused, leaving no partial bingo", async () => {
+    const { bingo, admin } = await withTags();
+    const broken = (mutate: (doc: BingoExportDocument) => void) => {
+      const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;
+      mutate(doc);
+      return doc;
+    };
+    const tileA = (doc: BingoExportDocument) => doc.tiles.find((t) => t.name === "Tile A")!;
+    expect(() => importBingo(db, broken((doc) => ((tileA(doc) as { tags: unknown }).tags = "dragon")), { slug: "bad1", createdByUserId: admin.id })).toThrow(/tags must be an array/);
+    expect(() => importBingo(db, broken((doc) => (tileA(doc).tags = [{ kind: "colour", text: "red" } as never])), { slug: "bad2", createdByUserId: admin.id })).toThrow(/isn't one/);
+    expect(() => importBingo(db, broken((doc) => (tileA(doc).tasks[0]!.tags = [{ kind: "boss", text: "Vorkath" } as never])), { slug: "bad3", createdByUserId: admin.id })).toThrow(/aliases/);
+    for (const slug of ["bad1", "bad2", "bad3"]) expect(getBingoBySlug(db, slug)).toBeUndefined();
+  });
+
+  it("account for every column", async () => {
+    const { bingo } = await withTags();
+    const columns = Object.keys(getTableColumns(schema.tags));
+    // kind and text are each tag's; bossTagId is a Boss tag's `aliases`; the rest place a tag on this board, which the
+    // file does by where the tag is written.
+    expect(columns.sort()).toEqual(["bingoId", "bossTagId", "id", "kind", "nodeId", "sortOrder", "text", "tileId"]);
+    const tag = exportBingo(db, bingo.id).tiles.find((t) => t.name === "Tile A")!.tasks[0]!.tags![0]!;
+    expect(Object.keys(tag).sort()).toEqual(["aliases", "kind", "text"]);
   });
 });

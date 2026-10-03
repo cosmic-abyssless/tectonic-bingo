@@ -349,6 +349,19 @@ export const SQL_TABLES: Record<string, TableClass> = {
       created_at: TS,
     },
   },
+  tags: {
+    note: "Tags: words the board's search finds a Tile by, on a Tile (tile_id) or one of its Parts (node_id). Never shown to Players.",
+    columns: {
+      id: "",
+      bingo_id: "",
+      tile_id: "Set for a Tile's own tag",
+      node_id: "nodes.id of the Part, for a Part's tag",
+      kind: "text (any text) or boss (an OSRS Wiki boss page title)",
+      text: "",
+      boss_tag_id: "A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag",
+      sort_order: "The order they were added in, per Tile or Part",
+    },
+  },
   bingo_lines: {
     note: "Lines (rows, columns, diagonals): each wraps a node whose children are its Tiles' nodes and whose points are the Line bonus.",
     columns: { id: "", bingo_id: "", node_id: "", line_type: "row, column, diagonal or custom", line_index: "" },

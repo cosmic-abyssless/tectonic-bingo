@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { CUT_MODES, isAchievementKey, type AchievementKey, type AppliedCutChange, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
+import { CUT_MODES, isAchievementKey, type AchievementKey, type AddTagRequest, type AppliedCutChange, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
 import * as achievementService from "../services/achievementService";
 import path from "path";
 import { UPLOADS_DIR } from "../config";
@@ -12,6 +12,9 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
+import * as tagService from "../services/tagService";
+import { getOsrsWikiClient, WikiUnavailableError } from "../services/osrsWikiService";
+import { isOsrsItemSearchEnabled } from "./osrsItems";
 import * as wrappedArtService from "../services/wrappedArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
@@ -387,6 +390,65 @@ router.delete(
   asyncHandler(async (req, res) => {
     wrappedArtService.removeArt(db, req.bingo!, req.params.id as string);
     res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Tags (CONTEXT.md "Tag"): on a Tile or a Part, for the board's search. Only the board editor reads them.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/tags",
+  asyncHandler(async (req, res) => {
+    res.json(tagService.getBoardTags(db, req.bingo!.id));
+  }),
+);
+
+// A Text tag ({ text }) or a Boss tag ({ boss: its wiki page title }), which brings the wiki's names for the boss.
+async function addTag(req: Request, owner: tagService.TagOwner) {
+  bingoService.assertBoardEditable(req.bingo!);
+  const body = (req.body ?? {}) as { [K in keyof AddTagRequest]?: unknown } & { text?: unknown; boss?: unknown };
+  if ("boss" in body) {
+    if (!isOsrsItemSearchEnabled()) throw new ServiceError(503, "Looking bosses up on the OSRS Wiki is turned off on this server");
+    return tagService.addBossTag(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient());
+  }
+  return tagService.addTextTag(db, req.bingo!.id, owner, body.text);
+}
+router.post(
+  "/tiles/:tileId/tags",
+  asyncHandler(async (req, res) => {
+    res.status(201).json({ tags: await addTag(req, { tileId: req.params.tileId as string }) });
+  }),
+);
+router.post(
+  "/parts/:partId/tags",
+  asyncHandler(async (req, res) => {
+    res.status(201).json({ tags: await addTag(req, { partId: req.params.partId as string }) });
+  }),
+);
+router.delete(
+  "/tags/:id",
+  asyncHandler(async (req, res) => {
+    bingoService.assertBoardEditable(req.bingo!);
+    res.json({ tags: tagService.removeTag(db, req.bingo!.id, req.params.id as string) });
+  }),
+);
+
+// The editor's boss picker: the OSRS Wiki's Bosses category, filtered by what's typed.
+router.get(
+  "/bosses",
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!isOsrsItemSearchEnabled() || !q) {
+      res.json({ bosses: [] });
+      return;
+    }
+    try {
+      res.json({ bosses: await getOsrsWikiClient().searchBosses(q) });
+    } catch (err) {
+      if (err instanceof WikiUnavailableError) throw new ServiceError(502, "Couldn't reach the OSRS Wiki to list its bosses. Try again in a moment.");
+      throw err;
+    }
   }),
 );
 

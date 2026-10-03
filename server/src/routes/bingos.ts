@@ -2,7 +2,7 @@ import { devSkipsOcr } from "../devMode";
 import { noStore, privateRevalidate } from "../middleware/cacheControl";
 import { Router, type Request } from "express";
 import fs from "fs";
-import type { AccountTypesResponse, Action, AuditLogResponse, BingoPermissionsResponse, ClaimInput, FeedbackSubmission, PlayerProfile } from "@bingo/shared";
+import type { AccountTypesResponse, Action, AuditLogResponse, BingoPermissionsResponse, ClaimInput, FeedbackSubmission, PlayerProfile, TileTagSearchResponse } from "@bingo/shared";
 import { can, isAchievementKey, passesRules, resolvePermissions } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import * as achievementService from "../services/achievementService";
@@ -18,6 +18,7 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import { effectiveStartsAt } from "../services/bingoStart";
 import * as boardService from "../services/boardService";
+import * as tagService from "../services/tagService";
 import * as teamService from "../services/teamService";
 import * as submissionService from "../services/submissionService";
 import { resolveSubmissionTarget, resolveSubmissionTeam } from "../services/submissionTarget";
@@ -139,6 +140,23 @@ router.get(
   privateRevalidate,
   asyncHandler(async (req, res) => {
     res.json(boardService.getBoardForViewer(db, req.bingo!, viewerCan(req, "view_hidden_board")));
+  }),
+);
+
+// The board's Tile search, for what only the server knows: the Tiles a query finds by their Tags (CONTEXT.md "Tag").
+// Players never get the tags themselves, only the matching Tiles' ids, and nothing while the Tiles are sealed for the
+// viewer (or before they can see the Tiles at all), when search finds a Tile by its name and Category only.
+router.get(
+  "/:slug/tile-search",
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const seesHiddenBoard = viewerCan(req, "view_hidden_board");
+    const searchable = bingoService.canViewTiles(req.bingo!, seesHiddenBoard) && (seesHiddenBoard || !bingoService.areTilesSealed(req.bingo!));
+    const body: TileTagSearchResponse = { tileIds: searchable && q ? tagService.tileIdsMatchingTags(db, req.bingo!.id, q) : [] };
+    res.json(body);
   }),
 );
 
