@@ -61,6 +61,8 @@ import { WrappedCaptain } from "./wrapped/sections/WrappedCaptain";
 import { WrappedModerator } from "./wrapped/sections/WrappedModerator";
 import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
+import { WrappedTeam } from "./wrapped/sections/WrappedTeam";
+import { WrappedBingo } from "./wrapped/sections/WrappedBingo";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -213,6 +215,8 @@ const comicTheme: ThemeDefinition = {
     WrappedModerator,
     WrappedBanner,
     WrappedIntro,
+    WrappedTeam,
+    WrappedBingo,
     WrappedOutro,
     WrappedShareCard,
   },
