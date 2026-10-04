@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_WATCHED_BINGOS } from "@bingo/shared";
-import { bingoSlugOfPath, keyMentions, otherBingoSlugs, watchedBingoIds } from "./bingoScope";
+import { bingoSlugOfPath, keyMentions, otherBingoSlugs, unwatchedBingoSlugs, watchedBingoIds } from "./bingoScope";
 
 describe("bingoSlugOfPath", () => {
   it("finds the slug on a bingo's pages and nowhere else", () => {
@@ -30,6 +30,20 @@ describe("otherBingoSlugs", () => {
     ] as const;
     expect(otherBingoSlugs(shells, "b1")).toEqual(new Set(["other"]));
     expect(otherBingoSlugs(shells, "b3")).toEqual(new Set(["mine", "other"]));
+  });
+});
+
+describe("unwatchedBingoSlugs", () => {
+  it("lists the cached bingos outside the watched ones, and none when nothing is cached", () => {
+    const shells = [
+      [["bingo", "a"], { bingo: { id: "b1" } }],
+      [["bingo", "b"], { bingo: { id: "b2" } }],
+      [["bingo", "c"], { bingo: { id: "b3" } }],
+      [["bingo", "loading"], undefined],
+    ] as const;
+    expect(unwatchedBingoSlugs(shells, new Set(["b1", "b3"]))).toEqual(new Set(["b"]));
+    expect(unwatchedBingoSlugs(shells, new Set())).toEqual(new Set(["a", "b", "c"]));
+    expect(unwatchedBingoSlugs([], new Set())).toEqual(new Set());
   });
 });
 
