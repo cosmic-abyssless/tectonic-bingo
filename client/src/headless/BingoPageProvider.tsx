@@ -125,8 +125,10 @@ export function BingoPageProvider({
   // the entry before it, and otherwise (a link that arrived open) just removes the param. Switching what's open
   // replaces it, so one Back still closes it.
   const openedHere = (location.state as { opened?: string } | null)?.opened;
-  // The history entry already gone Back from: Back lands a moment later, so until then this page still shows it open,
-  // and a second close (a double-click outside the Tile) would go Back a second time, off the board.
+  // A double-click outside the Tile closes it twice, and each close must not go Back again, off the board:
+  // - before Back lands, this page still shows it open, so the entry already gone Back from is remembered;
+  // - after, the second click can still reach the closing Tile (it animates out with this render's close), so a close
+  //   rendered for an entry the browser has since left does nothing.
   const wentBackFrom = useRef<string | null>(null);
   // Landing anywhere (Back, or Forward onto that same entry again) makes a close go Back again.
   useEffect(() => {
@@ -139,6 +141,8 @@ export function BingoPageProvider({
   };
   const closeParam = (name: string) => {
     if (searchParams.get(name) === null) return;
+    // React Router keeps the entry's key in history.state ("default" for the first entry, which has none).
+    if (((window.history.state as { key?: string } | null)?.key ?? "default") !== location.key) return;
     if (openedHere !== name) setUrl({ [name]: null });
     else if (wentBackFrom.current !== location.key) {
       wentBackFrom.current = location.key;
