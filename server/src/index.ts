@@ -128,7 +128,9 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 
 // gzip/deflate for API JSON (the board is ~175 KB raw, ~18 KB compressed). The
-// default filter skips already-compressed types, so images pass through.
+// default filter skips already-compressed types, so images pass through, and a
+// response that already has a Content-Encoding is left alone: the client's
+// hashed assets go out as the build's own Brotli/gzip copies (precompressedAssets).
 app.use(compression());
 
 // Session middleware — backed by SQLite so sessions survive a server restart
