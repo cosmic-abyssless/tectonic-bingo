@@ -12,12 +12,14 @@ const apiTarget = process.env.VITE_API_TARGET || "http://localhost:3001";
 const wsTarget = apiTarget.replace(/^http/, "ws");
 
 // Readable stack traces in Sentry need the build's source maps. Without SENTRY_AUTH_TOKEN (local builds, CI) none are
-// made and nothing is uploaded. The release name is the commit, matching what the SDK reports at runtime.
+// made and nothing is uploaded. The release name is the commit, matching what the SDK reports at runtime. An empty
+// variable is unset (hence ||, not ??): the Dockerfile declares ARG SENTRY_RELEASE="" and exports it, so an image built
+// without that build-arg has SENTRY_RELEASE set to "", and an empty build id would switch #455 off unnoticed.
 const sentryToken = process.env.SENTRY_AUTH_TOKEN;
-const sentryRelease = process.env.SENTRY_RELEASE ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA;
+const sentryRelease = process.env.SENTRY_RELEASE || process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GITHUB_SHA || undefined;
 // The same commit chain as the Sentry release: a Docker build has SENTRY_RELEASE but never GITHUB_SHA, and two builds of
 // one commit must share an id or every swap would discard the boards people have cached.
-const buildId = process.env.SENTRY_RELEASE ?? process.env.GITHUB_SHA ?? String(Date.now());
+const buildId = process.env.SENTRY_RELEASE || process.env.GITHUB_SHA || String(Date.now());
 
 export default defineConfig({
   // A new build id discards every persisted board (api/boardCache.ts), so a
@@ -25,10 +27,10 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(buildId),
     // Railway sets the commit being built; it is what Sentry calls the release (the server reports the same value).
-    __SENTRY_RELEASE__: JSON.stringify(process.env.SENTRY_RELEASE ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? ""),
+    __SENTRY_RELEASE__: JSON.stringify(sentryRelease ?? ""),
     // Railway also names the environment being built ("production", "development"); Vite's own mode is "production" for
     // every built bundle, so it can't tell the two apart.
-    __SENTRY_ENVIRONMENT__: JSON.stringify(process.env.RAILWAY_ENVIRONMENT_NAME ?? ""),
+    __SENTRY_ENVIRONMENT__: JSON.stringify(process.env.RAILWAY_ENVIRONMENT_NAME || ""),
   },
   plugins: [
     react(),
@@ -45,8 +47,8 @@ export default defineConfig({
     ...(sentryToken
       ? [
           sentryVitePlugin({
-            org: process.env.SENTRY_ORG ?? "tectonic-l9",
-            project: process.env.SENTRY_PROJECT ?? "tectonic-client",
+            org: process.env.SENTRY_ORG || "tectonic-l9",
+            project: process.env.SENTRY_PROJECT || "tectonic-client",
             authToken: sentryToken,
             ...(sentryRelease ? { release: { name: sentryRelease } } : {}),
             sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
