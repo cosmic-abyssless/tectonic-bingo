@@ -980,7 +980,8 @@ router.post(
 );
 
 // A Tile's details, the Rules, or the Stats page were opened. Fire-and-forget: always 204, even for a viewer not on
-// a team (achievementService itself no-ops when the open earns nothing: outside Board revealed and Live, sealed Tiles, hidden rules) — the client never needs to handle a failure here.
+// a team (achievementService itself no-ops when the open can't earn: outside Board revealed and Live, sealed Tiles,
+// hidden rules, Stats before Live) — the client never needs to handle a failure here.
 router.post(
   "/:slug/achievements/opened",
   requireAuth,

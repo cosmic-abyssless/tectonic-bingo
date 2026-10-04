@@ -180,10 +180,11 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const teamRows = (await fetchTeams(ctx)).map((t) => ({ ...t, players: t.members.map((m) => byUserId.get(m.user.id)).filter((p): p is Player => !!p) }));
   const hands = handEvents(ctx, teamRows.map((t) => ({ teamId: t.id, members: t.players })), board);
   const opens = openEvents(ctx, teamRows.map((t) => ({ members: t.players })), board);
-  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events, ...opens], new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime())));
+  const revealEnd = new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime()));
+  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events, ...opens], revealEnd);
   const raised = hands.raised;
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
-  log(`${seeds.length} teams named, ${raised.length} hands raised, ${opens.length} Tile and rules opens`);
+  log(`${seeds.length} teams named, ${raised.length} hands raised, ${opens.filter((o) => o.at <= revealEnd).length} Tile and rules opens`);
   const categories = await ensureCategories(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 30 * 60_000));
   log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;
