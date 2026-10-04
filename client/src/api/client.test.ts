@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api, onSlowDown } from "./client";
+import { getServerBuild } from "./serverBuild";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -20,5 +21,13 @@ describe("a write the server's write limit refuses (429)", () => {
     expect(failed).toMatchObject({ status: 429, code: "write_limited", message: body.error });
     expect(heard).toHaveBeenCalledWith(failed);
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("every response", () => {
+  it("tells the page which build the server serves", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200, headers: { "X-Build-Id": "abc123", "X-Force-Reload": "1" } })));
+    await api.get("/api/me");
+    expect(getServerBuild()).toEqual({ buildId: "abc123", forceReload: true });
   });
 });

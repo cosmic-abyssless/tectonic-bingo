@@ -15,14 +15,15 @@ const wsTarget = apiTarget.replace(/^http/, "ws");
 // made and nothing is uploaded. The release name is the commit, matching what the SDK reports at runtime.
 const sentryToken = process.env.SENTRY_AUTH_TOKEN;
 const sentryRelease = process.env.SENTRY_RELEASE ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA;
+// The same commit chain as the Sentry release: a Docker build has SENTRY_RELEASE but never GITHUB_SHA, and two builds of
+// one commit must share an id or every swap would discard the boards people have cached.
+const buildId = process.env.SENTRY_RELEASE ?? process.env.GITHUB_SHA ?? String(Date.now());
 
 export default defineConfig({
   // A new build id discards every persisted board (api/boardCache.ts), so a
   // changed response shape can never be hydrated into new code.
   define: {
-    // The same commit chain as the Sentry release below: a Docker build has SENTRY_RELEASE but never GITHUB_SHA, and two
-    // builds of one commit must share an id or every swap would discard the boards people have cached.
-    __BUILD_ID__: JSON.stringify(process.env.SENTRY_RELEASE ?? process.env.GITHUB_SHA ?? String(Date.now())),
+    __BUILD_ID__: JSON.stringify(buildId),
     // Railway sets the commit being built; it is what Sentry calls the release (the server reports the same value).
     __SENTRY_RELEASE__: JSON.stringify(process.env.SENTRY_RELEASE ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? ""),
     // Railway also names the environment being built ("production", "development"); Vite's own mode is "production" for
@@ -32,6 +33,15 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // The build's id beside it, for the server that serves it to announce (server/src/buildInfo.ts), so an open page
+    // learns a new build is out.
+    {
+      name: "build-id",
+      apply: "build",
+      generateBundle() {
+        this.emitFile({ type: "asset", fileName: "build-id.txt", source: buildId });
+      },
+    },
     ...(sentryToken
       ? [
           sentryVitePlugin({

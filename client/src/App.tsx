@@ -5,6 +5,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
 import { ToastRegion, toastOnce } from "./core/ui/Toast";
+import { NewVersionNotice } from "./core/ui/NewVersionNotice";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
 import { PhoneLogin } from "./pages/PhoneLogin";
@@ -159,6 +160,7 @@ export default function App() {
           <BingoGoneRedirect />
           <AccessWatch />
           <SlowDownNotice />
+          <NewVersionNotice />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>

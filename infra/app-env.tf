@@ -208,6 +208,8 @@ locals {
       SENTRY_ENVIRONMENT            = "staging"
     })
     # The image sets NODE_ENV=production itself, which turns dev-login off and marks the session cookie Secure.
+    # For a deploy that fixes a harmful bug, FORCE_CLIENT_RELOAD = "true" here makes every open page from an older build
+    # reload itself (see .env.example); it's off by default, and best taken out again afterwards.
     production = merge(local.app_common, {
       CLIENT_URL           = "https://tectonic.bingo"
       DISCORD_CALLBACK_URL = "https://tectonic.bingo/auth/discord/callback"

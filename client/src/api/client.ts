@@ -1,4 +1,5 @@
 import { reportClientError } from "../core/logging/reportClientError";
+import { noteServerBuild } from "./serverBuild";
 
 export class ApiError extends Error {
   status: number;
@@ -58,6 +59,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     reportClientError(`${path} ${message}`, "api.network");
     throw err;
   }
+  const buildId = res.headers.get("X-Build-Id");
+  if (buildId) noteServerBuild({ buildId, forceReload: res.headers.get("X-Force-Reload") === "1" });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     let code: string | undefined;

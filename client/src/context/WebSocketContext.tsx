@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BroadcastEvent, ClientSocketMessage } from "@bingo/shared";
+import type { BroadcastEvent, ClientSocketMessage, ServerSocketMessage } from "@bingo/shared";
 import { useAuth } from "./AuthContext";
 import { keyMentions, otherBingoSlugs, watchedBingoIds } from "../api/bingoScope";
+import { noteServerBuild } from "../api/serverBuild";
 
 type Listener = (event: BroadcastEvent) => void;
 
@@ -307,7 +308,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       };
       ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(event.data) as BroadcastEvent;
+          const msg = JSON.parse(event.data) as BroadcastEvent | ServerSocketMessage;
+          // Not a broadcast: the build the server serves (core/ui/NewVersionNotice).
+          if (msg.type === "hello") {
+            noteServerBuild({ buildId: msg.buildId, forceReload: msg.forceReload });
+            return;
+          }
           applyStatsRefreshing(msg);
           invalidateForEvent(queryClient, msg, socketUserId);
           // Their Admin flag: the Site admin pages and every bingo go by it.
