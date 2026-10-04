@@ -106,11 +106,13 @@ describe("Strong start", () => {
 
   it("is not earned before the bingo is live", () => {
     const { bingo, team, alice } = seed();
+    const { leafId } = tileWithLeaf(bingo.id, 0, 0);
     db.update(schema.bingos).set({ stage: "reveal" }).where(eq(schema.bingos.id, bingo.id)).run();
-    // setTileInterest has no stage guard of its own — a good probe for achievementService's own Live check.
-    const t = tileWithLeaf(bingo.id, 0, 0);
-    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, t.tile.id, t.leafId, true));
-    expect(earned(getBingo(bingo.id), alice.id, "eager_beaver")).toBe(false);
+    // The recorder directly: a Submission can't be posted in Board revealed, so this probes achievementService's own check.
+    at(STARTS_AT, "UTC", () =>
+      achievementService.recordSubmissionPosted(db, { bingoId: bingo.id, submissionId: "s1", posterUserId: alice.id, creditedUserId: alice.id, teamId: team.id, tileId: "t", tileNodeId: "n", claimedLeafIds: [leafId], occurredAt: STARTS_AT }),
+    );
+    expect(earned(getBingo(bingo.id), alice.id, "strong_start")).toBe(false);
   });
 
   it("earns nothing for a moderator posting to a team they aren't a member of", () => {
@@ -441,18 +443,24 @@ describe("Ragequit", () => {
     expect(earned(bingo, bob.id, "ragequit")).toBe(false);
   });
 
-  it("counts interest marked before Live but taken off during it; not taken off before Live", () => {
-    const { bingo, team, alice, bob } = seed();
-    db.update(schema.bingos).set({ stage: "reveal" }).where(eq(schema.bingos.id, bingo.id)).run();
+  it("counts interest taken off in Board revealed or Live, but not before", () => {
+    const { bingo, team, alice, bob, captain } = seed();
+    const setStage = (stage: "draft" | "reveal" | "live") => db.update(schema.bingos).set({ stage }).where(eq(schema.bingos.id, bingo.id)).run();
     const a = tileWithLeaf(bingo.id, 0, 0);
     const b = tileWithLeaf(bingo.id, 0, 1);
+    const c = tileWithLeaf(bingo.id, 0, 2);
+    setStage("draft"); // setTileInterest has no stage guard of its own, so this probes achievementService's
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, captain.id, c.tile.id, c.leafId, true));
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, captain.id, c.tile.id, c.leafId, false));
+    setStage("reveal");
     at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, a.tile.id, a.leafId, true));
     at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, b.tile.id, b.leafId, true));
     at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, b.tile.id, b.leafId, false)); // during reveal
-    db.update(schema.bingos).set({ stage: "live" }).where(eq(schema.bingos.id, bingo.id)).run();
+    setStage("live");
     at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, a.tile.id, a.leafId, false)); // during Live
     expect(earned(getBingo(bingo.id), alice.id, "ragequit")).toBe(true);
-    expect(earned(getBingo(bingo.id), bob.id, "ragequit")).toBe(false);
+    expect(earned(getBingo(bingo.id), bob.id, "ragequit")).toBe(true);
+    expect(earned(getBingo(bingo.id), captain.id, "ragequit")).toBe(false);
   });
 });
 
@@ -532,6 +540,90 @@ describe("Drop detective / Rules lawyer / Number cruncher", () => {
     // carol is on Team B, not Team A — opening "as" Team A's page isn't hers to earn from.
     at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId: bingo.id, userId: carol.id, teamId: team.id, kind: "rules", occurredAt: STARTS_AT }));
     expect(earned(bingo, carol.id, "rules_lawyer")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// When they can be earned: from Board revealed for actions available then, else only Live; never once Finished
+// ---------------------------------------------------------------------------
+
+describe("Earnable from Board revealed", () => {
+  function setStage(bingoId: string, values: Partial<typeof schema.bingos.$inferInsert>) {
+    db.update(schema.bingos).set(values).where(eq(schema.bingos.id, bingoId)).run();
+  }
+  const open = (bingoId: string, userId: string, teamId: string, page: { kind: "tile"; tileId: string } | { kind: "rules" | "stats" }) =>
+    at(STARTS_AT, "UTC", () => achievementService.recordPageOpened(db, { bingoId, userId, teamId, ...page, occurredAt: STARTS_AT }));
+
+  it("marking interest earns Eager beaver, opening every Tile Drop detective, and reading the rules Teacher's pet", () => {
+    const { bingo, team, alice } = seed();
+    const t1 = tileWithLeaf(bingo.id, 0, 0);
+    const t2 = addTile(bingo.id, 0, 1);
+    setStage(bingo.id, { stage: "reveal" });
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, t1.tile.id, t1.leafId, true));
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t1.tile.id });
+    open(bingo.id, alice.id, team.id, { kind: "rules" });
+    expect(earned(getBingo(bingo.id), alice.id, "drop_detective")).toBe(false);
+    // Tiles opened during the reveal count toward "every Tile" once Live.
+    setStage(bingo.id, { stage: "live" });
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t2.id });
+    const b = getBingo(bingo.id);
+    expect(earned(b, alice.id, "eager_beaver")).toBe(true);
+    expect(earned(b, alice.id, "drop_detective")).toBe(true);
+    expect(earned(b, alice.id, "rules_lawyer")).toBe(true);
+  });
+
+  it("Drop detective is earned within Board revealed alone", () => {
+    const { bingo, team, alice } = seed();
+    const t1 = addTile(bingo.id, 0, 0);
+    const t2 = addTile(bingo.id, 0, 1);
+    setStage(bingo.id, { stage: "reveal" });
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t1.id });
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t2.id });
+    expect(earned(getBingo(bingo.id), alice.id, "drop_detective")).toBe(true);
+  });
+
+  it("earns nothing from Tiles or interest while the Tiles are sealed, nor from the rules while they're hidden", () => {
+    const { bingo, team, alice } = seed();
+    const t = tileWithLeaf(bingo.id, 0, 0);
+    setStage(bingo.id, { stage: "reveal", sealedTiles: true, hideRules: true });
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t.tile.id });
+    open(bingo.id, alice.id, team.id, { kind: "rules" });
+    // setTileInterest refuses while sealed, so the recorders directly: the server decides, whatever a caller sends.
+    const event = { bingoId: bingo.id, userId: alice.id, teamId: team.id, tileId: t.tile.id, partId: t.leafId, occurredAt: STARTS_AT };
+    at(STARTS_AT, "UTC", () => achievementService.recordInterestMarked(db, event));
+    at(STARTS_AT, "UTC", () => achievementService.recordInterestRemoved(db, event));
+    const b = getBingo(bingo.id);
+    for (const key of ["drop_detective", "rules_lawyer", "eager_beaver", "ragequit"] as const) expect(earned(b, alice.id, key)).toBe(false);
+  });
+
+  it("Stats, Submissions and Reactions stay Live-only", () => {
+    const { bingo, team, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    const sub = submit(bingo, team.id, alice.id, leafId, itemName); // posted while Live
+    setStage(bingo.id, { stage: "reveal" });
+    open(bingo.id, bob.id, team.id, { kind: "stats" });
+    at(STARTS_AT, "UTC", () =>
+      achievementService.recordReactionAdded(db, { bingoId: bingo.id, submissionId: sub.id, reactorUserId: bob.id, creditedUserId: alice.id, teamId: team.id, occurredAt: STARTS_AT }),
+    );
+    at(STARTS_AT, "UTC", () =>
+      achievementService.recordSubmissionPosted(db, { bingoId: bingo.id, submissionId: "s2", posterUserId: bob.id, creditedUserId: bob.id, teamId: team.id, tileId: "t", tileNodeId: "n", claimedLeafIds: [leafId], occurredAt: STARTS_AT }),
+    );
+    const b = getBingo(bingo.id);
+    expect(earned(b, bob.id, "number_cruncher")).toBe(false);
+    expect(earned(b, bob.id, "hypeman")).toBe(false);
+    expect(earned(b, bob.id, "strong_start")).toBe(false);
+  });
+
+  it("earns nothing once Finished", () => {
+    const { bingo, team, alice } = seed();
+    const t = tileWithLeaf(bingo.id, 0, 0);
+    setStage(bingo.id, { stage: "complete" });
+    open(bingo.id, alice.id, team.id, { kind: "tile", tileId: t.tile.id });
+    open(bingo.id, alice.id, team.id, { kind: "rules" });
+    open(bingo.id, alice.id, team.id, { kind: "stats" });
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, t.tile.id, t.leafId, true));
+    const b = getBingo(bingo.id);
+    for (const key of ["drop_detective", "rules_lawyer", "number_cruncher", "eager_beaver"] as const) expect(earned(b, alice.id, key)).toBe(false);
   });
 });
 

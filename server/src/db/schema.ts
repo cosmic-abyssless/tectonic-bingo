@@ -1016,7 +1016,8 @@ export const bingoAchievementSettings = sqliteTable('bingo_achievement_settings'
   uniqueIndex('bingo_achievement_settings_bingo_key_unq').on(t.bingoId, t.achievementKey),
 ]);
 
-// One row per player action Achievements care about. Written only while the bingo is Live and only for an
+// One row per player action Achievements care about. Written only while the action can earn one (from Board revealed
+// for Tile and rules opens and interest marks, else only Live) and only for an
 // eligible player (a Team member acting on their own Team's concern), whether or not any Achievement is currently
 // switched on — so a later switch-on can count activity that happened while it was off, back to the moment it was
 // FIRST switched on. `subjectId`/`tileId`/`creditedUserId` are populated per `kind` (see achievementService.ts):

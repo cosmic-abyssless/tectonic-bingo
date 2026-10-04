@@ -415,3 +415,30 @@ export function handEvents(
   }
   return { events, raised };
 }
+
+/**
+ * Players looking the Board over during Board revealed (CONTEXT.md "Achievement": opens count from then): about half
+ * read the rules, most open a few Tiles, and the odd thorough one opens every Tile, so a generated Bingo shows Teacher's
+ * pet and Drop detective earned before the start. Through the same fire-and-forget endpoint the client calls.
+ */
+export function openEvents(ctx: Ctx, teams: { members: Player[] }[], board: BoardInfo): Timed[] {
+  const { tl } = ctx;
+  const rng = ctx.rng.fork("opens");
+  const windowEnd = Math.min(tl.startsAt.getTime(), ctx.limit.getTime());
+  const randomAt = () => new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
+  const open = (player: Player, at: Date, body: { kind: "tile"; tileId: string } | { kind: "rules" }): Timed => ({
+    at,
+    run: async () => {
+      await ctx.api.as(player.discordId).post(path(ctx, "/achievements/opened"), body, { at });
+    },
+  });
+  const events: Timed[] = [];
+  for (const player of teams.flatMap((t) => t.members)) {
+    if (rng.chance(0.5)) events.push(open(player, randomAt(), { kind: "rules" }));
+    const tiles = rng.chance(0.1) ? board.tiles : board.tiles.filter(() => rng.chance(0.25));
+    const start = randomAt();
+    // One sitting, a Tile every minute or so.
+    tiles.forEach((tile, i) => events.push(open(player, plus(start, i * MINUTE), { kind: "tile", tileId: tile.id })));
+  }
+  return events;
+}
