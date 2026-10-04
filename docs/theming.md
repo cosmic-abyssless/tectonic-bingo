@@ -18,6 +18,12 @@ pages — nothing else (mod, admin, bingo list, and login are never themed).
 - If your theme's module throws on import, it's caught, logged with
   `console.warn`, and the page falls back to `default` — never a blank
   page.
+- A theme's module loads with the board page, so the whole-page slots for
+  the pages beside the board (`DraftPage`, `StatsPage`, `FeedbackPage`,
+  `RewindPage`, `WrappedPage`) are registered with `React.lazy`, as
+  `default` and `comic` do: the Draft room and Stats bring ag-grid, which
+  the board page must not download. A lazy slot suspends to the route
+  fallback in `App.tsx` (the same "Loading…").
 
 ## Folder shape
 

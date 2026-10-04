@@ -1,3 +1,4 @@
+import { lazy } from "react";
 import type { ThemeDefinition } from "../registry";
 import { BugReportButton } from "../../core/ui/BugReportButton";
 import { PlainButton } from "../../core/ui/Button";
@@ -11,9 +12,6 @@ import { PlainBetaTag } from "../../core/ui/BetaTag";
 import { PlainTeamRoster } from "../../core/draft/TeamRoster";
 import { defaultTokens } from "../tokens";
 import { BoardPageLayout } from "./page/BoardPageLayout";
-import { DraftPageLayout } from "./page/DraftPageLayout";
-import { StatsPageLayout } from "./page/StatsPageLayout";
-import { FeedbackPageLayout } from "./page/FeedbackPageLayout";
 import { FeedbackBanner } from "./feedback/FeedbackBanner";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
@@ -58,7 +56,6 @@ import { TaskPicker } from "./submission/TaskPicker";
 import { ProofPicker } from "./submission/ProofPicker";
 import { RequirementPicker } from "./submission/RequirementPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
-import { RewindPageLayout } from "./rewind/RewindPageLayout";
 import { RewindTimeline } from "./rewind/RewindTimeline";
 import { RewindControls } from "./rewind/RewindControls";
 import { RewindScoreboard } from "./rewind/RewindScoreboard";
@@ -67,7 +64,6 @@ import { RewindPopup } from "./rewind/RewindPopup";
 import { RewindClosing } from "./rewind/RewindClosing";
 import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
 import { RewindTileTeams } from "./rewind/RewindTileTeams";
-import { WrappedPageLayout } from "./wrapped/WrappedPageLayout";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedYou } from "./wrapped/WrappedYou";
@@ -78,6 +74,14 @@ import { WrappedTeam } from "./wrapped/WrappedTeam";
 import { WrappedBingo } from "./wrapped/WrappedBingo";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
+
+// The pages beside the board load with their own route, not with this theme: the Draft room's pool grid and the
+// Stats tables bring ag-grid, which the board page must not download. (A lazy slot suspends to App's route fallback.)
+const DraftPageLayout = lazy(() => import("./page/DraftPageLayout").then((m) => ({ default: m.DraftPageLayout })));
+const StatsPageLayout = lazy(() => import("./page/StatsPageLayout").then((m) => ({ default: m.StatsPageLayout })));
+const FeedbackPageLayout = lazy(() => import("./page/FeedbackPageLayout").then((m) => ({ default: m.FeedbackPageLayout })));
+const RewindPageLayout = lazy(() => import("./rewind/RewindPageLayout").then((m) => ({ default: m.RewindPageLayout })));
+const WrappedPageLayout = lazy(() => import("./wrapped/WrappedPageLayout").then((m) => ({ default: m.WrappedPageLayout })));
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.

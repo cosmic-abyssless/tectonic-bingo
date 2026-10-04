@@ -1,5 +1,4 @@
 import "./instrument";
-import "./core/ui/agGrid"; // registers AG Grid's modules once for the whole app
 import { StrictMode } from "react";
 import { reactErrorHandler } from "@sentry/react";
 import { createRoot } from "react-dom/client";
@@ -9,11 +8,13 @@ import App from "./App";
 import { preloadTheme } from "./themes/registry";
 import { rememberedThemeForPath } from "./themes/rememberedTheme";
 import { installClientErrorListeners } from "./core/logging/reportClientError";
+import { installChunkReload } from "./core/chunkReload";
 import { ApiError } from "./api/client";
 
 // Start fetching this bingo's theme now rather than after its shell request returns.
 preloadTheme(rememberedThemeForPath(window.location.pathname));
 installClientErrorListeners();
+installChunkReload();
 
 const queryClient = new QueryClient({
   defaultOptions: {
