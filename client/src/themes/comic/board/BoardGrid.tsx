@@ -1,5 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useTime } from "motion/react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 import { LineCompletionWash } from "./LineCompletionWash";
@@ -72,14 +71,16 @@ export function BoardGrid({
   const PreStartBanner = useSlot("PreStartBanner");
   const gridRef = useRef<HTMLDivElement>(null);
   const fitWidth = useFitWidth(gridRef, board.rows, board.cols);
-  const time = useTime();
   const linePulseKey = board.lines.map((line) => `${line.id}:${Number(line.complete)}:${line.tileIds.join(",")}`).join("|");
   const stopsByTileId = useMemo(() => {
     const posById = new Map(board.tiles.map((tile) => [tile.id, { row: tile.row, col: tile.col }]));
     return buildStopsByTileId(board.lines, posById);
   }, [linePulseKey]);
   const seenCompleteRef = useRef<Set<string> | null>(null);
-  const boostedUntilRef = useRef(new Map<string, number>());
+  // Lines that completed while the board was open, pulsing brighter for
+  // BOOST_MS (comic-line-pulse-boost), each with the timer that ends it.
+  const [boostedLineIds, setBoostedLineIds] = useState<ReadonlySet<string>>(() => new Set());
+  const boostTimersRef = useRef(new Map<string, number>());
   useLayoutEffect(() => {
     const seen = seenCompleteRef.current;
     const completeIds = new Set(board.lines.filter((line) => line.complete).map((line) => line.id));
@@ -87,19 +88,39 @@ export function BoardGrid({
       seenCompleteRef.current = completeIds;
       return;
     }
+    const timers = boostTimersRef.current;
+    const endBoost = (id: string) => {
+      window.clearTimeout(timers.get(id));
+      timers.delete(id);
+      setBoostedLineIds((boosted) => {
+        if (!boosted.has(id)) return boosted;
+        const next = new Set(boosted);
+        next.delete(id);
+        return next;
+      });
+    };
     for (const id of completeIds) {
       if (!seen.has(id)) {
         seen.add(id);
-        boostedUntilRef.current.set(id, Date.now() + BOOST_MS);
+        window.clearTimeout(timers.get(id));
+        timers.set(id, window.setTimeout(() => endBoost(id), BOOST_MS));
+        setBoostedLineIds((boosted) => new Set(boosted).add(id));
       }
     }
     for (const id of [...seen]) {
       if (!completeIds.has(id)) {
         seen.delete(id);
-        boostedUntilRef.current.delete(id);
+        endBoost(id);
       }
     }
   }, [linePulseKey]);
+  useEffect(() => {
+    const timers = boostTimersRef.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
 
   return (
     // On a phone the board runs edge to edge (cancelling the page's own
@@ -151,7 +172,7 @@ export function BoardGrid({
                 const stops = stopsByTileId.get(tile.id);
                 return (
                   <TileSearchSlot key={tile.id} tileId={tile.id} className="relative aspect-square w-full" dimmedClassName="pointer-events-none opacity-20 saturate-0">
-                    {stops && <UndimmedWash tileId={tile.id} time={time} stops={stops} boostedUntilRef={boostedUntilRef} />}
+                    {stops && <UndimmedWash tileId={tile.id} stops={stops} boostedLineIds={boostedLineIds} />}
                     <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
                     {tileOverlay?.(tile)}
                   </TileSearchSlot>
