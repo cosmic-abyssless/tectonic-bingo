@@ -35,6 +35,18 @@ export function onRefused(listener: RefusalListener): () => void {
   return () => refusalListeners.delete(listener);
 }
 
+type SlowDownListener = (error: ApiError) => void;
+const slowDownListeners = new Set<SlowDownListener>();
+
+/**
+ * Hears every 429: the server's per-user write limit refused a write ("Slow down: …"), so the page shows its message
+ * (App's SlowDownNotice). Nothing retries it. Returns the unsubscribe.
+ */
+export function onSlowDown(listener: SlowDownListener): () => void {
+  slowDownListeners.add(listener);
+  return () => slowDownListeners.delete(listener);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -59,6 +71,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.status >= 500) reportClientError(`${path} ${message}`, "api.5xx");
     const error = new ApiError(res.status, message, code);
     if (res.status === 403) for (const listener of refusalListeners) listener(path, init?.method ?? "GET", error);
+    if (res.status === 429) for (const listener of slowDownListeners) listener(error);
     throw error;
   }
   if (res.status === 204) return undefined as T;

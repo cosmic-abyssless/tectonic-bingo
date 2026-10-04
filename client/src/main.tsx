@@ -20,9 +20,12 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 10_000,
       refetchOnWindowFocus: false,
-      // A 404 won't turn up on a second try (a deleted bingo, a removed Team): fail at once, the rest up to 3 times.
-      retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 3,
+      // A 404 won't turn up on a second try (a deleted bingo, a removed Team), and a 429 (the server's write limit) asks
+      // for less, not more: fail at once, the rest up to 3 times.
+      retry: (failureCount, error) => !(error instanceof ApiError && (error.status === 404 || error.status === 429)) && failureCount < 3,
     },
+    // Writes are never retried by themselves: a refused one (a 429) is shown, not sent again.
+    mutations: { retry: false },
   },
 });
 

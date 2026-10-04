@@ -51,6 +51,7 @@ import { createMcpRouter } from "./mcp/router";
 import { startReplicaJob } from "./mcp/sql/replica";
 import { LoadWarnings, loadWarningSettings, loadWarningsEnabled, startEventLoopMonitor } from "./loadWarnings";
 import { loadWarningsMiddleware } from "./middleware/loadWarnings";
+import { WriteLimit, writeLimitMiddleware, writeLimitPerWindow } from "./middleware/writeLimit";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -180,6 +181,9 @@ app.use(requestLog);
 // Unsampled counters that raise Sentry warning issues when the server is slow or flooded (loadWarnings.ts).
 const loadWarnings = loadWarningsEnabled() ? new LoadWarnings({ settings: loadWarningSettings() }) : null;
 if (loadWarnings) app.use(loadWarningsMiddleware(loadWarnings));
+// One user's API writes are capped, so one page (or an old tab) can't flood the server (middleware/writeLimit.ts).
+const writesPerWindow = writeLimitPerWindow();
+if (writesPerWindow) app.use(writeLimitMiddleware(new WriteLimit(writesPerWindow), loadWarnings ? (hit) => loadWarnings.recordWriteLimited(hit) : undefined));
 
 // Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });

@@ -23,6 +23,15 @@ export function toast(data: ToastData, timeout = 6000) {
   toastQueue.add(data, { timeout });
 }
 
+const shownOnce = new Map<string, string>();
+
+/** toast(), unless the last one with this `id` is still showing: one notice for a burst of the same thing. */
+export function toastOnce(id: string, data: ToastData, timeout = 6000) {
+  const key = shownOnce.get(id);
+  if (key && toastQueue.visibleToasts.some((t) => t.key === key)) return;
+  shownOnce.set(id, toastQueue.add(data, { timeout }));
+}
+
 const TONE = {
   info: { icon: InfoIcon, cls: "text-info" },
   success: { icon: CheckIcon, cls: "text-ok" },
