@@ -94,8 +94,15 @@ describe("writeLimitPerWindow", () => {
   it("is 30 unless set, and off with WRITE_LIMIT_DISABLED", () => {
     expect(writeLimitPerWindow({})).toBe(30);
     expect(writeLimitPerWindow({ WRITE_LIMIT_PER_10S: "50" })).toBe(50);
-    expect(writeLimitPerWindow({ WRITE_LIMIT_PER_10S: "nope" })).toBe(30);
     expect(writeLimitPerWindow({ WRITE_LIMIT_DISABLED: "true" })).toBeNull();
+  });
+
+  it("warns about a value that isn't a positive whole number, 0 included, and keeps the default", () => {
+    for (const value of ["0", "-5", "2.5", "nope"]) {
+      const warned: unknown[] = [];
+      expect(writeLimitPerWindow({ WRITE_LIMIT_PER_10S: value }, (msg, fields) => warned.push([msg, fields]))).toBe(30);
+      expect(warned).toEqual([[expect.stringContaining("WRITE_LIMIT_DISABLED=true"), { value }]]);
+    }
   });
 });
 

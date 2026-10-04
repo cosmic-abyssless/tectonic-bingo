@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { requestPath } from "../log";
+import { log, requestPath, type LogFields } from "../log";
 import { TESTDATA_PREFIX } from "../services/devTestDataService";
 
 // One user's writes are capped (docs/postmortems/2026-10-03-colour-picker.md, #454): on 2026-10-03 one Admin's page sent
@@ -19,11 +19,18 @@ const EXEMPT_PATHS = [
   /^\/api\/bingos\/[^/]+\/feedback(\/|$)/, // anonymous end to end (ADR 0002): nothing may tie a request there to its user
 ];
 
-/** How many writes per user per 10 seconds (WRITE_LIMIT_PER_10S, default 30), or null with WRITE_LIMIT_DISABLED=true. */
-export function writeLimitPerWindow(env: NodeJS.ProcessEnv = process.env): number | null {
+/**
+ * How many writes per user per 10 seconds (WRITE_LIMIT_PER_10S, default 30), or null with WRITE_LIMIT_DISABLED=true.
+ * A value that isn't a positive whole number is warned about and the default used: 0 doesn't switch it off.
+ */
+export function writeLimitPerWindow(env: NodeJS.ProcessEnv = process.env, warn: (msg: string, fields?: LogFields) => void = log.warn): number | null {
   if (env.WRITE_LIMIT_DISABLED === "true") return null;
-  const parsed = Number(env.WRITE_LIMIT_PER_10S);
-  return env.WRITE_LIMIT_PER_10S && Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_PER_WINDOW;
+  const value = env.WRITE_LIMIT_PER_10S;
+  if (!value) return DEFAULT_PER_WINDOW;
+  const parsed = Number(value);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  warn(`WRITE_LIMIT_PER_10S must be a positive whole number, so the default of ${DEFAULT_PER_WINDOW} applies; WRITE_LIMIT_DISABLED=true switches the limit off`, { value });
+  return DEFAULT_PER_WINDOW;
 }
 
 /** Each user's writes over the last 10 seconds. */
