@@ -922,12 +922,14 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
       markUnchanged();
       return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
     }
+    // Only becoming received stamps when and by whom; changing who collected one already received keeps both.
+    const receivedNow = params.received && !existing.buyinReceivedAt;
     const updated = tx
       .update(signups)
       .set({
-        buyinReceivedAt: params.received ? clockNow() : null,
+        buyinReceivedAt: params.received ? (receivedNow ? clockNow() : existing.buyinReceivedAt) : null,
         buyinCollectedByUserId: collectedByUserId,
-        buyinRecordedByUserId: params.received ? params.recordedByUserId : null,
+        buyinRecordedByUserId: params.received ? (receivedNow ? params.recordedByUserId : existing.buyinRecordedByUserId) : null,
       })
       .where(eq(signups.id, signupId))
       .returning(PUBLIC_SIGNUP_COLS)
