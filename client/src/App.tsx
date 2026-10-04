@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { LazyMotion } from "motion/react";
 import { onSlowDown } from "./api/client";
 import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
@@ -30,6 +31,8 @@ const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ de
 const SiteAdminPage = lazy(() => import("./pages/SiteAdminPage").then((m) => ({ default: m.SiteAdminPage })));
 const TermsPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.TermsPage })));
 const PrivacyPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.PrivacyPage })));
+// The animation features of every `m` component (core/ui/motionFeatures.ts), fetched once the app has rendered.
+const loadMotionFeatures = () => import("./core/ui/motionFeatures").then((m) => m.default);
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -60,6 +63,7 @@ function SlowDownNotice() {
 export default function App() {
   useSyncColorSchemeAttribute();
   return (
+    <LazyMotion features={loadMotionFeatures}>
     <BrowserRouter>
       <ErrorBoundary>
       <AuthProvider>
@@ -175,5 +179,6 @@ export default function App() {
       </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>
+    </LazyMotion>
   );
 }

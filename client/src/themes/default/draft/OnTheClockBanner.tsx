@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";
@@ -9,7 +10,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
   const ink = teamColor ? inkOn(teamColor) : "var(--color-on-accent)";
   return (
     // Remounted per pick by the caller (key), so the entrance plays on every turn change.
-    <motion.div
+    <m.div
       initial={reduced ? false : { opacity: 0, y: -14, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 380, damping: 26 }}
@@ -36,6 +37,6 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
         )}
       </div>
       <p className="num text-sm font-semibold uppercase tracking-wide">{pickLabel}</p>
-    </motion.div>
+    </m.div>
   );
 }

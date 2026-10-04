@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useBingoHeader, useBingoMenuEntries, useBoardModel, useRewindModel } from "../../../headless";
 import type { RewindPopupModel, TileModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";
@@ -125,7 +126,7 @@ export function RewindPageLayout() {
         <AnimatePresence mode="wait">
           {popup && <PlacedPopup key={popup.submission.id} popup={popup} bounds={bounds} />}
           {!popup && closing && (
-            <motion.div
+            <m.div
               key="closing"
               className="pointer-events-auto absolute inset-x-4 top-20 mx-auto w-fit"
               initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
@@ -134,7 +135,7 @@ export function RewindPageLayout() {
               transition={reduceMotion ? { duration: 0.16 } : { type: "spring", stiffness: 320, damping: 28 }}
             >
               <RewindClosing closing={closing} />
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
       </div>
@@ -172,7 +173,7 @@ function PlacedPopup({ popup, bounds }: { popup: RewindPopupModel; bounds: () =>
   }, [tileId, bounds]);
 
   return (
-    <motion.div
+    <m.div
       ref={cardRef}
       className="pointer-events-auto absolute"
       style={{
@@ -186,6 +187,6 @@ function PlacedPopup({ popup, bounds }: { popup: RewindPopupModel; bounds: () =>
       transition={popup.size === "big" && !reduceMotion ? { type: "spring", stiffness: 380, damping: 24 } : { duration: 0.16 }}
     >
       <RewindPopup popup={popup} pointer={placement?.pointer ?? null} />
-    </motion.div>
+    </m.div>
   );
 }
