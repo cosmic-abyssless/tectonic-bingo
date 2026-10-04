@@ -154,7 +154,8 @@ describe("setting a borrowed account", () => {
     expect(fetchStats).toHaveBeenCalledWith(expect.anything(), aliceSignup.id, "Bob", { discordId: "alice_dc", linkedRsns: ["Alice Main", "Alice Alt"] });
     expect(syncWom).toHaveBeenCalledWith(expect.anything(), bingo.id);
     expect(broadcast).toHaveBeenCalledWith({ type: "player_renamed", bingoId: bingo.id, payload: { userId: alice.id } });
-    expect(broadcast).toHaveBeenCalledWith({ type: "bingo_changed", bingoId: bingo.id, payload: {} });
+    // player_renamed covers it: nothing on the board changed.
+    expect(broadcast).not.toHaveBeenCalledWith({ type: "bingo_changed", bingoId: bingo.id, payload: {} });
   });
 
   it("leaves their Team, roles and Discord account alone", async () => {

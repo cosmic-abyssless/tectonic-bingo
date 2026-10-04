@@ -1,3 +1,5 @@
+import { MAX_WATCHED_BINGOS } from "@bingo/shared";
+
 // Which bingo a query belongs to. Query keys carry the bingo's slug (at different positions: ["teamProgress", slug,
 // teamId], ["wrapped", "state", slug]), while live events carry its id, so the two meet through the cached shells.
 
@@ -23,4 +25,18 @@ export function otherBingoSlugs(shells: readonly (readonly [readonly unknown[], 
     if (typeof queryKey[1] === "string" && typeof id === "string" && id !== bingoId) slugs.add(queryKey[1]);
   }
   return slugs;
+}
+
+/**
+ * The Bingos this client has data for, from its cached shells: the ones it asks the server for live events about
+ * (ClientSocketMessage). Most recently fetched first, so in the unlikely case of more than the server takes, the ones
+ * left out are those it looked at longest ago. Sorted after that, so the same set always reads the same.
+ */
+export function watchedBingoIds(shells: readonly { data: unknown; dataUpdatedAt: number }[]): string[] {
+  const ids = new Set<string>();
+  for (const { data } of [...shells].sort((a, b) => b.dataUpdatedAt - a.dataUpdatedAt)) {
+    const id = (data as { bingo?: { id?: unknown } } | undefined)?.bingo?.id;
+    if (typeof id === "string") ids.add(id);
+  }
+  return [...ids].slice(0, MAX_WATCHED_BINGOS).sort();
 }

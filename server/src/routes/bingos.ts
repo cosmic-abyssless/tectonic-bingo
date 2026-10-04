@@ -850,7 +850,8 @@ router.put(
 
     const { stars, note } = req.body as { stars?: number; note?: string };
     draftService.setPickRating(db, myTeam.id, req.params.signupId as string, { stars: stars ?? 0, note: note ?? "" });
-    broadcast({ type: "draft_rating_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } });
+    // Only the Team's leads see its ratings: nobody else has anything to refetch.
+    broadcast({ type: "draft_rating_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } }, { to: draftService.ratingViewerIds(db, myTeam.id) });
     res.json({ ratings: draftService.getTeamRatings(db, myTeam.id) });
   }),
 );
