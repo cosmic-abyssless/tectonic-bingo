@@ -856,6 +856,12 @@ function FlyingBook({
       // The book simply appears open, in place.
       cover.style.transform = `rotateY(${OPEN_ANGLE}deg)`;
       page.style.transform = "rotateY(0deg)";
+      // Motion has to know the open pose too: a page turn animates the
+      // leaves' depth through it, and it rebuilds their transforms from the
+      // values it holds — without this, the cover's rotateY falls back to 0
+      // and the cover shuts over page 1 at the first turn.
+      animate(COVER, { rotateY: OPEN_ANGLE, z: leafDepth(0, 1) }, { duration: 0 });
+      animate(PAGE_FRONT, { rotateY: 0, z: leafDepth(1, 1) }, { duration: 0 });
       base.style.transform = `translateZ(${-BASE_DEPTH}px)`;
       base.style.filter = "none";
       const back = root.querySelector<HTMLElement>(BACK);
