@@ -74,6 +74,25 @@ describe("TectonicClient", () => {
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
+  it("drops expired entries when it stores a new one, at most once per TTL", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fetchImpl = mockFetch({ "/users/": { body: [] } });
+      const client = new TectonicClient(cfg, fetchImpl);
+      const cache = (client as unknown as { cache: Map<string, unknown> }).cache;
+
+      await client.getDetailedUsers(["1"]);
+      await client.getDetailedUsers(["2"]);
+      expect(cache.size).toBe(2);
+
+      vi.advanceTimersByTime(60_001);
+      await client.getDetailedUsers(["3"]);
+      expect([...cache.keys()]).toEqual([expect.stringContaining("/users/3")]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not cache failures", async () => {
     const fetchImpl = mockFetch({ "/leaderboard": { status: 500 } });
     const client = new TectonicClient(cfg, fetchImpl);
