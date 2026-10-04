@@ -50,7 +50,7 @@ import {
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import { PUBLIC_USER_COLS } from "./userService";
@@ -653,7 +653,7 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
   return db.transaction((tx) => {
     const existing = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
     if (!existing) throw new ServiceError(404, "Bingo not found");
-    if (params.achievements) achievementService.applyAchievementSwitches(tx, bingoId, params.achievements);
+    const switched = params.achievements ? achievementService.applyAchievementSwitches(tx, bingoId, params.achievements) : false;
     if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
       // Existing signups were made under the other mode's rules (pairings only
       // mean something in duo), so the switch is only allowed on a clean slate.
@@ -685,19 +685,22 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
     if (discordChannels !== undefined) set.discordChannelsJson = JSON.stringify(normalizeDiscordChannels(discordChannels));
-    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
 
-    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
-    if (changes) {
-      audit(tx, {
-        action: "settings.updated",
-        bingoId,
-        entity: { type: "bingo", id: bingoId, label: updated.name },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
+    // Saving the form untouched writes and records nothing (#456). The Achievement switches aren't audited, so a change
+    // to only them is written but recorded as nothing to audit, not as unchanged.
+    const changes = diffFields(existing, { ...existing, ...set }, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
+    if (!changes) {
+      if (switched) markAuditedNoop();
+      else markUnchanged();
+      return existing;
     }
+    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
+    audit(tx, {
+      action: "settings.updated",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: updated.name },
+      details: { changes: changes as never },
+    });
     return updated;
   });
 }

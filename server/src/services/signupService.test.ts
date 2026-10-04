@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -386,6 +386,23 @@ describe("getAllSignups / markBuyin", () => {
 
     const unmarked = markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
     expect(unmarked.buyinReceivedAt).toBeNull();
+  });
+
+  it("changing only who collected it keeps when it was received and who recorded it", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-01T12:00:00Z"));
+      const marked = markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: adminId, recordedByUserId: adminId });
+      vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
+      const recollected = markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: memberId, recordedByUserId: memberId });
+      expect(recollected.buyinCollectedByUserId).toBe(memberId);
+      expect(recollected.buyinReceivedAt).toEqual(marked.buyinReceivedAt);
+      expect(recollected.buyinRecordedByUserId).toBe(adminId);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects marking buy-in outside signup/draft/reveal", () => {

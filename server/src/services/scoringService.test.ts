@@ -538,6 +538,12 @@ describe("editing the board after teams have progress", () => {
     expect(totalPoints(fx.teamId)).toBe(20);
   });
 
+  it("is run by the board edit itself when it changed something", () => {
+    const { fx } = completedTask(20);
+    updateTileBonusPoints(db, fx.tileId, 50);
+    expect(totalPoints(fx.teamId)).toBe(70);
+  });
+
   it("un-completes a tile for a team when a new requirement is added to it", () => {
     const { fx } = completedTask(20);
     const bingoId = db.select().from(schema.bingos).get()!.id;

@@ -5,6 +5,7 @@ import type { Request, RequestHandler, Response } from "express";
 import { MAX_WATCHED_BINGOS, type BroadcastEvent } from "@bingo/shared";
 import { passesGuildGate } from "./middleware/requireGuildMember";
 import { createCoalescer, type Outgoing } from "./broadcastCoalescing";
+import { helloMessage } from "./buildInfo";
 import { log } from "./log";
 
 /** Who opened a socket: the session it belongs to and its user. */
@@ -115,6 +116,9 @@ export function initWebSocketServer(server: Server, authorize: AuthorizeUpgrade)
     // Any logged-in clan member may watch any Bingo: payloads carry only IDs (v1 leaked team names to every connected
     // client), and each client refetches under its own auth.
     log.info("ws connect", { clients: created.clients.size });
+    // The build this server serves, so a page from an older one offers a reload (buildInfo.ts).
+    const hello = helloMessage();
+    if (hello) socket.send(JSON.stringify(hello));
     socket.on("message", (data) => {
       const bingoIds = parseWatch(data);
       const info = sockets.get(socket);

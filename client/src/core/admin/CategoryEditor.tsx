@@ -52,7 +52,7 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
         </div>
       )}
       <div className="flex items-center gap-2">
-        <input type="color" aria-label="New category color" value={colorHex} onChange={(e) => setColorHex(e.target.value)} className="size-8 cursor-pointer rounded-md border-none bg-transparent" />
+        <ColorInput aria-label="New category color" value={colorHex} onCommit={setColorHex} className="size-8 cursor-pointer rounded-md border-none bg-transparent" />
         <Input value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="New category name…" className="max-w-xs" />
         <Button onPress={add} isDisabled={!label.trim()}>
           Add

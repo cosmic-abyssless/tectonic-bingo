@@ -6,7 +6,7 @@ import { log } from "./log";
 // they're sampled per browser page load, so the one page flooding the server is usually not in them at all. Counted per
 // process in memory, from every request that reaches the API (middleware/loadWarnings.ts) and a timer on the event loop.
 
-export type LoadWarningKind = "slow_request" | "event_loop_lag" | "user_write_flood" | "request_spike";
+export type LoadWarningKind = "slow_request" | "event_loop_lag" | "user_write_flood" | "request_spike" | "write_limited";
 
 export interface LoadWarning {
   kind: LoadWarningKind;
@@ -268,6 +268,14 @@ export class LoadWarnings {
       writes.routes.prune(now);
       if (writes.routes.total === 0) this.writesByUser.delete(userId);
     }
+  }
+
+  /** A write the per-user write limit refused (middleware/writeLimit.ts). */
+  recordWriteLimited(hit: { userId: string; method: string; area: string; perWindow: number }): void {
+    this.fire(["write_limited"], () => ({
+      message: `Write limit: one user went over ${hit.perWindow} writes in 10 s, refused at ${hit.method} ${hit.area}`,
+      extra: { ...hit },
+    }));
   }
 
   /** One window of event loop lag (from startEventLoopMonitor). */

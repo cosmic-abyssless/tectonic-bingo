@@ -766,19 +766,24 @@ export function getAchievementSettings(db: Db, bingoId: string): AchievementSett
 /**
  * Applies an admin's per-Achievement switches (called from within bingoService.updateBingoSettings's own
  * transaction). Turning one on for the first time stamps firstSwitchedOnAt now — never moved again; turning one off
- * (or back on) just flips `enabled`. Unknown keys are ignored.
+ * (or back on) just flips `enabled`. Unknown keys are ignored. Returns whether any switch changed.
  */
-export function applyAchievementSwitches(tx: Tx, bingoId: string, switches: Partial<Record<AchievementKey, boolean>>, now: Date = clockNow()): void {
+export function applyAchievementSwitches(tx: Tx, bingoId: string, switches: Partial<Record<AchievementKey, boolean>>, now: Date = clockNow()): boolean {
+  let changed = false;
   for (const [key, enabled] of Object.entries(switches) as [AchievementKey, boolean][]) {
     if (!(ACHIEVEMENT_KEYS as readonly string[]).includes(key)) continue;
     const existing = tx.select().from(bingoAchievementSettings).where(and(eq(bingoAchievementSettings.bingoId, bingoId), eq(bingoAchievementSettings.achievementKey, key))).get();
     if (existing) {
-      if (existing.enabled !== enabled) tx.update(bingoAchievementSettings).set({ enabled }).where(eq(bingoAchievementSettings.id, existing.id)).run();
+      if (existing.enabled === enabled) continue;
+      tx.update(bingoAchievementSettings).set({ enabled }).where(eq(bingoAchievementSettings.id, existing.id)).run();
     } else if (enabled) {
       tx.insert(bingoAchievementSettings).values({ bingoId, achievementKey: key, enabled: true, firstSwitchedOnAt: now }).run();
+    } else {
+      continue; // no row and switching off — already off, nothing to do.
     }
-    // else: no row and switching off — already off, nothing to do.
+    changed = true;
   }
+  return changed;
 }
 
 /** Currently-enabled keys, for export (bingoExportService.ts) — the admin's current configuration, not activity history. */
