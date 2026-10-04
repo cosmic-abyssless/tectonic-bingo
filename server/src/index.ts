@@ -49,6 +49,8 @@ import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
 import { createMcpRouter } from "./mcp/router";
 import { startReplicaJob } from "./mcp/sql/replica";
+import { LoadWarnings, loadWarningSettings, loadWarningsEnabled, startEventLoopMonitor } from "./loadWarnings";
+import { loadWarningsMiddleware } from "./middleware/loadWarnings";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -175,6 +177,9 @@ app.use((req, _res, next) => {
 // passport.session() (needs req.user) and before the routers.
 app.use(auditContext);
 app.use(requestLog);
+// Unsampled counters that raise Sentry warning issues when the server is slow or flooded (loadWarnings.ts).
+const loadWarnings = loadWarningsEnabled() ? new LoadWarnings({ settings: loadWarningSettings() }) : null;
+if (loadWarnings) app.use(loadWarningsMiddleware(loadWarnings));
 
 // Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -231,6 +236,7 @@ const server = http.createServer(app);
 // A socket needs a logged-in clan member, checked against the same session store and Passport user as HTTP requests.
 initWebSocketServer(server, authorizeWithSession(sessionAuth));
 
+let stopEventLoopMonitor: (() => void) | null = null;
 server.listen(PORT, () => {
   log.info("server listening", {
     port: Number(PORT),
@@ -255,6 +261,7 @@ server.listen(PORT, () => {
   startWomReads(db);
   // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
   if (mcpEnabled) startReplicaJob(DB_PATH);
+  if (loadWarnings) stopEventLoopMonitor = startEventLoopMonitor(loadWarnings);
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
@@ -266,6 +273,7 @@ function shutdown(signal: string): void {
   shuttingDown = true;
   log.info("shutdown", { signal });
   closeWebSocketServer();
+  stopEventLoopMonitor?.();
   if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
   server.close(() => {
     // Give Sentry a moment to send anything still buffered (a no-op when it is switched off).
