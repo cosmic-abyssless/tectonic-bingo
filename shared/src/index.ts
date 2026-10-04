@@ -1554,6 +1554,9 @@ export interface UnvaluedItem {
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 
+// The server holds a burst of one event type for one Bingo and sends it as one (server/src/broadcastCoalescing.ts):
+// a payload a client reads must either be merged there or the type sent every time. A teamId, say, is the last held
+// event's, which is fine only while no client narrows its refetch by it.
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
@@ -1568,8 +1571,8 @@ export type BroadcastEvent =
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // An admin took back the latest pick; its players are back in the pool.
   | { type: "draft_pick_undone"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
-  // A team lead starred/noted a signup. Other leads of the same team refetch
-  // draft state; the rating itself stays behind GET /draft's auth.
+  // A team lead starred/noted a signup. Sent only to that Team's leads, the only ones who see its ratings: they
+  // refetch draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
   // Someone on a team raised or lowered a hand for a tile; teammates refetch
   // progress so the board shows who's on what.
@@ -1621,6 +1624,14 @@ export type BroadcastEvent =
   // A Player's name in this Bingo changed (an Admin set their Signup on a Borrowed account or back, or an in-game rename
   // was found): everything that names them refetches. The user id only, per the unauthenticated-broadcast rule above.
   | { type: "player_renamed"; bingoId: string; payload: { userId: string } };
+
+/**
+ * What a client sends up its socket. `watch`: the Bingos it has data for (its cached shells), sent on every (re)connect
+ * and whenever that set changes. From then on it gets only those Bingos' events (and the site-wide ones); a socket that
+ * never sends one gets everything. At most MAX_WATCHED_BINGOS ids, or the message is ignored.
+ */
+export type ClientSocketMessage = { type: "watch"; bingoIds: string[] };
+export const MAX_WATCHED_BINGOS = 50;
 
 export * from "./achievements.ts";
 export * from "./audit.ts";

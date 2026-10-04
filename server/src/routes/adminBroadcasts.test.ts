@@ -1,6 +1,7 @@
 // What an Admin write tells the open pages (docs/postmortems/2026-10-03-colour-picker.md): bingo_changed, which refetches
 // the board and everything scored from it, only for the board and settings; anything less sends the narrow event that
-// covers it. Real routers over a real in-memory DB, with the logged-in user faked, hit over HTTP.
+// covers it. And a Captain's Pick Rating is told only to the leads who see it. Real routers over a real in-memory DB,
+// with the logged-in user faked, hit over HTTP.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import type { AddressInfo } from "net";
@@ -127,3 +128,12 @@ describe("an Admin write", () => {
   });
 });
 
+describe("a Captain's Pick Rating", () => {
+  it("is told only to the Team's leads, who are the only ones who see it", async () => {
+    const signupId = db.select({ id: schema.signups.id }).from(schema.signups).all()[2]!.id;
+    expect(await call(captain, "PUT", `/draft/ratings/${signupId}`, { stars: 2, note: "" })).toBe(200);
+    const rated = broadcast.mock.calls.find(([event]) => event.type === "draft_rating_changed");
+    expect(rated?.[0]).toEqual(bingoEvent("draft_rating_changed", { teamId: team.id }));
+    expect([...(rated?.[1]?.to ?? [])].sort()).toEqual([captain.id, coCaptain.id].sort());
+  });
+});
