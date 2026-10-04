@@ -89,6 +89,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/admin/teams/:id": ["team.deleted"],
   "DELETE /api/bingos/:slug/admin/teams/:id/members/:userId": ["team.member_removed", "signup.withdrawn", "pairing.dissolved"],
   "POST /api/bingos/:slug/admin/late-signups": ["signup.created", "team.member_added"],
+  "PUT /api/bingos/:slug/admin/signups/:signupId/account": ["signup.account_borrowed"],
   // Cut review scoring (POST .../admin/cut-review/score) is a read-only calculation (auditSkip), not listed here.
   "POST /api/bingos/:slug/admin/cut-review/apply": ["pairing.admin_paired", "pairing.unpaired", "team.created", "team.deleted", "draft.cut_review_applied"],
 

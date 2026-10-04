@@ -48,6 +48,7 @@ import { timeAgo } from "../ui/time";
 import { headerTooltip, usefulTooltip } from "../ui/gridTooltips";
 import { NoTooltips } from "../ui/Tooltip";
 import { restrictionLabel, RestrictionsManager } from "./Restrictions";
+import { BorrowedBadge } from "../signup/BorrowedAccount";
 
 /** A roster entry plus its 1-based signup position — kept on the row (not derived from `rowIndex`) so sorting by
  * another column doesn't change what "#" shows. */
@@ -102,6 +103,8 @@ export interface GridContext {
   liftRestriction: ReturnType<typeof useLiftRestriction>;
   /** Opens a player's profile (Enter on their RSN); null outside a PlayerProfileProvider. */
   openProfile: ((userId: string) => void) | null;
+  /** Opens Set borrowed account for the row (the Account column, an Admin's from Signups closed until Finished). */
+  setAccount: (row: RosterRow) => void;
 }
 
 // The surface every popup cell editor here sits on (AG gives a popup editor none of its own, so it would float over
@@ -121,6 +124,7 @@ const RsnCell = memo(function RsnCell({ data, context }: CustomCellRendererProps
       <PlayerName userId={data.user.id} className="min-w-0 truncate">
         <Mark text={data.signup.rsn} query={context.search} />
       </PlayerName>
+      {data.signup.accountBorrowed && <BorrowedBadge ownName={discordName(data.user)} />}
     </span>
   );
 });
@@ -185,6 +189,14 @@ function refreshTooltip(p: TooltipCallbackParams<RosterRow, RefreshState>): stri
   if (!rsn) return "";
   return p.value === "failed" ? "The lookup failed; try again in a moment" : p.value === "refreshing" ? `Looking up stats for ${rsn}` : `Refresh stats for ${rsn}`;
 }
+
+// Which OSRS account an active signup plays on (CONTEXT.md "Borrowed account"): a click or Enter opens Set borrowed
+// account (onCellClicked / onCellKeyDown), to set one or set it back.
+const AccountCell = memo(function AccountCell({ data }: CustomCellRendererProps<RosterRow>) {
+  if (!data) return null;
+  if (data.signup.status !== "active") return <span className="text-on-surface-subtle">—</span>;
+  return <EditableCellValue prompt="">{data.signup.accountBorrowed ? "Borrowed" : "Their own"}</EditableCellValue>;
+});
 
 const TierCell = memo(function TierCell({ data }: CustomCellRendererProps<RosterRow>) {
   if (!data?.tectonicProfile) return <span className="text-on-surface-subtle">—</span>;
@@ -503,6 +515,7 @@ export function SignupRosterGrid({
   questions,
   isDuo,
   showTier,
+  showAccount = false,
   readOnly = false,
   collectedByOptions,
   doesRowPassFilters,
@@ -515,6 +528,8 @@ export function SignupRosterGrid({
   questions: SignupQuestion[];
   isDuo: boolean;
   showTier: boolean;
+  /** The Account column: an Admin's Set borrowed account, from Signups closed until Finished. */
+  showAccount?: boolean;
   /** A Historical Bingo's roster: nothing to edit or look up again (no timezone edits, refresh or buy-in). */
   readOnly?: boolean;
   collectedByOptions: { id: string; label: string }[];
@@ -662,6 +677,15 @@ export function SignupRosterGrid({
         suppressKeyboardEvent: (p) => p.editing && ["Enter", "Tab", "ArrowUp", "ArrowDown"].includes(p.event.key),
         width: 150,
       },
+      showAccount && {
+        colId: "account",
+        headerName: "Account",
+        headerTooltip: "The OSRS account they're playing this bingo on: their own, or one an Admin set them on for this bingo. Click a cell to set a borrowed account or set it back.",
+        valueGetter: (p) => (p.data?.signup.accountBorrowed ? "Borrowed" : "Their own"),
+        cellRenderer: AccountCell,
+        cellClass: (p) => (p.data?.signup.status === "active" ? "cursor-pointer" : ""),
+        width: 120,
+      },
       !readOnly && {
         colId: "refresh",
         headerName: "Refresh",
@@ -772,7 +796,7 @@ export function SignupRosterGrid({
     // collectedByRefData/collectedByOptions/unpairedActive deliberately excluded — read via the
     // refs above instead, precisely so their (frequent) changes don't force columnDefs to a new identity. See
     // that comment for why a new columnDefs identity is the actual problem being avoided here.
-  }, [questions, isDuo, showTier, readOnly]);
+  }, [questions, isDuo, showTier, showAccount, readOnly]);
 
   // A cell's tooltip is its formatted value, a header's its name, but only when they'd tell you something: text cut
   // off, or detail the cell doesn't show (the exact signup time, the CA points behind a tier). See gridTooltips.ts,
@@ -842,9 +866,10 @@ export function SignupRosterGrid({
     gridApiRef.current?.refreshCells({ force: true, columns: ["rsn", "partner"] });
   }, [context.search]);
   // Likewise the Partner cell shows a pending request (and "—" once withdrawn), which isn't its value (the sort and the
-  // picker read that): a refetch that only changes those would otherwise leave the cell as it was.
+  // picker read that), and the RSN cell a borrowed account's badge: a refetch that only changes those would otherwise
+  // leave the cell as it was.
   useEffect(() => {
-    gridApiRef.current?.refreshCells({ force: true, columns: ["partner"] });
+    gridApiRef.current?.refreshCells({ force: true, columns: ["rsn", "partner"] });
   }, [rows]);
 
   const onCellEditRequest = useCallback((e: CellEditRequestEvent<RosterRow>) => {
@@ -866,23 +891,26 @@ export function SignupRosterGrid({
     }
   }, [context.markBuyin, context.modPair, context.modUnpair, context.withdrawSignup, context.setTimezone, context.currentUserId]);
 
-  // Enter on a cell that acts rather than edits: RSN opens the player's profile, Refresh looks their stats up again.
+  // Enter on a cell that acts rather than edits: RSN opens the player's profile, Refresh looks their stats up again,
+  // Account opens Set borrowed account.
   const onCellKeyDown = useCallback(
     (e: CellKeyDownEvent<RosterRow>) => {
       if ((e.event as KeyboardEvent | null)?.key !== "Enter" || !e.data) return;
       if (e.colDef.colId === "rsn") context.openProfile?.(e.data.user.id);
       else if (e.colDef.colId === "refresh" && refreshState(e.data, context) === "idle") startRefresh(e.data, context);
+      else if (e.colDef.colId === "account" && e.data.signup.status === "active") context.setAccount(e.data);
     },
     [context],
   );
 
   // A click on a cell that acts rather than edits: anywhere on a buy-in cell ticks or unticks it, anywhere on a Refresh
-  // cell looks the player up again.
+  // cell looks the player up again, anywhere on an Account cell opens Set borrowed account.
   const onCellClicked = useCallback(
     (e: CellClickedEvent<RosterRow>) => {
       if (!e.data) return;
       if (e.colDef.colId === "buyin") toggleBuyin(e.data, context);
       else if (e.colDef.colId === "refresh" && refreshState(e.data, context) === "idle") startRefresh(e.data, context);
+      else if (e.colDef.colId === "account" && e.data.signup.status === "active") context.setAccount(e.data);
     },
     [context],
   );

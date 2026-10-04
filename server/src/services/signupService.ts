@@ -1,6 +1,6 @@
 import { now as clockNow } from "../clock";
 import { and, count, eq, inArray, isNotNull, ne, notInArray, or } from "drizzle-orm";
-import { can, canSeeAnswers, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, FEEDBACK_AUDIENCES, QUESTION_FORMS, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type FeedbackAudience, type PublicUser, type QuestionForm, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
+import { can, canSeeAnswers, discordName, passesRules, unavailableReason, encodeChoices, encodeMemberPicks, formatSignupAnswer, isBlankAnswer, isValidTimeZone, otherText, parseChoiceAnswer, parseMemberPicks, FEEDBACK_AUDIENCES, QUESTION_FORMS, QUESTION_VISIBILITIES, MAX_CHOICE_LENGTH, MAX_MEMBER_PICKS, MAX_MULTISELECT_CHOICES, MAX_OTHER_LENGTH, MAX_QUESTION_HELPER_TEXT, type AnswerViewer, type BuyinsResponse, type FeedbackAudience, type PublicUser, type QuestionForm, type QuestionVisibility, type PermissionBingo, type Role, type SignupQuestionType } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { feedbackAnswers, feedbackResponses, signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
@@ -32,6 +32,7 @@ export const PUBLIC_SIGNUP_COLS = {
   timezone: signups.timezone,
   womId: signups.womId,
   rsnVerified: signups.rsnVerified,
+  accountBorrowed: signups.accountBorrowed,
   status: signups.status,
   buyinReceivedAt: signups.buyinReceivedAt,
   buyinCollectedByUserId: signups.buyinCollectedByUserId,
@@ -455,6 +456,7 @@ export function createSignup(db: Db, bingo: Bingo, params: CreateSignupParams) {
       timezone: params.timezone ? normalizeTimeZone(params.timezone) : null,
       womId: params.womId ?? null,
       rsnVerified: params.rsnVerified ?? false,
+      accountBorrowed: false,
     };
     // A withdrawn signup is reused rather than duplicated: (bingo, user) is
     // unique. The buy-in columns are left alone on purpose — someone who
@@ -531,7 +533,7 @@ export function createLateSignup(db: Db, bingo: Bingo, params: CreateLateSignupP
       throw new ServiceError(409, "This player is already signed up. Put them on a Team with Add member on the Captains tab.", "already_signed_up");
     }
 
-    const values = { rsn, womId: params.womId ?? null, rsnVerified: params.rsnVerified ?? false, status: "active" as const, createdAt: clockNow() };
+    const values = { rsn, womId: params.womId ?? null, rsnVerified: params.rsnVerified ?? false, accountBorrowed: false, status: "active" as const, createdAt: clockNow() };
     // A Withdrawn Signup comes back with its answers (and its buy-in, as createSignup keeps it).
     const signup = existing
       ? tx.update(signups).set(values).where(eq(signups.id, existing.id)).returning(PUBLIC_SIGNUP_COLS).get()!
@@ -559,6 +561,85 @@ export function createLateSignup(db: Db, bingo: Bingo, params: CreateLateSignupP
   });
 }
 
+const BORROW_REASON_MAX = 500;
+
+/**
+ * The active Signup an Admin sets an account for (setSignupAccount): from Signups closed until the Bingo is Finished,
+ * the stages a Late signup can be made in. The route checks it before looking the account up on Wise Old Man, and
+ * setSignupAccount again when it saves.
+ */
+export function signupForAccountChange(db: Db, bingo: Bingo, signupId: string) {
+  if (bingo.stage === "complete") throw new ServiceError(400, "This bingo is finished, so its signups are locked. Move it back to Live to change them.", "bingo_finished");
+  if (!LATE_SIGNUP_STAGES.includes(bingo.stage)) throw new ServiceError(400, "A borrowed account can only be set once signups have closed");
+  const signup = db.select(PUBLIC_SIGNUP_COLS).from(signups).where(and(eq(signups.id, signupId), eq(signups.bingoId, bingo.id))).get();
+  if (!signup) throw new ServiceError(404, "Signup not found");
+  if (signup.status !== "active") throw new ServiceError(400, "This signup was withdrawn");
+  return signup;
+}
+
+/** Refuses an account another active Signup in the bingo is on, by RSN (any case) or WOM id, naming who it is. */
+function assertAccountFree(db: Db, bingoId: string, userId: string, rsns: string[], womId: string | null): void {
+  const names = new Set(rsns.map((r) => r.trim().toLowerCase()));
+  const other = db
+    .select({ rsn: signups.rsn, womId: signups.womId, user: PUBLIC_USER_COLS })
+    .from(signups)
+    .innerJoin(users, eq(signups.userId, users.id))
+    .where(and(eq(signups.bingoId, bingoId), eq(signups.status, "active"), ne(signups.userId, userId)))
+    .all()
+    .find((s) => names.has(s.rsn.trim().toLowerCase()) || (!!womId && s.womId === womId));
+  if (other) throw new ServiceError(409, `${discordName(other.user)} is already signed up on ${other.rsn} in this bingo`, "account_taken");
+}
+
+export interface SetSignupAccountParams {
+  /** The account's RSN: the name Wise Old Man has for a borrowed one. */
+  rsn: string;
+  /** What the Admin typed, when it differs from `rsn` (a different case): checked against other signups too. */
+  typedRsn?: string;
+  /** A borrowed account's WOM id from Wise Old Man, or the Player's own from the clan (matchRsn); route-computed. */
+  womId: string | null;
+  rsnVerified: boolean;
+  /** True: a Borrowed account. False: back on the Player's own account. */
+  borrowed: boolean;
+  reason: unknown;
+}
+
+/**
+ * Sets the account a Signup plays on (CONTEXT.md "Borrowed account"): a Borrowed account, or back on the Player's own.
+ * Only the account changes (`rsn`, `womId`, whether it's borrowed): their Team, roles, Submissions and Discord account
+ * stay as they were. For the whole Bingo, so the Wise Old Man reads start again from its start (womReadService). A
+ * Player not on a borrowed account can only be put on one. Audited as signup.account_borrowed, either way.
+ */
+export function setSignupAccount(db: Db, bingo: Bingo, signupId: string, params: SetSignupAccountParams) {
+  const reason = typeof params.reason === "string" ? params.reason.trim() : "";
+  if (!reason) throw new ServiceError(400, "Give a reason");
+  if (reason.length > BORROW_REASON_MAX) throw new ServiceError(400, `Keep the reason under ${BORROW_REASON_MAX} characters`);
+  const rsn = params.rsn.trim();
+  if (!rsn) throw new ServiceError(400, "RSN is required");
+  return db.transaction((tx) => {
+    const existing = signupForAccountChange(tx, bingo, signupId);
+    if (!params.borrowed && !existing.accountBorrowed) throw new ServiceError(400, "Their signup is already on their own account. A borrowed account is one they don't own.");
+    if (rsn === existing.rsn && params.borrowed === existing.accountBorrowed && params.womId === existing.womId) {
+      throw new ServiceError(400, `Their signup is already on ${rsn}`);
+    }
+    assertAccountFree(tx, bingo.id, existing.userId, [rsn, params.typedRsn ?? rsn], params.womId);
+    const updated = tx
+      .update(signups)
+      .set({ rsn, womId: params.womId, rsnVerified: params.rsnVerified, accountBorrowed: params.borrowed })
+      .where(eq(signups.id, signupId))
+      .returning(PUBLIC_SIGNUP_COLS)
+      .get()!;
+    const player = tx.select(PUBLIC_USER_COLS).from(users).where(eq(users.id, existing.userId)).get();
+    audit(tx, {
+      action: "signup.account_borrowed",
+      bingoId: bingo.id,
+      entity: { type: "signup", id: signupId, label: rsn },
+      details: { before: existing.rsn, after: rsn, borrowed: params.borrowed, womId: params.womId, reason, player: player ? discordName(player) : existing.rsn },
+      onBehalfOfUserId: existing.userId,
+    });
+    return updated;
+  });
+}
+
 export interface UpdateSignupParams {
   rsn?: string;
   timezone?: string;
@@ -580,12 +661,15 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
       if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
       const newRsn = params.rsn.trim();
       if (newRsn !== existing.rsn) rsnChange = { before: existing.rsn, after: newRsn };
-      const womId = params.womId ?? null;
-      const rsnVerified = params.rsnVerified ?? false;
+      // A Borrowed account (a Bingo moved back to Signups open) keeps the WOM id an Admin's lookup gave it, until the
+      // player saves an RSN of their own instead.
+      const keepsBorrowed = existing.accountBorrowed && !rsnChange;
+      const womId = keepsBorrowed ? existing.womId : (params.womId ?? null);
+      const rsnVerified = keepsBorrowed ? existing.rsnVerified : (params.rsnVerified ?? false);
       // The WOM id and verification are the server's, re-derived on every save: kept current, but not a change the
       // player made, so not one to record on their own.
       if (rsnChange || womId !== existing.womId || rsnVerified !== existing.rsnVerified) {
-        tx.update(signups).set({ rsn: newRsn, womId, rsnVerified }).where(eq(signups.id, signupId)).run();
+        tx.update(signups).set({ rsn: newRsn, womId, rsnVerified, accountBorrowed: keepsBorrowed }).where(eq(signups.id, signupId)).run();
       }
     }
 

@@ -313,6 +313,14 @@ export function createLateSignup(slug: string, payload: { userId: string; rsn: s
   return api.post<{ signup: Signup }>(`${base(slug)}/late-signups`, payload);
 }
 
+/**
+ * A Borrowed account (CONTEXT.md "Signup"): puts the Signup on the account `rsn` with a reason. One of the Player's own
+ * clan RSNs sets them back; `ownAccount` says it's theirs when the clan has no RSNs on file to tell by.
+ */
+export function setSignupAccount(slug: string, signupId: string, payload: { rsn: string; reason: string; ownAccount?: boolean }) {
+  return api.put<{ signup: Signup }>(`${base(slug)}/signups/${signupId}/account`, payload);
+}
+
 // Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), for the settings
 // form's "Achievements" section — matches server/src/services/achievementService.ts's AchievementSettingRow.
 export interface AchievementSettingRow {

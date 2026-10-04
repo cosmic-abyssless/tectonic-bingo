@@ -111,11 +111,12 @@ export function getAccountTypes(db: Db, bingoId: string): Record<string, Account
 }
 
 /** A player's active signup for this bingo with its stored stats parsed and their answers, or null. */
-export function getSignupStats(db: Db, bingoId: string, userId: string): (StoredPlayerStats & { rsn: string; answers: SignupAnswer[] }) | null {
+export function getSignupStats(db: Db, bingoId: string, userId: string): (StoredPlayerStats & { signupId: string; rsn: string; accountBorrowed: boolean; answers: SignupAnswer[] }) | null {
   const signup = db
     .select({
       id: signups.id,
       rsn: signups.rsn,
+      accountBorrowed: signups.accountBorrowed,
       womDataJson: signups.womDataJson,
       runeProfileDataJson: signups.runeProfileDataJson,
       caCurrentJson: signups.caCurrentJson,
@@ -127,11 +128,20 @@ export function getSignupStats(db: Db, bingoId: string, userId: string): (Stored
     .get();
   if (!signup) return null;
   const answers = withMemberNames(db, bingoId, db.select().from(signupAnswers).where(eq(signupAnswers.signupId, signup.id)).all());
-  return { rsn: signup.rsn, answers, ...parseStoredPlayerStats(signup) };
+  return { signupId: signup.id, rsn: signup.rsn, accountBorrowed: signup.accountBorrowed, answers, ...parseStoredPlayerStats(signup) };
 }
 
+/**
+ * On a Borrowed account (CONTEXT.md "Signup") the account's own details (WOM, RuneProfile, account type, current CA)
+ * are the borrowed account's, while peak CA stays the Player's: the best across their own clan-linked RSNs only, or what
+ * was stored before when those can't be looked up.
+ */
 export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: string, opts: FetchPlayerStatsOpts = {}): Promise<void> {
-  const signup = db.select({ bingoId: signups.bingoId, userId: signups.userId }).from(signups).where(eq(signups.id, signupId)).get();
+  const signup = db
+    .select({ bingoId: signups.bingoId, userId: signups.userId, accountBorrowed: signups.accountBorrowed, caPeakJson: signups.caPeakJson })
+    .from(signups)
+    .where(eq(signups.id, signupId))
+    .get();
   // Test hook — skips WOM/RuneProfile/Tectonic network calls entirely. Used
   // by the E2E suite so a real signup during tests never hits those live APIs,
   // and per request by the test data generator (skipsIntegrations).
@@ -171,14 +181,21 @@ export async function fetchAndPersistPlayerStats(db: Db, signupId: string, rsn: 
         altStats.push(deriveCombatAchievements(await runeProfileClient.getAccountFull(other)));
       }
     }
-    const caPeak = linked ? peakCombatAchievements([caCurrent, ...altStats]) : caCurrent;
+    const toJson = (stats: CombatAchievementStats | null) => (stats ? JSON.stringify(stats) : null);
+    // A borrowed account's own tier never counts towards the Player's peak: their own accounts' best, or what was
+    // stored before when those aren't known.
+    const caPeakJson = signup?.accountBorrowed
+      ? linked
+        ? toJson(peakCombatAchievements(altStats))
+        : signup.caPeakJson
+      : toJson(linked ? peakCombatAchievements([caCurrent, ...altStats]) : caCurrent);
 
     db.update(signups)
       .set({
         womDataJson: womData ? JSON.stringify(womData) : null,
         runeProfileDataJson: runeProfileData ? JSON.stringify(runeProfileData) : null,
-        caCurrentJson: caCurrent ? JSON.stringify(caCurrent) : null,
-        caPeakJson: caPeak ? JSON.stringify(caPeak) : null,
+        caCurrentJson: toJson(caCurrent),
+        caPeakJson,
         statsFetchedAt: clockNow(),
       })
       .where(eq(signups.id, signupId))
