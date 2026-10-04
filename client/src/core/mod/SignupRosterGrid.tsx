@@ -680,7 +680,7 @@ export function SignupRosterGrid({
       showAccount && {
         colId: "account",
         headerName: "Account",
-        headerTooltip: "The OSRS account they play on: their own, or a borrowed one an Admin set. Click a cell to set a borrowed account or set it back.",
+        headerTooltip: "The OSRS account they're playing this bingo on: their own, or one an Admin set them on for this bingo. Click a cell to set a borrowed account or set it back.",
         valueGetter: (p) => (p.data?.signup.accountBorrowed ? "Borrowed" : "Their own"),
         cellRenderer: AccountCell,
         cellClass: (p) => (p.data?.signup.status === "active" ? "cursor-pointer" : ""),

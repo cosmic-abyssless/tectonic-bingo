@@ -119,6 +119,8 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
   // This bingo only exists once it has started; the answers only for mods, and for captains while scouting and
   // drafting (the server sends null otherwise). A tab that's there but has nothing to show is dimmed instead.
   const stage = shell?.bingo.stage;
+  // The Team they're on now, where this viewer can see the Teams.
+  const team = shell?.teams.find((t) => t.members.some((m) => m.user.id === player.user.id));
   const showBingoTab = stage === "live" || stage === "complete";
   const showSignupTab = canModerate || player.answers !== null;
   const canSetAccount = canAdminister && !!stage && BORROWED_ACCOUNT_STAGES.includes(stage) && !shell?.bingo.historical;
@@ -157,6 +159,15 @@ function ProfileBody({ slug, player, questions, onClose }: { slug: string; playe
           player.rsn ? (
             <>
               Discord: {name} ·{" "}
+              {team && (
+                <>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: team.color ?? "var(--color-outline-strong)" }} />
+                    {team.name}
+                  </span>{" "}
+                  ·{" "}
+                </>
+              )}
               <ExternalLink href={`https://wiseoldman.net/players/${encodeURIComponent(player.rsn)}`}>Wise Old Man</ExternalLink> ·{" "}
               <ExternalLink href={`https://secure.runescape.com/m=hiscore_oldschool/hiscorepersonal?user1=${encodeURIComponent(player.rsn)}`}>OSRS hiscores</ExternalLink>
             </>

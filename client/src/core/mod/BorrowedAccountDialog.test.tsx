@@ -51,7 +51,7 @@ describe("BorrowedAccountForm", () => {
     const { onDone } = renderForm(own);
     expect(screen.queryByText("Back to their own account")).toBeNull();
     const submit = screen.getByRole("button", { name: "Set borrowed account" });
-    await user.type(screen.getByLabelText(/^RSN of the account they play on/), "Bob");
+    await user.type(screen.getByLabelText(/^RSN of the account they're playing on/), "Bob");
     // No reason yet.
     expect(submit.hasAttribute("disabled")).toBe(true);
     await user.type(screen.getByLabelText(/^Reason/), "Her account is banned");
@@ -64,7 +64,7 @@ describe("BorrowedAccountForm", () => {
     stage = "live";
     const user = userEvent.setup();
     renderForm(own);
-    await user.type(screen.getByLabelText(/^RSN of the account they play on/), "Bob");
+    await user.type(screen.getByLabelText(/^RSN of the account they're playing on/), "Bob");
     expect(screen.getByText(/Wise Old Man will count Bob for the whole competition/)).toBeTruthy();
   });
 

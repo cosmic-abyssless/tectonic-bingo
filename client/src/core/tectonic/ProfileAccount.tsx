@@ -18,11 +18,11 @@ export function ProfileAccount({ slug, target }: { slug: string; target: Account
           <p className="text-sm text-on-surface-muted [&_strong]:text-on-surface">
             {target.accountBorrowed ? (
               <>
-                Plays on <strong>{target.rsn}</strong>, a borrowed account (set by an Admin).
+                Playing this bingo on <strong>{target.rsn}</strong>, a borrowed account (set by an Admin).
               </>
             ) : (
               <>
-                Plays on their own account, <strong>{target.rsn}</strong>.
+                Playing this bingo on their own account, <strong>{target.rsn}</strong>.
               </>
             )}
           </p>

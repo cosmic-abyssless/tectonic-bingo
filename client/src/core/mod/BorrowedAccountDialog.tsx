@@ -93,7 +93,7 @@ export function BorrowedAccountForm({ slug, target, onDone, onCancel }: { slug: 
         </fieldset>
       )}
       {!backToOwn ? (
-        <Field label="RSN of the account they play on" hint="Wise Old Man has to track it. They're named by it everywhere in this bingo.">
+        <Field label="RSN of the account they're playing on" hint="Wise Old Man has to track it. They're named by it in this bingo only.">
           <Input value={rsn} onChange={(e) => setRsn(e.target.value)} maxLength={12} autoFocus />
         </Field>
       ) : ownRsns.length > 0 ? (
@@ -133,7 +133,7 @@ export function BorrowedAccountDialog({ slug, target, onClose }: { slug: string;
   if (target && target !== shown) setShown(target);
   return (
     <Dialog isOpen={target !== null} onClose={onClose}>
-      <DialogHeader title="Set borrowed account" subtitle="When they play on an OSRS account they don't own. Their Team, roles and Submissions stay as they are." onClose={onClose} />
+      <DialogHeader title="Set borrowed account" subtitle="For this bingo only, while they're playing it on an OSRS account they don't own. Their Team, roles and Submissions stay as they are." onClose={onClose} />
       <div className="p-5">{shown && <BorrowedAccountForm key={shown.signupId} slug={slug} target={shown} onDone={onClose} onCancel={onClose} />}</div>
     </Dialog>
   );
