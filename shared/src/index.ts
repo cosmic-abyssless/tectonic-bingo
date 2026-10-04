@@ -1576,6 +1576,7 @@ export type BroadcastEvent =
   | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
   // A teammate reacted to (or took a reaction off) one of the team's submissions; teammates refetch its submissions.
   | { type: "submission_reactions_changed"; bingoId: string; payload: { teamId: string; submissionId: string } }
+  // A Team was created, renamed, recoloured or deleted, or its members changed: what shows Teams refetches (not the board).
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod
@@ -1583,9 +1584,18 @@ export type BroadcastEvent =
   // unauthenticated socket may carry IDs, not snapshots.
   // statsFailed: with statsRefreshing false, whether that stats lookup failed (the roster's refresh button shows a tick or a cross).
   | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean; statsFailed?: boolean } }
-  // Any successful admin mutation (settings, board, lines, questions, teams,
-  // mods). Coarse on purpose: clients refetch the bingo shell + board.
+  // An Admin changed the board (Categories, Tiles, Tasks, Lines, Tags) or the settings, or made a change too broad to
+  // name (a Cut review). Coarse on purpose: clients refetch the shell, the board and everything scored from it. An Admin
+  // write that changes less sends one of the narrower events instead (server/src/routes/admin.ts).
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }
+  // The Bingo's Moderators or Staff changed (the people themselves hear it as access_changed).
+  | { type: "mods_changed"; bingoId: string; payload: Record<string, never> }
+  // A signup or Feedback question was added, edited, removed or moved.
+  | { type: "questions_changed"; bingoId: string; payload: Record<string, never> }
+  // A Superlative category was added, renamed, removed (with its votes) or moved.
+  | { type: "superlative_categories_changed"; bingoId: string; payload: Record<string, never> }
+  // Wrapped art or its credits changed (CONTEXT.md "Wrapped"): shown in Wrapped even once it's published.
+  | { type: "wrapped_art_changed"; bingoId: string; payload: Record<string, never> }
   // A new audit_log row was appended. Ids/visibility only, per the
   // unauthenticated-broadcast rule below — clients invalidate their audit
   // log / team activity queries and refetch under their own auth.

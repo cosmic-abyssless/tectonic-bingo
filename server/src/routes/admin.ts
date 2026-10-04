@@ -1,5 +1,5 @@
-import { Router, type Request } from "express";
-import { CUT_MODES, isAchievementKey, type AchievementKey, type AddTagRequest, type AppliedCutChange, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
+import { Router, type Request, type Response } from "express";
+import { CUT_MODES, isAchievementKey, type AchievementKey, type AddTagRequest, type AppliedCutChange, type BroadcastEvent, type CutChange, type CutMode, type GraphNodeInput } from "@bingo/shared";
 import * as achievementService from "../services/achievementService";
 import path from "path";
 import { UPLOADS_DIR } from "../config";
@@ -45,16 +45,35 @@ import { countPricedSubmissions, repriceNodeClaims } from "../services/gpReprice
 const router = Router({ mergeParams: true });
 router.use(requireAuth, requireBingo, requireAdmin);
 
-// Every successful mutation here changes what other clients are looking at
-// (board, settings, teams…), so tell them to refetch. (A read-only POST sets res.locals.readOnly.)
+// Every successful mutation here changes what other clients are looking at, so tell them to refetch: bingo_changed
+// (the board and settings, and everything scored from them) unless the route said what it changed with broadcastInstead.
+// (A read-only POST sets res.locals.readOnly.)
 router.use((req, res, next) => {
   if (req.method !== "GET") {
     res.on("finish", () => {
-      if (res.statusCode < 400 && !res.locals.readOnly) broadcast({ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} });
+      if (res.statusCode >= 400 || res.locals.readOnly) return;
+      const instead = res.locals.broadcast as BroadcastEvent | BroadcastEvent[] | false | undefined;
+      if (instead === false) return;
+      for (const event of instead === undefined ? [{ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} } as const] : [instead].flat()) broadcast(event);
     });
   }
   next();
 });
+
+/**
+ * What this write changed, for the broadcast above, when it's less than the board or settings: the narrower events
+ * that cover it, or false when it changed nothing anyone else sees or the route already broadcast for itself.
+ */
+function broadcastInstead(res: Response, events: BroadcastEvent | BroadcastEvent[] | false): void {
+  res.locals.broadcast = events;
+}
+
+/** One of the narrow events that only say "this changed in this Bingo". */
+function changed(req: Request, type: "mods_changed" | "questions_changed" | "superlative_categories_changed" | "wrapped_art_changed"): BroadcastEvent {
+  return { type, bingoId: req.bingo!.id, payload: {} };
+}
+
+const teamUpdated = (req: Request, teamId: string): BroadcastEvent => ({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId } });
 
 // ---------------------------------------------------------------------------
 // Bingo settings
@@ -242,6 +261,7 @@ router.post(
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
     const mod = bingoService.addModerator(db, { bingoId: req.bingo!.id, userId });
+    broadcastInstead(res, changed(req, "mods_changed"));
     res.status(201).json({ mod });
   }),
 );
@@ -249,6 +269,7 @@ router.delete(
   "/mods/:userId",
   asyncHandler(async (req, res) => {
     bingoService.removeModerator(db, { bingoId: req.bingo!.id, userId: req.params.userId as string });
+    broadcastInstead(res, changed(req, "mods_changed"));
     res.status(204).end();
   }),
 );
@@ -270,6 +291,7 @@ router.post(
     const { userId } = req.body as { userId?: string };
     if (!userId) throw new ServiceError(400, "userId is required");
     const staff = bingoService.addStaff(db, { bingoId: req.bingo!.id, userId });
+    broadcastInstead(res, changed(req, "mods_changed"));
     res.status(201).json({ staff });
   }),
 );
@@ -277,6 +299,7 @@ router.delete(
   "/staff/:userId",
   asyncHandler(async (req, res) => {
     bingoService.removeStaff(db, { bingoId: req.bingo!.id, userId: req.params.userId as string });
+    broadcastInstead(res, changed(req, "mods_changed"));
     res.status(204).end();
   }),
 );
@@ -398,6 +421,7 @@ router.post(
     const group = wrappedArtService.parseGroup(req.params.group);
     if (!req.file) throw new ServiceError(400, "image is required");
     const keying = wrappedArtService.parseKeying(req.body ?? {});
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.status(201).json({ art: await wrappedArtService.addArt(db, UPLOADS_DIR, req.bingo!, group, req.file.buffer, keying) });
   }),
 );
@@ -405,6 +429,7 @@ router.put(
   "/wrapped-art/:group/order",
   asyncHandler(async (req, res) => {
     const group = wrappedArtService.parseGroup(req.params.group);
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.json({ art: wrappedArtService.reorderArt(db, req.bingo!, group, (req.body as { ids?: unknown })?.ids) });
   }),
 );
@@ -413,6 +438,7 @@ router.put(
   "/wrapped-art/:group/credits",
   asyncHandler(async (req, res) => {
     const section = wrappedArtService.parseSection(req.params.group);
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.json({ additionalCredits: wrappedArtService.setAdditionalCredits(db, req.bingo!, section, (req.body as { credits?: unknown })?.credits) });
   }),
 );
@@ -422,6 +448,7 @@ router.post(
   asyncHandler(async (req, res) => {
     if (!req.file) throw new ServiceError(400, "image is required");
     const keying = wrappedArtService.parseKeying(req.body ?? {});
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.json({ art: await wrappedArtService.replaceArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, req.file.buffer, keying) });
   }),
 );
@@ -429,6 +456,7 @@ router.post(
   "/wrapped-art/images/:id/recut",
   asyncHandler(async (req, res) => {
     const keying = wrappedArtService.parseKeying(req.body ?? {});
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.json({ art: await wrappedArtService.recutArt(db, UPLOADS_DIR, req.bingo!, req.params.id as string, keying) });
   }),
 );
@@ -436,6 +464,7 @@ router.post(
 router.put(
   "/wrapped-art/images/:id/credit",
   asyncHandler(async (req, res) => {
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.json({ art: wrappedArtService.setArtCredit(db, req.bingo!, req.params.id as string, (req.body as { credit?: unknown })?.credit ?? null) });
   }),
 );
@@ -443,6 +472,7 @@ router.delete(
   "/wrapped-art/images/:id",
   asyncHandler(async (req, res) => {
     wrappedArtService.removeArt(db, req.bingo!, req.params.id as string);
+    broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.status(204).end();
   }),
 );
@@ -540,6 +570,8 @@ router.get(
 router.post(
   "/nodes/:nodeId/reprice",
   asyncHandler(async (req, res) => {
+    // It sends gp_values_updated itself when anything was re-priced.
+    broadcastInstead(res, false);
     res.json({ repriced: await repriceNodeClaims(db, req.bingo!.id, req.params.nodeId as string) });
   }),
 );
@@ -631,6 +663,7 @@ router.post(
     const { prompt, type } = req.body as { prompt?: string; type?: string };
     if (!prompt || !type) throw new ServiceError(400, "prompt and type are required");
     const question = signupService.createQuestion(db, { bingoId: req.bingo!.id, ...req.body, form });
+    broadcastInstead(res, changed(req, "questions_changed"));
     res.status(201).json({ question });
   }),
 );
@@ -641,6 +674,7 @@ router.patch(
     if (!existing || existing.bingoId !== req.bingo!.id) throw new ServiceError(404, "Question not found");
     assertQuestionsOpen(req, existing.form);
     const question = signupService.updateQuestion(db, existing.id, req.body);
+    broadcastInstead(res, changed(req, "questions_changed"));
     res.json({ question });
   }),
 );
@@ -651,6 +685,7 @@ router.delete(
     if (existing && existing.bingoId !== req.bingo!.id) throw new ServiceError(404, "Question not found");
     assertQuestionsOpen(req, existing?.form ?? "signup");
     signupService.deleteQuestion(db, req.params.id as string);
+    broadcastInstead(res, changed(req, "questions_changed"));
     res.status(204).end();
   }),
 );
@@ -662,6 +697,7 @@ router.post(
     const { orderedIds } = req.body as { orderedIds?: string[] };
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
     signupService.reorderQuestions(db, req.bingo!.id, orderedIds, form);
+    broadcastInstead(res, changed(req, "questions_changed"));
     res.json({ questions: signupService.getQuestions(db, req.bingo!.id, form) });
   }),
 );
@@ -682,6 +718,7 @@ router.post(
     const { name } = req.body as { name?: string };
     if (!name) throw new ServiceError(400, "name is required");
     const category = superlativeService.createCategory(db, { bingoId: req.bingo!.id, name });
+    broadcastInstead(res, changed(req, "superlative_categories_changed"));
     res.status(201).json({ category });
   }),
 );
@@ -691,6 +728,7 @@ router.patch(
     const { name } = req.body as { name?: string };
     if (!name) throw new ServiceError(400, "name is required");
     const category = superlativeService.renameCategory(db, req.params.id as string, name);
+    broadcastInstead(res, changed(req, "superlative_categories_changed"));
     res.json({ category });
   }),
 );
@@ -698,6 +736,7 @@ router.delete(
   "/superlatives/:id",
   asyncHandler(async (req, res) => {
     superlativeService.deleteCategory(db, req.params.id as string);
+    broadcastInstead(res, changed(req, "superlative_categories_changed"));
     res.status(204).end();
   }),
 );
@@ -707,6 +746,7 @@ router.post(
     const { orderedIds } = req.body as { orderedIds?: string[] };
     if (!Array.isArray(orderedIds)) throw new ServiceError(400, "orderedIds must be an array");
     superlativeService.reorderCategories(db, req.bingo!.id, orderedIds);
+    broadcastInstead(res, changed(req, "superlative_categories_changed"));
     res.json({ categories: superlativeService.getCategories(db, req.bingo!.id) });
   }),
 );
@@ -732,6 +772,7 @@ router.post(
     const team = teamService.createTeam(db, { bingoId: req.bingo!.id, captainUserId, coCaptainUserId, name });
     void syncWomCompetition(db, req.bingo!.id);
     void syncDiscordTeams(db, req.bingo!.id);
+    broadcastInstead(res, teamUpdated(req, team.id));
     res.status(201).json({ team });
   }),
 );
@@ -745,6 +786,7 @@ router.patch(
     if (name !== undefined) void syncWomCompetition(db, req.bingo!.id);
     // The Team's Discord role carries its name and color, its channels its name.
     if (name !== undefined || color !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    broadcastInstead(res, teamUpdated(req, team.id));
     res.json({ team });
   }),
 );
@@ -756,6 +798,7 @@ router.post(
     const member = teamService.addTeamMember(db, req.params.id as string, userId, req.bingo!.id);
     void syncWomCompetition(db, req.bingo!.id);
     void syncDiscordTeams(db, req.bingo!.id);
+    broadcastInstead(res, teamUpdated(req, req.params.id as string));
     res.status(201).json({ member });
   }),
 );
@@ -765,6 +808,7 @@ router.delete(
     teamService.deleteTeam(db, req.params.id as string);
     void syncWomCompetition(db, req.bingo!.id);
     void syncDiscordTeams(db, req.bingo!.id);
+    broadcastInstead(res, teamUpdated(req, req.params.id as string));
     res.status(204).end();
   }),
 );
@@ -780,6 +824,9 @@ router.delete(
     void syncWomCompetition(db, req.bingo!.id);
     void syncDiscordTeams(db, req.bingo!.id);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    // Their hands raised for Tiles went with them.
+    const teamId = req.params.id as string;
+    broadcastInstead(res, [teamUpdated(req, teamId), { type: "tile_interest_changed", bingoId: req.bingo!.id, payload: { teamId } }]);
     res.status(204).end();
   }),
 );
@@ -822,6 +869,7 @@ router.post(
     if (teamId) void syncWomCompetition(db, req.bingo!.id);
     if (teamId) void syncDiscordTeams(db, req.bingo!.id);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastInstead(res, teamId ? teamUpdated(req, teamId) : false);
     res.status(201).json({ signup });
   }),
 );
@@ -872,6 +920,7 @@ router.put(
     void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, { discordId: user.discordId, linkedRsns: enabled ? (member?.rsns ?? []).map((r) => r.rsn) : null });
     void syncWomCompetition(db, bingo.id);
     broadcast({ type: "player_renamed", bingoId: bingo.id, payload: { userId: signup.userId } });
+    broadcastInstead(res, false);
     res.json({ signup });
   }),
 );

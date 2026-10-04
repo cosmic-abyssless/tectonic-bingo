@@ -57,11 +57,39 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["bingo"]);
       break;
     case "team_updated":
+      // Team names, colours and members: the board's header and team picker.
       invalidate(["bingo"]);
       // The scouting/draft room lists teams from draft state.
       invalidate(["draftState"]);
       // Who can vote, and a removed Player's votes, change with the Team.
       invalidate(["superlatives"]);
+      // The mod roster shows each Player's Team, and who can still captain one changes with them.
+      invalidate(["signupRoster"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "mods_changed":
+      invalidate(["adminMods"]);
+      invalidate(["adminStaff"]);
+      invalidate(["bingoMods"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "questions_changed":
+      invalidate(["adminQuestions"]);
+      invalidate(["signupQuestions"]);
+      // The Feedback form's questions are edited there too.
+      invalidate(["feedback"]);
+      // The roster's answer columns.
+      invalidate(["signupRoster"]);
+      break;
+    case "superlative_categories_changed":
+      invalidate(["adminSuperlatives"]);
+      // Deleting a category drops its votes.
+      invalidate(["superlatives"]);
+      break;
+    case "wrapped_art_changed":
+      invalidate(["adminWrappedArt"]);
+      // Published Wrapped shows the art as it is now.
+      invalidate(["wrapped"]);
       break;
     case "bingo_changed":
       invalidate(["bingo"]);
