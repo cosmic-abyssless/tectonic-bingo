@@ -1,7 +1,7 @@
 # Post-mortem: the site slowed to a halt after the Board reveal (2026-10-03)
 
 **Status:** resolved. Trigger fixed in #446; follow-ups #451-#457.
-**Impact:** about 5 minutes (15:47-15:51 EDT) in which the site loaded slowly or not at all ("This site can't be reached" in Chrome) for everyone, minutes after Tectonic's Comics Bingo moved to Board revealed, with up to ~105 Players around. No data was lost. Six Discord team syncs failed on Discord's rate limit and caught up by themselves.
+**Impact:** about 5 minutes (15:47-15:51 EDT) in which the site loaded slowly or not at all (Chrome gave up and showed its error page) for everyone, minutes after Tectonic's Comics Bingo moved to Board revealed, with up to ~105 Players around. No data was lost. Six Discord team syncs failed on Discord's rate limit and caught up by themselves.
 
 Blameless: the Admin used the colour picker exactly as it invites you to. The picker, and the server behind it, are what failed.
 
