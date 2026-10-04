@@ -11,6 +11,7 @@ import type { AchievementKey } from "./achievements.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 import { describeRestrictionTarget } from "./permissions.ts";
+import type { TagKind } from "./tags.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system";
@@ -140,6 +141,12 @@ export interface AuditDetailsMap {
   "tile.updated": { changes: FieldChanges<{ name: string; boardRow: number; boardCol: number; categoryId: string | null; imageUrl: string | null; hasFreezePeriod: boolean; freezeDurationMinutes: number; notes: string | null }> };
   "tile.deleted": { name: string; boardRow: number; boardCol: number; taskCount: number };
   "tile.bonus_points_updated": { points: { before: number; after: number } };
+  /**
+   * A Tag (CONTEXT.md) added to or removed from a Tile, or from one of its Parts (`partLabel`). A Boss tag's `aliases`:
+   * how many of the wiki's names for the boss came with it, or went with it.
+   */
+  "tag.added": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
+  "tag.removed": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
 
   "task.created": { tileId: string; tileName: string; after: TaskSnapshot };
   "task.updated": { tileId: string; tileName: string; before: TaskSnapshot; after: TaskSnapshot };
@@ -370,6 +377,10 @@ const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const settingValue = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v));
 // ` on "Pets"`, or nothing when the tile's name isn't there.
 const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
+// `the boss tag "Abyssal Sire" (and 112 of its names)`, `the tag "kq"`; and what it's on: `Part A on "Vorkath"`.
+const describeTag = (d: { kind: TagKind; text: string; aliases?: number }) =>
+  d.kind === "boss" ? `the boss tag "${d.text}"${d.aliases ? ` (and ${d.aliases} of its names)` : ""}` : `the tag "${d.text}"`;
+const tagOwner = (d: { tileName: string; partLabel?: string | null }) => (d.partLabel ? `${d.partLabel} on "${d.tileName}"` : `"${d.tileName}"`);
 /** "feedback" or "signup": which form a question audit entry is about (absent: signup, as before Feedback questions). */
 const formWord = (d: { form?: "feedback" }) => (d.form === "feedback" ? "feedback" : "signup");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
@@ -623,6 +634,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} set "${i.entityLabel ?? ""}"'s full-completion bonus to ${i.details.points.after} pts`
         : `${actor(i)} removed "${i.entityLabel ?? ""}"'s full-completion bonus`,
   },
+  "tag.added": { category: "board", tone: "ok", visibility: "mods", title: "Tag added", label: (i) => `${actor(i)} added ${describeTag(i.details)} to ${tagOwner(i.details)}` },
+  "tag.removed": { category: "board", tone: "danger", visibility: "mods", title: "Tag removed", label: (i) => `${actor(i)} removed ${describeTag(i.details)} from ${tagOwner(i.details)}` },
   // The tile's name can be missing: entries whose details went over the size cap before it kept the small fields.
   "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task${onTile("to", i.details.tileName)}` },
   "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task${onTile("on", i.details.tileName)}` },

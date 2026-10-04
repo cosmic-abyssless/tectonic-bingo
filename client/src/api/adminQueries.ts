@@ -26,7 +26,13 @@ export const adminQueryKeys = {
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
   wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
+  boardTags: (slug: string) => ["adminBoardTags", slug] as const,
 };
+
+/** Every Tag on the board (CONTEXT.md "Tag"), by Tile and by Part: the board editor's. */
+export function useBoardTags(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.boardTags(slug), queryFn: () => adminApi.getBoardTags(slug) });
+}
 
 // The site-wide audit log — every bingo, or just site-level entries
 // (bingoScope: null), or one specific bingo (bingoScope: its id).

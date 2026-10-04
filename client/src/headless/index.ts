@@ -4,6 +4,7 @@
 // (useSubmissionFlow.ts), never by themed code.
 export { BingoPageProvider } from "./BingoPageProvider";
 export { useBingoPage, useBoardModel, useTileModel, usePageEvent } from "./useBingoPage";
+export { TileSearchProvider, TileSearchSlot, useTileDimmed, useTileSearchHighlighted, useTileSearchModel } from "./TileSearchProvider";
 export { useSignupForm } from "./useSignupForm";
 export type { SignupFormModel, SignupQuestionModel, SignupChoiceModel, SignupCaModel, SignupBlock } from "./useSignupForm";
 export { useFeedbackForm } from "./useFeedbackForm";

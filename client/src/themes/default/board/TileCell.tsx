@@ -1,5 +1,6 @@
 import { memo, useState, type CSSProperties } from "react";
 import type { TileModel } from "../../../headless/types";
+import { useTileSearchHighlighted } from "../../../headless/TileSearchProvider";
 import { formatCountdown } from "../../../core/ui/time";
 import { TASK_STATUS_DOT } from "../../../core/ui/StatusBadge";
 import { CheckIcon, ClockIcon, HandIcon, LockIcon } from "../../../core/ui/icons";
@@ -15,6 +16,8 @@ import { thumbUrl } from "../../../api/imageVariants";
  */
 export const TileCell = memo(function TileCell({ tile, onOpen, isSearchHighlighted }: { tile: TileModel; onOpen: (tileId: string) => void; isSearchHighlighted?: boolean }) {
   const [imgFailed, setImgFailed] = useState(false);
+  // The board's search list on this Tile (TileSearchProvider); its slot (TileSearchSlot) fades it when it isn't found.
+  const highlighted = useTileSearchHighlighted(tile.id) || !!isSearchHighlighted;
 
   const style = (tile.accentColor ? { "--tile-accent": tile.accentColor } : {}) as CSSProperties;
   const borderColor = tile.freeze.isFrozen ? "var(--tile-frozen)" : tile.progress.allComplete ? "var(--tile-complete)" : undefined;
@@ -24,8 +27,8 @@ export const TileCell = memo(function TileCell({ tile, onOpen, isSearchHighlight
       onClick={() => onOpen(tile.id)}
       style={{ ...style, borderColor }}
       className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md border-2 border-[var(--tile-border)] bg-[var(--tile-bg)] transition-[border-color,opacity] duration-150 hover:border-[var(--tile-accent)] ${
-        tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
-      } ${isSearchHighlighted ? "tile-flash" : ""}`}
+        highlighted ? "tile-flash" : ""
+      }`}
     >
       {tile.imageUrl && !imgFailed ? (
         <img
