@@ -23,13 +23,19 @@ export function toast(data: ToastData, timeout = 6000) {
   toastQueue.add(data, { timeout });
 }
 
-const shownOnce = new Map<string, string>();
+// The toastOnce() toasts still in the queue, by id: showing, or waiting behind maxVisibleToasts others.
+const openOnce = new Map<string, string>();
 
-/** toast(), unless the last one with this `id` is still showing: one notice for a burst of the same thing. */
+/** toast(), unless the last one with this `id` is still in the queue: one notice for a burst of the same thing. */
 export function toastOnce(id: string, data: ToastData, timeout = 6000) {
-  const key = shownOnce.get(id);
-  if (key && toastQueue.visibleToasts.some((t) => t.key === key)) return;
-  shownOnce.set(id, toastQueue.add(data, { timeout }));
+  if (openOnce.has(id)) return;
+  const key = toastQueue.add(data, {
+    timeout,
+    onClose: () => {
+      if (openOnce.get(id) === key) openOnce.delete(id);
+    },
+  });
+  openOnce.set(id, key);
 }
 
 const TONE = {
