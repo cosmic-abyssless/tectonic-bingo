@@ -11,8 +11,7 @@ import { db } from "../db";
 import * as signupService from "../services/signupService";
 import { assertCan, bingoRoles, restrictionsOf } from "../services/permissions";
 import { ServiceError } from "../services/errors";
-import { broadcast } from "../ws";
-import { changedNothing } from "../audit/record";
+import { broadcastChange } from "../broadcastChange";
 
 const router = Router({ mergeParams: true });
 
@@ -43,7 +42,7 @@ router.patch(
     const { received, collectedByUserId } = req.body as { received?: boolean; collectedByUserId?: string | null };
     if (typeof received !== "boolean") throw new ServiceError(400, "received must be a boolean");
     signupService.markBuyin(db, req.bingo!, req.params.signupId as string, { received, collectedByUserId, recordedByUserId: req.user!.id });
-    if (!changedNothing()) broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
   }),
 );

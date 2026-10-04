@@ -279,3 +279,17 @@ describe("the player card", () => {
     expect(res.body.player).toMatchObject({ rsn: "Bob", signupId: aliceSignup.id, accountBorrowed: true });
   });
 });
+
+describe("the Player saving their own Signup", () => {
+  it("untouched, fetches no stats and tells nobody; changed, does both (#456)", async () => {
+    setStage("signup");
+    const signupEvents = () => broadcast.mock.calls.filter(([event]) => event.type === "signup_changed");
+    expect((await call(alice, "PATCH", "/signup", { rsn: "Alice Main", answers: [] })).status).toBe(200);
+    expect(fetchStats).not.toHaveBeenCalled();
+    expect(signupEvents()).toHaveLength(0);
+
+    expect((await call(alice, "PATCH", "/signup", { rsn: "Alice Main", timezone: "Europe/London" })).status).toBe(200);
+    expect(fetchStats).toHaveBeenCalledTimes(1);
+    expect(signupEvents()).toHaveLength(1);
+  });
+});
