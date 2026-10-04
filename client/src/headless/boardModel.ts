@@ -397,20 +397,19 @@ export function buildTileModelsStatic(args: {
   });
 }
 
-// The cheap per-tick pass: only `now`, `matchIds` (search), and `canSubmit`
-// can change here. Preserves the previous TileModel's object identity for
-// any tile whose derived (isFrozen, remainingMs, dimmed, canSubmit) is
+// The cheap per-tick pass: only `now` and `canSubmit` can change here (the
+// search isn't the board's: TileSearchProvider). Preserves the previous
+// TileModel's object identity for any tile whose derived (isFrozen, remainingMs, canSubmit) is
 // unchanged from last call, so React.memo(TileCell) only re-renders frozen
 // cells each tick. `staticTiles` must be the SAME array across calls in one
 // tick loop (i.e. built once via useMemo) for the identity check to mean
 // anything — it's keyed on `progress` object reference as a stand-in for
 // "same static snapshot", since buildTileModelsStatic always creates every
 // field of one tile together in a single pass.
-export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, matchIds: Set<string> | null, canSubmit: boolean, canToggleInterest: boolean, prev: ReadonlyMap<string, TileModel>): TileModel[] {
+export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, canSubmit: boolean, canToggleInterest: boolean, prev: ReadonlyMap<string, TileModel>): TileModel[] {
   return staticTiles.map((s) => {
     const isFrozen = !!(s.freezeUnlocksAt && now < s.freezeUnlocksAt);
     const remainingMs = s.freezeUnlocksAt ? s.freezeUnlocksAt - now : 0;
-    const dimmed = matchIds !== null && !matchIds.has(s.id);
     const tileCanSubmit = canSubmit && !s.progress.allComplete && !isFrozen;
     const canToggle = canToggleInterest && !s.progress.allComplete;
 
@@ -420,7 +419,6 @@ export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, 
       prevModel.progress === s.progress &&
       prevModel.freeze.isFrozen === isFrozen &&
       prevModel.freeze.remainingMs === remainingMs &&
-      prevModel.dimmed === dimmed &&
       prevModel.canSubmit === tileCanSubmit &&
       prevModel.interest.canToggle === canToggle
     ) {
@@ -435,14 +433,14 @@ export function finalizeTileModels(staticTiles: StaticTileModel[], now: number, 
       ...rest,
       tasks: reuseTasks ? prevModel.tasks : tasks.map((t) => ({ ...t, interest: { ...t.interest, canToggle: canToggleInterest && !t.complete } })),
       freeze: { hasFreezePeriod, durationMinutes: freezeDurationMinutes, unlocksAt: freezeUnlocksAt, isFrozen, remainingMs },
-      dimmed,
       canSubmit: tileCanSubmit,
       interest: { ...interest, canToggle },
     };
   });
 }
 
-export function buildBoard(args: {
+/** What the board is built from that changes only with its data (not with the search or the clock). */
+export interface BoardStaticArgs {
   tiles: Tile[];
   categories: TileCategory[];
   lines: BoardLine[];
@@ -450,24 +448,60 @@ export function buildBoard(args: {
   teamSubmissions: SubmissionDetails[];
   bingoStartsAt: string | null;
   bingoRows: number;
-  bingoCols: number;
-  now: number;
-  matchIds: Set<string> | null;
-  canSubmit: boolean;
-  canToggleInterest: boolean;
   interests: TileInterest[];
   viewerUserId: string;
   viewerOnTeam?: boolean;
-  totalPoints: number | null;
-  adjustments: PointAdjustment[];
   locks?: ExclusiveLocks;
   sealed?: boolean;
-  prev: ReadonlyMap<string, TileModel>;
-}): BoardModel {
-  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, bingoCols, now, matchIds, canSubmit, canToggleInterest, interests, viewerUserId, viewerOnTeam, totalPoints, adjustments, locks, sealed = false, prev } = args;
+}
 
-  const staticTiles = buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, viewerOnTeam, locks, sealed });
-  const finalized = finalizeTileModels(staticTiles, now, matchIds, canSubmit, canToggleInterest, prev);
+/** What changes often: the clock (freeze countdowns). The search isn't the board's (TileSearchProvider). */
+export interface BoardLiveArgs {
+  bingoStartsAt: string | null;
+  bingoRows: number;
+  bingoCols: number;
+  now: number;
+  canSubmit: boolean;
+  canToggleInterest: boolean;
+  totalPoints: number | null;
+  adjustments: PointAdjustment[];
+  sealed?: boolean;
+  prev: ReadonlyMap<string, TileModel>;
+}
+
+/** The expensive pass: every Tile's requirements and progress, the lines and the row Categories. */
+export interface BoardStatic {
+  staticTiles: StaticTileModel[];
+  lines: LineModel[];
+  rowCategories: (CategoryModel | null)[];
+}
+
+/**
+ * The expensive pass, to be memoised on the board's data alone (BoardProvider): the cheap pass (assembleBoard) then
+ * reuses each Tile's model whenever only the clock moved, so a tick doesn't rebuild or re-draw every Tile.
+ */
+export function buildBoardStatic(args: BoardStaticArgs): BoardStatic {
+  const { tiles, categories, lines, nodeStates, teamSubmissions, bingoStartsAt, bingoRows, interests, viewerUserId, viewerOnTeam, locks, sealed = false } = args;
+  const rowCategories = Array.from({ length: bingoRows }, (_, row) => {
+    const rowCategoryRow = getRowCategory(tiles, categories, row);
+    return rowCategoryRow ? toCategoryModel(rowCategoryRow) : null;
+  });
+  return {
+    staticTiles: buildTileModelsStatic({ tiles, categories, nodeStates, teamSubmissions, bingoStartsAt, interests, viewerUserId, viewerOnTeam, locks, sealed }),
+    lines: buildLineModels(lines, tiles, nodeStates),
+    rowCategories,
+  };
+}
+
+/** Both passes at once, for a one-off build (tests); BoardProvider memoises them apart. */
+export function buildBoard(args: BoardStaticArgs & BoardLiveArgs): BoardModel {
+  return assembleBoard(buildBoardStatic(args), args);
+}
+
+/** The cheap pass: the clock over the expensive pass's Tiles (see buildBoardStatic). */
+export function assembleBoard(built: BoardStatic, args: BoardLiveArgs): BoardModel {
+  const { bingoStartsAt, bingoRows, bingoCols, now, canSubmit, canToggleInterest, totalPoints, adjustments, sealed = false, prev } = args;
+  const finalized = finalizeTileModels(built.staticTiles, now, canSubmit, canToggleInterest, prev);
 
   const grid: (TileModel | null)[][] = Array.from({ length: bingoRows }, () => Array.from({ length: bingoCols }, () => null));
   const tileById = new Map<string, TileModel>();
@@ -475,11 +509,6 @@ export function buildBoard(args: {
     tileById.set(tile.id, tile);
     if (tile.row >= 0 && tile.row < bingoRows && tile.col >= 0 && tile.col < bingoCols) grid[tile.row]![tile.col] = tile;
   }
-
-  const rowCategories = Array.from({ length: bingoRows }, (_, row) => {
-    const rowCategoryRow = getRowCategory(tiles, categories, row);
-    return rowCategoryRow ? toCategoryModel(rowCategoryRow) : null;
-  });
 
   const startMs = bingoStartsAt ? new Date(bingoStartsAt).getTime() : null;
   const isPreStart = startMs !== null && now < startMs;
@@ -491,9 +520,9 @@ export function buildBoard(args: {
     grid,
     tiles: finalized,
     tileById,
-    rowCategories,
-    showRowLabels: rowCategories.some((c) => c !== null),
-    lines: buildLineModels(lines, tiles, nodeStates),
+    rowCategories: built.rowCategories,
+    showRowLabels: built.rowCategories.some((c) => c !== null),
+    lines: built.lines,
     now,
     preStart: { isPreStart, startsAt: startMs },
     totalPoints,

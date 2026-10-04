@@ -421,6 +421,13 @@
       "when": 1791063637666,
       "tag": "0061_borrowed_account",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1791074825169,
+      "tag": "0062_tags",
+      "breakpoints": true
     }
   ]
 }

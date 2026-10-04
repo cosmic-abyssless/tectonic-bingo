@@ -660,6 +660,11 @@ export interface BoardResponse {
   sealed: false;
   tiles: Tile[];
   lines: BoardLine[];
+  /**
+   * Each Tile's Tags (CONTEXT.md "Tag"), its Parts' included, by Tile id: only for the board's search to match, never
+   * shown. A sealed board has none.
+   */
+  tileTags: Record<string, string[]>;
 }
 
 /** What GET /:slug/board answers a given viewer. */
@@ -1620,6 +1625,7 @@ export * from "./permissions.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
 export * from "./superlative.ts";
+export * from "./tags.ts";
 export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";

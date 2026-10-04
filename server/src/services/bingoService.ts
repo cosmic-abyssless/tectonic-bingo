@@ -39,6 +39,7 @@ import {
   submissionReactions,
   superlativeCategories,
   superlativeVotes,
+  tags,
   tiles,
   users,
   womPastCompetitions,
@@ -468,6 +469,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
+    tx.delete(tags).where(eq(tags.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();
     tx.delete(tileCategories).where(eq(tileCategories.bingoId, bingoId)).run();
     tx.delete(nodeEdges).where(inArray(nodeEdges.parentId, nodeIds)).run();

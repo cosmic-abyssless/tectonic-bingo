@@ -772,6 +772,27 @@ export const tiles = sqliteTable('tiles', {
   uniqueIndex('tiles_node_unq').on(t.nodeId),
 ]);
 
+// Tags (CONTEXT.md "Tag"): words the board's search finds a Tile by, never shown to Players. A tag is on a Tile
+// (tileId) or on one of its Parts (nodeId, a tile node's direct child), never both. Its own table rather than columns
+// on tiles/nodes, so nothing that serialises a Tile or a node to Players can carry them by accident: only the board
+// editor, the search endpoint (which answers with Tile ids) and the export read it.
+export const tags = sqliteTable('tags', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  tileId: text('tile_id').references(() => tiles.id),
+  nodeId: text('node_id').references(() => nodes.id),
+  // A Text tag is any text; a Boss tag's text is the boss's OSRS Wiki page title.
+  kind: text('kind', { enum: ['text', 'boss'] }).notNull(),
+  text: text('text').notNull(),
+  // A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag, removed along with it. Same
+  // table, so plain text with no FK declared, like nodes' self-references.
+  bossTagId: text('boss_tag_id'),
+  // The order the tags were added in, per Tile or Part.
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => [
+  index('tags_bingo_idx').on(t.bingoId),
+]);
+
 // All possible lines on the board (rows + cols + diagonals, generated from
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
 // line is a presentation wrapper around a node whose children are the line's

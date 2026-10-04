@@ -2,12 +2,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput, NodeStatus, SealedBoardResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingoLines, claims, nodeEdges, submissions, teamNodeState, tileCategories, tileInterests, tiles } from "../db/schema";
+import { bingoLines, claims, nodeEdges, submissions, tags, teamNodeState, tileCategories, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 import { audit, diffFields, markAuditedNoop } from "../audit/record";
 import { describeTaskNode } from "../audit/describe";
 import { areTilesSealed, canViewTiles } from "./bingoService";
+import { tileSearchTags } from "./tagService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -44,9 +45,10 @@ export function getBoardLines(db: Db, bingoId: string) {
 // are sealed, only the sealed board; otherwise the full board. Whoever may see the hidden Board (view_hidden_board:
 // mods) always gets the full board.
 export function getBoardForViewer(db: Db, bingo: Bingo, seesHiddenBoard: boolean) {
-  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [] };
+  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [], tileTags: {} };
   if (!seesHiddenBoard && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
-  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id) };
+  // Tags ride along for the board's search, which runs in the browser; the sealed board above has none.
+  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id), tileTags: tileSearchTags(db, bingo.id) };
 }
 
 // The board as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): only what a
@@ -356,6 +358,7 @@ export function deleteTile(db: Db, id: string): void {
     if (proofs > 0) throw new ServiceError(409, `Can't delete "${tile.name}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it`);
     const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
     tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
+    tx.delete(tags).where(eq(tags.tileId, id)).run(); // its Parts' tags go with their nodes (deleteSubtree)
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId);
     audit(tx, {
