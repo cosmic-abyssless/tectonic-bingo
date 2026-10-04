@@ -29,6 +29,9 @@ import { getTectonicMembership, matchRsn } from "../services/tectonicMembership"
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { checkWomGroup, syncWomCompetition } from "../services/womCompetitionService";
 import { isDevModeActive } from "../devMode";
+import { getWomClient, parseWomAccount } from "../services/womService";
+import { TESTDATA_PREFIX } from "../services/devTestDataService";
+import { skipsIntegrations } from "../audit/context";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
@@ -820,6 +823,56 @@ router.post(
     if (teamId) void syncDiscordTeams(db, req.bingo!.id);
     broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ signup });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Borrowed account (CONTEXT.md "Signup") — an Admin sets a Player's Signup to play on an OSRS account they don't own,
+// with a reason, or back on their own, from Signups closed until Finished.
+// ---------------------------------------------------------------------------
+
+// Body: { rsn, reason, ownAccount? }. An RSN among the Player's own clan RSNs (matchRsn) is their own account, as is
+// any RSN with ownAccount when the clan integration is off (nothing to check it against, as at signup). Anything else
+// is a borrowed account, which Wise Old Man has to know: its WOM id is what the competition and the reads go by. A test
+// data Bingo (or a request skipping the outside services) takes the RSN without asking Wise Old Man.
+router.put(
+  "/signups/:signupId/account",
+  asyncHandler(async (req, res) => {
+    const { rsn, reason, ownAccount } = req.body as { rsn?: unknown; reason?: unknown; ownAccount?: unknown };
+    if (typeof rsn !== "string" || !rsn.trim()) throw new ServiceError(400, "rsn is required");
+    if (ownAccount !== undefined && typeof ownAccount !== "boolean") throw new ServiceError(400, "ownAccount must be true or false");
+    const bingo = req.bingo!;
+    const signupId = req.params.signupId as string;
+    const current = signupService.signupForAccountChange(db, bingo, signupId);
+    const user = userService.getUserById(db, current.userId);
+    if (!user) throw new ServiceError(404, "User not found");
+    const { enabled, member } = await getTectonicMembership(user.discordId);
+    const own = matchRsn(member, rsn);
+
+    let account: Omit<signupService.SetSignupAccountParams, "reason">;
+    if (own.rsnVerified) {
+      if (!current.accountBorrowed) throw new ServiceError(400, `${rsn.trim()} is one of their own clan RSNs, so it isn't a borrowed account`);
+      account = { rsn: member!.rsns.find((r) => r.rsn.toLowerCase() === rsn.trim().toLowerCase())!.rsn, ...own, borrowed: false };
+    } else if (ownAccount) {
+      if (enabled) throw new ServiceError(400, `${rsn.trim()} isn't one of their clan RSNs. Pick one of those to set them back.`);
+      account = { rsn, ...own, borrowed: false };
+    } else if (skipsIntegrations() || bingo.slug.startsWith(TESTDATA_PREFIX)) {
+      account = { rsn, womId: null, rsnVerified: false, borrowed: true };
+    } else {
+      const found = await getWomClient().lookupPlayer(rsn.trim());
+      if (found.status === "unavailable") throw new ServiceError(503, "Couldn't reach Wise Old Man to look the account up. Try again in a moment.", "wom_unavailable");
+      const womAccount = found.status === "found" ? parseWomAccount(found.player) : null;
+      if (!womAccount) throw new ServiceError(400, `Wise Old Man doesn't track ${rsn.trim()}. Track it on wiseoldman.net first, then try again.`, "wom_not_found");
+      account = { rsn: womAccount.displayName, typedRsn: rsn, womId: womAccount.womId, rsnVerified: false, borrowed: true };
+    }
+
+    const signup = signupService.setSignupAccount(db, bingo, signupId, { ...account, reason });
+    // Account details follow the account they're on, while their peak CA stays their own accounts' best
+    // (playerStatsService). The WOM competition swaps the account in (its WOM id no longer matches the old one's).
+    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, { discordId: user.discordId, linkedRsns: enabled ? (member?.rsns ?? []).map((r) => r.rsn) : null });
+    void syncWomCompetition(db, bingo.id);
+    broadcast({ type: "player_renamed", bingoId: bingo.id, payload: { userId: signup.userId } });
+    res.json({ signup });
   }),
 );
 

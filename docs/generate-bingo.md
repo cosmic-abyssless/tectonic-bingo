@@ -120,7 +120,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    the teams. Once the mods are made, a few **Restrictions** (CONTEXT.md) are applied from the mod roster: a
    Moderator takes rating picks from a Captain and reacting from a Player, and the Admin takes submitting (the
    `submit*` wildcard) from another Player and lifts it again that day. A Moderator also tries to restrict another
-   Moderator, which has to be refused (a sanity check). Before the draft the admin applies an empty **Cut review** (keeping the cuts
+   Moderator, which has to be refused (a sanity check). Later that day the Admin puts one Player on a **Borrowed
+   account** (CONTEXT.md) with a reason: an account named like no one in the Bingo, which Wise Old Man isn't asked
+   about for test data. Before the draft the admin applies an empty **Cut review** (keeping the cuts
    as they are), which the move into the draft needs while any cut is avoidable. Then the
    **real draft** runs: the admin sets the pick order, starts
    the draft, and captains pick in turn a minute or so apart, favouring better players,

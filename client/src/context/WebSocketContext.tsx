@@ -117,6 +117,27 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["playerProfile"]);
       invalidate(["accountTypes"]);
       break;
+    case "player_renamed":
+      // A Player is named by their Signup's RSN in everything that shows them (CONTEXT.md "Player"): the shell's Teams,
+      // the roster and their own Signup, the draft, Submissions, stats, the audit log, Superlatives, Wrapped and Rewind.
+      // Their account's details (its type, its CA) change with it.
+      invalidate(["bingo"]);
+      invalidate(["signupRoster"]);
+      invalidate(["mySignup"]);
+      invalidate(["adminCaptainCandidates"]);
+      invalidate(["draftState"]);
+      invalidate(["teamProgress"]);
+      invalidate(["teamSubmissions"]);
+      invalidate(["modSubmissions"]);
+      invalidate(["stats"]);
+      invalidate(["auditLog"]);
+      invalidate(["teamActivity"]);
+      invalidate(["superlatives"]);
+      invalidate(["wrapped"]);
+      invalidate(["rewind"]);
+      invalidate(["playerProfile"]);
+      invalidate(["accountTypes"]);
+      break;
     case "audit_appended":
       invalidate(["auditLog"]);
       invalidate(["teamActivity"]);

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "209a84a8-fb58-4690-8921-f0fa06f96b1b",
-  "prevId": "e1ebcac8-c857-4861-882a-24085244d146",
+  "id": "69b38bc5-630e-4437-aa49-593892c79c05",
+  "prevId": "209a84a8-fb58-4690-8921-f0fa06f96b1b",
   "tables": {
     "achievement_activity": {
       "name": "achievement_activity",
@@ -4215,6 +4215,121 @@
           "tableTo": "users",
           "columnsFrom": [
             "nominee_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tags": {
+      "name": "tags",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bingo_id": {
+          "name": "bingo_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tile_id": {
+          "name": "tile_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "boss_tag_id": {
+          "name": "boss_tag_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "tags_bingo_idx": {
+          "name": "tags_bingo_idx",
+          "columns": [
+            "bingo_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tags_bingo_id_bingos_id_fk": {
+          "name": "tags_bingo_id_bingos_id_fk",
+          "tableFrom": "tags",
+          "tableTo": "bingos",
+          "columnsFrom": [
+            "bingo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tags_tile_id_tiles_id_fk": {
+          "name": "tags_tile_id_tiles_id_fk",
+          "tableFrom": "tags",
+          "tableTo": "tiles",
+          "columnsFrom": [
+            "tile_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "tags_node_id_nodes_id_fk": {
+          "name": "tags_node_id_nodes_id_fk",
+          "tableFrom": "tags",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
           ],
           "columnsTo": [
             "id"

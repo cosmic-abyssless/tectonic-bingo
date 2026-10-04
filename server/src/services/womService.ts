@@ -22,6 +22,23 @@ type FetchLike = typeof fetch;
 // WOM accepts at least 200 snapshots per page (checked by hand); 100 keeps each response modest.
 const SNAPSHOTS_PAGE_SIZE = 100;
 
+/** A player looked up on WOM: found (the raw player), not tracked by WOM (a 404), or WOM unreachable or rate-limited. */
+export type WomLookup = { status: "found"; player: unknown } | { status: "not_found" } | { status: "unavailable" };
+
+/** An account as WOM knows it: its WOM id (kept through in-game renames) and the name it goes by now. */
+export interface WomAccount {
+  womId: string;
+  displayName: string;
+}
+
+/** The account in a raw WOM player object (a lookup's `player`), or null if it isn't one. */
+export function parseWomAccount(raw: unknown): WomAccount | null {
+  const player = raw as { id?: unknown; username?: unknown; displayName?: unknown } | null;
+  if (!player || typeof player.id !== "number") return null;
+  const displayName = typeof player.displayName === "string" ? player.displayName : typeof player.username === "string" ? player.username : null;
+  return displayName ? { womId: String(player.id), displayName } : null;
+}
+
 export class WomClient {
   // Set from a 429's `retry-after` header. While in the future, new requests
   // short-circuit locally instead of hitting WOM.
@@ -35,6 +52,16 @@ export class WomClient {
   /** Raw WOM player object for the given RSN, or null if unranked/unreachable/rate-limited. Caller persists it verbatim. */
   async getPlayerByUsername(rsn: string): Promise<unknown | null> {
     return this.get(`/players/${encodeURIComponent(rsn)}`, { rsn });
+  }
+
+  /** The WOM player for the RSN, telling an account WOM doesn't track apart from WOM being unreachable or rate-limited. */
+  async lookupPlayer(rsn: string): Promise<WomLookup> {
+    return this.lookup(`/players/${encodeURIComponent(rsn)}`, { rsn });
+  }
+
+  /** The WOM player with this WOM id, which follows the account through in-game renames (see lookupPlayer). */
+  async lookupPlayerById(womId: string): Promise<WomLookup> {
+    return this.lookup(`/players/id/${encodeURIComponent(womId)}`, { womId });
   }
 
   /**
@@ -73,25 +100,32 @@ export class WomClient {
     return this.apiKey !== null;
   }
 
+  /** The response body, or null for a 404, an error, or while (or because) WOM is rate-limiting us. */
   private async get(path: string, context: Record<string, unknown>): Promise<unknown | null> {
-    if (Date.now() < this.rateLimitedUntil) return null;
+    const result = await this.lookup(path, context);
+    return result.status === "found" ? result.player : null;
+  }
+
+  private async lookup(path: string, context: Record<string, unknown>): Promise<WomLookup> {
+    if (Date.now() < this.rateLimitedUntil) return { status: "unavailable" };
 
     try {
       const headers: Record<string, string> = { "User-Agent": WOM_USER_AGENT };
       if (this.apiKey) headers["x-api-key"] = this.apiKey;
       const res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, { headers });
-      if (res.ok) return await res.json();
+      if (res.ok) return { status: "found", player: await res.json() };
+      if (res.status === 404) return { status: "not_found" };
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
         log.warn("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
-      } else if (res.status !== 404) {
+      } else {
         log.warn("wom request failed", { status: res.status, ...context });
       }
     } catch (err) {
       log.warn("wom request failed", { ...context, err });
     }
-    return null;
+    return { status: "unavailable" };
   }
 }
 

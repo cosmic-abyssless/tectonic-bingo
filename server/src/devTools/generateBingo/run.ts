@@ -15,6 +15,7 @@ import { ensureFeedbackQuestions, runFeedback } from "./feedback";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
+import { runBorrowedAccount } from "./borrowedAccount";
 import { uploadWrappedArt } from "./wrappedArt";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
@@ -151,6 +152,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const restrictions = await runRestrictions(ctx, players, mods, seeds);
   log(`restrictions: ${restrictions.applied} applied, ${restrictions.lifted} lifted`);
   result.problems.push(...restrictions.problems);
+  const borrowed = await runBorrowedAccount(ctx, players, seeds);
+  if (borrowed.player) log(`borrowed account: ${borrowed.player.name} plays on ${borrowed.rsn}`);
   if (options.stage === "captains") {
     for (const p of result.problems) log(`SANITY CHECK FAILED: ${p}`);
     return result;

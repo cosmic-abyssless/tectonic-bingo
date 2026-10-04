@@ -813,6 +813,8 @@ export interface Signup {
   timezone: string | null;
   womId: string | null;
   rsnVerified: boolean;
+  /** On a Borrowed account (CONTEXT.md "Signup"): `rsn` and `womId` are an account an Admin set them to play on. */
+  accountBorrowed: boolean;
   status: SignupStatus;
   buyinReceivedAt: string | null;
   buyinCollectedByUserId: string | null;
@@ -1232,6 +1234,8 @@ export interface AccountTypesResponse {
 export interface PlayerProfile {
   user: MinimalUser;
   rsn: string | null; // their signup RSN for this bingo; null when they never signed up
+  signupId: string | null; // their active Signup in this bingo, for an Admin's actions on it; null without one
+  accountBorrowed: boolean; // their Signup is on a Borrowed account (CONTEXT.md "Signup"): `rsn` is that account's
   accountType: AccountType | null;
   womStats: WomPlayerStats | null;
   caCurrent: CombatAchievementStats | null;
@@ -1603,7 +1607,10 @@ export type BroadcastEvent =
   | { type: "access_changed"; bingoId: string | null; payload: { userIds: string[] } }
   // A Restriction was applied or lifted: Moderators and Admins refetch the roster that shows them. The restricted user
   // hears it as access_changed. Nothing else, per the unauthenticated-broadcast rule above.
-  | { type: "restrictions_changed"; bingoId: string; payload: Record<string, never> };
+  | { type: "restrictions_changed"; bingoId: string; payload: Record<string, never> }
+  // A Player's name in this Bingo changed (an Admin set their Signup on a Borrowed account or back, or an in-game rename
+  // was found): everything that names them refetches. The user id only, per the unauthenticated-broadcast rule above.
+  | { type: "player_renamed"; bingoId: string; payload: { userId: string } };
 
 export * from "./achievements.ts";
 export * from "./audit.ts";

@@ -6,6 +6,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { syncSignupRsn } from "./rsnSyncService";
 import { TectonicClient, TectonicUnavailableError } from "./tectonicService";
+import type { WomClient, WomLookup } from "./womService";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -82,6 +83,41 @@ describe("syncSignupRsn", () => {
     const { signup } = seedSignup("12345");
     const down = fakeClient({ err: new TectonicUnavailableError("GET /users/wom/12345: HTTP 503") }).client;
     expect(await syncSignupRsn(db, signup.id, down)).toEqual({ rsn: "Old Name", renamedFrom: null });
+    expect(nameChanges()).toHaveLength(0);
+  });
+});
+
+describe("syncSignupRsn on a Borrowed account", () => {
+  /** A Signup an Admin put on the borrowed account "Bob" (WOM id 200). */
+  function seedBorrowed() {
+    const seeded = seedSignup("200", "Bob");
+    db.update(schema.signups).set({ accountBorrowed: true, rsnVerified: false }).where(eq(schema.signups.id, seeded.signup.id)).run();
+    return seeded;
+  }
+  function fakeWom(answer: WomLookup) {
+    const lookupPlayerById = vi.fn(async () => answer);
+    return { womClient: { lookupPlayerById } as unknown as WomClient, lookupPlayerById };
+  }
+
+  it("follows the borrowed account's own rename by its WOM id on Wise Old Man, not the clan", async () => {
+    const { signup } = seedBorrowed();
+    const tectonic = fakeClient({ rsn: "Player's Own" });
+    const { womClient, lookupPlayerById } = fakeWom({ status: "found", player: { id: 200, username: "bob renamed", displayName: "Bob Renamed" } });
+
+    expect(await syncSignupRsn(db, signup.id, tectonic.client, womClient)).toEqual({ rsn: "Bob Renamed", renamedFrom: "Bob" });
+    expect(lookupPlayerById).toHaveBeenCalledWith("200");
+    expect(tectonic.getRsnByWomId).not.toHaveBeenCalled();
+    // Still on the borrowed account, under its new name.
+    expect(db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()).toMatchObject({ rsn: "Bob Renamed", womId: "200", accountBorrowed: true });
+    expect(JSON.parse(nameChanges()[0]!.details)).toEqual({ before: "Bob", after: "Bob Renamed", womId: "200" });
+  });
+
+  it("keeps the name when Wise Old Man doesn't know the id or can't be reached", async () => {
+    const { signup } = seedBorrowed();
+    for (const answer of [{ status: "not_found" }, { status: "unavailable" }] as const) {
+      expect(await syncSignupRsn(db, signup.id, null, fakeWom(answer).womClient)).toEqual({ rsn: "Bob", renamedFrom: null });
+    }
+    expect(rsnOf(signup.id)).toBe("Bob");
     expect(nameChanges()).toHaveLength(0);
   });
 });

@@ -277,6 +277,11 @@ export interface AuditDetailsMap {
   "signup.stats_fetch_failed": { message: string };
   /** The player's account was renamed in-game: found by its WOM id when a mod refreshed their stats. */
   "signup.name_changed": { before: string; after: string; womId: string };
+  /**
+   * An Admin set a Signup on a Borrowed account (CONTEXT.md "Signup"), or back on the Player's own (`borrowed` false).
+   * `player`: their Discord name then, since inside the Bingo they're named by whichever account they're on.
+   */
+  "signup.account_borrowed": { before: string; after: string; borrowed: boolean; womId: string | null; reason: string; player: string };
 
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
@@ -955,6 +960,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Name change",
     label: (i) => `${i.details.before} changed their name to ${i.details.after}`,
+  },
+  "signup.account_borrowed": {
+    category: "signup",
+    tone: "info",
+    visibility: "mods",
+    title: "Borrowed account",
+    label: (i) =>
+      i.details.borrowed
+        ? `${actor(i)} put ${i.details.player} on the borrowed account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`
+        : `${actor(i)} put ${i.details.player} back on their own account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`,
   },
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
   "wom.roster_synced": {
