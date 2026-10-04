@@ -9,6 +9,7 @@ import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/reco
 import { describeTaskNode } from "../audit/describe";
 import { areTilesSealed, canViewTiles } from "./bingoService";
 import { tileSearchTags } from "./tagService";
+import { rescoreBingo } from "./scoringService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -321,6 +322,8 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
       entity: { type: "tile", id, label: existing.name },
       details: { changes: changes as never },
     });
+    // Scores are a snapshot (rescoreBingo), so an edit that changed something re-scores; one that changed nothing doesn't.
+    rescoreBingo(tx, existing.bingoId);
     return updated;
   });
 }
@@ -346,6 +349,7 @@ export function updateTileBonusPoints(db: Db, tileId: string, points: number) {
       entity: { type: "tile", id: tile.id, label: tile.name },
       details: { points: { before: node.points, after: points } },
     });
+    rescoreBingo(tx, tile.bingoId);
     return tile;
   });
 }
@@ -526,6 +530,7 @@ export function updateLinePoints(db: Db, id: string, points: number) {
       entity: { type: "line", id: line.id, label: `${line.lineType} ${line.lineIndex}` },
       details: { lineType: line.lineType, lineIndex: line.lineIndex, points: { before: node.points, after: points } },
     });
+    rescoreBingo(tx, line.bingoId);
     return line;
   });
 }

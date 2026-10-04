@@ -34,7 +34,7 @@ import { TESTDATA_PREFIX } from "../services/devTestDataService";
 import { skipsIntegrations } from "../audit/context";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
-import { changedNothing } from "../audit/record";
+import { changedNothing, diffFields } from "../audit/record";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { countPricedSubmissions, repriceNodeClaims } from "../services/gpRepriceService";
@@ -163,7 +163,8 @@ router.patch(
     const before = req.bingo!;
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
     // What follows a setting runs only when it changed (#456): saving the form untouched starts nothing.
-    const changed = (...keys: (keyof typeof bingo)[]) => keys.some((key) => JSON.stringify(bingo[key]) !== JSON.stringify(before[key]));
+    const diff = diffFields(before, bingo)?.after ?? {};
+    const changed = (...keys: (keyof typeof bingo)[]) => keys.some((key) => key in diff);
     // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
     if (changed("exclusivityRulesJson")) rescoreBingo(db, req.bingo!.id);
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
@@ -368,7 +369,6 @@ router.patch(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     const tile = boardService.updateTile(db, req.params.id as string, req.body);
-    if (!changedNothing()) rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
@@ -388,7 +388,6 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const tile = boardService.updateTileBonusPoints(db, req.params.id as string, points);
-    if (!changedNothing()) rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
@@ -617,7 +616,6 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const line = boardService.updateLinePoints(db, req.params.id as string, points);
-    if (!changedNothing()) rescoreBingo(db, req.bingo!.id);
     res.json({ line });
   }),
 );
