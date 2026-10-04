@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { feedbackAnswers, feedbackResponses, signupAnswers, signupQuestions, signups, teamMembers, teams, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs, getPendingOutgoingPairs } from "./pairingService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { withRsn } from "./playerNames";
 import { parseStoredCaStats } from "./combatAchievements";
@@ -213,19 +213,19 @@ export function updateQuestion(db: Db, id: string, params: Partial<Omit<CreateQu
     const multiplePicks = set.multiplePicks ?? existing.multiplePicks;
     if (!multiplePicks && params.maxPicks === undefined && existing.maxPicks !== null) set.maxPicks = null;
     assertMemberSettings(type, multiplePicks, set.maxPicks === undefined ? existing.maxPicks : set.maxPicks);
-    const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
-
-    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[] });
-    if (changes) {
-      audit(tx, {
-        action: "question.updated",
-        bingoId: existing.bingoId,
-        entity: { type: "question", id, label: existing.prompt },
-        details: { changes: changes as never, ...(existing.form === "feedback" ? { form: "feedback" as const } : {}) },
-      });
-    } else {
-      markAuditedNoop();
+    // Saving the question untouched writes and records nothing (#456).
+    const changes = diffFields(existing, { ...existing, ...set }, { only: Object.keys(set) as (keyof typeof existing)[] });
+    if (!changes) {
+      markUnchanged();
+      return existing;
     }
+    const updated = tx.update(signupQuestions).set(set).where(eq(signupQuestions.id, id)).returning().get();
+    audit(tx, {
+      action: "question.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "question", id, label: existing.prompt },
+      details: { changes: changes as never, ...(existing.form === "feedback" ? { form: "feedback" as const } : {}) },
+    });
     return updated;
   });
 }
@@ -657,6 +657,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
 
     // Only what actually changed is written and recorded: saving the form untouched records nothing.
     let rsnChange: { before: string; after: string } | undefined;
+    let wrote = false;
     if (params.rsn !== undefined) {
       if (!params.rsn.trim()) throw new ServiceError(400, "RSN is required");
       const newRsn = params.rsn.trim();
@@ -670,6 +671,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
       // player made, so not one to record on their own.
       if (rsnChange || womId !== existing.womId || rsnVerified !== existing.rsnVerified) {
         tx.update(signups).set({ rsn: newRsn, womId, rsnVerified, accountBorrowed: keepsBorrowed }).where(eq(signups.id, signupId)).run();
+        wrote = true;
       }
     }
 
@@ -699,6 +701,7 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
         .get();
       // No answer and a blank one are the same thing to the player.
       if ((existingAnswer?.value ?? "") === a.value) continue;
+      wrote = true;
       if (existingAnswer) {
         tx.update(signupAnswers).set({ value: a.value }).where(eq(signupAnswers.id, existingAnswer.id)).run();
       } else {
@@ -721,8 +724,10 @@ export function updateSignup(db: Db, bingo: Bingo, signupId: string, params: Upd
         entity: { type: "signup", id: signupId, label: updated.rsn },
         details: { changes: { before, after } },
       });
-    } else {
+    } else if (wrote) {
       markAuditedNoop();
+    } else {
+      markUnchanged();
     }
     return updated;
   });
@@ -738,7 +743,7 @@ export function setSignupTimezone(db: Db, bingo: Bingo, signupId: string, timezo
     const existing = tx.select().from(signups).where(and(eq(signups.id, signupId), eq(signups.bingoId, bingo.id))).get();
     if (!existing) throw new ServiceError(404, "Signup not found");
     if (existing.timezone === next) {
-      markAuditedNoop();
+      markUnchanged();
       return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
     }
     const updated = tx.update(signups).set({ timezone: next }).where(eq(signups.id, signupId)).returning(PUBLIC_SIGNUP_COLS).get()!;
@@ -912,6 +917,11 @@ export function markBuyin(db: Db, bingo: Bingo, signupId: string, params: MarkBu
     const existing = tx.select().from(signups).where(eq(signups.id, signupId)).get();
     if (!existing || existing.bingoId !== bingo.id) throw new ServiceError(404, "Signup not found");
     const collectedByUserId = params.received ? (params.collectedByUserId ?? null) : null;
+    // Marking it as it already is changes nothing, and keeps when it was received (#456).
+    if (params.received === !!existing.buyinReceivedAt && collectedByUserId === existing.buyinCollectedByUserId) {
+      markUnchanged();
+      return tx.select(PUBLIC_SIGNUP_COLS).from(signups).where(eq(signups.id, signupId)).get()!;
+    }
     const updated = tx
       .update(signups)
       .set({

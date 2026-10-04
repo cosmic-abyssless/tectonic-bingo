@@ -8,7 +8,7 @@ import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 import { MINIMAL_USER_COLS, PUBLIC_USER_COLS } from "./userService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import * as achievementService from "./achievementService";
@@ -365,24 +365,25 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
     const existing = tx.select().from(teams).where(eq(teams.id, teamId)).get();
     if (!existing) throw new ServiceError(404, "Team not found");
 
+    // Only what differs is written: an update that changes nothing writes and records nothing (#456).
     const patch: UpdateTeamParams = {};
     if (params.name !== undefined) {
       if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
-      patch.name = params.name.trim();
+      if (params.name.trim() !== existing.name) patch.name = params.name.trim();
     }
     if (params.color !== undefined) {
       if (params.color !== null && typeof params.color !== "string") throw new ServiceError(400, "color must be a string or null");
-      patch.color = params.color;
+      if (params.color !== existing.color) patch.color = params.color;
     }
     if (params.codeword !== undefined) {
       if (typeof params.codeword !== "string" || !params.codeword.trim()) throw new ServiceError(400, "codeword must be a non-empty string");
       const codeword = params.codeword.trim();
       const clash = tx.select({ id: teams.id }).from(teams).where(and(eq(teams.bingoId, existing.bingoId), eq(teams.codeword, codeword))).get();
       if (clash && clash.id !== teamId) throw new ServiceError(409, "Another team in this bingo already uses that password");
-      patch.codeword = codeword;
+      if (codeword !== existing.codeword) patch.codeword = codeword;
     }
     if (Object.keys(patch).length === 0) {
-      markAuditedNoop();
+      markUnchanged();
       return existing;
     }
     const updated = tx.update(teams).set(patch).where(eq(teams.id, teamId)).returning().get();
@@ -395,7 +396,7 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
       teamId,
       details: {
         changes: (changes ?? { before: {}, after: {} }) as FieldChanges<{ name: string; color: string | null }>,
-        ...(params.codeword !== undefined ? { codeword: { changed: true as const } } : {}),
+        ...(patch.codeword !== undefined ? { codeword: { changed: true as const } } : {}),
       },
     });
     return updated;

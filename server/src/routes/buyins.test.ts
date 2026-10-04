@@ -190,8 +190,8 @@ describe("Moderators and Admins", () => {
   it("keep their Buy-in powers, on the Buy-ins page too", async () => {
     expect((await call("mod", "GET", "/bingos/b1/buyins")).status).toBe(200);
     expect((await call("mod", "PATCH", `/bingos/b1/buyins/${signupId}`, { received: true })).status).toBe(204);
-    expect((await call("mod", "PATCH", `/bingos/b1/mod/signups/${signupId}/buyin`, { received: true })).status).toBe(200);
-    expect((await call("admin", "PATCH", `/bingos/b1/buyins/${signupId}`, { received: false })).status).toBe(204);
+    expect((await call("mod", "PATCH", `/bingos/b1/mod/signups/${signupId}/buyin`, { received: false })).status).toBe(200);
+    expect((await call("admin", "PATCH", `/bingos/b1/buyins/${signupId}`, { received: true })).status).toBe(204);
     const roles = db.select({ role: schema.auditLog.actorRole }).from(schema.auditLog).where(eq(schema.auditLog.action, "signup.buyin_marked")).all().map((r) => r.role);
     expect(roles).toEqual(["mod", "mod", "admin"]);
   });

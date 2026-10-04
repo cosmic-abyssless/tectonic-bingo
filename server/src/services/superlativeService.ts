@@ -8,7 +8,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { superlativeCategories, superlativeVotes, teamMembers, users } from "../db/schema";
 import { ServiceError } from "./errors";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { PUBLIC_USER_COLS } from "./userService";
 import { withRsn } from "./playerNames";
 import { getAcceptedPairs } from "./pairingService";
@@ -59,18 +59,17 @@ export function renameCategory(db: Db, id: string, name: string) {
   return db.transaction((tx) => {
     const existing = tx.select().from(superlativeCategories).where(eq(superlativeCategories.id, id)).get();
     if (!existing) throw new ServiceError(404, "Superlative category not found");
-    const updated = tx.update(superlativeCategories).set({ name: nextName }).where(eq(superlativeCategories.id, id)).returning().get();
-    const changes = diffFields(existing, updated, { only: ["name"] });
-    if (changes) {
-      audit(tx, {
-        action: "superlative.category_updated",
-        bingoId: existing.bingoId,
-        entity: { type: "superlative_category", id, label: existing.name },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
+    if (existing.name === nextName) {
+      markUnchanged();
+      return existing;
     }
+    const updated = tx.update(superlativeCategories).set({ name: nextName }).where(eq(superlativeCategories.id, id)).returning().get();
+    audit(tx, {
+      action: "superlative.category_updated",
+      bingoId: existing.bingoId,
+      entity: { type: "superlative_category", id, label: existing.name },
+      details: { changes: diffFields(existing, updated, { only: ["name"] }) as never },
+    });
     return updated;
   });
 }

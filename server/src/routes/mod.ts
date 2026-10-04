@@ -30,7 +30,7 @@ import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../se
 import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
-import { markAuditedNoop } from "../audit/record";
+import { changedNothing, markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
 import { repriceSubmission } from "../services/gpRepriceService";
@@ -388,7 +388,7 @@ router.patch(
       collectedByUserId,
       recordedByUserId: req.user!.id,
     });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    if (!changedNothing()) broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -400,7 +400,7 @@ router.patch(
     const { timezone } = req.body as { timezone?: string | null };
     if (timezone !== null && typeof timezone !== "string") throw new ServiceError(400, "timezone must be a string or null");
     const signup = signupService.setSignupTimezone(db, req.bingo!, req.params.id as string, timezone, req.user!.id);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    if (!changedNothing()) broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );

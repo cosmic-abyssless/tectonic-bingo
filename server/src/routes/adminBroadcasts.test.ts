@@ -17,6 +17,8 @@ const broadcast = vi.fn<(event: BroadcastEvent, options?: { to?: readonly string
 vi.mock("../ws", () => ({ broadcast: (event: BroadcastEvent, options?: { to?: readonly string[] }) => broadcast(event, options) }));
 vi.mock("../services/womCompetitionService", () => ({ syncWomCompetition: vi.fn(async () => {}), checkWomGroup: vi.fn(async () => ({ ok: true })) }));
 vi.mock("../services/discordTeamService", () => ({ syncDiscordTeams: vi.fn(async () => {}), removeDiscordTeams: vi.fn(), getDiscordSyncStatus: vi.fn() }));
+import { syncWomCompetition } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 vi.mock("../db", async () => {
   const { createTestDb } = await import("../testUtils/testDb");
   return { ...createTestDb(), DB_PATH: ":memory:", BUSY_TIMEOUT_MS: 0 };
@@ -39,6 +41,7 @@ beforeAll(async () => {
   const { default: bingosRouter } = await import("./bingos");
   const { default: adminRouter } = await import("./admin");
   const { errorHandler } = await import("../middleware/errorHandler");
+  const { auditContext } = await import("../audit/middleware");
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -47,6 +50,7 @@ beforeAll(async () => {
     req.isAuthenticated = (() => !!actingAs) as typeof req.isAuthenticated;
     next();
   });
+  app.use(auditContext);
   app.use("/api/bingos/:slug/admin", adminRouter);
   app.use("/api/bingos", bingosRouter);
   app.use(errorHandler);
@@ -75,6 +79,8 @@ beforeEach(() => {
   db.insert(schema.teamMembers).values({ teamId: team.id, userId: captain.id, isCaptain: true }).run();
   db.insert(schema.teamMembers).values({ teamId: team.id, userId: coCaptain.id, isCoCaptain: true }).run();
   broadcast.mockClear();
+  vi.mocked(syncWomCompetition).mockClear();
+  vi.mocked(syncDiscordTeams).mockClear();
 });
 
 async function call(as: SessionUser, method: string, path: string, body?: unknown) {
@@ -119,6 +125,28 @@ describe("an Admin write", () => {
     expect(await call(admin, "POST", "/admin/questions", { prompt: "Favourite boss?", type: "text" })).toBe(201);
     expect(await call(admin, "POST", "/admin/superlatives", { name: "MVP" })).toBe(201);
     expect(sent()).toEqual([bingoEvent("questions_changed"), bingoEvent("superlative_categories_changed")]);
+  });
+
+  it("that changes nothing writes no audit entry, tells nobody and starts no sync (#456)", async () => {
+    expect(await call(admin, "PATCH", `/admin/teams/${team.id}`, { color: "#123456" })).toBe(200);
+    broadcast.mockClear();
+    vi.mocked(syncWomCompetition).mockClear();
+    vi.mocked(syncDiscordTeams).mockClear();
+    const audited = () => db.select().from(schema.auditLog).all().length;
+    const entries = audited();
+
+    expect(await call(admin, "PATCH", `/admin/teams/${team.id}`, { name: "Team A", color: "#123456", codeword: "alpha" })).toBe(200);
+    expect(await call(admin, "PATCH", "/admin/settings", { name: "B1", description: bingo.description })).toBe(200);
+    expect(broadcast).not.toHaveBeenCalled();
+    expect(syncWomCompetition).not.toHaveBeenCalled();
+    expect(syncDiscordTeams).not.toHaveBeenCalled();
+    expect(audited()).toBe(entries);
+  });
+
+  it("to a Team's colour alone syncs Discord but not the WOM competition", async () => {
+    expect(await call(admin, "PATCH", `/admin/teams/${team.id}`, { name: "Team A", color: "#654321" })).toBe(200);
+    expect(syncDiscordTeams).toHaveBeenCalled();
+    expect(syncWomCompetition).not.toHaveBeenCalled();
   });
 
   it("that's refused, or only reads, tells nobody anything", async () => {

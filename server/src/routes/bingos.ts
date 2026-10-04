@@ -48,6 +48,7 @@ import { refreshPricesAndFill } from "../services/gpValueService";
 import { broadcast } from "../ws";
 import { anonymous, auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
+import { changedNothing } from "../audit/record";
 
 const upload = imageUpload(UPLOADS_DIR, { variants: true });
 // Separate instance for analysis — memory only, nothing saved to disk.
@@ -583,7 +584,7 @@ router.patch(
       discordId: req.user!.discordId,
       linkedRsns: (membership.member?.rsns ?? []).map((r) => r.rsn),
     });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    if (!changedNothing()) broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -943,9 +944,12 @@ router.patch(
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
-    broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
-    void syncWomCompetition(db, req.bingo!.id);
-    void syncDiscordTeams(db, req.bingo!.id);
+    // The same name again changes nothing, so it tells nobody and syncs nothing (#456).
+    if (updated.name !== team.name) {
+      broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
+      void syncWomCompetition(db, req.bingo!.id);
+      void syncDiscordTeams(db, req.bingo!.id);
+    }
     res.json({ team: updated });
   }),
 );

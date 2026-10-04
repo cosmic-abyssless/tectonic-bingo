@@ -114,6 +114,25 @@ export function markAuditedNoop(): void {
 }
 
 /**
+ * Records that an update found nothing to change, so it wrote nothing (#456). Stronger than markAuditedNoop, which a
+ * write that changes something it doesn't audit (a secret vote) also calls: this one promises nothing changed.
+ */
+export function markUnchanged(): void {
+  const ctx = getAuditContext();
+  if (!ctx) return;
+  ctx.recorded++;
+  ctx.unchanged = (ctx.unchanged ?? 0) + 1;
+}
+
+/**
+ * Whether this request changed nothing: everything it recorded was markUnchanged(). Such a request broadcasts nothing
+ * and starts no syncs (docs/postmortems/2026-10-03-colour-picker.md). False outside a request.
+ */
+export function changedNothing(ctx: AuditContext | undefined = getAuditContext()): boolean {
+  return !!ctx?.unchanged && ctx.unchanged === ctx.recorded;
+}
+
+/**
  * Changed-fields-only diff. Dates are normalized to ISO strings so the
  * output matches the string-typed fields in AuditDetailsMap. Returns null
  * when nothing in scope changed (callers should call markAuditedNoop() in
