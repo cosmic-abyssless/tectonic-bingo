@@ -1,5 +1,6 @@
 import type { SignificanceTier } from "@bingo/shared";
 import type { RewindTimelineModel } from "../../../headless/types";
+import { RangeInput } from "../../../core/ui/RangeInput";
 
 // How tall each tier's tick stands, as a share of the track.
 const TICK_HEIGHT: Record<SignificanceTier, string> = { minor: "28%", notable: "58%", huge: "92%" };
@@ -34,15 +35,14 @@ export function RewindTimeline({ timeline }: { timeline: RewindTimelineModel }) 
           ))}
           <span className="absolute -inset-y-1 w-0.5 -translate-x-1/2 bg-on-surface" style={{ left: pct(timeline.position) }} />
         </div>
-        <input
-          type="range"
+        <RangeInput
           aria-label="Moment in the bingo"
           aria-valuetext={`${timeline.atLabel}, ${timeline.atClockLabel}`}
           min={timeline.start}
           max={timeline.end}
           step={1000}
           value={timeline.at}
-          onChange={(e) => timeline.seek(Number(e.target.value))}
+          onChange={timeline.seek}
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
       </div>
