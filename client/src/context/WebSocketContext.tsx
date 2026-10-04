@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BroadcastEvent } from "@bingo/shared";
+import type { BroadcastEvent, ClientSocketMessage } from "@bingo/shared";
 import { useAuth } from "./AuthContext";
-import { keyMentions, otherBingoSlugs } from "../api/bingoScope";
+import { keyMentions, otherBingoSlugs, watchedBingoIds } from "../api/bingoScope";
 
 type Listener = (event: BroadcastEvent) => void;
 
@@ -57,11 +57,39 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["bingo"]);
       break;
     case "team_updated":
+      // Team names, colours and members: the board's header and team picker.
       invalidate(["bingo"]);
       // The scouting/draft room lists teams from draft state.
       invalidate(["draftState"]);
       // Who can vote, and a removed Player's votes, change with the Team.
       invalidate(["superlatives"]);
+      // The mod roster shows each Player's Team, and who can still captain one changes with them.
+      invalidate(["signupRoster"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "mods_changed":
+      invalidate(["adminMods"]);
+      invalidate(["adminStaff"]);
+      invalidate(["bingoMods"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "questions_changed":
+      invalidate(["adminQuestions"]);
+      invalidate(["signupQuestions"]);
+      // The Feedback form's questions are edited there too.
+      invalidate(["feedback"]);
+      // The roster's answer columns.
+      invalidate(["signupRoster"]);
+      break;
+    case "superlative_categories_changed":
+      invalidate(["adminSuperlatives"]);
+      // Deleting a category drops its votes.
+      invalidate(["superlatives"]);
+      break;
+    case "wrapped_art_changed":
+      invalidate(["adminWrappedArt"]);
+      // Published Wrapped shows the art as it is now.
+      invalidate(["wrapped"]);
       break;
     case "bingo_changed":
       invalidate(["bingo"]);
@@ -246,6 +274,25 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // the first connect needs nothing (the queries are loading anyway).
     let hasConnected = false;
 
+    // The Bingos the server sends this client live events for: those it has a shell for (ClientSocketMessage), sent on
+    // connecting and whenever a shell is cached or dropped. A Bingo's events start arriving once its shell has loaded,
+    // about when its page's other queries do.
+    let lastWatch: string | null = null;
+    function sendWatch() {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const bingoIds = watchedBingoIds(queryClient.getQueryCache().findAll({ queryKey: ["bingo"] }).map((q) => q.state));
+      const key = bingoIds.join(",");
+      // Nothing to narrow to yet (no shell loaded): it keeps hearing everything rather than nothing.
+      if (key === lastWatch || (lastWatch === null && bingoIds.length === 0)) return;
+      lastWatch = key;
+      const msg: ClientSocketMessage = { type: "watch", bingoIds };
+      ws.send(JSON.stringify(msg));
+    }
+    const stopWatchingCache = queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === "bingo") sendWatch();
+    });
+
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
@@ -254,6 +301,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       ws.onopen = () => {
         if (hasConnected) queryClient.invalidateQueries();
         hasConnected = true;
+        // A new connection hears every Bingo until told.
+        lastWatch = null;
+        sendWatch();
       };
       ws.onmessage = (event) => {
         try {
@@ -277,6 +327,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     connect();
     return () => {
       closed = true;
+      stopWatchingCache();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
