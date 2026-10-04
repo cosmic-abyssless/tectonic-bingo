@@ -125,6 +125,13 @@ export function BingoPageProvider({
   // the entry before it, and otherwise (a link that arrived open) just removes the param. Switching what's open
   // replaces it, so one Back still closes it.
   const openedHere = (location.state as { opened?: string } | null)?.opened;
+  // The history entry already gone Back from: Back lands a moment later, so until then this page still shows it open,
+  // and a second close (a double-click outside the Tile) would go Back a second time, off the board.
+  const wentBackFrom = useRef<string | null>(null);
+  // Landing anywhere (Back, or Forward onto that same entry again) makes a close go Back again.
+  useEffect(() => {
+    wentBackFrom.current = null;
+  }, [location.key]);
   const openParam = (name: string, value: string) => {
     if (searchParams.get(name) === value) return;
     if (searchParams.get(name) !== null) setUrl({ [name]: value });
@@ -132,8 +139,11 @@ export function BingoPageProvider({
   };
   const closeParam = (name: string) => {
     if (searchParams.get(name) === null) return;
-    if (openedHere === name) navigate(-1);
-    else setUrl({ [name]: null });
+    if (openedHere !== name) setUrl({ [name]: null });
+    else if (wentBackFrom.current !== location.key) {
+      wentBackFrom.current = location.key;
+      navigate(-1);
+    }
   };
   const showDialog = (which: BoardDialog) => openParam(OPEN_PARAM, which);
   const hideDialog = (which: BoardDialog) => {
