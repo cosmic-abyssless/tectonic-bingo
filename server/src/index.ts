@@ -51,6 +51,8 @@ import { createMcpRouter } from "./mcp/router";
 import { startReplicaJob } from "./mcp/sql/replica";
 import { LoadWarnings, loadWarningSettings, loadWarningsEnabled, startEventLoopMonitor } from "./loadWarnings";
 import { loadWarningsMiddleware } from "./middleware/loadWarnings";
+import { WriteLimit, writeLimitMiddleware, writeLimitPerWindow } from "./middleware/writeLimit";
+import { buildHeaders, readBuildId, setBuildId } from "./buildInfo";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -180,6 +182,13 @@ app.use(requestLog);
 // Unsampled counters that raise Sentry warning issues when the server is slow or flooded (loadWarnings.ts).
 const loadWarnings = loadWarningsEnabled() ? new LoadWarnings({ settings: loadWarningSettings() }) : null;
 if (loadWarnings) app.use(loadWarningsMiddleware(loadWarnings));
+// The build this server serves, on every API response, so an open page from an older build offers a reload (buildInfo.ts).
+const CLIENT_DIST = path.join(__dirname, "../../client/dist");
+setBuildId(readBuildId(CLIENT_DIST));
+app.use("/api", buildHeaders);
+// One user's API writes are capped, so one page (or an old tab) can't flood the server (middleware/writeLimit.ts).
+const writesPerWindow = writeLimitPerWindow();
+if (writesPerWindow) app.use(writeLimitMiddleware(new WriteLimit(writesPerWindow), loadWarnings ? (hit) => loadWarnings.recordWriteLimited(hit) : undefined));
 
 // Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -226,7 +235,7 @@ app.use("/api/client-errors", clientErrorsRouter);
 // mismatch, and the client's already-relative fetch/WS URLs (see
 // WebSocketContext.tsx's `window.location.host`) just work unmodified.
 // The built client, when there is one (see mountClientApp; in dev the client is served by Vite instead).
-mountClientApp(app, path.join(__dirname, "../../client/dist"), readRuntimeConfig());
+mountClientApp(app, CLIENT_DIST, readRuntimeConfig());
 
 // After every route, before our own handler: reports unexpected errors (not deliberate 4xx refusals) to Sentry.
 Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });

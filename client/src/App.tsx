@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { onSlowDown } from "./api/client";
 import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
-import { ToastRegion } from "./core/ui/Toast";
+import { ToastRegion, toastOnce } from "./core/ui/Toast";
+import { NewVersionNotice } from "./core/ui/NewVersionNotice";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
 import { PhoneLogin } from "./pages/PhoneLogin";
@@ -39,6 +42,12 @@ function BingoGoneRedirect() {
 
 function AccessWatch() {
   useAccessWatch();
+  return null;
+}
+
+// The server's write limit refused a write (a 429): its "Slow down" message, once for the whole burst.
+function SlowDownNotice() {
+  useEffect(() => onSlowDown((error) => toastOnce("slow-down", { title: error.message, tone: "warning" })), []);
   return null;
 }
 
@@ -150,6 +159,8 @@ export default function App() {
           </Routes>
           <BingoGoneRedirect />
           <AccessWatch />
+          <SlowDownNotice />
+          <NewVersionNotice />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>

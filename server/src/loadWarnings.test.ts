@@ -84,6 +84,25 @@ describe("slow_request", () => {
   });
 });
 
+describe("write_limited", () => {
+  it("fires when the write limit refuses a write, once per throttle window", () => {
+    const { warnings, advance, reported, kinds } = setup();
+    const hit = { userId: "u1", method: "PATCH", area: "/api/bingos/:slug/admin", perWindow: 30 };
+    times(5, () => warnings.recordWriteLimited(hit));
+    expect(reported).toEqual([
+      {
+        kind: "write_limited",
+        message: "Write limit: one user went over 30 writes in 10 s, refused at PATCH /api/bingos/:slug/admin",
+        fingerprint: ["load-warning", "write_limited"],
+        extra: hit,
+      },
+    ]);
+    advance(10 * 60_000);
+    warnings.recordWriteLimited({ ...hit, userId: "u2" });
+    expect(kinds()).toEqual(["write_limited", "write_limited"]);
+  });
+});
+
 describe("user_write_flood", () => {
   it("fires on the write past the limit, naming the user, routes and Bingos", () => {
     const { write, reported } = setup();

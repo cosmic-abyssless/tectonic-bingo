@@ -1631,6 +1631,12 @@ export type BroadcastEvent =
  * never sends one gets everything. At most MAX_WATCHED_BINGOS ids, or the message is ignored.
  */
 export type ClientSocketMessage = { type: "watch"; bingoIds: string[] };
+
+/**
+ * What the server sends a socket of its own accord, not a broadcast. `hello`, once on connect: the build it serves, so
+ * an open page from an older build offers a reload (or, with forceReload, reloads). Not sent without a build id.
+ */
+export type ServerSocketMessage = { type: "hello"; buildId: string; forceReload: boolean };
 export const MAX_WATCHED_BINGOS = 50;
 
 export * from "./achievements.ts";

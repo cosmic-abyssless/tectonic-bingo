@@ -5,10 +5,11 @@ import * as schema from "../db/schema";
 import { bingoLines, claims, nodeEdges, submissions, tags, teamNodeState, tileCategories, tileInterests, tiles } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { describeTaskNode } from "../audit/describe";
 import { areTilesSealed, canViewTiles } from "./bingoService";
 import { tileSearchTags } from "./tagService";
+import { rescoreBingo } from "./scoringService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -170,19 +171,18 @@ export function updateCategory(db: Db, id: string, params: Partial<Omit<CreateCa
   return db.transaction((tx) => {
     const existing = tx.select().from(tileCategories).where(eq(tileCategories.id, id)).get();
     if (!existing) throw new ServiceError(404, "Category not found");
-    const updated = tx.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
-
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
-    if (changes) {
-      audit(tx, {
-        action: "category.updated",
-        bingoId: existing.bingoId,
-        entity: { type: "category", id, label: existing.label },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
+    const changes = diffFields(existing, { ...existing, ...params }, { only: Object.keys(params) as (keyof typeof existing)[] });
+    if (!changes) {
+      markUnchanged();
+      return existing;
     }
+    const updated = tx.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
+    audit(tx, {
+      action: "category.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "category", id, label: existing.label },
+      details: { changes: changes as never },
+    });
     return updated;
   });
 }
@@ -307,21 +307,23 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
   return db.transaction((tx) => {
     const existing = tx.select().from(tiles).where(eq(tiles.id, id)).get();
     if (!existing) throw new ServiceError(404, "Tile not found");
-    const updated = tx.update(tiles).set({ ...params, ...tileProofFields(params) }).where(eq(tiles.id, id)).returning().get();
+    const set = { ...params, ...tileProofFields(params) };
+    const changes = diffFields(existing, { ...existing, ...set }, { only: Object.keys(set) as (keyof typeof existing)[] });
+    if (!changes) {
+      markUnchanged();
+      return existing;
+    }
+    const updated = tx.update(tiles).set(set).where(eq(tiles.id, id)).returning().get();
     if (updated.requiresProof && !existing.requiresProof) clearTaskProofs(tx, updated);
     if (updated.boardRow !== existing.boardRow || updated.boardCol !== existing.boardCol) syncTileLines(tx, updated);
-
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
-    if (changes) {
-      audit(tx, {
-        action: "tile.updated",
-        bingoId: existing.bingoId,
-        entity: { type: "tile", id, label: existing.name },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
-    }
+    audit(tx, {
+      action: "tile.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "tile", id, label: existing.name },
+      details: { changes: changes as never },
+    });
+    // Scores are a snapshot (rescoreBingo), so an edit that changed something re-scores; one that changed nothing doesn't.
+    rescoreBingo(tx, existing.bingoId);
     return updated;
   });
 }
@@ -336,6 +338,10 @@ export function updateTileBonusPoints(db: Db, tileId: string, points: number) {
     const tile = tx.select().from(tiles).where(eq(tiles.id, tileId)).get();
     if (!tile) throw new ServiceError(404, "Tile not found");
     const node = tx.select({ points: schema.nodes.points }).from(schema.nodes).where(eq(schema.nodes.id, tile.nodeId)).get()!;
+    if (node.points === points) {
+      markUnchanged();
+      return tile;
+    }
     tx.update(schema.nodes).set({ points }).where(eq(schema.nodes.id, tile.nodeId)).run();
     audit(tx, {
       action: "tile.bonus_points_updated",
@@ -343,6 +349,7 @@ export function updateTileBonusPoints(db: Db, tileId: string, points: number) {
       entity: { type: "tile", id: tile.id, label: tile.name },
       details: { points: { before: node.points, after: points } },
     });
+    rescoreBingo(tx, tile.bingoId);
     return tile;
   });
 }
@@ -512,6 +519,10 @@ export function updateLinePoints(db: Db, id: string, points: number) {
     const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
     if (!line) throw new ServiceError(404, "Line not found");
     const node = tx.select({ points: schema.nodes.points }).from(schema.nodes).where(eq(schema.nodes.id, line.nodeId)).get()!;
+    if (node.points === points) {
+      markUnchanged();
+      return line;
+    }
     tx.update(schema.nodes).set({ points }).where(eq(schema.nodes.id, line.nodeId)).run();
     audit(tx, {
       action: "line.updated",
@@ -519,6 +530,7 @@ export function updateLinePoints(db: Db, id: string, points: number) {
       entity: { type: "line", id: line.id, label: `${line.lineType} ${line.lineIndex}` },
       details: { lineType: line.lineType, lineIndex: line.lineIndex, points: { before: node.points, after: points } },
     });
+    rescoreBingo(tx, line.bingoId);
     return line;
   });
 }

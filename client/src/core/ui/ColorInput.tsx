@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
+import { useNativeChange } from "./useNativeChange";
 
 type ColorInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "defaultValue" | "onChange"> & {
   value: string;
@@ -14,21 +15,12 @@ type ColorInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "val
 export function ColorInput({ value, onCommit, ...props }: ColorInputProps) {
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
-  const latest = useRef({ value, onCommit });
   useEffect(() => {
-    latest.current = { value, onCommit };
     setDraft(value);
-  }, [value, onCommit]);
-
-  useEffect(() => {
-    const input = ref.current;
-    if (!input) return;
-    const commit = () => {
-      if (input.value !== latest.current.value) latest.current.onCommit(input.value);
-    };
-    input.addEventListener("change", commit);
-    return () => input.removeEventListener("change", commit);
-  }, []);
+  }, [value]);
+  useNativeChange(ref, (input) => {
+    if (input.value !== value) onCommit(input.value);
+  });
 
   return <input {...props} ref={ref} type="color" value={draft} onChange={(e) => setDraft(e.target.value)} />;
 }

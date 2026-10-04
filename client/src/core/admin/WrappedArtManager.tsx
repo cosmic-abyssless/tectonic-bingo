@@ -23,6 +23,7 @@ import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs";
 import { StickerArt } from "../wrapped/StickerArt";
 import { ExternalLink } from "../ui/ExternalLink";
 import { FileDropButton } from "../ui/FileDropButton";
+import { RangeInput } from "../ui/RangeInput";
 
 const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
   intro: { label: "Intro", hint: "The opening screen" },
@@ -391,7 +392,7 @@ function KeyingSlider({ label, hint, min, max, value, onChange }: { label: strin
         </span>
         <span className="num text-on-surface">{value}</span>
       </span>
-      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-on-surface" />
+      <RangeInput min={min} max={max} value={value} onChange={onChange} className="w-full accent-on-surface" />
     </label>
   );
 }

@@ -240,6 +240,15 @@ describe("audit trail", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("updateTeam with the values it already has records nothing (#456)", () => {
+    const { bingo, captain } = seedBingoAndUsers();
+    const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id, name: "Alpha" });
+    updateTeam(db, team.id, { color: "#123456" });
+    updateTeam(db, team.id, { name: " Alpha ", color: "#123456", codeword: team.codeword });
+    const rows = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "team.updated")).all();
+    expect(rows).toHaveLength(1);
+  });
+
   it("addTeamMember / removeTeamMember record their actions", () => {
     const { bingo, captain, member } = seedBingoAndUsers();
     const team = createTeam(db, { bingoId: bingo.id, captainUserId: captain.id });

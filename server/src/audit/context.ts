@@ -11,6 +11,11 @@ export interface AuditContext {
   actorRole: AuditActorRole;
   /** How many rows this request has already recorded — read by the http.mutation fallback. */
   recorded: number;
+  /**
+   * How many of those were markUnchanged(): a write that changed nothing at all. When every one was, the request
+   * changed nothing, so it tells nobody and starts no syncs (changedNothing(), #456).
+   */
+  unchanged?: number;
   /** Set via auditSkip() to suppress the fallback for a route that intentionally records nothing. */
   skip: string | null;
   /** Set via anonymous(): the route is anonymous, so the request log line names no user either. */

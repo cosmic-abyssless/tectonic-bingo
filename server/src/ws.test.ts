@@ -182,6 +182,20 @@ describe("watching Bingos", () => {
   });
 });
 
+describe("the hello", () => {
+  it("tells a socket the build the server serves, first thing, and isn't sent without one", async () => {
+    const { setBuildId } = await import("./buildInfo");
+    setBuildId("abc123");
+    try {
+      const socket = new WebSocket(`ws://${base}/ws`, { headers: { cookie: await login("member") } });
+      expect(await nextMessage(socket)).toEqual({ type: "hello", buildId: "abc123", forceReload: false });
+      socket.close();
+    } finally {
+      setBuildId(null);
+    }
+  });
+});
+
 describe("logging out", () => {
   it("closes that session's sockets, and only those", async () => {
     const cookie = await login("member");

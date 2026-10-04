@@ -34,6 +34,7 @@ import { TESTDATA_PREFIX } from "../services/devTestDataService";
 import { skipsIntegrations } from "../audit/context";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
+import { changedNothing, diffFields } from "../audit/record";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { countPricedSubmissions, repriceNodeClaims } from "../services/gpRepriceService";
@@ -47,11 +48,11 @@ router.use(requireAuth, requireBingo, requireAdmin);
 
 // Every successful mutation here changes what other clients are looking at, so tell them to refetch: bingo_changed
 // (the board and settings, and everything scored from them) unless the route said what it changed with broadcastInstead.
-// (A read-only POST sets res.locals.readOnly.)
+// (A read-only POST sets res.locals.readOnly.) A write that changed nothing tells nobody (changedNothing, #456).
 router.use((req, res, next) => {
   if (req.method !== "GET") {
     res.on("finish", () => {
-      if (res.statusCode >= 400 || res.locals.readOnly) return;
+      if (res.statusCode >= 400 || res.locals.readOnly || changedNothing(req.audit)) return;
       const instead = res.locals.broadcast as BroadcastEvent | BroadcastEvent[] | false | undefined;
       if (instead === false) return;
       for (const event of instead === undefined ? [{ type: "bingo_changed", bingoId: req.bingo!.id, payload: {} } as const] : [instead].flat()) broadcast(event);
@@ -159,13 +160,17 @@ router.patch(
       }
       params.achievements = switches;
     }
+    const before = req.bingo!;
     const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
+    // What follows a setting runs only when it changed (#456): saving the form untouched starts nothing.
+    const diff = diffFields(before, bingo)?.after ?? {};
+    const changed = (...keys: (keyof typeof bingo)[]) => keys.some((key) => key in diff);
     // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
-    if (params.exclusivityRules !== undefined) rescoreBingo(db, req.bingo!.id);
+    if (changed("exclusivityRulesJson")) rescoreBingo(db, req.bingo!.id);
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
-    if (params.name !== undefined || params.startsAt !== undefined || params.endsAt !== undefined) void syncWomCompetition(db, req.bingo!.id);
+    if (changed("name", "startsAt", "endsAt")) void syncWomCompetition(db, req.bingo!.id);
     // The Discord category carries the bingo's name; turning the sync on, or editing its category or channels, applies them.
-    if (params.name !== undefined || params.discordEnabled || params.discordGuildId !== undefined || params.discordCategoryId !== undefined || params.discordCategoryName !== undefined || params.discordChannels !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    if ((bingo.discordEnabled && !before.discordEnabled) || changed("name", "discordGuildId", "discordCategoryId", "discordCategoryName", "discordChannelsJson")) void syncDiscordTeams(db, req.bingo!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
@@ -364,7 +369,6 @@ router.patch(
   asyncHandler(async (req, res) => {
     bingoService.assertBoardEditable(req.bingo!);
     const tile = boardService.updateTile(db, req.params.id as string, req.body);
-    rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
@@ -384,7 +388,6 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const tile = boardService.updateTileBonusPoints(db, req.params.id as string, points);
-    rescoreBingo(db, req.bingo!.id);
     res.json({ tile });
   }),
 );
@@ -613,7 +616,6 @@ router.patch(
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
     const line = boardService.updateLinePoints(db, req.params.id as string, points);
-    rescoreBingo(db, req.bingo!.id);
     res.json({ line });
   }),
 );
@@ -780,12 +782,15 @@ router.patch(
   "/teams/:id",
   asyncHandler(async (req, res) => {
     const { name, color, codeword } = req.body as teamService.UpdateTeamParams;
+    const before = teamService.getTeamById(db, req.params.id as string);
     const team = teamService.updateTeam(db, req.params.id as string, { name, color, codeword });
+    // The syncs follow what changed (#456): when nothing did, nothing was written and the router tells nobody.
     // Keep the WOM competition's team names in sync with renames made
     // from the admin panel too, not just the captain self-service route.
-    if (name !== undefined) void syncWomCompetition(db, req.bingo!.id);
+    const renamed = team.name !== before?.name;
+    if (renamed) void syncWomCompetition(db, req.bingo!.id);
     // The Team's Discord role carries its name and color, its channels its name.
-    if (name !== undefined || color !== undefined) void syncDiscordTeams(db, req.bingo!.id);
+    if (renamed || team.color !== before?.color) void syncDiscordTeams(db, req.bingo!.id);
     broadcastInstead(res, teamUpdated(req, team.id));
     res.json({ team });
   }),
