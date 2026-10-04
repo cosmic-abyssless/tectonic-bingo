@@ -178,12 +178,12 @@ export function BingoPageProvider({
   // A Restriction on submitting, applied while the submission dialog is open, closes it and says why.
   useCloseOnLoss(viewingTeamId && viewingTeamId !== shell?.myTeam?.id ? "submit_for_any_team" : "submit", submitOpen, () => setSubmitOpen(false), slug);
 
-  // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
-  // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
-  // point sending the request. Sent whenever a Tile or the Rules come open, however they were opened (a click, the
+  // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only from
+  // Board revealed through Live, with the viewer on a team — the server decides (sealed Tiles and hidden rules earn
+  // nothing, and never open for a Player anyway), but there's no point sending the request otherwise. Sent whenever a Tile or the Rules come open, however they were opened (a click, the
   // search box, a link).
   const recordOpened = useRecordAchievementOpened(slug);
-  const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
+  const eligibleForOpens = (shell?.bingo.stage === "reveal" || shell?.bingo.stage === "live") && !!shell?.myTeam;
   const rulesOpen = dialog === "rules";
   useEffect(() => {
     if (openTileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId: openTileId });
