@@ -52,6 +52,7 @@ import {
   draftNodeEdges,
   draftNodes,
   draftTileCategories,
+  draftTags,
   draftTiles,
 } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -477,6 +478,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     // The Draft board (CONTEXT.md), if any: the same tables over again.
+    tx.delete(draftTags).where(eq(draftTags.bingoId, bingoId)).run();
     tx.delete(draftBingoLines).where(eq(draftBingoLines.bingoId, bingoId)).run();
     tx.delete(draftTiles).where(eq(draftTiles.bingoId, bingoId)).run();
     tx.delete(draftNodeEdges).where(inArray(draftNodeEdges.parentId, tx.select({ id: draftNodes.id }).from(draftNodes).where(eq(draftNodes.bingoId, bingoId)))).run();

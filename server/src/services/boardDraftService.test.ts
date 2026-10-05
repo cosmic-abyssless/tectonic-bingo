@@ -439,9 +439,10 @@ describe("deleting the Bingo", () => {
     const s = seed();
     setHeadPoints(s, 60);
     asDraft(s, (t) => updateTile(db, s.vorkath.id, { imageUrl: "/uploads/tiles/draft.png" }, t));
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: s.vorkath.id }, "dragon", t));
     const { files } = deleteBingo(db, s.bingo.id);
     expect(files).toContain("/uploads/tiles/draft.png");
-    for (const table of [schema.boardDrafts, schema.draftNodes, schema.draftNodeEdges, schema.draftTiles, schema.draftBingoLines, schema.draftTileCategories]) {
+    for (const table of [schema.boardDrafts, schema.draftNodes, schema.draftNodeEdges, schema.draftTiles, schema.draftBingoLines, schema.draftTileCategories, schema.draftTags]) {
       expect(db.select().from(table).all()).toHaveLength(0);
     }
   });
