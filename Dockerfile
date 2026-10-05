@@ -25,6 +25,9 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 # ---- build the server (tsc) and the client (tsc + vite) -------------------------------------------------------------
 FROM deps AS build
+# sentry-cli (the source-map upload) checks Sentry's certificate against the system's CA bundle, which the slim image
+# lacks: Node carries its own, so npm works without it. Only the build needs it; the image that runs is unchanged.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 # The commit being built: the Sentry release the client's source maps are uploaded under.
 ARG SENTRY_RELEASE=""
 ENV SENTRY_RELEASE=${SENTRY_RELEASE}
