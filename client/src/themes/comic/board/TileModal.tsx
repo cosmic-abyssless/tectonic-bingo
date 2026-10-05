@@ -9,12 +9,8 @@ import {
   type AnimationPlaybackControls,
   type AnimationSequence,
 } from "motion/react";
-import {
-  Button as AriaButton,
-  Dialog as AriaDialog,
-  Modal as AriaModal,
-  ModalOverlay,
-} from "react-aria-components";
+import { Button as AriaButton } from "react-aria-components";
+import { Overlay } from "react-aria";
 import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";
 import { useTutorial } from "../../../headless";
 import { SubmissionBubble } from "./SubmissionBubble";
@@ -58,6 +54,7 @@ import { getBookPose, setBookAway } from "./bookFlight";
 import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from "./PinnedArt";
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 import { LETTERED } from "../../lettering";
+import { useBookModal } from "./bookModal";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -1182,6 +1179,11 @@ function FlyingBook({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPresent]);
 
+  // The modal around the book (see useBookModal): the page behind it is locked and hidden once the book has landed.
+  const modalRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const { underlayProps, modalProps } = useBookModal({ modalRef, dialogRef, onClose, armed: !opening });
+
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
   // typing in a field.
@@ -1202,11 +1204,11 @@ function FlyingBook({
   }, [isPresent, step]);
 
   return (
-    <ModalOverlay
+    // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
+    <Overlay shouldContainFocus isExiting={!isPresent}>
+    <div
       ref={overlayRef}
-      isOpen
-      onOpenChange={(open) => !open && onClose()}
-      isDismissable
+      {...underlayProps}
       // On a phone the book is drawn twice the screen's width (see `single`);
       // the half that's off-screen must not scroll, and neither may the overlay
       // itself: the book is sized to fit (PHONE_BOOK_MAX_WIDTH), and only a page's
@@ -1224,8 +1226,8 @@ function FlyingBook({
       <div className={`flex min-h-full items-center justify-center ${single ? "" : "py-10"}`}>
         {/* Width is what sizes the book (it's 4:3), so it's capped by the
             viewport's height too — an open comic should fit on screen. */}
-        <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
-          <AriaDialog aria-label={tile.name} className="outline-none">
+        <div ref={modalRef} {...modalProps} className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={tile.name} tabIndex={-1} className="outline-none">
             {/* Inert to the pointer while the book is still flying out (see `opening`). A click on its spot lands on
                 the modal around it, so it doesn't count as clicking off; only the backdrop cancels. */}
             <div style={{ pointerEvents: opening ? "none" : undefined }}>
@@ -1249,10 +1251,11 @@ function FlyingBook({
                 onPostProof={onPostProof}
               />
             </div>
-          </AriaDialog>
-        </AriaModal>
+          </div>
+        </div>
       </div>
-    </ModalOverlay>
+    </div>
+    </Overlay>
   );
 }
 
