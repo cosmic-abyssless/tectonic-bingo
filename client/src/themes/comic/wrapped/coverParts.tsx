@@ -4,6 +4,7 @@ import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { halftoneUrl } from "../fx/halftoneSheet";
 import { burstPoints } from "../ui/Burst";
 import { WRAPPED_PAGE_WIDTH } from "./camera";
+import { LETTERED } from "../../lettering";
 
 // The pieces the front and back covers share. Like the share cards (themes/comic/wrapped/WrappedShareCard), a cover is
 // printed: always on the newsprint palette, so it reads the same in the light and the dark scheme (the pages inside
@@ -36,11 +37,11 @@ export function CoverMasthead({ kicker, name, flag }: { kicker: string; name?: s
         Tectonic
       </div>
       <div className="min-w-0 flex-1 px-3 py-1.5">
-        <p className="uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 12, letterSpacing: "0.08em", color: COVER.INK_SUBTLE, lineHeight: 1 }}>
+        <p className={`${LETTERED} uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 12, letterSpacing: "0.08em", color: COVER.INK_SUBTLE, lineHeight: 1 }}>
           {kicker}
         </p>
         {name && (
-          <p className="truncate" style={{ fontFamily: COMIC_FONT, fontSize: name.length > 18 ? 24 : 30, lineHeight: 1.05, color: COVER.INK }}>
+          <p className={`${LETTERED} truncate`} style={{ fontFamily: COMIC_FONT, fontSize: name.length > 18 ? 24 : 30, lineHeight: 1.05, color: COVER.INK }}>
             {name}
           </p>
         )}
@@ -54,7 +55,7 @@ export function CoverMasthead({ kicker, name, flag }: { kicker: string; name?: s
 export function CoverCaption({ children, fill = COVER.PAPER_RAISED, tilt = 0, size = 16, style }: { children: ReactNode; fill?: string; tilt?: number; size?: number; style?: CSSProperties }) {
   return (
     <div
-      className="uppercase"
+      className={`${LETTERED} uppercase`}
       style={{ background: fill, border: `3px solid ${COVER.INK}`, boxShadow: coverShadow(3), padding: "4px 10px", fontFamily: COMIC_FONT, fontSize: size, lineHeight: 1.05, letterSpacing: "0.04em", color: COVER.INK, transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
     >
       {children}
@@ -71,7 +72,7 @@ export function CoverBurst({ fill = COVER.YELLOW, size, tilt = -8, children }: {
         <polygon points={points} fill={COVER.INK} transform="translate(3 3.5)" />
         <polygon points={points} fill={fill} stroke={COVER.INK} strokeWidth={2.5} strokeLinejoin="round" />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center uppercase leading-none" style={{ fontFamily: COMIC_FONT, color: COVER.INK }}>
+      <div className={`${LETTERED} absolute inset-0 flex flex-col items-center justify-center text-center uppercase leading-none`} style={{ fontFamily: COMIC_FONT, color: COVER.INK }}>
         {children}
       </div>
     </div>
@@ -82,6 +83,7 @@ export function CoverBurst({ fill = COVER.YELLOW, size, tilt = -8, children }: {
 export function CoverTitle({ children, size, as: Tag = "h2" }: { children: ReactNode; size: number; as?: "h1" | "h2" }) {
   return (
     <Tag
+      className={LETTERED}
       style={{
         maxWidth: "100%",
         fontFamily: COMIC_FONT,

@@ -3,6 +3,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { Swatch } from "./TeamSelector";
+import { LETTERED } from "../../lettering";
 
 /**
  * Nothing to show yet: whoever can pick a team (a mod, or anyone once the
@@ -18,7 +19,7 @@ export function NoTeamStage({ selector }: { selector: TeamSelectorModel }) {
       className="mx-auto flex max-w-2xl flex-col items-center gap-4 border-[3px] px-5 py-6 text-center"
       style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK }}
     >
-      <h2 className="text-3xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
+      <h2 className={`${LETTERED} text-3xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
         Select a team to view
       </h2>
       <ul className="flex flex-wrap items-center justify-center gap-3">
@@ -28,7 +29,7 @@ export function NoTeamStage({ selector }: { selector: TeamSelectorModel }) {
               <Swatch color={team.color} />
               <span className="max-w-[14rem] truncate">{team.name}</span>
               {team.isMine && (
-                <span className="text-sm opacity-60" style={{ fontFamily: COMIC_FONT }}>
+                <span className={`${LETTERED} text-sm opacity-60`} style={{ fontFamily: COMIC_FONT }}>
                   You
                 </span>
               )}

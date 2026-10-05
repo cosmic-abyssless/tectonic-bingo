@@ -7,6 +7,7 @@ import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { ProofNeeded } from "./ProofNeeded";
+import { LETTERED } from "../../lettering";
 
 /**
  * One task ("part") of an issue, laid out like a story page: a big title,
@@ -24,7 +25,7 @@ export function TaskPanel({ task, onPostProof }: { task: TaskModel; onPostProof?
   return (
     <div className="relative">
       <div className="mb-3 flex flex-wrap items-center gap-2 pr-6">
-        <h3 className="text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+        <h3 className={`${LETTERED} text-3xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           {task.label}
         </h3>
         {task.complete && <CheckIcon size={18} style={{ color: colors.OK }} aria-label="complete" />}

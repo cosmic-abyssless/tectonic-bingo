@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { COMIC_FONT } from "../font";
+import { LETTERED } from "../../lettering";
 
 /**
  * Props for core/ui AppHeader that turn it into a comic masthead: yellow
@@ -8,7 +9,8 @@ import { COMIC_FONT } from "../font";
  */
 export function comicHeaderProps(): { className: string; titleClassName: string; style: CSSProperties } {
   return {
-    className: "comic-masthead !bg-background !border-b-[3px] !backdrop-blur-none",
+    // LETTERED: the style below letters the header in Bangers (see lettering.ts).
+    className: `${LETTERED} comic-masthead !bg-background !border-b-[3px] !backdrop-blur-none`,
     // The title box is `truncate` (overflow hidden) and only as wide as the
     // text's advance width. Bangers leans right, so its last glyph overhangs
     // that by up to ~0.17em, plus the 0.08em drop shadow: pad for both so

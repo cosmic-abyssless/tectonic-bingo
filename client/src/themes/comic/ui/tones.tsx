@@ -3,6 +3,7 @@ import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { shadeHalftone } from "../fx/halftoneSheet";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * The comic theme's coloured surfaces, one recipe for all of them: a tone is a loud process colour (a tag, a button,
@@ -151,7 +152,7 @@ export function ToneTag({ tone, tilt = 0, className, children }: { tone: Tone; t
   const { loud, onLoud } = toneColors(colors, tone);
   return (
     <h3
-      className={`border-2 px-2 py-0.5 uppercase leading-none tracking-wide ${className ?? ""}`}
+      className={`${LETTERED} border-2 px-2 py-0.5 uppercase leading-none tracking-wide ${className ?? ""}`}
       style={{ fontFamily: COMIC_FONT, background: loud, borderColor: colors.LINE, color: onLoud, boxShadow: `2px 2px 0 ${colors.SHADOW}`, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
       {children}

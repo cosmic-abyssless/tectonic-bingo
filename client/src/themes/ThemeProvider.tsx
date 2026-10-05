@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { rememberThemeBackground, rememberedThemeBackground } from "./rememberedTheme";
 import { tokensToCssVars } from "./tokens";
+import { letteringClasses } from "./lettering";
 import { onThemeHmrUpdate, peekTheme, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
 import { useResolvedColorScheme } from "../core/ui/colorScheme";
@@ -62,6 +63,8 @@ export function ThemeProvider({ themeKey, children, fallback = null }: { themeKe
     [resolved, activeTokens, scheme],
   );
   const cssVars = useMemo(() => (activeTokens ? tokensToCssVars(activeTokens) : undefined), [activeTokens]);
+  // A theme that sets a heading font names it in these variables, which letters the page (lettering.ts).
+  const lettering = useMemo(() => letteringClasses(cssVars) || undefined, [cssVars]);
 
   // Still loading: paint the wait in the colour this theme's page had last time, so a
   // reload goes straight from that colour to the finished page rather than default
@@ -72,7 +75,7 @@ export function ThemeProvider({ themeKey, children, fallback = null }: { themeKe
   }
   return (
     <ThemeContext.Provider value={value}>
-      <div data-theme={resolved.key} style={cssVars}>
+      <div data-theme={resolved.key} className={lettering} style={cssVars}>
         {children}
       </div>
     </ThemeContext.Provider>

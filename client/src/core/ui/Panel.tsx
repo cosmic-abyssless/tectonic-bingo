@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useOptionalSlot } from "../../themes/context";
 import { HEADING_FONT } from "./Card";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 export interface PanelProps {
   /** A small heading at the top ("Teams"). */
@@ -38,7 +39,7 @@ export function PlainPanel({ title, header, children, padding = "md", className,
       {header && <div className="overflow-hidden rounded-t-[7px]">{header}</div>}
       <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>
         {title && (
-          <h3 className="mb-2 text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          <h3 className={`${HEADING_LETTERED} mb-2 text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
             {title}
           </h3>
         )}

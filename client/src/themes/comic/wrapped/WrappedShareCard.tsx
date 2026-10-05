@@ -5,6 +5,7 @@ import { getColors, TECTONIC_LOGO } from "../board/colors";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
 import { halftoneUrl } from "../fx/halftoneSheet";
 import { burstPoints } from "../ui/Burst";
+import { LETTERED } from "../../lettering";
 
 // The comic theme's share cards (#315): each a comic book cover. A masthead with the Bingo's name, the Team's colour
 // printed with rays and a halftone rising from the foot, the Wrapped art as the cover star, the big number in an SFX
@@ -101,15 +102,15 @@ function Masthead({ bingoName, issue }: { bingoName: string; issue: string }) {
         Tectonic
       </div>
       <div className="min-w-0 flex-1 px-3 py-1.5">
-        <p className="uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 12, letterSpacing: "0.08em", color: C.INK_SUBTLE, lineHeight: 1 }}>
+        <p className={`${LETTERED} uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 12, letterSpacing: "0.08em", color: C.INK_SUBTLE, lineHeight: 1 }}>
           Wrapped · {issue}
         </p>
         {/* A long name gets smaller lettering before it's cut short. */}
-        <p className="truncate" style={{ fontFamily: COMIC_FONT, fontSize: bingoName.length > 18 ? 26 : 32, lineHeight: 1.05 }}>
+        <p className={`${LETTERED} truncate`} style={{ fontFamily: COMIC_FONT, fontSize: bingoName.length > 18 ? 26 : 32, lineHeight: 1.05 }}>
           {bingoName}
         </p>
       </div>
-      <div className="flex flex-col items-center justify-center px-2 text-center uppercase" style={{ borderLeft: `4px solid ${C.INK}`, fontFamily: COMIC_FONT, fontSize: 13, lineHeight: 1, background: C.YELLOW }}>
+      <div className={`${LETTERED} flex flex-col items-center justify-center px-2 text-center uppercase`} style={{ borderLeft: `4px solid ${C.INK}`, fontFamily: COMIC_FONT, fontSize: 13, lineHeight: 1, background: C.YELLOW }}>
         <span>Final</span>
         <span>issue!</span>
       </div>
@@ -143,6 +144,7 @@ function Title({ children, size, minSize = size, lines = 2 }: { children: ReactN
   return (
     <h2
       ref={ref}
+      className={LETTERED}
       style={{
         // Never wider than its column, however it's laid out: the box the lettering is fitted to.
         maxWidth: "100%",
@@ -187,7 +189,7 @@ function useFitLine<T extends HTMLElement>(size: number, min: number, content: R
 function Caption({ children, fill = C.PAPER_RAISED, tilt = 0, size = 14, style }: { children: ReactNode; fill?: string; tilt?: number; size?: number; style?: CSSProperties }) {
   return (
     <div
-      className="uppercase"
+      className={`${LETTERED} uppercase`}
       style={{ background: fill, border: `3px solid ${C.INK}`, boxShadow: hardShadow(3), padding: "3px 8px", fontFamily: COMIC_FONT, fontSize: size, lineHeight: 1.05, letterSpacing: "0.03em", transform: tilt ? `rotate(${tilt}deg)` : undefined, ...style }}
     >
       {children}
@@ -204,7 +206,7 @@ function Burst({ fill, size, children }: { fill: string; size: number; children:
         <polygon points={points} fill={C.INK} transform="translate(3 3.5)" />
         <polygon points={points} fill={fill} stroke={C.INK} strokeWidth={2.5} strokeLinejoin="round" />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+      <div className={`${LETTERED} absolute inset-0 flex flex-col items-center justify-center text-center uppercase leading-none`} style={{ fontFamily: COMIC_FONT }}>
         {children}
       </div>
     </div>
@@ -214,7 +216,7 @@ function Burst({ fill, size, children }: { fill: string; size: number; children:
 /** A GP figure with the Coins icon, sized to it; just the figure if the icon doesn't load. */
 function Gp({ label, coins, size }: { label: string; coins: string; size: number }) {
   return (
-    <span className="num inline-flex min-w-0 items-center leading-none" style={{ fontFamily: COMIC_FONT, fontSize: size, gap: size * 0.15 }}>
+    <span className={`${LETTERED} num inline-flex min-w-0 items-center leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: size, gap: size * 0.15 }}>
       <CardImage src={coins} className="shrink-0 object-contain [image-rendering:pixelated]" style={{ width: size * 0.9, height: size * 0.9 }} />
       {label}
     </span>
@@ -229,7 +231,7 @@ function Avatar({ url, name, size, style }: { url: string; name: string; size: n
       className="shrink-0 rounded-full object-cover"
       style={box}
       fallback={
-        <span className="flex shrink-0 items-center justify-center rounded-full" style={{ ...box, background: C.YELLOW, fontFamily: COMIC_FONT, fontSize: size * 0.5 }}>
+        <span className={`${LETTERED} flex shrink-0 items-center justify-center rounded-full`} style={{ ...box, background: C.YELLOW, fontFamily: COMIC_FONT, fontSize: size * 0.5 }}>
           {name.charAt(0).toUpperCase()}
         </span>
       }
@@ -241,7 +243,7 @@ function Avatar({ url, name, size, style }: { url: string; name: string; size: n
 function Strip({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="relative flex shrink-0 items-stretch" style={{ background: C.PAPER_RAISED, borderTop: `4px solid ${C.INK}` }}>
-      <div className="flex items-center justify-center px-2 text-center uppercase" style={{ background: C.RED, color: C.ON_LOUD, fontFamily: COMIC_FONT, fontSize: 15, lineHeight: 1, width: 64, borderRight: `4px solid ${C.INK}` }}>
+      <div className={`${LETTERED} flex items-center justify-center px-2 text-center uppercase`} style={{ background: C.RED, color: C.ON_LOUD, fontFamily: COMIC_FONT, fontSize: 15, lineHeight: 1, width: 64, borderRight: `4px solid ${C.INK}` }}>
         {label}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-3 py-2">{children}</div>
@@ -257,7 +259,7 @@ function StripDrop({ drop, tag, detail, coins }: { drop: WrappedShareCardDropMod
         <CardImage src={drop.iconUrl} className="object-contain [image-rendering:pixelated]" style={{ width: 28, height: 28 }} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 12, lineHeight: 1, color: C.RED, letterSpacing: "0.04em" }}>
+        <p className={`${LETTERED} truncate uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 12, lineHeight: 1, color: C.RED, letterSpacing: "0.04em" }}>
           {tag}
         </p>
         <p className="line-clamp-2 text-[14px] font-bold leading-tight">
@@ -303,7 +305,7 @@ function TeamLine({ children }: { children: string }) {
   return (
     <p
       ref={ref}
-      className={oneLine ? "overflow-hidden whitespace-nowrap" : "truncate"}
+      className={`${LETTERED} ${oneLine ? "overflow-hidden whitespace-nowrap" : "truncate"}`}
       style={{ fontFamily: COMIC_FONT, fontSize, lineHeight: 1.1, letterSpacing: "0.02em", color: C.TITLE_FILL, WebkitTextStroke: `0.8px ${C.INK}`, textShadow: hardShadow(2), paddingRight: 2 }}
     >
       {children}
@@ -343,7 +345,7 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
             )}
             {streak && (
               <p className="truncate text-[12px] leading-tight">
-                <span className="uppercase" style={{ fontFamily: COMIC_FONT, color: C.RED, letterSpacing: "0.04em" }}>
+                <span className={`${LETTERED} uppercase`} style={{ fontFamily: COMIC_FONT, color: C.RED, letterSpacing: "0.04em" }}>
                   Driest streak:{" "}
                 </span>
                 <b className="num">{streak.killsLabel}</b> at {streak.boss} · only <span className="num">{streak.chanceLabel}</span> go that dry
@@ -421,7 +423,7 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
             // At most 3, wrapping onto a second line rather than cutting one off.
             <div className="flex flex-wrap gap-1.5">
               {card.titles.map((t) => (
-                <span key={t.id} style={{ fontFamily: COMIC_FONT, fontSize: 13, background: C.MAGENTA, color: C.ON_LOUD, border: `2px solid ${C.INK}`, padding: "1px 7px", letterSpacing: "0.03em" }}>
+                <span key={t.id} className={LETTERED} style={{ fontFamily: COMIC_FONT, fontSize: 13, background: C.MAGENTA, color: C.ON_LOUD, border: `2px solid ${C.INK}`, padding: "1px 7px", letterSpacing: "0.03em" }}>
                   ★ {t.name}
                 </span>
               ))}

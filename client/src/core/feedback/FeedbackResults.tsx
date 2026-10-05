@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Card, EmptyState, HEADING_FONT, Notice } from "../ui/Card";
 import { ArrowLeftIcon, ArrowRightIcon, ListIcon, LockIcon } from "../ui/icons";
 import { SegmentedControl } from "../ui/SegmentedControl";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 type Which = "feedback" | "captain";
 
@@ -55,7 +56,7 @@ function ResponseList({ questions, list, label }: { questions: SignupQuestion[];
     <div className="space-y-5">
       {choiceQuestions.length > 0 && (
         <Card className="space-y-4 p-4">
-          <h3 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          <h3 className={`${HEADING_LETTERED} text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
             Totals
           </h3>
           <ul className="space-y-4">
@@ -68,7 +69,7 @@ function ResponseList({ questions, list, label }: { questions: SignupQuestion[];
 
       <Card className="space-y-4 p-4">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="num text-sm font-semibold text-on-surface" style={HEADING_FONT} aria-live="polite">
+          <h3 className={`${HEADING_LETTERED} num text-sm font-semibold text-on-surface`} style={HEADING_FONT} aria-live="polite">
             Response {index + 1} of {list.count}
           </h3>
           <div className="flex gap-2">

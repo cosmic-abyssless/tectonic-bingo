@@ -6,6 +6,7 @@ import { TextTooltip } from "../ui/Tooltip";
 import { avatarUrl, displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
 import { TitleGroupBox } from "./TitleChrome";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 /**
  * The Titles (shared/titles.ts) in a box per group (TitleGroupBox, the theme's), one row each: its name and quip, then who holds it and the
@@ -41,7 +42,7 @@ export function TitlesSection({
                   className={`grid gap-x-4 gap-y-1 py-2.5 sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,1.25fr)] sm:items-baseline ${holders.length ? "" : "opacity-60"}`}
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-[length:var(--title-name-size,0.875rem)] font-semibold text-[var(--title-ink)]" style={HEADING_FONT}>
+                    <span className={`${HEADING_LETTERED} truncate text-[length:var(--title-name-size,0.875rem)] font-semibold text-[var(--title-ink)]`} style={HEADING_FONT}>
                       {title.name}
                     </span>
                     <TextTooltip text={title.explanation}>

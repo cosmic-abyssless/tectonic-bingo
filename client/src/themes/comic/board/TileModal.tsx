@@ -57,6 +57,7 @@ import { PEEL_CLIP_BLEED, peelGeometry, toClipPolygon, type Point } from "./peel
 import { getBookPose, setBookAway } from "./bookFlight";
 import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from "./PinnedArt";
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -1545,7 +1546,7 @@ function TileDetails({
       >
         <XIcon size={24} />
       </AriaButton>
-      <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
+      <div data-extra className={`${LETTERED} mt-5 flex items-center justify-center gap-4`} style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
         <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={spread <= 0} colors={page}>
           <ArrowLeftIcon size={20} />
         </NavButton>
@@ -1815,11 +1816,11 @@ function SummaryPage({
       >
         Tectonic
       </span>
-      <h2 className="text-3xl leading-none [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
+      <h2 className={`${LETTERED} text-3xl leading-none [overflow-wrap:anywhere]`} style={{ fontFamily: COMIC_FONT }}>
         {tile.name}
       </h2>
       {tile.category && (
-        <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
+        <span className={`${LETTERED} text-sm uppercase tracking-wide`} style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
           {tile.category.label}
         </span>
       )}
@@ -1834,7 +1835,7 @@ function SummaryPage({
   const progressCards = (
     <>
       <CaptionBox tone="yellow" title={cardTitle("Points")} className={cardPad}>
-        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
+        <span className={`${LETTERED} num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
           {progress.pointsAwarded}
         </span>
         <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
@@ -1842,7 +1843,7 @@ function SummaryPage({
         </span>
       </CaptionBox>
       <CaptionBox tone="paper" title={cardTitle("Parts")} className={cardPad}>
-        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+        <span className={`${LETTERED} num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           {progress.completedTasks}
         </span>
         <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
@@ -1890,7 +1891,7 @@ function SummaryPage({
       {/* Parts (table of contents) */}
       {ordered.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+          <h3 className={`${LETTERED} text-xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT }}>
             Parts
           </h3>
           <ol className="flex flex-col gap-2">
@@ -1917,7 +1918,7 @@ function SummaryPage({
                     }}
                   >
                     <span
-                      className="flex size-7 shrink-0 items-center justify-center border-2 text-sm"
+                      className={`${LETTERED} flex size-7 shrink-0 items-center justify-center border-2 text-sm`}
                       style={{
                         fontFamily: COMIC_FONT,
                         borderColor: colors.LINE,
@@ -1928,7 +1929,7 @@ function SummaryPage({
                       {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : number}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-base leading-tight" style={{ fontFamily: COMIC_FONT }}>
+                      <span className={`${LETTERED} block truncate text-base leading-tight`} style={{ fontFamily: COMIC_FONT }}>
                         {task.label}
                       </span>
                       <span className="block truncate text-xs" style={{ color: claimed.length > 0 ? colors.INK_BODY : tone }}>
@@ -1950,10 +1951,10 @@ function SummaryPage({
                         )}
                       </span>
                     </span>
-                    <span className="num shrink-0 text-sm" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                    <span className={`${LETTERED} num shrink-0 text-sm`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                       {task.points} pts
                     </span>
-                    <span className="shrink-0 text-xs uppercase" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+                    <span className={`${LETTERED} shrink-0 text-xs uppercase`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
                       p.{i + 2}
                     </span>
                   </button>
@@ -2021,7 +2022,7 @@ function TaskPage({
     <div className="relative flex min-h-full flex-col p-6" style={{ color: colors.INK }}>
       {/* Tilted Part Number Badge */}
       <div
-        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl"
+        className={`${LETTERED} absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl`}
         style={{
           fontFamily: COMIC_FONT,
           borderColor: colors.LINE,
@@ -2084,7 +2085,7 @@ function TaskPage({
       {/* (The approved / pending / locked stamp is the one TaskPanel draws
           beside the part's title — not repeated down here.) */}
       <div className="mt-4 pt-2 border-t-[2px] border-dashed" style={{ borderColor: `${colors.LINE}44` }}>
-        <span className="text-xs uppercase tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+        <span className={`${LETTERED} text-xs uppercase tracking-wider`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
           Part {number} of {tile.tasks.length}
         </span>
       </div>
@@ -2098,11 +2099,11 @@ function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel
   return (
     <div className="flex flex-col gap-4 p-6" style={{ color: colors.INK }}>
       <div className="flex items-center justify-between">
-        <h3 className="text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+        <h3 className={`${LETTERED} text-2xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT }}>
           Submissions
         </h3>
         <span
-          className="rounded-full border-[2px] px-2 py-0.5 text-xs uppercase"
+          className={`${LETTERED} rounded-full border-[2px] px-2 py-0.5 text-xs uppercase`}
           style={{
             borderColor: colors.LINE,
             background: colors.YELLOW,
