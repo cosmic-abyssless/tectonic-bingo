@@ -74,6 +74,14 @@ describe("slow_request", () => {
     expect(reported.map((w) => w.extra.thresholdMs)).toEqual([30_000]);
   });
 
+  it("never times the MCP endpoint, whose stream the client may hold open, but still times its sign-in", () => {
+    const { request, reported } = setup();
+    request({ method: "POST", route: "/mcp", ms: 212_027 });
+    expect(reported).toEqual([]);
+    request({ method: "POST", route: "/token", ms: 30_001 });
+    expect(reported.map((w) => w.message)).toEqual(["Slow request: POST /token took 30001 ms"]);
+  });
+
   it("knows which routes are slow by design, by method too", () => {
     expect(isSlowByDesign("POST", "/api/bingos/:slug/submissions")).toBe(true);
     expect(isSlowByDesign("GET", "/api/bingos/:slug/submissions")).toBe(false);

@@ -107,6 +107,12 @@ export function isSlowByDesign(method: string, route: string): boolean {
   return SLOW_BY_DESIGN.has(`${method} ${route}`) || MCP_PATH.test(route) || route.startsWith("/api/dev/");
 }
 
+// Routes whose time says nothing about the server, so they never fire slow_request (they still count towards
+// request_spike). The MCP endpoint answers as a stream the client may keep open after the answer has gone (once 212 s,
+// on 2026-10-04). A real stall there shows elsewhere: its SQL runs in a child process stopped at 10 s, and its other
+// tools run on the server's thread, where a stall is event_loop_lag.
+const UNTIMED = new Set(["POST /mcp"]);
+
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /** A request as the counters see it, once it's done. */
@@ -219,7 +225,7 @@ export class LoadWarnings {
     const s = this.settings;
 
     const slowMs = isSlowByDesign(method, route) ? s.slowByDesignMs : s.slowRequestMs;
-    if (ms > slowMs) {
+    if (ms > slowMs && !UNTIMED.has(label)) {
       this.fire(["slow_request", label], () => ({
         message: `Slow request: ${label} took ${Math.round(ms)} ms`,
         extra: { method, route, ms: Math.round(ms), status, thresholdMs: slowMs },
