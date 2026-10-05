@@ -1,6 +1,6 @@
 import type { MyAchievement } from "@bingo/shared";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
-import { achievementCardKind, earnedLabel, progressFraction, progressLabel } from "../../../core/achievements/achievementCard";
+import { achievementCardKind, earnedLabel, progressFraction, progressLabel, shareLabel } from "../../../core/achievements/achievementCard";
 
 export function AchievementRow({ achievement }: { achievement: MyAchievement }) {
   const kind = achievementCardKind(achievement);
@@ -22,6 +22,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
   const earned = kind === "earned";
   const label = progressLabel(achievement.progress);
   const fraction = progressFraction(achievement.progress);
+  const share = shareLabel(achievement.share);
 
   return (
     <div className={`flex items-center gap-3 rounded-md border border-outline bg-surface p-3 ${earned ? "" : "opacity-60"}`}>
@@ -32,7 +33,12 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
           {earned && <div className="shrink-0 text-[11px] text-on-surface-subtle">{earnedLabel(achievement.earnedAt)}</div>}
         </div>
         <div className="text-xs text-on-surface-muted">{achievement.description}</div>
-        {earned && <div className="text-xs italic text-on-surface-subtle">{achievement.flavor}</div>}
+        {earned && (
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="text-xs italic text-on-surface-subtle">{achievement.flavor}</div>
+            {share && <div className="num shrink-0 text-[11px] text-on-surface-subtle">{share}</div>}
+          </div>
+        )}
         {!earned && label && (
           <div className="mt-1.5 flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-raised">

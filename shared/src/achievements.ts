@@ -65,7 +65,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { key: "skiller", name: "Skiller", description: "Get at least 3 EHP during the bingo", flavor: "I hope you got this chopping ice demon trees...", hidden: true, itemName: "Dragon axe" },
   { key: "ragequit", name: "Ragequit", description: "Remove interest from a tile", flavor: "This is somebody else's problem now", hidden: true, itemName: "Logout" },
   { key: "yammma", name: "Yammma", description: "Open and close the Yama tile 3 times", flavor: "Mmmm Yammma", hidden: true, itemName: "Yami" },
-  { key: "night_owl", name: "Night owl", description: "Submit a drop between 2am and 6am", flavor: "Sleep is for the people not playing bingo", hidden: true, itemName: "Bullseye lantern" },
+  { key: "night_owl", name: "Night owl", description: "Submit a drop between 2am and 6am", flavor: "Sleep is for the people not playing bingo", hidden: true, itemName: "Bullseye lantern (lit)" },
   { key: "early_bird", name: "Early bird", description: "Submit a drop between 6am and 9am", flavor: "The early bird gets the drop", hidden: true, itemName: "Bird nest" },
   { key: "main_character", name: "Main character", description: "React to your own submission", flavor: "You're your own biggest fan", hidden: true, itemName: "Mirror" },
   { key: "called_it", name: "Called it", description: "Submit a drop for a part you marked interest in", flavor: "If you call the tbow every raid, you know it doesn't count when you get it right?", hidden: true, itemName: "Improved Reflexes" },
@@ -116,6 +116,11 @@ export interface MyAchievement {
   earnedAt: string | null;
   /** Only for counted Achievements (Cheerleader, Regular, Globetrotter, Long weekend, Drop detective). */
   progress: AchievementProgress | null;
+  /**
+   * Only once earned (as on Steam): the share, 0-1, of this Bingo's Players on a Team who have earned it, this Player
+   * included (CONTEXT.md "Achievement", Rarity).
+   */
+  share: number | null;
 }
 
 export interface MyAchievementsResponse {

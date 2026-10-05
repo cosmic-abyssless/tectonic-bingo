@@ -635,6 +635,7 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
     .all();
   const earnedByKey = new Map(earnedRows.map((r) => [r.achievementKey as AchievementKey, r]));
   const tileCount = db.select({ id: tiles.id }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all().length;
+  const rarity = earnedByPlayers(db, bingo.id);
 
   const achievements: MyAchievement[] = ACHIEVEMENTS.filter((def) => switched.has(def.key)).map((def) => {
     const earned = earnedByKey.get(def.key);
@@ -652,6 +653,8 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       earnedAt: earned ? earned.earnedAt.toISOString() : null,
       // A masked one's progress would hint at what it is (Cheerleader's "4/10"), so it has none until earned.
       progress: masked ? null : progressFor(db, bingo, userId, def.key, switched, tileCount),
+      // Like Steam's unlock view: how rare it is shows only once you have it.
+      share: earned && rarity.players > 0 ? (rarity.earnedBy.get(def.key) ?? 0) / rarity.players : null,
     };
   });
 
@@ -661,6 +664,22 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
     .map((r) => r.achievementKey as AchievementKey);
 
   return { achievements, unshownPopups };
+}
+
+/**
+ * The Players on a Team in this Bingo, and how many of them have earned each Achievement (CONTEXT.md "Achievement",
+ * Rarity). One who earned it and has since left their Team counts on neither side, so a share never passes 100%.
+ */
+function earnedByPlayers(db: Queryable, bingoId: string): { players: number; earnedBy: Map<AchievementKey, number> } {
+  const players = new Set(
+    db.select({ userId: teamMembers.userId }).from(teamMembers).innerJoin(teams, eq(teams.id, teamMembers.teamId)).where(eq(teams.bingoId, bingoId)).all().map((r) => r.userId),
+  );
+  const earnedBy = new Map<AchievementKey, number>();
+  // One row per (bingo, player, Achievement): the unique index makes each a distinct Player.
+  for (const r of db.select({ userId: achievementEarned.userId, key: achievementEarned.achievementKey }).from(achievementEarned).where(eq(achievementEarned.bingoId, bingoId)).all()) {
+    if (players.has(r.userId)) earnedBy.set(r.key as AchievementKey, (earnedBy.get(r.key as AchievementKey) ?? 0) + 1);
+  }
+  return { players: players.size, earnedBy };
 }
 
 function progressFor(
@@ -789,12 +808,29 @@ export interface AchievementSettingRow {
   hidden: boolean;
   itemName: string;
   enabled: boolean;
+  /** How many of the Bingo's Players (on a Team) have earned it. */
+  earnedBy: number;
 }
 
-/** Current per-key switch state for the admin settings form, in catalogue order. A key with no row reads as off. */
-export function getAchievementSettings(db: Db, bingoId: string): AchievementSettingRow[] {
+/**
+ * Current per-key switch state for the admin settings form, in catalogue order, with how many Players have earned
+ * each, out of `players`. A key with no row reads as off.
+ */
+export function getAchievementSettings(db: Db, bingoId: string): { achievements: AchievementSettingRow[]; players: number } {
   const rows = new Map(db.select().from(bingoAchievementSettings).where(eq(bingoAchievementSettings.bingoId, bingoId)).all().map((r) => [r.achievementKey as AchievementKey, r]));
-  return ACHIEVEMENTS.map((def) => ({ key: def.key, name: def.name, description: def.description, hidden: def.hidden, itemName: def.itemName, enabled: rows.get(def.key)?.enabled ?? false }));
+  const rarity = earnedByPlayers(db, bingoId);
+  return {
+    achievements: ACHIEVEMENTS.map((def) => ({
+      key: def.key,
+      name: def.name,
+      description: def.description,
+      hidden: def.hidden,
+      itemName: def.itemName,
+      enabled: rows.get(def.key)?.enabled ?? false,
+      earnedBy: rarity.earnedBy.get(def.key) ?? 0,
+    })),
+    players: rarity.players,
+  };
 }
 
 /**

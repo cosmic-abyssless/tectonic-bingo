@@ -60,6 +60,11 @@ export function AchievementsManager({ slug, bingo }: { slug: string; bingo: Bing
                 {a.hidden && <Badge>Hidden</Badge>}
               </div>
               <div className="text-xs text-on-surface-muted">{a.description}</div>
+              {data && data.players > 0 && (
+                <div className="num text-xs text-on-surface-subtle">
+                  Earned by {a.earnedBy} of {data.players} Players
+                </div>
+              )}
             </div>
             <Switch
               isSelected={edits[a.key] ?? a.enabled}

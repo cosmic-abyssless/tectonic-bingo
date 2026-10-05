@@ -1,6 +1,6 @@
 import type { MyAchievement } from "@bingo/shared";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
-import { achievementCardKind, earnedLabel, progressFraction, progressLabel } from "../../../core/achievements/achievementCard";
+import { achievementCardKind, earnedLabel, progressFraction, progressLabel, shareLabel } from "../../../core/achievements/achievementCard";
 import { COMIC_FONT } from "../font";
 import { InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
@@ -8,7 +8,7 @@ import { LETTERED } from "../../lettering";
 
 /**
  * One Achievement as a caption box, like the rest of the book's dialogs: earned ones on bright paper with the sprite in
- * its little panel and a green tag with the date, the ones still to get on plain paper with the sprite in greyscale and
+ * its little panel, a green tag with the date and how many Players have it too, the ones still to get on plain paper with the sprite in greyscale and
  * an inked progress bar, the Hidden ones a "???" box on the darker stock.
  */
 export function AchievementRow({ achievement }: { achievement: MyAchievement }) {
@@ -18,6 +18,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
   const masked = kind === "masked";
   const label = progressLabel(achievement.progress);
   const fraction = progressFraction(achievement.progress);
+  const share = shareLabel(achievement.share);
 
   return (
     <div
@@ -54,8 +55,9 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
           {masked ? "Keep playing to discover this one." : achievement.description}
         </div>
         {earned && (
-          <div className="text-sm italic leading-snug" style={{ color: colors.INK_SUBTLE }}>
-            {achievement.flavor}
+          <div className="flex items-baseline justify-between gap-3" style={{ color: colors.INK_SUBTLE }}>
+            <div className="text-sm italic leading-snug">{achievement.flavor}</div>
+            {share && <div className="num shrink-0 text-xs">{share}</div>}
           </div>
         )}
         {!earned && !masked && label && (

@@ -257,14 +257,14 @@ describe("importBingo", () => {
     expect(doc.achievementKeys?.sort()).toEqual(ACHIEVEMENT_KEYS.filter((k) => k !== "strong_start" && k !== "hypeman").slice().sort());
 
     const imported = importBingo(db, doc, { slug: "some-achievements", createdByUserId: admin.id });
-    const enabled = achievementService.getAchievementSettings(db, imported.id).filter((a) => a.enabled).map((a) => a.key);
+    const enabled = achievementService.getAchievementSettings(db, imported.id).achievements.filter((a) => a.enabled).map((a) => a.key);
     expect(enabled.sort()).toEqual(doc.achievementKeys!.slice().sort());
     expect(enabled).not.toContain("strong_start");
 
     // No achievementKeys field at all (an older export, or one that never touched the switches): every key is on.
     const { achievementKeys: _dropped, ...docWithoutField } = doc;
     const importedAll = importBingo(db, docWithoutField, { slug: "all-achievements", createdByUserId: admin.id });
-    expect(achievementService.getAchievementSettings(db, importedAll.id).every((a) => a.enabled)).toBe(true);
+    expect(achievementService.getAchievementSettings(db, importedAll.id).achievements.every((a) => a.enabled)).toBe(true);
   });
 
   it("carries over settings and signup questions", () => {
