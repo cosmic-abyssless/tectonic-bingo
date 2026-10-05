@@ -1,6 +1,7 @@
 import type { CategoryModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * A board row's category, as a vertical tab framed like the board's other panels (3px ink border, hard shadow). The
@@ -13,7 +14,7 @@ export function RowLabel({ category }: { category: CategoryModel | null }) {
   const stripe = category?.color ? `inset -5px 0 0 ${category.color}, ` : "";
   return (
     <div
-      className="mr-1 flex items-center justify-center border-[3px] px-1 text-sm uppercase leading-none"
+      className={`${LETTERED} mr-1 flex items-center justify-center border-[3px] px-1 text-sm uppercase leading-none`}
       style={{
         writingMode: "vertical-lr",
         transform: "rotate(180deg)",

@@ -8,6 +8,7 @@ import { useComic } from "../ui/useComic";
 import { SubmissionBubble } from "../board/SubmissionBubble";
 import { COMIC_FONT } from "../font";
 import { useTeamSubmissionsFilter } from "../../../core/submissions/useTeamSubmissionsFilter";
+import { LETTERED } from "../../lettering";
 
 /**
  * Submissions — every claim the team has sent in, stacked as a pile of
@@ -109,7 +110,7 @@ function EmptySubmissions({ hasSubmit }: { hasSubmit: boolean }) {
     <div className="relative flex flex-col items-center gap-3 py-8 text-center">
       <div className="relative">
         <div
-          className="flex h-28 w-40 items-center justify-center border-[3px] text-2xl uppercase"
+          className={`${LETTERED} flex h-28 w-40 items-center justify-center border-[3px] text-2xl uppercase`}
           style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK_SUBTLE, boxShadow: `5px 5px 0 ${colors.SHADOW}` }}
         >
           Empty

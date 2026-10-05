@@ -5,6 +5,7 @@ import { CaptionBox } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { WikiItemLink } from "../../../core/ui/WikiItemLink";
+import { LETTERED } from "../../lettering";
 
 /** The detective's verdict on the screenshot, delivered as a narration caption. */
 export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["analysis"] }) {
@@ -21,7 +22,7 @@ export function AnalysisPanel({ analysis }: { analysis: SubmissionFlowModel["ana
   if (analysis.status === "analyzing") {
     return (
       <CaptionBox tone="cyan" tilt={-0.4}>
-        <p className="flex items-center gap-2 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+        <p className={`${LETTERED} flex items-center gap-2 text-lg uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           <SpinnerIcon className="animate-spin" />
           Analyzing screenshot…
         </p>

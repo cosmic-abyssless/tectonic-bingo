@@ -12,6 +12,7 @@ import { sfxAt } from "../fx/SfxLayer";
 import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
 import { warmFullUrl } from "../../../api/imageVariants";
+import { LETTERED } from "../../lettering";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -267,7 +268,7 @@ export const TileCell = memo(function TileCell({
 
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
-          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none"
+          className={`${LETTERED} absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none`}
           style={{
             background: tile.interest.mine ? colors.YELLOW : colors.PAPER_RAISED,
             color: tile.interest.mine ? colors.ON_YELLOW : colors.INK,

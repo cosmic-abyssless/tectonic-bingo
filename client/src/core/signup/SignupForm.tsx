@@ -10,6 +10,7 @@ import { Select } from "../ui/Select";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { AlertIcon, CheckIcon, LockIcon, XIcon } from "../ui/icons";
 import { TextButton } from "../ui/TextButton";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 /** A group of radio buttons or checkboxes under one label, for the choice questions. */
 function ChoiceGroup({ question, label }: { question: SignupQuestionModel; label: React.ReactNode }) {
@@ -193,7 +194,7 @@ export function SignupForm({ slug }: { slug: string }) {
         onExpandedChange={form.setExpanded}
         className="mx-auto max-w-lg"
         title={
-          <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          <h2 className={`${HEADING_LETTERED} text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
             {/* A duo bingo's two steps are numbered: this, then picking a partner (PartnerPanel). */}
             {form.isDuo && "1. "}
             {form.signedUp ? "Edit your signup" : "Sign up"}

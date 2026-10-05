@@ -7,6 +7,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { Callout, RowList, Sheet, SubHead } from "./parts";
+import { LETTERED } from "../../lettering";
 
 /** Step 2 of a duo signup, under the form: who they're paired with, or finding someone. */
 export function PartnerSheet({ slug }: { slug: string }) {
@@ -35,7 +36,7 @@ export function PartnerSheet({ slug }: { slug: string }) {
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm">You're paired with</div>
-                <div className="truncate text-2xl uppercase leading-tight" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+                <div className={`${LETTERED} truncate text-2xl uppercase leading-tight`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
                   {partner.name}
                 </div>
                 <div className="text-sm">You'll be drafted together.</div>

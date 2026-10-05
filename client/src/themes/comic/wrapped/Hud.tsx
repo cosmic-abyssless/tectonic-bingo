@@ -3,6 +3,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton, ComicIconButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { pageInSection, panelPlace, type GuidePage, type Stop } from "./guide";
+import { LETTERED } from "../../lettering";
 
 /** What the reader is on, in words: "Page 3 · Your Team", "Front cover". */
 export function whereLabel(pages: readonly GuidePage[], pos: Stop): string {
@@ -54,7 +55,7 @@ export function Hud({
         <span className="max-sm:hidden">In this issue</span>
       </ComicButton>
       <div
-        className="pointer-events-none flex min-w-0 flex-col items-center gap-1 border-[3px] px-2.5 py-1 text-center uppercase leading-none"
+        className={`${LETTERED} pointer-events-none flex min-w-0 flex-col items-center gap-1 border-[3px] px-2.5 py-1 text-center uppercase leading-none`}
         style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, color: colors.INK, fontSize: "0.95rem" }}
       >
         <span className="max-w-[54vw] truncate sm:max-w-none">{whereLabel(pages, pos)}</span>

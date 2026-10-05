@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { burstPoints } from "../ui/Burst";
 import { useComic } from "../ui/useComic";
 import { sfxWord } from "./sfxWords";
+import { LETTERED } from "../../lettering";
 
 /** A soft, scalloped puff (viewBox 0 0 100 100): `bumps` arcs bulging out from a circle of radius `r`. */
 function puffPath(bumps = 10, r = 40): string {
@@ -104,7 +105,7 @@ export function RewindSfxBubble({ submissionId, tileId, standout, big, rejected 
           </>
         )}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center px-[22%] text-center leading-none" style={{ fontFamily: COMIC_FONT, color: ink }}>
+      <div className={`${LETTERED} absolute inset-0 flex flex-col items-center justify-center px-[22%] text-center leading-none`} style={{ fontFamily: COMIC_FONT, color: ink }}>
         <span className="whitespace-nowrap uppercase" style={{ fontSize: `${Math.min(22, 96 / word.length)}cqw`, letterSpacing: "0.02em", WebkitTextStroke: loud ? `0.6px ${colors.LINE}` : undefined }}>
           {word}
         </span>

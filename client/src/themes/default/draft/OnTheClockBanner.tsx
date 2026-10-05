@@ -3,6 +3,7 @@ import * as m from "motion/react-m";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";
+import { HEADING_LETTERED } from "../../lettering";
 
 export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isMyTurn, embedded, compact }: OnTheClockProps) {
   const reduced = useReducedMotion();
@@ -21,7 +22,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
     >
       <div className="min-w-0">
         <p className="text-xs font-medium uppercase tracking-widest opacity-80">{isMyTurn ? "You're on the clock" : "On the clock"}</p>
-        <p className="truncate text-2xl font-bold leading-tight" style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
+        <p className={`${HEADING_LETTERED} truncate text-2xl font-bold leading-tight`} style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
           {teamName}
         </p>
         {captains.length > 0 && (

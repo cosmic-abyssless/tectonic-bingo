@@ -3,13 +3,18 @@ import { usePreference } from "./preferences";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
+// One query for the page's life: readSystemScheme runs on every render of every component that reads the scheme, and
+// a matchMedia call each time added up across a whole board re-rendering (#470).
+let darkQuery: MediaQueryList | null = null;
+const systemDarkQuery = () => (darkQuery ??= window.matchMedia(DARK_QUERY));
+
 function subscribeToSystemScheme(onChange: () => void) {
-  const mql = window.matchMedia(DARK_QUERY);
+  const mql = systemDarkQuery();
   mql.addEventListener("change", onChange);
   return () => mql.removeEventListener("change", onChange);
 }
 function readSystemScheme(): "light" | "dark" {
-  return window.matchMedia(DARK_QUERY).matches ? "dark" : "light";
+  return systemDarkQuery().matches ? "dark" : "light";
 }
 
 /** The user's raw "system" | "light" | "dark" choice, and a setter — for the appearance menu. */

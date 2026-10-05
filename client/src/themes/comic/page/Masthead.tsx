@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { comicHeaderProps } from "./headerStyle";
+import { LETTERED } from "../../lettering";
 
 /**
  * The masthead every page of a bingo shares (the board, the draft room): the bingo's name in Bangers, its stage (or
@@ -48,12 +49,12 @@ export function Masthead({
       title={header.name}
       subtitle={
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>
+          <span className={`${LETTERED} inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK }}>
             {status ?? header.stageLabel}
           </span>
           {/* A Historical Bingo (CONTEXT.md): a second caption box, in the comic's yellow. */}
           {header.historical && (
-            <span className="inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
+            <span className={`${LETTERED} inline-flex items-center border-2 px-1.5 py-px text-xs uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
               Historical
             </span>
           )}
@@ -84,7 +85,7 @@ export function ModPanelLink({ slug, pendingCount }: { slug: string; pendingCoun
 function Counter({ n }: { n: number }) {
   const { colors } = useComic();
   return (
-    <span className="num -my-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 px-1 text-xs" style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, fontFamily: COMIC_FONT }}>
+    <span className={`${LETTERED} num -my-1 inline-flex min-w-5 items-center justify-center rounded-full border-2 px-1 text-xs`} style={{ background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, fontFamily: COMIC_FONT }}>
       {n}
     </span>
   );

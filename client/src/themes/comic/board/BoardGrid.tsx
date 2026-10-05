@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 import { LineCompletionWash } from "./LineCompletionWash";
@@ -54,7 +54,8 @@ function useFitWidth(gridRef: React.RefObject<HTMLDivElement | null>, rows: numb
   return maxWidth;
 }
 
-export function BoardGrid({
+// Memoised: the page above re-renders as a Tile opens and closes, and the grid has nothing new to draw then (#470).
+export const BoardGrid = memo(function BoardGrid({
   board,
   onOpenTile,
   highlightedTileId,
@@ -184,7 +185,7 @@ export function BoardGrid({
       </div>
     </div>
   );
-}
+});
 
 /** A line's completion wash over a Tile, but not one the board's search dims (it reads that on its own, TileSearchProvider). */
 function UndimmedWash({ tileId, ...wash }: { tileId: string } & Parameters<typeof LineCompletionWash>[0]) {

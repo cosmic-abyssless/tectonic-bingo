@@ -1,6 +1,7 @@
 import { COMIC_FONT } from "../font";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * For someone who isn't part of this bingo (CONTEXT.md "Player"), from signups closing until it's Finished: a panel
@@ -17,7 +18,7 @@ export function NotPartStage({ isCut, removedFromTeam }: { isCut: boolean; remov
       <Stamp kind="custom" rotate={-6} size="md">
         {isCut ? "Cut" : "Members only"}
       </Stamp>
-      <h2 className="mt-2 text-3xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+      <h2 className={`${LETTERED} mt-2 text-3xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
         {isCut ? "You were cut from the draft" : "You're not part of this bingo"}
       </h2>
       <p className="max-w-md text-sm" style={{ color: colors.INK_BODY }}>

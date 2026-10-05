@@ -18,6 +18,7 @@ import { ArrowLeftIcon } from "./icons";
 import { useOptionalSlot } from "../../themes/context";
 import { useOpenProfile } from "../tectonic/PlayerName";
 import { avatarUrl, displayName } from "./user";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 /**
  * Top bar shared by every page: the ☰ menu and the title/subtitle at the left, then at the right the page's controls,
@@ -162,7 +163,7 @@ export function AppHeader({
           )}
           <div className="min-w-0 leading-tight">
             {/* Themeable via --font-heading/--font-heading-weight — both no-ops outside a themed page */}
-            <div className={`truncate text-sm font-semibold text-on-surface ${titleClassName ?? ""}`} style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
+            <div className={`${HEADING_LETTERED} truncate text-sm font-semibold text-on-surface ${titleClassName ?? ""}`} style={{ fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" }}>
               {title}
             </div>
             {subtitle && <div className="truncate text-xs text-on-surface-muted">{subtitle}</div>}

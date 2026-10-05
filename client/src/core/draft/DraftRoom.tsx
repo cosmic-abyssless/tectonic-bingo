@@ -26,6 +26,7 @@ import { DraftRoomPhone } from "./DraftRoomPhone";
 import { useIsPhone, useMediaQuery } from "../ui/useMediaQuery";
 import { useElementHeight } from "../ui/useElementHeight";
 import { describeShares } from "./cutModes";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
@@ -513,7 +514,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         widthSwitch={!wide}
         heading={
           // data-panel-heading: a theme's panel can letter it like its own titles.
-          <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          <h3 data-panel-heading="" className={`${HEADING_LETTERED} text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
             Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
             {/* What every team drafts, so a captain knows what they're picking towards. */}
             {state.shares && !scouting && (

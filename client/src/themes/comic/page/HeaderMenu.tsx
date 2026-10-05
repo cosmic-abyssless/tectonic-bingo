@@ -8,6 +8,7 @@ import { COMIC_FONT } from "../font";
 import { ComicIconButton } from "../ui/ComicButton";
 import { useThemeVarsInPortal } from "../ui/ComicDialog";
 import { useComic } from "../ui/useComic";
+import { LETTERED, letteringClasses } from "../../lettering";
 
 const ROW = "flex items-center gap-2 px-3 py-2.5 text-lg uppercase outline-none";
 
@@ -34,7 +35,7 @@ export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenu
         placement={trigger.kind === "nav" ? "bottom start" : "bottom end"}
         offset={8}
         style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
-        className="comic-panel-pop z-[60] flex min-w-56 flex-col overflow-hidden rounded-md border-[3px] outline-none"
+        className={`${letteringClasses(portalVars)} comic-panel-pop z-[60] flex min-w-56 flex-col overflow-hidden rounded-md border-[3px] outline-none`}
       >
         {/* min-h-0: a menu taller than the room the popover gets scrolls instead of spilling out (see PlainMenu). */}
         <AriaMenu className="min-h-0 overflow-y-auto outline-none">
@@ -53,7 +54,7 @@ export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenu
                       isDisabled={item.current}
                       onAction={item.onAction}
                       data-tutorial={item.tutorial}
-                      className={`${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-not-allowed focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
+                      className={`${LETTERED} ${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-not-allowed focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
                       // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
                       // ink is light, and would sit on the yellow unreadably).
                       style={{ borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}

@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { paperVars } from "../signup/parts";
 import { CaptionBox } from "./CaptionBox";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * The comic theme's Panel slot: an ink-bordered panel on the palette's own paper (charcoal in the dark palettes, not
@@ -19,13 +20,13 @@ export function ComicPanel({ title, header, children, padding = "md", className,
   return (
     <section
       data-portal-scope=""
-      className={`comic-fields border-[3px] ${className ?? ""}`}
+      className={`${LETTERED} comic-fields border-[3px] ${className ?? ""}`}
       style={{ ...paperVars(colors), ...gridVars(colors), ["--panel-border" as string]: "3px", background: colors.PAPER, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}`, color: colors.INK_BODY, ...style }}
     >
       {header}
       <div className={padding === "sm" ? "px-4 py-2.5" : "p-4"}>
         {title && (
-          <h3 className="mb-3 text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+          <h3 className={`${LETTERED} mb-3 text-xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
             {title}
           </h3>
         )}

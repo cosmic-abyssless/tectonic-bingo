@@ -4,6 +4,7 @@ import type { TaskInterestModel } from "../../headless/types";
 import { UsersIcon } from "./icons";
 import { PlayerName } from "../tectonic/PlayerName";
 import { COMIC_FONT } from "../../themes/comic/font";
+import { LETTERED } from "../../themes/lettering";
 
 export interface TaskInterestPeopleProps {
   interest: TaskInterestModel;
@@ -100,7 +101,7 @@ export function TaskInterestPeople({
         }}
         className={
           isComic
-            ? "inline-flex items-center gap-1.5 rounded-full border-2 border-black bg-white px-2 py-0.5 text-xs font-bold leading-none text-black shadow-[2px_2px_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer select-none"
+            ? `${LETTERED} inline-flex items-center gap-1.5 rounded-full border-2 border-black bg-white px-2 py-0.5 text-xs font-bold leading-none text-black shadow-[2px_2px_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer select-none`
             : "inline-flex items-center gap-1.5 rounded-full border border-outline bg-surface-raised px-2 py-0.5 text-xs font-medium text-on-surface-muted transition-colors hover:border-outline-strong hover:text-on-surface cursor-pointer select-none"
         }
         style={isComic ? { fontFamily: COMIC_FONT } : undefined}
@@ -132,7 +133,7 @@ export function TaskInterestPeople({
               <div
                 className={
                   isComic
-                    ? "border-b-2 border-black/20 pb-1 text-xs font-black uppercase tracking-wider text-black"
+                    ? `${LETTERED} border-b-2 border-black/20 pb-1 text-xs font-black uppercase tracking-wider text-black`
                     : "border-b border-outline pb-1 font-semibold text-on-surface"
                 }
                 style={isComic ? { fontFamily: COMIC_FONT } : undefined}

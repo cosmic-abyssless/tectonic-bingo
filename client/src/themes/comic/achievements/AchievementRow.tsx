@@ -4,6 +4,7 @@ import { achievementCardKind, earnedLabel, progressFraction, progressLabel } fro
 import { COMIC_FONT } from "../font";
 import { InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * One Achievement as a caption box, like the rest of the book's dialogs: earned ones on bright paper with the sprite in
@@ -30,7 +31,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
     >
       <div className="grid size-14 shrink-0 place-items-center border-[3px]" style={{ background: masked ? colors.PAPER : colors.PAPER_RAISED, borderColor: colors.LINE }}>
         {masked ? (
-          <span aria-hidden className="text-3xl leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+          <span aria-hidden className={`${LETTERED} text-3xl leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
             ?
           </span>
         ) : (
@@ -40,7 +41,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 text-xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: masked || !earned ? colors.INK_SUBTLE : colors.INK }}>
+          <div className={`${LETTERED} min-w-0 text-xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: masked || !earned ? colors.INK_SUBTLE : colors.INK }}>
             {masked ? "???" : achievement.name}
           </div>
           {earned && (
@@ -62,7 +63,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
             <div className="h-3 flex-1 border-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED }}>
               <div className="h-full" style={{ width: `${(fraction ?? 0) * 100}%`, background: colors.YELLOW }} />
             </div>
-            <span className="num shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+            <span className={`${LETTERED} num shrink-0 text-base leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
               {label}
             </span>
           </div>

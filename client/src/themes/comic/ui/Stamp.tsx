@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { COMIC_FONT } from "../font";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 export type StampKind = "approved" | "completed" | "rejected" | "pending" | "frozen" | "done" | "locked" | "custom";
 
@@ -56,7 +57,7 @@ export function Stamp({
   return (
     <motion.span
       aria-hidden={kind !== "custom" ? undefined : true}
-      className={`comic-stamp pointer-events-none inline-flex select-none items-center justify-center whitespace-nowrap border-[3px] uppercase leading-none ${positioned ? "" : "relative"} ${fontSize} ${pad} ${className ?? ""}`}
+      className={`${LETTERED} comic-stamp pointer-events-none inline-flex select-none items-center justify-center whitespace-nowrap border-[3px] uppercase leading-none ${positioned ? "" : "relative"} ${fontSize} ${pad} ${className ?? ""}`}
       style={{
         fontFamily: COMIC_FONT,
         letterSpacing: "0.08em",

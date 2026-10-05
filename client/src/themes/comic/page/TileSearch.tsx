@@ -6,6 +6,7 @@ import { ComboFocusFirst, ComboFocusedKey, ComboInput, ComboPopover } from "../.
 import { SearchIcon, XIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * Speech-bubble tail: two stacked CSS border-triangles. The bigger one is
@@ -107,7 +108,7 @@ export function TileSearch({ search }: { search: TileSearchModel }) {
             >
               {({ isFocused }) => (
                 <>
-                  <span className="w-5 shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: isFocused ? colors.ON_YELLOW : colors.INK_SUBTLE }}>
+                  <span className={`${LETTERED} w-5 shrink-0 text-base leading-none`} style={{ fontFamily: COMIC_FONT, color: isFocused ? colors.ON_YELLOW : colors.INK_SUBTLE }}>
                     {search.results.indexOf(tile) + 1}.
                   </span>
                   <span className="truncate text-sm font-medium">{tile.name}</span>

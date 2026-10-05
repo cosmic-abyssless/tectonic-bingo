@@ -12,6 +12,7 @@ import { ComicIconButton } from "./ComicButton";
 import { isDarkPaper, PrintedShade, toneColors, type ToneOrColor } from "./tones";
 import { useComic } from "./useComic";
 import { useModalDepth } from "./modalStack";
+import { LETTERED, letteringClasses } from "../../lettering";
 
 const MAX_WIDTH = {
   md: "max-w-lg",
@@ -23,7 +24,8 @@ const MAX_WIDTH = {
  * Hook: the style object that re-applies the theme's CSS vars inside a
  * react-aria portal (which mounts at <body>, outside ThemeProvider's div).
  * Spread it on the portal's outermost element and every core/ui component
- * inside picks up the comic chrome tokens.
+ * inside picks up the comic chrome tokens. They name the lettering font, so
+ * that element takes letteringClasses(vars) too (see lettering.ts).
  */
 export function useThemeVarsInPortal(): CSSProperties {
   const tokens = useThemeTokens();
@@ -89,7 +91,7 @@ export function ComicDialog({
       isOpen={isOpen}
       onOpenChange={(open) => !open && onClose()}
       isDismissable={isDismissable}
-      className="comic-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 text-on-surface"
+      className={`${letteringClasses(portalVars)} comic-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 text-on-surface`}
       style={portalVars}
     >
       <ComicBackdrop />
@@ -137,7 +139,7 @@ export function ComicDialogHeader({
       <div className="relative flex items-start justify-between gap-4 border-b-[3px] px-5 py-3" style={{ background: fill, borderColor: colors.LINE, color: fg }}>
         {dark && <PrintedShade ink={loud} />}
         <div className="relative min-w-0">
-          <Heading slot="title" className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: fg }}>
+          <Heading slot="title" className={`${LETTERED} truncate text-3xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: fg }}>
             {title}
           </Heading>
           {subtitle && (

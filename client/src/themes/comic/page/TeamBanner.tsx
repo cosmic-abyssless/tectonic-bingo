@@ -5,6 +5,7 @@ import { ChevronDownIcon } from "../../../core/ui/icons";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import { TeamMenu } from "./TeamSelector";
+import { LETTERED } from "../../lettering";
 
 /**
  * The board's team strip — the team's identity, score and way in, in one
@@ -56,7 +57,7 @@ export function TeamBanner({
         style={{ ["--comic-yellow" as string]: colors.YELLOW, ["--comic-on-yellow" as string]: colors.ON_YELLOW }}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2 px-3">
-          <span className="truncate text-xl uppercase leading-none group-hovered:text-[var(--comic-on-yellow)] group-focus-visible:text-[var(--comic-on-yellow)]" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
+          <span className={`${LETTERED} truncate text-xl uppercase leading-none group-hovered:text-[var(--comic-on-yellow)] group-focus-visible:text-[var(--comic-on-yellow)]`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
             {team?.name ?? "Select team"}
           </span>
           {team && (
@@ -73,7 +74,7 @@ export function TeamBanner({
           <AriaButton
             onPress={onOpenPoints}
             aria-label={`${team.name}: ${totalPoints.toLocaleString()} points, see the breakdown`}
-            className="flex shrink-0 cursor-pointer items-center gap-1 border-l-[3px] bg-[var(--tab-bg)] px-3 text-xl leading-none text-[var(--tab-fg)] outline-none transition-colors hovered:bg-[var(--tab-hover-bg)] hovered:text-[var(--tab-hover-fg)] focus-visible:bg-[var(--tab-hover-bg)] focus-visible:text-[var(--tab-hover-fg)] pressed:brightness-125"
+            className={`${LETTERED} flex shrink-0 cursor-pointer items-center gap-1 border-l-[3px] bg-[var(--tab-bg)] px-3 text-xl leading-none text-[var(--tab-fg)] outline-none transition-colors hovered:bg-[var(--tab-hover-bg)] hovered:text-[var(--tab-hover-fg)] focus-visible:bg-[var(--tab-hover-bg)] focus-visible:text-[var(--tab-hover-fg)] pressed:brightness-125`}
             // Yellow at rest; on hover it flips to yellow-on-ink, so the tab visibly reacts even though it is already yellow.
             style={{
               fontFamily: COMIC_FONT,
@@ -89,7 +90,7 @@ export function TeamBanner({
           </AriaButton>
         ) : (
           <span
-            className="flex shrink-0 items-center gap-1 border-l-[3px] px-3 text-xl leading-none"
+            className={`${LETTERED} flex shrink-0 items-center gap-1 border-l-[3px] px-3 text-xl leading-none`}
             style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, borderColor: colors.LINE, color: colors.ON_YELLOW }}
           >
             <span className="num">{totalPoints.toLocaleString()}</span>
