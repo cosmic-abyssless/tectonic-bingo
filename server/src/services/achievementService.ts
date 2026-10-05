@@ -531,22 +531,25 @@ interface WomPoint {
 }
 
 /**
- * How long after the Bingo's start (or the Achievement's switch-on, if later) its Wise Old Man Achievements start
- * counting play (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer
- * than 6 hours, so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update
- * sent at start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Titles and Luck still count from the start.
+ * How long after the Bingo's start (or the Achievement's switch-on, if later) Leech and Skiller start counting play
+ * (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer than 6 hours,
+ * so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update sent at
+ * start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Long weekend and Diversification count from the start
+ * instead, like the Wise Old Man competition (EHB) they'd otherwise be compared against, as do Titles and Luck.
  */
 export const WOM_ACHIEVEMENT_DELAY_MS = 7 * 60 * 60 * 1000;
+const WOM_DELAYED: ReadonlySet<AchievementKey> = new Set(["leech", "skiller"]);
+const womDelayFor = (key: AchievementKey) => (WOM_DELAYED.has(key) ? WOM_ACHIEVEMENT_DELAY_MS : 0);
 
 /**
  * A Player's Wise Old Man snapshots bracketing their play during the Bingo: their latest one taken by its end, and a
- * baseline — their last snapshot at or before WOM_ACHIEVEMENT_DELAY_MS after it started (or after the Achievement was
- * switched on, if that's later), else their first one since. Null until there's a snapshot after that cutoff.
+ * baseline — their last snapshot at or before `delayMs` after it started (or after the Achievement was switched on, if
+ * that's later), else their first one since. Null until there's a snapshot after that cutoff.
  */
-function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date): { baseline: WomPoint; latest: WomPoint } | null {
+function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date, delayMs: number): { baseline: WomPoint; latest: WomPoint } | null {
   const start = effectiveStartsAt(q, bingo);
   if (!start) return null;
-  const cutoff = new Date(Math.max(firstSwitchedOnAt.getTime(), start.getTime()) + WOM_ACHIEVEMENT_DELAY_MS);
+  const cutoff = new Date(Math.max(firstSwitchedOnAt.getTime(), start.getTime()) + delayMs);
   const end = endedAt(q, bingo);
   const snapshots = q
     .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, ehp: womSnapshots.ehp, bossKillsJson: womSnapshots.bossKillsJson })
@@ -572,7 +575,8 @@ const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
  * Bingo: any clue gain), Long weekend (20 EHB gained during it), Diversification (10 different bosses killed during it)
- * and Skiller (3 EHP gained during it), from womWindow (so from 7 hours after the start). Checked on every read, the final one after the Bingo is Finished too, since that read is still
+ * and Skiller (3 EHP gained during it), from womWindow: Leech and Skiller from 7 hours after the start, the other two from
+ * the start. Checked on every read, the final one after the Bingo is Finished too, since that read is still
  * about play while it was Live; snapshots after its end don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
@@ -598,7 +602,7 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
       for (const [key, reached] of goals) {
         const setting = settings.get(key);
         if (!setting) continue;
-        const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt);
+        const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt, womDelayFor(key));
         if (window) tryEarn(tx, bingoId, userId, key, window.latest.at, settings, () => reached(window));
       }
     });
@@ -635,6 +639,7 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
     .all();
   const earnedByKey = new Map(earnedRows.map((r) => [r.achievementKey as AchievementKey, r]));
   const tileCount = db.select({ id: tiles.id }).from(tiles).where(eq(tiles.bingoId, bingo.id)).all().length;
+  const rarity = earnedByPlayers(db, bingo.id);
 
   const achievements: MyAchievement[] = ACHIEVEMENTS.filter((def) => switched.has(def.key)).map((def) => {
     const earned = earnedByKey.get(def.key);
@@ -652,6 +657,8 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
       earnedAt: earned ? earned.earnedAt.toISOString() : null,
       // A masked one's progress would hint at what it is (Cheerleader's "4/10"), so it has none until earned.
       progress: masked ? null : progressFor(db, bingo, userId, def.key, switched, tileCount),
+      // Like Steam's unlock view: how rare it is shows only once you have it.
+      share: earned && rarity.players > 0 ? (rarity.earnedBy.get(def.key) ?? 0) / rarity.players : null,
     };
   });
 
@@ -661,6 +668,22 @@ export function getMyAchievements(db: Db, bingo: Bingo, userId: string): MyAchie
     .map((r) => r.achievementKey as AchievementKey);
 
   return { achievements, unshownPopups };
+}
+
+/**
+ * The Players on a Team in this Bingo, and how many of them have earned each Achievement (CONTEXT.md "Achievement",
+ * Rarity). One who earned it and has since left their Team counts on neither side, so a share never passes 100%.
+ */
+function earnedByPlayers(db: Queryable, bingoId: string): { players: number; earnedBy: Map<AchievementKey, number> } {
+  const players = new Set(
+    db.select({ userId: teamMembers.userId }).from(teamMembers).innerJoin(teams, eq(teams.id, teamMembers.teamId)).where(eq(teams.bingoId, bingoId)).all().map((r) => r.userId),
+  );
+  const earnedBy = new Map<AchievementKey, number>();
+  // One row per (bingo, player, Achievement): the unique index makes each a distinct Player.
+  for (const r of db.select({ userId: achievementEarned.userId, key: achievementEarned.achievementKey }).from(achievementEarned).where(eq(achievementEarned.bingoId, bingoId)).all()) {
+    if (players.has(r.userId)) earnedBy.set(r.key as AchievementKey, (earnedBy.get(r.key as AchievementKey) ?? 0) + 1);
+  }
+  return { players: players.size, earnedBy };
 }
 
 function progressFor(
@@ -701,7 +724,7 @@ function progressFor(
   }
   if (key === "long_weekend") {
     // Whole hours: "12/20", never rounded up to a goal not yet reached.
-    const window = womWindow(db, bingo, userId, cutoff);
+    const window = womWindow(db, bingo, userId, cutoff, womDelayFor("long_weekend"));
     return { current: Math.min(Math.floor(window ? ehbGained(window) : 0), LONG_WEEKEND_EHB), target: LONG_WEEKEND_EHB };
   }
   return null;
@@ -789,12 +812,29 @@ export interface AchievementSettingRow {
   hidden: boolean;
   itemName: string;
   enabled: boolean;
+  /** How many of the Bingo's Players (on a Team) have earned it. */
+  earnedBy: number;
 }
 
-/** Current per-key switch state for the admin settings form, in catalogue order. A key with no row reads as off. */
-export function getAchievementSettings(db: Db, bingoId: string): AchievementSettingRow[] {
+/**
+ * Current per-key switch state for the admin settings form, in catalogue order, with how many Players have earned
+ * each, out of `players`. A key with no row reads as off.
+ */
+export function getAchievementSettings(db: Db, bingoId: string): { achievements: AchievementSettingRow[]; players: number } {
   const rows = new Map(db.select().from(bingoAchievementSettings).where(eq(bingoAchievementSettings.bingoId, bingoId)).all().map((r) => [r.achievementKey as AchievementKey, r]));
-  return ACHIEVEMENTS.map((def) => ({ key: def.key, name: def.name, description: def.description, hidden: def.hidden, itemName: def.itemName, enabled: rows.get(def.key)?.enabled ?? false }));
+  const rarity = earnedByPlayers(db, bingoId);
+  return {
+    achievements: ACHIEVEMENTS.map((def) => ({
+      key: def.key,
+      name: def.name,
+      description: def.description,
+      hidden: def.hidden,
+      itemName: def.itemName,
+      enabled: rows.get(def.key)?.enabled ?? false,
+      earnedBy: rarity.earnedBy.get(def.key) ?? 0,
+    })),
+    players: rarity.players,
+  };
 }
 
 /**

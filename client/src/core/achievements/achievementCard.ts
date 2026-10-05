@@ -42,3 +42,14 @@ export function orderForList<T extends Pick<MyAchievement, "masked" | "earned">>
 export function earnedLabel(earnedAt: string | null): string | null {
   return earnedAt ? `Earned ${new Date(earnedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : null;
 }
+
+/**
+ * "12% of players": how many of the Bingo's Players have an Achievement this Player earned (CONTEXT.md "Achievement",
+ * Rarity), or null with none to show. Whole percent, never rounded to "0%" when someone has it or to "100%" when not
+ * everyone does.
+ */
+export function shareLabel(share: number | null): string | null {
+  if (share === null) return null;
+  const percent = Math.min(share < 1 ? 99 : 100, Math.max(share > 0 ? 1 : 0, Math.round(share * 100)));
+  return `${share > 0 && share < 0.005 ? "<1" : percent}% of players`;
+}

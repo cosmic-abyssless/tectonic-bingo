@@ -362,8 +362,9 @@ export function setSignupAccount(slug: string, signupId: string, payload: { rsn:
   return api.put<{ signup: Signup }>(`${base(slug)}/signups/${signupId}/account`, payload);
 }
 
-// Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), for the settings
-// form's "Achievements" section — matches server/src/services/achievementService.ts's AchievementSettingRow.
+// Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), and how many of its
+// `players` have earned it, for the settings form's "Achievements" section — matches
+// server/src/services/achievementService.ts's AchievementSettingRow.
 export interface AchievementSettingRow {
   key: AchievementKey;
   name: string;
@@ -371,8 +372,9 @@ export interface AchievementSettingRow {
   hidden: boolean;
   itemName: string;
   enabled: boolean;
+  earnedBy: number;
 }
 export function getAchievementSettings(slug: string) {
-  return api.get<{ achievements: AchievementSettingRow[] }>(`${base(slug)}/achievements`);
+  return api.get<{ achievements: AchievementSettingRow[]; players: number }>(`${base(slug)}/achievements`);
 }
 

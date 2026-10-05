@@ -370,6 +370,54 @@ describe("Eager beaver", () => {
   });
 });
 
+describe("Rarity (the share of Players who have earned one)", () => {
+  function shareOf(bingo: typeof schema.bingos.$inferSelect, userId: string, key: AchievementKey) {
+    return myAchievements(bingo, userId).achievements.find((a) => a.key === key)!.share;
+  }
+
+  it("shows a Player the share of the Bingo's Players with an Achievement once they've earned it, and not before", () => {
+    const { bingo, team, alice, bob } = seed(); // four Players: captain, alice and bob on Team A, carol on Team B
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, leafId, itemName); // alice earns Strong start
+
+    expect(shareOf(bingo, alice.id, "strong_start")).toBe(0.25);
+    expect(shareOf(bingo, bob.id, "strong_start")).toBeNull(); // bob hasn't earned it
+
+    submit(bingo, team.id, bob.id, leafId, itemName);
+    expect(shareOf(bingo, alice.id, "strong_start")).toBe(0.5);
+    expect(shareOf(bingo, bob.id, "strong_start")).toBe(0.5);
+  });
+
+  it("never shows one on a Hidden Achievement still to be found", () => {
+    const { bingo, alice } = seed();
+    const masked = myAchievements(bingo, alice.id).achievements.filter((a) => a.masked);
+    expect(masked.length).toBeGreaterThan(0);
+    expect(masked.every((a) => a.share === null)).toBe(true);
+  });
+
+  it("counts only Players on a Team: one who earned it and has since left counts on neither side", () => {
+    const { bingo, team, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, leafId, itemName);
+    submit(bingo, team.id, bob.id, leafId, itemName);
+    db.delete(schema.teamMembers).where(eq(schema.teamMembers.userId, bob.id)).run();
+
+    expect(shareOf(bingo, alice.id, "strong_start")).toBeCloseTo(1 / 3);
+  });
+
+  it("tells the Admins how many Players have earned each Achievement, out of how many", () => {
+    const { bingo, team, alice, bob } = seed();
+    const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, leafId, itemName);
+    submit(bingo, team.id, bob.id, leafId, itemName);
+
+    const { achievements, players } = achievementService.getAchievementSettings(db, bingo.id);
+    expect(players).toBe(4);
+    expect(achievements.find((a) => a.key === "strong_start")!.earnedBy).toBe(2);
+    expect(achievements.find((a) => a.key === "cheerleader")!.earnedBy).toBe(0);
+  });
+});
+
 describe("getAchievementTallies (for the Overachiever Title)", () => {
   it("counts each Player's switched-on earned Achievements and when they got the latest", () => {
     const { bingo, team, alice, bob } = seed();

@@ -232,12 +232,13 @@ router.post(
   }),
 );
 
-// Every catalogue Achievement's current switch state, for the settings form's "Achievements" section — see
-// achievementService.getAchievementSettings. The master switch is on the bingo shell (achievementsEnabled).
+// Every catalogue Achievement's current switch state and how many Players have earned it, for the settings form's
+// "Achievements" section — see achievementService.getAchievementSettings. The master switch is on the bingo shell
+// (achievementsEnabled).
 router.get(
   "/achievements",
   asyncHandler(async (req, res) => {
-    res.json({ achievements: achievementService.getAchievementSettings(db, req.bingo!.id) });
+    res.json(achievementService.getAchievementSettings(db, req.bingo!.id));
   }),
 );
 
