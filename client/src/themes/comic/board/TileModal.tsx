@@ -1179,10 +1179,11 @@ function FlyingBook({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPresent]);
 
-  // The modal around the book (see useBookModal): the page behind it is locked and hidden once the book has landed.
+  // The modal around the book (see useBookModal): the page behind it can't be scrolled, and is hidden from screen
+  // readers, without being restyled.
   const modalRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const { underlayProps, modalProps } = useBookModal({ modalRef, dialogRef, onClose, armed: !opening });
+  const { underlayProps, modalProps } = useBookModal({ modalRef, dialogRef, onClose });
 
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
