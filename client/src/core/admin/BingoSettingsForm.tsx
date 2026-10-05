@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { STAGE_LABEL, areTilesSealed, isBoardLocked, type Bingo, type CutMode, type ExclusivityRule, type SignupMode } from "@bingo/shared";
+import { STAGE_LABEL, areTilesSealed, isBoardLocked, type Bingo, type CutMode, type SignupMode } from "@bingo/shared";
 import { cutModeOptions } from "../draft/cutModes";
 import * as adminApi from "../../api/adminApi";
 import { queryKeys } from "../../api/queries";
-import { Markdown } from "../ui/Markdown";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Disclosure } from "../ui/Disclosure";
@@ -13,8 +12,6 @@ import { Checkbox } from "../ui/Checkbox";
 import { Select } from "../ui/Select";
 import { Switch } from "../ui/Switch";
 import { THEME_KEYS } from "../../themes/keys";
-import { ExclusiveItemsSection } from "./ExclusiveItemsSection";
-import { TextButton } from "../ui/TextButton";
 import { ExternalLink } from "../ui/ExternalLink";
 import { DiscordSyncPanel } from "./DiscordSyncPanel";
 import { useAuth } from "../../context/AuthContext";
@@ -62,12 +59,10 @@ export function BingoSettingsForm({
     warnLeftovers: bingo.warnLeftovers,
     buyinAmount: bingo.buyinAmount?.toString() ?? "",
     bonusPotAmount: bingo.bonusPotAmount.toString(),
-    rulesMarkdown: bingo.rulesMarkdown ?? "",
     showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     publishWrappedOnFinish: bingo.publishWrappedOnFinish,
     sealedTiles: bingo.sealedTiles,
     hideRules: bingo.hideRules,
-    exclusivityRules: bingo.exclusivityRules as ExclusivityRule[],
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
     draftScheduledAt: toLocalInput(bingo.draftScheduledAt),
     revealScheduledAt: toLocalInput(bingo.revealScheduledAt),
@@ -85,7 +80,6 @@ export function BingoSettingsForm({
     discordCategoryId: bingo.discordCategoryId ?? "",
     discordChannels: bingo.discordChannels,
   });
-  const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -129,12 +123,10 @@ export function BingoSettingsForm({
         warnLeftovers: form.warnLeftovers,
         buyinAmount: form.buyinAmount ? Number(form.buyinAmount) : null,
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
-        rulesMarkdown: form.rulesMarkdown || null,
         showScreenshotsWhenFinished: form.showScreenshotsWhenFinished,
         publishWrappedOnFinish: form.publishWrappedOnFinish,
         sealedTiles: form.sealedTiles,
         hideRules: form.hideRules,
-        exclusivityRules: form.exclusivityRules,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
         draftScheduledAt: fromLocalInput(form.draftScheduledAt) as never,
         revealScheduledAt: fromLocalInput(form.revealScheduledAt) as never,
@@ -333,28 +325,6 @@ export function BingoSettingsForm({
         </Section>
       )}
 
-      <Section title="Rules">
-        <Field
-          as="div"
-          label={
-            <span className="flex items-center justify-between">
-              Rules (Markdown)
-              <TextButton onPress={() => setShowPreview((p) => !p)} className="text-xs text-on-surface-muted">
-                {showPreview ? "Edit" : "Preview"}
-              </TextButton>
-            </span>
-          }
-        >
-          {showPreview ? (
-            <div className="min-h-[120px] rounded-md border border-outline bg-surface px-3 py-2">
-              <Markdown>{form.rulesMarkdown || "*(nothing yet)*"}</Markdown>
-            </div>
-          ) : (
-            <Textarea aria-label="Rules (Markdown)" value={form.rulesMarkdown} onChange={(e) => setForm({ ...form, rulesMarkdown: e.target.value })} rows={6} className="font-mono" />
-          )}
-        </Field>
-      </Section>
-
       <Section title="Once Finished">
         <p className="text-sm text-on-surface-muted">
           Once the bingo is finished, every clan member can read it: the board, stats, final teams, and every team's submissions.
@@ -371,13 +341,9 @@ export function BingoSettingsForm({
         </p>
       </Section>
 
-      <Section title="Exclusive items">
-        <ExclusiveItemsSection slug={slug} rules={form.exclusivityRules} onChange={(exclusivityRules) => setForm({ ...form, exclusivityRules })} />
-      </Section>
-
       <Section title="Export">
         <p className="text-sm text-on-surface-muted">
-          Download this bingo's board and settings as a file — categories, tiles, tasks, lines, and signup questions. Everything
+          Download this bingo's published board and settings as a file — categories, tiles, tasks, lines, and signup questions (unpublished board changes are left out). Everything
           environment-specific (teams, signups, submissions, moderators, dates) is left out. Import it as a new bingo from the site admin page.
         </p>
         <div className="flex items-center gap-3">

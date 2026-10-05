@@ -1,6 +1,6 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardDraftStatus, BoardResponse, DraftBoardResponse, PublishPreview, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
 import { DEFAULT_DISCORD_CHANNELS } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
@@ -93,13 +93,27 @@ function asInput(node: GraphNode): GraphNodeInput {
  * has one to show even when the board it was made from has none (see board.ts's itemToWeigh for which).
  */
 export async function weighAnItem(ctx: Ctx, at: Date): Promise<void> {
-  const board = await fetchBoard(ctx);
+  const { board } = await ctx.api.as(ctx.admin).get<DraftBoardResponse>(path(ctx, "/admin/board-draft"));
   const tasks = [...board.tiles].sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol).flatMap((t) => t.node.children);
   const pick = itemToWeigh(tasks);
   if (!pick) return;
   const withWeight = (n: GraphNodeInput): GraphNodeInput => (n.id === pick.item.id ? { ...n, countsAs: pick.countsAs } : { ...n, children: n.children?.map(withWeight) });
   await ctx.api.as(ctx.admin).patch(path(ctx, `/admin/tasks/${pick.task.id}`), withWeight(asInput(pick.task)), { at });
   ctx.log(`${pick.item.itemName} counts as ${pick.countsAs} in "${pick.task.label}"`);
+}
+
+/**
+ * Publishes the Admin's setup edits to the board (CONTEXT.md "Publish"), as an Admin would from the Board tab: opens
+ * the Publish screen's preview, then publishes the draft it showed. The import itself is the Published board; the
+ * edits after it (weighAnItem) went to the Draft board, so without this the Bingo would play on the board as imported.
+ */
+export async function publishBoard(ctx: Ctx, at: Date): Promise<void> {
+  const admin = ctx.api.as(ctx.admin);
+  const { status } = await admin.get<{ status: BoardDraftStatus }>(path(ctx, "/admin/board-draft/status"));
+  if (!status.hasChanges) return;
+  const { preview } = await admin.get<{ preview: PublishPreview }>(path(ctx, "/admin/board-draft/preview"));
+  await admin.post(path(ctx, "/admin/board-draft/publish"), { revision: preview.revision }, { at });
+  ctx.log(`published the board (${preview.summary.join(", ")}) at ${fmt(at)}`);
 }
 
 /**

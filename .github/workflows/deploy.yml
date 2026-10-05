@@ -25,7 +25,8 @@ name: Deploy
 #   DEPLOY_USER         the deploy user on the box (deploy/bootstrap-box.sh creates it)
 #   DEPLOY_SSH_KEY      the private half of the CI key (its public half is in the deploy user's authorized_keys, pinned to ssh-entry.sh)
 #   DEPLOY_KNOWN_HOSTS  the box's host key line(s), from `ssh-keyscan -t ed25519 <host>` run once, from a trusted network
-#   SENTRY_AUTH_TOKEN   uploads the client's source maps for this release (optional)
+#   SENTRY_AUTH_TOKEN   a Sentry organization token (optional): uploads the client's source maps for this release, and records
+#                       the release's commits and where it is deployed
 # Variables (optional): STAGING_URL, PRODUCTION_URL, e.g. https://staging.tectonic.bingo, for a check from outside after a deploy.
 
 on:
@@ -106,6 +107,7 @@ jobs:
       ACTION: ${{ needs.resolve.outputs.action }}
       SHA: ${{ needs.resolve.outputs.sha }}
       SKIP_STAGING_CHECK: ${{ needs.resolve.outputs.skip_staging_check }}
+      HAS_SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -221,3 +223,22 @@ jobs:
             sleep 5
           done
           echo "::error::$URL/health did not answer"; exit 1
+
+      # Tells Sentry which commits the release holds and that it now runs in this environment. That gives an issue its
+      # suspect commits, and a commit saying "Fixes TECTONIC-SERVER-7" resolves that issue once its release is deployed. The
+      # release is the commit, as the server and client report it (SENTRY_RELEASE). The commits come from this checkout
+      # (fetch-depth: 0): everything since the release Sentry last recorded. Optional like the source maps, and a Sentry
+      # outage never fails a deploy that has already happened.
+      - name: Record the release in Sentry
+        if: env.ACTION == 'deploy' && env.HAS_SENTRY_TOKEN == 'true'
+        continue-on-error: true
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: tectonic-l9
+        with:
+          release: ${{ needs.resolve.outputs.sha }}
+          projects: tectonic-server tectonic-client
+          environment: ${{ needs.resolve.outputs.environment }}
+          set_commits: auto
+          ignore_missing: true

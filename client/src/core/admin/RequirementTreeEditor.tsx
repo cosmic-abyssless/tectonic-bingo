@@ -9,9 +9,7 @@ import { Input } from "../ui/Field";
 import { Menu, MenuItem } from "../ui/Menu";
 import { Select } from "../ui/Select";
 import { ChevronDownIcon, GripIcon, LinkIcon, PlusIcon, XIcon } from "../ui/icons";
-import { Dialog, DialogHeader } from "../ui/Dialog";
 import { TextTooltip, TooltipSpan } from "../ui/Tooltip";
-import * as adminApi from "../../api/adminApi";
 import { toGraphNodeInput, collectLabeledConditions } from "../board/requirementTree";
 import { describeRules, useRulesFor } from "./exclusiveItems";
 import { canMove, moveNode, type Path } from "./requirementMoves";
@@ -639,7 +637,7 @@ function RemoveButton({ shared, label, what, onPress, className }: { shared: boo
 // docs/item-quantity-model.md §2). Renaming isn't supported here; remove and
 // re-add (or "+ existing item") instead, matching the read-only-once-added
 // behavior a chip always had.
-function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedNodeIds, parentKind }: NodeProps) {
+function ItemLeafRow({ node, path, remove, update, existingLeaves, sharedNodeIds, parentKind }: NodeProps) {
   const isRoot = path.length === 0;
   const name = node.itemName ?? "";
   // This leaf *itself* has 2+ direct parents — not just "reachable somewhere
@@ -651,35 +649,14 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
   const exclusiveRules = useRulesFor(name);
   const [editingValue, setEditingValue] = useState(false);
   const valuedAs = node.valuedAs ?? null;
-  // A changed Valued as on a Task that already has priced submissions (mid-bingo): the new value waits here while
-  // the admin picks whether to re-price them too.
-  const [pending, setPending] = useState<{ next: ValuedAs | null; count: number } | null>(null);
-  const [repriceNote, setRepriceNote] = useState<string | null>(null);
   const dragging = samePath(useContext(MovesContext)!.dragging, path);
 
+  // Saved to the Draft board like any edit. Submissions already priced from the old value are offered for re-pricing
+  // once it's published (PublishBoardDialog), when the new value is the one that counts.
   async function saveValuedAs(next: ValuedAs | null) {
-    setRepriceNote(null);
-    const changed = JSON.stringify(next) !== JSON.stringify(valuedAs);
-    if (!changed) return setEditingValue(false);
-    const count = node.id ? (await adminApi.countPricedSubmissions(slug, node.id).catch(() => ({ count: 0 }))).count : 0;
-    if (count > 0) return setPending({ next, count });
     setEditingValue(false);
+    if (JSON.stringify(next) === JSON.stringify(valuedAs)) return;
     await update(path, (n) => ({ ...n, valuedAs: next }));
-  }
-
-  async function applyPending(reprice: boolean) {
-    if (!pending) return;
-    const { next } = pending;
-    setPending(null);
-    setEditingValue(false);
-    const saved = await update(path, (n) => ({ ...n, valuedAs: next }));
-    if (!reprice || saved === false || !node.id) return;
-    try {
-      const { repriced } = await adminApi.repriceNodeClaims(slug, node.id);
-      setRepriceNote(`Re-priced ${repriced} submission${repriced === 1 ? "" : "s"}`);
-    } catch (e) {
-      setRepriceNote(e instanceof Error ? e.message : "Couldn't re-price");
-    }
   }
 
   return (
@@ -718,29 +695,6 @@ function ItemLeafRow({ slug, node, path, remove, update, existingLeaves, sharedN
         {!isRoot && <RemoveButton shared={isShared} label={isShared ? `Unlink ${name}` : `Remove ${name}`} what="item" onPress={() => remove(path)} />}
       </div>
       {editingValue && <ValuedAsEditor itemName={name} valuedAs={valuedAs} onSave={(next) => void saveValuedAs(next)} onCancel={() => setEditingValue(false)} />}
-      {repriceNote && <p className="px-2 text-[11px] text-on-surface-muted">{repriceNote}</p>}
-
-      <Dialog isOpen={!!pending} onClose={() => setPending(null)}>
-        <DialogHeader title="Re-price the submissions already made?" onClose={() => setPending(null)} />
-        <div className="space-y-3 p-5 text-sm text-on-surface-muted">
-          <p>
-            {pending?.count} submission{pending?.count === 1 ? " already has" : "s already have"} a drop value from {name} on this Task. Re-pricing prices{" "}
-            {pending?.count === 1 ? "it" : "them"} again with the new value at today's prices (only this Task's items); saving only leaves{" "}
-            {pending?.count === 1 ? "it" : "them"} as {pending?.count === 1 ? "it is" : "they are"} and applies the new value to new submissions.
-          </p>
-          <div className="flex flex-wrap justify-end gap-2 pt-2">
-            <Button variant="ghost" size="sm" onPress={() => setPending(null)}>
-              Cancel
-            </Button>
-            <Button variant="secondary" size="sm" onPress={() => void applyPending(false)}>
-              Save only
-            </Button>
-            <Button variant="primary" size="sm" onPress={() => void applyPending(true)}>
-              Save and re-price {pending?.count}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { getApprovedClaims, getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
 import { tileForLeaf } from "./submissionService";
 import { audit } from "../audit/record";
+import { PUBLISHED_BOARD, type BoardTables } from "./boardTables";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -94,17 +95,22 @@ export function getSubmissionNodeIds(tx: Tx, submissionId: string): string[] {
   return [...new Set(rows.map((r) => r.nodeId))];
 }
 
-// Re-evaluates the whole bingo's graph against a team's approved claims and
-// overwrites teamNodeState with exactly the currently-complete nodes. This is
-// a full recompute, not an incremental patch — see docs/node-graph-model.md
-// §5. Returns the new state so callers can diff against what was there
-// before (e.g. to report what an approval newly completed).
-export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { completedAt: Date; pointsAwarded: number }> {
+/**
+ * What rebuildTeamState would store for a team, without writing it: every node complete for the team, with the points
+ * it awards. `board` scores it against another copy of the board, such as the Draft board for a Publish preview
+ * (boardDraftService): only Claims on nodes that board still has count, under that board's Exclusive Item rules.
+ */
+export function scoreTeam(
+  tx: Tx,
+  teamId: string,
+  board?: { t: BoardTables; exclusivityRulesJson: string },
+): Map<string, { completedAt: Date; pointsAwarded: number }> {
   const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
   if (!team) throw new ServiceError(404, "Team not found");
 
-  const { engineNodes, childrenOf, nodesById } = getFullGraph(tx, team.bingoId);
-  const approvedClaims = applyExclusivity(tx, team.bingoId, getApprovedClaims(tx, teamId, team.bingoId));
+  const { engineNodes, childrenOf, nodesById } = getFullGraph(tx, team.bingoId, board?.t ?? PUBLISHED_BOARD);
+  const claimed = getApprovedClaims(tx, teamId, team.bingoId).filter((c) => !board || nodesById.has(c.nodeId));
+  const approvedClaims = applyExclusivity(tx, team.bingoId, claimed, board);
   const results = evaluateGraph(engineNodes, childrenOf, approvedClaims);
 
   const newState = new Map<string, { completedAt: Date; pointsAwarded: number }>();
@@ -114,7 +120,16 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
       newState.set(node.id, { completedAt: r.completedAt, pointsAwarded: awardedPoints(node.id, results, nodesById) });
     }
   }
+  return newState;
+}
 
+// Re-evaluates the whole bingo's graph against a team's approved claims and
+// overwrites teamNodeState with exactly the currently-complete nodes. This is
+// a full recompute, not an incremental patch — see docs/node-graph-model.md
+// §5. Returns the new state so callers can diff against what was there
+// before (e.g. to report what an approval newly completed).
+export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { completedAt: Date; pointsAwarded: number }> {
+  const newState = scoreTeam(tx, teamId);
   tx.delete(teamNodeState).where(eq(teamNodeState.teamId, teamId)).run();
   for (const [nodeId, state] of newState) {
     tx.insert(teamNodeState).values({ teamId, nodeId, completedAt: state.completedAt, pointsAwarded: state.pointsAwarded }).run();
@@ -130,19 +145,27 @@ export function rebuildTeamState(tx: Tx, teamId: string): Map<string, { complete
  */
 export function rescoreBingo(db: Db, bingoId: string): void {
   db.transaction((tx) => {
-    for (const team of tx.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingoId)).all()) {
-      const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, team.id)).all().reduce((sum, r) => sum + r.pointsAwarded, 0);
-      const after = [...rebuildTeamState(tx, team.id).values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
-      if (after === before) continue;
-      audit(tx, {
-        action: "points.rescored",
-        bingoId,
-        entity: { type: "team", id: team.id, label: team.name },
-        teamId: team.id,
-        details: { delta: after - before },
-      });
-    }
+    rescoreBingoTx(tx, bingoId);
   });
+}
+
+/** rescoreBingo inside the caller's transaction (a Publish), returning each team's node points before and after. */
+export function rescoreBingoTx(tx: Tx, bingoId: string): { teamId: string; before: number; after: number }[] {
+  const changes: { teamId: string; before: number; after: number }[] = [];
+  for (const team of tx.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingoId)).all()) {
+    const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, team.id)).all().reduce((sum, r) => sum + r.pointsAwarded, 0);
+    const after = [...rebuildTeamState(tx, team.id).values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
+    changes.push({ teamId: team.id, before, after });
+    if (after === before) continue;
+    audit(tx, {
+      action: "points.rescored",
+      bingoId,
+      entity: { type: "team", id: team.id, label: team.name },
+      teamId: team.id,
+      details: { delta: after - before },
+    });
+  }
+  return changes;
 }
 
 export interface ApproveSubmissionParams {

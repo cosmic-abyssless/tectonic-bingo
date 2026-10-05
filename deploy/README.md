@@ -270,7 +270,8 @@ steps; the rest is secrets and DNS, which only a person can do.
 6. **Add the GitHub secrets** (Settings > Secrets and variables > Actions): `DEPLOY_HOST` (the address),
    `DEPLOY_USER` (`deploy`), `DEPLOY_SSH_KEY` (the contents of `deploy_key`), `DEPLOY_KNOWN_HOSTS` (the output of
    `ssh-keyscan -t ed25519 <address>`, run from a network you trust: the deploy refuses a host whose key differs), and
-   `SENTRY_AUTH_TOKEN` (optional). The optional variables `STAGING_URL` and `PRODUCTION_URL` add a check from outside.
+   `SENTRY_AUTH_TOKEN` (optional: a Sentry organization token, from Settings > Developer Settings > Organization Tokens;
+   it uploads the client's source maps and records each release's commits and deploys). The optional variables `STAGING_URL` and `PRODUCTION_URL` add a check from outside.
 7. **DNS** (Mico controls it): `tectonic.bingo`, `www` and `staging` as A records to the server. Caddy obtains certificates
    on the first request once the names resolve. Until then a deploy warns that the public address is not answering yet
    (it cannot get a certificate), which is expected.

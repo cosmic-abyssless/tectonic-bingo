@@ -82,6 +82,10 @@ const isFieldDiff = (v: unknown): v is FieldDiff => {
 // as a plain key/value line, or a list when it's a list of text. A `changes`
 // that isn't a before/after pair (an older Cut review entry's list) is just
 // another key.
+function isPointsBeforeAfter(v: unknown): v is { teamName: string; before: number; after: number }[] {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => !!x && typeof x === "object" && typeof x.teamName === "string" && typeof x.before === "number" && typeof x.after === "number");
+}
+
 export function DetailsView({ details }: { details: unknown }) {
   if (!details || typeof details !== "object") return null;
   const { changes: rawChanges, ...others } = details as { changes?: unknown };
@@ -111,7 +115,19 @@ export function DetailsView({ details }: { details: unknown }) {
         </div>
       )}
       {Object.entries(rest).map(([k, v]) =>
-        Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") ? (
+        isPointsBeforeAfter(v) ? (
+          // A Publish's (board.published) Teams: each one's points before and after.
+          <div key={k} className="text-on-surface-muted">
+            <span className="text-on-surface-subtle">{k}:</span>
+            <ul className="ml-4 list-disc">
+              {v.map((t, i) => (
+                <li key={i}>
+                  {t.teamName}: <span className="num">{t.before}</span> → <span className="num">{t.after}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") ? (
           <div key={k} className="text-on-surface-muted">
             <span className="text-on-surface-subtle">{k}:</span>
             <ul className="ml-4 list-disc">

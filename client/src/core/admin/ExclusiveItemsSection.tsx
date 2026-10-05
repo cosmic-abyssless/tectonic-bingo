@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ExclusivityRule, ExclusivityScope, ItemGroup } from "@bingo/shared";
-import { useItemGroups } from "../../api/adminQueries";
-import { fullBoard, useBoard } from "../../api/queries";
+import { useBoardDraft, useItemGroups } from "../../api/adminQueries";
 import { boardItemSources, type ItemSource } from "../board/exclusivity";
 import { addGroup, addToGroup, groupLabelOf, groupProblems, groupsOf, mergeNames, removeFromGroup, removeGroup, removeItem, renameGroup, ungroupedNames } from "./exclusiveGroups";
 import { Button, IconButton } from "../ui/Button";
@@ -276,7 +275,8 @@ function RuleRow({
  */
 export function ExclusiveItemsSection({ slug, rules, onChange }: { slug: string; rules: ExclusivityRule[]; onChange: (rules: ExclusivityRule[]) => void }) {
   const groups = useItemGroups().data?.itemGroups ?? [];
-  const tiles = fullBoard(useBoard(slug).data)?.tiles;
+  // Started from the board being edited: the Draft board's Tiles, as the rules are saved to it too.
+  const tiles = useBoardDraft(slug).data?.board.tiles;
   const sources = useMemo(() => boardItemSources(tiles ?? []), [tiles]);
   const [sourceValue, setSourceValue] = useState("");
   const [name, setName] = useState("");
@@ -331,7 +331,7 @@ export function ExclusiveItemsSection({ slug, rules, onChange }: { slug: string;
       </div>
       <p className="text-xs text-on-surface-subtle">
         A rule keeps the items it was started with: changing the tile or group later doesn't change it. Edit the items here, or remove the rule and add it
-        again. Save the settings to apply.
+        again. Save them to the draft; they apply once the board is published.
       </p>
     </>
   );

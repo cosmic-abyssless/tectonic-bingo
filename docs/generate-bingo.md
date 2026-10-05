@@ -94,6 +94,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
+   That PATCH goes to the **Draft board** (CONTEXT.md), as every board edit does, so the admin then **publishes** it
+   through the Publish endpoint, the way the Publish screen does (its preview, then a Publish of the revision it
+   showed): the Bingo plays on the board it set up, and its audit log shows "Board published". The import itself is
+   the Published board, so a run with no board edit publishes nothing.
    The admin also uploads **Wrapped art** (CONTEXT.md) through the Wrapped art manager's endpoints (`wrappedArt.ts`):
    four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
    Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
