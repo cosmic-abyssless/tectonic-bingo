@@ -50,6 +50,11 @@ beforeAll(async () => {
   app.use(auditContext);
   app.use((req, res, next) => loadWarningsMiddleware(warnings)(req, res, next));
   app.use("/api/bingos/:slug/admin", adminRouter);
+  // One that never answers (as a Player card did, waiting on a dead connection), and one that does.
+  app.get("/api/never", () => {});
+  app.get("/api/answers", (_req, res) => {
+    res.json({ ok: true });
+  });
   app.use(errorHandler);
   server = app.listen(0);
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -112,6 +117,17 @@ describe("a burst of writes from one user", () => {
   it("to a test data Bingo raises nothing", async () => {
     await burst(`/api/bingos/testdata-b2/admin/teams/${generatedTeam.id}`, 10);
     expect(captureMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("a request the browser gives up on", () => {
+  it("is recorded without a status, as unanswered; an answered one has its status", async () => {
+    const recorded = vi.spyOn(warnings, "recordRequest");
+    await fetch(`${origin}/api/never`, { signal: AbortSignal.timeout(50) }).catch(() => {});
+    await fetch(`${origin}/api/answers`);
+    await vi.waitFor(() => expect(recorded).toHaveBeenCalledTimes(2));
+    // In whichever order the server notices: the given-up one when its connection closes.
+    expect(new Map(recorded.mock.calls.map(([r]) => [r.route, r.status]))).toEqual(new Map<string, number | null>([["/api/never", null], ["/api/answers", 200]]));
   });
 });
 
