@@ -46,7 +46,6 @@ function PreviewBoard({ bingo, draft }: { bingo: Bingo; draft: DraftBoardRespons
       bingoStartsAt={null}
       bingoRows={bingo.boardRows}
       bingoCols={bingo.boardCols}
-      searchQuery=""
       canSubmit={false}
       canToggleInterest={false}
       interests={NO_INTERESTS}

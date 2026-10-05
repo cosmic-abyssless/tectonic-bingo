@@ -3,6 +3,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * The nudge to scout the players before the draft: a team lead (or mod) gets it while signups are open, and every
@@ -31,7 +32,7 @@ export function ScoutBanner({ onOpen, canRate }: { onOpen: () => void; canRate: 
               {/* The wiki's Spyglass, at its own 31x29 so the pixel art stays crisp. */}
               <WikiIcon name="Spyglass" className="h-[29px] w-[31px] [image-rendering:pixelated]" />
               <span
-                className="comic-outline-text text-3xl uppercase leading-none"
+                className={`${LETTERED} comic-outline-text text-3xl uppercase leading-none`}
                 style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", ["--comic-title-fill" as string]: colors.TITLE_FILL, ["--comic-title-stroke" as string]: colors.TITLE_STROKE }}
               >
                 Scout the signups!

@@ -16,12 +16,18 @@ export function SearchableSelect({
   placeholder,
   onChange,
   readOnly,
+  matches,
+  onQueryChange,
 }: {
   value: string;
   options: Option[];
   placeholder: string;
   onChange: (id: string) => void;
   readOnly?: boolean;
+  /** Whether an option matches what's typed (lowercased), when that's more than its label containing it. */
+  matches?: (option: Option, q: string) => boolean;
+  /** Hears what's typed as it's typed ("" while the whole list shows). */
+  onQueryChange?: (q: string) => void;
 }) {
   return (
     <SearchCombo
@@ -31,6 +37,8 @@ export function SearchableSelect({
       itemSection={(o) => o.group}
       selectedKey={options.some((o) => o.id === value) ? value : null}
       onPick={(o) => onChange(o.id)}
+      itemMatches={matches}
+      onQueryChange={onQueryChange}
       readOnly={readOnly}
       emptyText="No matches"
       placeholder={placeholder}

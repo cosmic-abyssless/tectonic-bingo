@@ -1,13 +1,16 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOARD_CACHE_MAX_AGE_MS,
   BOARD_CACHE_MAX_ENTRIES,
+  BOARD_CACHE_REFRESH_MS,
   BOARD_CACHE_SCHEMA,
   boardCacheKey,
   clearBoardCache,
+  flushBoardCacheWrites,
   readBoardCache,
   removeBoardCacheForSlug,
+  scheduleBoardCacheWrite,
   writeBoardCache,
   type StorageLike,
 } from "./boardCache";
@@ -119,5 +122,75 @@ describe("boardCache", () => {
     expect(() => clearBoardCache(broken)).not.toThrow();
     expect(readBoardCache("u1", "bingo", "b1", NOW, null)).toBeUndefined();
     expect(() => writeBoardCache("u1", "bingo", "b1", BOARD, NOW, null)).not.toThrow();
+  });
+
+  it("skips rewriting unchanged data until the refresh window passes", () => {
+    const s = memoryStorage();
+    const setItem = vi.spyOn(s, "setItem");
+    writeBoardCache("u1", "bingo", "b1", BOARD, NOW, s);
+    writeBoardCache("u1", "bingo", "b1", { ...BOARD }, NOW + 1000, s);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    // Changed data, another build, or an old enough copy is written again.
+    writeBoardCache("u1", "bingo", "b1", { ...BOARD, lines: [1] }, NOW + 2000, s);
+    writeBoardCache("u1", "bingo", "b2", { ...BOARD, lines: [1] }, NOW + 3000, s);
+    writeBoardCache("u1", "bingo", "b2", { ...BOARD, lines: [1] }, NOW + 3000 + BOARD_CACHE_REFRESH_MS, s);
+    expect(setItem).toHaveBeenCalledTimes(4);
+    expect(JSON.parse(s.data.get(boardCacheKey("u1", "bingo"))!)).toEqual({ savedAt: NOW + 3000 + BOARD_CACHE_REFRESH_MS, build: "b2", data: { ...BOARD, lines: [1] } });
+  });
+
+  it("recognises unchanged data in a copy written as one JSON.stringify of the whole entry", () => {
+    const s = memoryStorage();
+    s.data.set(boardCacheKey("u1", "bingo"), JSON.stringify({ savedAt: NOW, build: "b1", data: BOARD }));
+    const setItem = vi.spyOn(s, "setItem");
+    writeBoardCache("u1", "bingo", "b1", BOARD, NOW + 1, s);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  describe("scheduled writes", () => {
+    afterEach(() => {
+      clearBoardCache(null);
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it("writes only the latest data per key, and nothing before the flush", () => {
+      const s = memoryStorage();
+      scheduleBoardCacheWrite("u1", "bingo", "b1", { tiles: [], lines: [] }, NOW);
+      scheduleBoardCacheWrite("u1", "bingo", "b1", BOARD, NOW + 1);
+      scheduleBoardCacheWrite("u1", "bingo:shell", "b1", { name: "x" }, NOW + 2);
+      expect(s.data.size).toBe(0);
+      flushBoardCacheWrites(s);
+      expect(readBoardCache("u1", "bingo", "b1", NOW + 3, s)).toEqual(BOARD);
+      expect(readBoardCache("u1", "bingo:shell", "b1", NOW + 3, s)).toEqual({ name: "x" });
+      // Nothing is left over for a later flush.
+      s.data.clear();
+      flushBoardCacheWrites(s);
+      expect(s.data.size).toBe(0);
+    });
+
+    it("flushes on its own once the browser is idle", () => {
+      vi.useFakeTimers();
+      const s = memoryStorage();
+      vi.stubGlobal("localStorage", s);
+      scheduleBoardCacheWrite("u1", "bingo", "b1", BOARD, NOW);
+      expect(s.data.size).toBe(0);
+      vi.runAllTimers();
+      expect(readBoardCache("u1", "bingo", "b1", NOW, s)).toEqual(BOARD);
+    });
+
+    it("drops waiting writes for a removed bingo, and all of them on logout", () => {
+      const s = memoryStorage();
+      scheduleBoardCacheWrite("u1", "gone", "b1", BOARD, NOW);
+      scheduleBoardCacheWrite("u1", "gone:shell", "b1", BOARD, NOW);
+      scheduleBoardCacheWrite("u1", "kept", "b1", BOARD, NOW);
+      removeBoardCacheForSlug("u1", "gone", s);
+      flushBoardCacheWrites(s);
+      expect([...s.data.keys()]).toEqual([boardCacheKey("u1", "kept")]);
+
+      scheduleBoardCacheWrite("u1", "kept", "b1", { ...BOARD, lines: [1] }, NOW + 1);
+      clearBoardCache(s);
+      flushBoardCacheWrites(s);
+      expect(s.data.size).toBe(0);
+    });
   });
 });

@@ -48,6 +48,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
+  "POST /api/bingos/:slug/admin/discord/remove": ["settings.updated", "discord.removed"],
   // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, and the Exclusive Item rules and Rules
   // text at .../board-draft/rules) are auditSkip()'d, audited instead by the Publish that applies them.
   "POST /api/bingos/:slug/admin/board-draft/publish": ["board.published", "points.rescored"],
@@ -63,6 +64,9 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_set"],
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id/recut": ["wrapped.art_recut"],
   "DELETE /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_removed"],
+  "POST /api/bingos/:slug/admin/tiles/:tileId/tags": ["tag.added"],
+  "POST /api/bingos/:slug/admin/parts/:partId/tags": ["tag.added"],
+  "DELETE /api/bingos/:slug/admin/tags/:id": ["tag.removed"],
   "POST /api/bingos/:slug/admin/nodes/:nodeId/reprice": ["submission.repriced"],
   "POST /api/bingos/:slug/admin/questions": ["question.created"],
   "PATCH /api/bingos/:slug/admin/questions/:id": ["question.updated"],
@@ -78,6 +82,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/admin/teams/:id": ["team.deleted"],
   "DELETE /api/bingos/:slug/admin/teams/:id/members/:userId": ["team.member_removed", "signup.withdrawn", "pairing.dissolved"],
   "POST /api/bingos/:slug/admin/late-signups": ["signup.created", "team.member_added"],
+  "PUT /api/bingos/:slug/admin/signups/:signupId/account": ["signup.account_borrowed"],
   // Cut review scoring (POST .../admin/cut-review/score) is a read-only calculation (auditSkip), not listed here.
   "POST /api/bingos/:slug/admin/cut-review/apply": ["pairing.admin_paired", "pairing.unpaired", "team.created", "team.deleted", "draft.cut_review_applied"],
 

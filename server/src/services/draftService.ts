@@ -1,5 +1,5 @@
 import { now as clockNow } from "../clock";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { PAIRS_FIRST_MESSAGE, playerName, unavailableReason, type AnswerViewer, type CutMode, type DraftCutPreview, type DraftShares, type DraftTakes } from "@bingo/shared";
 import { visibleQuestionIds } from "./signupService";
@@ -570,6 +570,16 @@ export const MAX_RATING_STARS = 3;
 export function ratingsForViewer(db: Db, bingoId: string, userId: string): Record<string, PickRating> {
   const team = getUserTeamForBingo(db, bingoId, userId);
   return team && isTeamLead(db, team.id, userId) ? getTeamRatings(db, team.id) : {};
+}
+
+/** Who sees a Team's ratings (ratingsForViewer): its leads, so a change to them is told to these users only. */
+export function ratingViewerIds(db: Db, teamId: string): string[] {
+  return db
+    .select({ userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamId, teamId), or(eq(teamMembers.isCaptain, true), eq(teamMembers.isCoCaptain, true))))
+    .all()
+    .map((r) => r.userId);
 }
 
 export function getTeamRatings(db: Db, teamId: string): Record<string, PickRating> {

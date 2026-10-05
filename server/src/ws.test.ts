@@ -1,5 +1,5 @@
 // The live-update socket is for logged-in clan members only, checked on the upgrade with the same session and Passport
-// machinery as HTTP requests, and a logout closes that session's sockets.
+// machinery as HTTP requests, and a logout closes that session's sockets. A Bingo's events go to the sockets watching it.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import express from "express";
 import session from "express-session";
@@ -104,6 +104,95 @@ describe("the /ws upgrade", () => {
     expect(await received).toEqual([event, event]);
     member.close();
     admin.close();
+  });
+});
+
+describe("watching Bingos", () => {
+  // The server reads a socket's messages in order; this gives a sent one time to land before the test broadcasts.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+  /** Every event a socket receives from now on. */
+  const record = (socket: WebSocket) => {
+    const got: BroadcastEvent[] = [];
+    socket.on("message", (data) => got.push(JSON.parse(String(data)) as BroadcastEvent));
+    return got;
+  };
+  const stage = (bingoId: string): BroadcastEvent => ({ type: "stage_changed", bingoId, payload: { stage: "live" } });
+  const watch = (socket: WebSocket, bingoIds: unknown) => socket.send(JSON.stringify({ type: "watch", bingoIds }));
+
+  it("sends a Bingo's events only to the sockets watching it, and site-wide ones to everyone", async () => {
+    const cookie = await login("member");
+    const onB1 = await connect(cookie);
+    const onB2 = await connect(cookie);
+    watch(onB1, ["b1"]);
+    watch(onB2, ["b2", "b3"]);
+    const [got1, got2] = [record(onB1), record(onB2)];
+    await settle();
+
+    ws.broadcast(stage("b1"));
+    ws.broadcast(stage("b3"));
+    ws.broadcast({ type: "bug_report_changed", payload: { id: "r1" } });
+    await settle();
+    expect(got1).toEqual([stage("b1"), { type: "bug_report_changed", payload: { id: "r1" } }]);
+    expect(got2).toEqual([stage("b3"), { type: "bug_report_changed", payload: { id: "r1" } }]);
+    onB1.close();
+    onB2.close();
+  });
+
+  it("sends everything to a socket that never said what it watches (a tab from before watching)", async () => {
+    const old = await connect(await login("member"));
+    const got = record(old);
+    ws.broadcast(stage("b1"));
+    ws.broadcast(stage("b2"));
+    await settle();
+    expect(got).toEqual([stage("b1"), stage("b2")]);
+    old.close();
+  });
+
+  it("follows a new watch list, and ignores a malformed one", async () => {
+    const socket = await connect(await login("member"));
+    const got = record(socket);
+    watch(socket, ["b1"]);
+    await settle();
+    watch(socket, ["b2"]);
+    for (const bad of ["not json", JSON.stringify({ type: "watch", bingoIds: "b1" }), JSON.stringify({ type: "watch", bingoIds: [1] }), JSON.stringify({ type: "watch", bingoIds: Array.from({ length: 51 }, (_, i) => `b${i}`) }), JSON.stringify({ type: "other" }), "null"]) socket.send(bad);
+    await settle();
+    ws.broadcast(stage("b1"));
+    ws.broadcast(stage("b2"));
+    await settle();
+    expect(got).toEqual([stage("b2")]);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    socket.close();
+  });
+
+  it("sends an event for some users only to their sockets, among those watching its Bingo", async () => {
+    const member = await connect(await login("member"));
+    const admin = await connect(await login("admin"));
+    const memberElsewhere = await connect(await login("member"));
+    watch(memberElsewhere, ["b2"]);
+    const [gotMember, gotAdmin, gotElsewhere] = [record(member), record(admin), record(memberElsewhere)];
+    await settle();
+
+    const rating: BroadcastEvent = { type: "draft_rating_changed", bingoId: "b1", payload: { teamId: "t1" } };
+    ws.broadcast(rating, { to: ["member"] });
+    await settle();
+    expect(gotMember).toEqual([rating]);
+    expect(gotAdmin).toEqual([]);
+    expect(gotElsewhere).toEqual([]);
+    for (const s of [member, admin, memberElsewhere]) s.close();
+  });
+});
+
+describe("the hello", () => {
+  it("tells a socket the build the server serves, first thing, and isn't sent without one", async () => {
+    const { setBuildId } = await import("./buildInfo");
+    setBuildId("abc123");
+    try {
+      const socket = new WebSocket(`ws://${base}/ws`, { headers: { cookie: await login("member") } });
+      expect(await nextMessage(socket)).toEqual({ type: "hello", buildId: "abc123", forceReload: false });
+      socket.close();
+    } finally {
+      setBuildId(null);
+    }
   });
 });
 

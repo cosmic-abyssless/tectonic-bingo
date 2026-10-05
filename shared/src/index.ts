@@ -10,6 +10,7 @@
 // derived at read time, never stored (see TeamNodeState).
 
 import type { ExclusivityRule } from "./exclusivity.ts";
+import type { DiscordChannelTemplate } from "./discord.ts";
 import type { AuditVisibility } from "./audit.ts";
 import type { AchievementCount } from "./achievements.ts";
 import type { PlayerTitleFacts, TitleSettings } from "./titles.ts";
@@ -152,6 +153,18 @@ export interface Bingo {
   womGroupId: string | null;
   womCompetitionId: number | null;
   womSyncError: string | null;
+  // Discord team sync (server/src/services/discordTeamService.ts): a role and private channels per Team.
+  discordEnabled: boolean;
+  /** The name of the Discord category the sync makes; null: the Bingo's name. Unused with discordCategoryId. */
+  discordCategoryName: string | null;
+  /** An existing Discord category to put the Teams' channels in instead (never edited or deleted). Null: make one. */
+  discordCategoryId: string | null;
+  /** Dev servers only: a Discord server to try the sync on instead of the clan's. Null: the clan's. */
+  discordGuildId: string | null;
+  /** The channels every Team gets (Settings > Discord). See discord.ts. */
+  discordChannels: DiscordChannelTemplate[];
+  discordSyncError: string | null;
+  discordSyncedAt: string | null;
   draftStarted: boolean;
   createdByUserId: string;
   createdAt: string;
@@ -647,6 +660,11 @@ export interface BoardResponse {
   sealed: false;
   tiles: Tile[];
   lines: BoardLine[];
+  /**
+   * Each Tile's Tags (CONTEXT.md "Tag"), its Parts' included, by Tile id: only for the board's search to match, never
+   * shown. A sealed board has none.
+   */
+  tileTags: Record<string, string[]>;
 }
 
 /** What GET /:slug/board answers a given viewer. */
@@ -795,6 +813,8 @@ export interface Signup {
   timezone: string | null;
   womId: string | null;
   rsnVerified: boolean;
+  /** On a Borrowed account (CONTEXT.md "Signup"): `rsn` and `womId` are an account an Admin set them to play on. */
+  accountBorrowed: boolean;
   status: SignupStatus;
   buyinReceivedAt: string | null;
   buyinCollectedByUserId: string | null;
@@ -1214,6 +1234,8 @@ export interface AccountTypesResponse {
 export interface PlayerProfile {
   user: MinimalUser;
   rsn: string | null; // their signup RSN for this bingo; null when they never signed up
+  signupId: string | null; // their active Signup in this bingo, for an Admin's actions on it; null without one
+  accountBorrowed: boolean; // their Signup is on a Borrowed account (CONTEXT.md "Signup"): `rsn` is that account's
   accountType: AccountType | null;
   womStats: WomPlayerStats | null;
   caCurrent: CombatAchievementStats | null;
@@ -1532,6 +1554,9 @@ export interface UnvaluedItem {
 // WebSocket envelope, matching server/src/ws.ts
 // ---------------------------------------------------------------------------
 
+// The server holds a burst of one event type for one Bingo and sends it as one (server/src/broadcastCoalescing.ts):
+// a payload a client reads must either be merged there or the type sent every time. A teamId, say, is the last held
+// event's, which is fine only while no client narrows its refetch by it.
 export type BroadcastEvent =
   | { type: "submission_created"; bingoId: string; payload: { teamId: string } }
   | { type: "submission_reviewed"; bingoId: string; payload: { teamId: string; nodeIds: string[] } }
@@ -1546,14 +1571,15 @@ export type BroadcastEvent =
   | { type: "draft_pick"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
   // An admin took back the latest pick; its players are back in the pool.
   | { type: "draft_pick_undone"; bingoId: string; payload: { pickNumber: number; teamId: string; userIds: string[] } }
-  // A team lead starred/noted a signup. Other leads of the same team refetch
-  // draft state; the rating itself stays behind GET /draft's auth.
+  // A team lead starred/noted a signup. Sent only to that Team's leads, the only ones who see its ratings: they
+  // refetch draft state; the rating itself stays behind GET /draft's auth.
   | { type: "draft_rating_changed"; bingoId: string; payload: { teamId: string } }
   // Someone on a team raised or lowered a hand for a tile; teammates refetch
   // progress so the board shows who's on what.
   | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
   // A teammate reacted to (or took a reaction off) one of the team's submissions; teammates refetch its submissions.
   | { type: "submission_reactions_changed"; bingoId: string; payload: { teamId: string; submissionId: string } }
+  // A Team was created, renamed, recoloured or deleted, or its members changed: what shows Teams refetches (not the board).
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
   // signup changed. Clients refetch their own signup/pairing state and the mod
@@ -1561,9 +1587,18 @@ export type BroadcastEvent =
   // unauthenticated socket may carry IDs, not snapshots.
   // statsFailed: with statsRefreshing false, whether that stats lookup failed (the roster's refresh button shows a tick or a cross).
   | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean; statsFailed?: boolean } }
-  // Any successful admin mutation (settings, board, lines, questions, teams,
-  // mods). Coarse on purpose: clients refetch the bingo shell + board.
+  // An Admin changed the board (Categories, Tiles, Tasks, Lines, Tags) or the settings, or made a change too broad to
+  // name (a Cut review). Coarse on purpose: clients refetch the shell, the board and everything scored from it. An Admin
+  // write that changes less sends one of the narrower events instead (server/src/routes/admin.ts).
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }
+  // The Bingo's Moderators or Staff changed (the people themselves hear it as access_changed).
+  | { type: "mods_changed"; bingoId: string; payload: Record<string, never> }
+  // A signup or Feedback question was added, edited, removed or moved.
+  | { type: "questions_changed"; bingoId: string; payload: Record<string, never> }
+  // A Superlative category was added, renamed, removed (with its votes) or moved.
+  | { type: "superlative_categories_changed"; bingoId: string; payload: Record<string, never> }
+  // Wrapped art or its credits changed (CONTEXT.md "Wrapped"): shown in Wrapped even once it's published.
+  | { type: "wrapped_art_changed"; bingoId: string; payload: Record<string, never> }
   // A new audit_log row was appended. Ids/visibility only, per the
   // unauthenticated-broadcast rule below — clients invalidate their audit
   // log / team activity queries and refetch under their own auth.
@@ -1585,13 +1620,31 @@ export type BroadcastEvent =
   | { type: "access_changed"; bingoId: string | null; payload: { userIds: string[] } }
   // A Restriction was applied or lifted: Moderators and Admins refetch the roster that shows them. The restricted user
   // hears it as access_changed. Nothing else, per the unauthenticated-broadcast rule above.
-  | { type: "restrictions_changed"; bingoId: string; payload: Record<string, never> };
+  | { type: "restrictions_changed"; bingoId: string; payload: Record<string, never> }
+  // A Player's name in this Bingo changed (an Admin set their Signup on a Borrowed account or back, or an in-game rename
+  // was found): everything that names them refetches. The user id only, per the unauthenticated-broadcast rule above.
+  | { type: "player_renamed"; bingoId: string; payload: { userId: string } };
+
+/**
+ * What a client sends up its socket. `watch`: the Bingos it has data for (its cached shells), sent on every (re)connect
+ * and whenever that set changes. From then on it gets only those Bingos' events (and the site-wide ones); a socket that
+ * never sends one gets everything. At most MAX_WATCHED_BINGOS ids, or the message is ignored.
+ */
+export type ClientSocketMessage = { type: "watch"; bingoIds: string[] };
+
+/**
+ * What the server sends a socket of its own accord, not a broadcast. `hello`, once on connect: the build it serves, so
+ * an open page from an older build offers a reload (or, with forceReload, reloads). Not sent without a build id.
+ */
+export type ServerSocketMessage = { type: "hello"; buildId: string; forceReload: boolean };
+export const MAX_WATCHED_BINGOS = 50;
 
 export * from "./achievements.ts";
 export * from "./audit.ts";
 export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./boardDraft.ts";
+export * from "./discord.ts";
 export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";
@@ -1600,6 +1653,7 @@ export * from "./permissions.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
 export * from "./superlative.ts";
+export * from "./tags.ts";
 export * from "./wrapped.ts";
 export * from "./signupAnswers.ts";
 export * from "./testData.ts";

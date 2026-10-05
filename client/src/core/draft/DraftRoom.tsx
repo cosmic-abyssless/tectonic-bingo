@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSlot } from "../../themes/context";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
@@ -25,6 +26,7 @@ import { DraftRoomPhone } from "./DraftRoomPhone";
 import { useIsPhone, useMediaQuery } from "../ui/useMediaQuery";
 import { useElementHeight } from "../ui/useElementHeight";
 import { describeShares } from "./cutModes";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
@@ -276,7 +278,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
   // Each team's column: its card, then its picks. The same columns in both layouts, in a different grid.
   const rosters = state.teams.map((team) => (
-    <motion.div
+    <m.div
       key={team.id}
       layout
       transition={
@@ -295,7 +297,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         pairRows={pairRows}
         undo={undoLatest && latestPickTeam?.id === team.id ? undoLatest : undefined}
       />
-    </motion.div>
+    </m.div>
   ));
 
   // The state of the draft above everything else: scouting, the pre-draft setup, revealing, started, complete.
@@ -512,7 +514,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         widthSwitch={!wide}
         heading={
           // data-panel-heading: a theme's panel can letter it like its own titles.
-          <h3 data-panel-heading="" className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+          <h3 data-panel-heading="" className={`${HEADING_LETTERED} text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
             Available players <span className="num font-normal text-on-surface-subtle">({poolCount})</span>
             {/* What every team drafts, so a captain knows what they're picking towards. */}
             {state.shares && !scouting && (

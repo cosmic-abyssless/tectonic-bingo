@@ -1,5 +1,6 @@
-// One-time AG Grid setup (docs/ag-grid-tables-plan.md): module registration and the shared theme. Imported once
-// from main.tsx — a table component only needs to call useGridTheme(), never registers a module itself.
+// One-time AG Grid setup (docs/ag-grid-tables-plan.md): module registration and the shared theme. Every table
+// component imports useGridTheme() from here, so the registration runs before the first grid renders, in the chunk of
+// whichever page has one (never the board page's) — a table never registers a module itself.
 import { useMemo } from "react";
 import {
   ModuleRegistry,

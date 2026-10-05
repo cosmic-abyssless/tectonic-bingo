@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -271,6 +271,18 @@ describe("updateSignup / withdrawSignup", () => {
     expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Newer", womId: null, rsnVerified: false }));
   });
 
+  it("keeps a Borrowed account (and its WOM id) through a save, until the player saves an RSN of their own", () => {
+    const { bingo, memberId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Own", answers: [] });
+    db.update(schema.signups).set({ rsn: "Bob", womId: "200", accountBorrowed: true }).where(eq(schema.signups.id, signup.id)).run();
+
+    updateSignup(db, bingo, signup.id, { rsn: "Bob", timezone: "Europe/London" });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Bob", womId: "200", accountBorrowed: true }));
+
+    updateSignup(db, bingo, signup.id, { rsn: "Own", womId: "1135", rsnVerified: true });
+    expect(getSignupForUser(db, bingo.id, memberId)!.signup).toEqual(expect.objectContaining({ rsn: "Own", womId: "1135", rsnVerified: true, accountBorrowed: false }));
+  });
+
   it("marks a signup withdrawn", () => {
     const { bingo, memberId } = seedBingo();
     const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "Old", answers: [] });
@@ -374,6 +386,23 @@ describe("getAllSignups / markBuyin", () => {
 
     const unmarked = markBuyin(db, bingo, signup.id, { received: false, recordedByUserId: adminId });
     expect(unmarked.buyinReceivedAt).toBeNull();
+  });
+
+  it("changing only who collected it keeps when it was received and who recorded it", () => {
+    const { bingo, memberId, adminId } = seedBingo();
+    const signup = createSignup(db, bingo, { bingoId: bingo.id, userId: memberId, rsn: "MyRsn", answers: [] });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-01T12:00:00Z"));
+      const marked = markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: adminId, recordedByUserId: adminId });
+      vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
+      const recollected = markBuyin(db, bingo, signup.id, { received: true, collectedByUserId: memberId, recordedByUserId: memberId });
+      expect(recollected.buyinCollectedByUserId).toBe(memberId);
+      expect(recollected.buyinReceivedAt).toEqual(marked.buyinReceivedAt);
+      expect(recollected.buyinRecordedByUserId).toBe(adminId);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects marking buy-in outside signup/draft/reveal", () => {

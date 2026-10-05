@@ -5,6 +5,7 @@ import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, invalidateBoardDraft } from "../../api/adminQueries";
 import { Button, IconButton } from "../ui/Button";
+import { ColorInput } from "../ui/ColorInput";
 import { Input } from "../ui/Field";
 import { XIcon } from "../ui/icons";
 
@@ -42,7 +43,7 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
         <div className="mb-3 flex flex-wrap gap-2">
           {categories.map((cat) => (
             <div key={cat.id} className="flex h-8 items-center gap-1.5 rounded-full border border-outline bg-surface pl-1.5 pr-1">
-              <input type="color" aria-label={`${cat.label} color`} value={cat.colorHex ?? "#64748b"} onChange={(e) => recolor(cat.id, e.target.value)} className="size-5 cursor-pointer rounded-full border-none bg-transparent" />
+              <ColorInput aria-label={`${cat.label} color`} value={cat.colorHex ?? "#64748b"} onCommit={(hex) => recolor(cat.id, hex)} className="size-5 cursor-pointer rounded-full border-none bg-transparent" />
               <span className="text-sm text-on-surface">{cat.label}</span>
               <IconButton size="sm" label={`Remove ${cat.label}`} onPress={() => remove(cat.id)}>
                 <XIcon size={12} />
@@ -52,7 +53,7 @@ export function CategoryEditor({ slug, categories }: { slug: string; categories:
         </div>
       )}
       <div className="flex items-center gap-2">
-        <input type="color" aria-label="New category color" value={colorHex} onChange={(e) => setColorHex(e.target.value)} className="size-8 cursor-pointer rounded-md border-none bg-transparent" />
+        <ColorInput aria-label="New category color" value={colorHex} onCommit={setColorHex} className="size-8 cursor-pointer rounded-md border-none bg-transparent" />
         <Input value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="New category name…" className="max-w-xs" />
         <Button onPress={add} isDisabled={!label.trim()}>
           Add

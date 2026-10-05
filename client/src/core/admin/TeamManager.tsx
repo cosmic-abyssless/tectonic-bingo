@@ -14,6 +14,7 @@ import { Field, Input } from "../ui/Field";
 import { SearchableSelect } from "../ui/SearchableSelect";
 import { Select } from "../ui/Select";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
+import { ColorInput } from "../ui/ColorInput";
 import { TrashIcon, XIcon } from "../ui/icons";
 
 // Forward-looking estimate while captains are still being assigned — teams
@@ -211,11 +212,10 @@ function TeamCard({
             <Field label="Name" className="flex-1">
               <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
             </Field>
-            <input
-              type="color"
+            <ColorInput
               aria-label={`${team.name} color`}
               value={team.color ?? "#6366f1"}
-              onChange={(e) => update({ color: e.target.value })}
+              onCommit={(color) => update({ color })}
               className="size-10 shrink-0 cursor-pointer rounded-md border border-outline-strong bg-background p-1"
             />
           </div>

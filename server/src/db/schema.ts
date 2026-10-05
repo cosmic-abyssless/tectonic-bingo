@@ -178,6 +178,23 @@ export const bingos = sqliteTable('bingos', {
   // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
   historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
+  // Discord team sync (discordTeamService.ts): when on, every Team gets a Discord role (its name, color and members)
+  // and its own channels, under a category named after the Bingo (or discordCategoryName), from the moment the Draft
+  // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
+  discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
+  discordCategoryName: text('discord_category_name'),
+  // An existing category in the Discord server to put every Team's channels in, instead of one the sync makes (and
+  // names discordCategoryName). The sync never edits or deletes it.
+  discordCategoryId: text('discord_category_id'),
+  // Dev servers only (isDevModeActive): another Discord server to sync to instead of DISCORD_GUILD_ID, for trying it
+  // out on a test server. Ignored elsewhere. Can't change while anything made in the old one is left.
+  discordGuildId: text('discord_guild_id'),
+  // The channels every Team gets: a JSON array of DiscordChannelTemplate (shared/src/discord.ts), parsed by
+  // bingoService.parseDiscordChannels and exposed as `discordChannels`. Starts as a text and a voice channel.
+  discordChannelsJson: text('discord_channels_json').notNull().default('[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]'),
+  // Last sync failure, surfaced in the settings panel; cleared by the next successful sync.
+  discordSyncError: text('discord_sync_error'),
+  discordSyncedAt: integer('discord_synced_at', { mode: 'timestamp' }),
 });
 
 // A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
@@ -317,6 +334,9 @@ export const signups = sqliteTable('signups', {
   // RSNs at signup time. Never set from a client-supplied claim.
   womId: text('wom_id'),
   rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
+  // A Borrowed account (CONTEXT.md "Signup"): an Admin set this Signup to play on an OSRS account the Player doesn't
+  // own. `rsn` and `womId` are then that account's (womId from Wise Old Man, not the clan) and rsnVerified is false.
+  accountBorrowed: integer('account_borrowed', { mode: 'boolean' }).notNull().default(false),
   // Raw WOM (/players/{rsn}) and RuneProfile (/accounts/{rsn}/full) API
   // responses, fetched at signup (and on mod refresh) and reused as-is at
   // draft time — no live external calls in the draft room's hot path. May
@@ -417,6 +437,29 @@ export const teams = sqliteTable('teams', {
 }, (t) => [
   uniqueIndex('teams_bingo_captain_unq').on(t.bingoId, t.captainUserId),
   uniqueIndex('teams_bingo_codeword_unq').on(t.bingoId, t.codeword),
+]);
+
+// What the Discord team sync (discordTeamService.ts) made in the guild: one row per Discord object, so it can be updated
+// or deleted later. No foreign keys on purpose: a row outlives its Team or Bingo being deleted, so the sync can still
+// delete the role and channels left behind. `applied_json` is what was last sent (name, color, permissions, and for a
+// role its members), compared with what's wanted so only real changes reach Discord: it allows a channel only two
+// renames per 10 minutes.
+export const discordResources = sqliteTable('discord_resources', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull(),
+  // The Discord server it was made in, so it's always edited and deleted there.
+  guildId: text('guild_id').notNull(),
+  // Null for the Bingo's category.
+  teamId: text('team_id'),
+  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
+  // A channel's entry in bingos.discord_channels_json (its `key`); null for the category and a role.
+  channelKey: text('channel_key'),
+  discordId: text('discord_id').notNull(),
+  appliedJson: text('applied_json').notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  index('discord_resources_bingo_idx').on(t.bingoId),
 ]);
 
 export const teamMembers = sqliteTable('team_members', {
@@ -742,6 +785,27 @@ export const tiles = sqliteTable('tiles', tileColumns(() => nodes, () => tileCat
   uniqueIndex('tiles_node_unq').on(t.nodeId),
 ]);
 
+// Tags (CONTEXT.md "Tag"): words the board's search finds a Tile by, never shown to Players. A tag is on a Tile
+// (tileId) or on one of its Parts (nodeId, a tile node's direct child), never both. Its own table rather than columns
+// on tiles/nodes, so nothing that serialises a Tile or a node to Players can carry them by accident: only the board
+// editor, the search endpoint (which answers with Tile ids) and the export read it.
+export const tags = sqliteTable('tags', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  tileId: text('tile_id').references(() => tiles.id),
+  nodeId: text('node_id').references(() => nodes.id),
+  // A Text tag is any text; a Boss tag's text is the boss's OSRS Wiki page title.
+  kind: text('kind', { enum: ['text', 'boss'] }).notNull(),
+  text: text('text').notNull(),
+  // A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag, removed along with it. Same
+  // table, so plain text with no FK declared, like nodes' self-references.
+  bossTagId: text('boss_tag_id'),
+  // The order the tags were added in, per Tile or Part.
+  sortOrder: integer('sort_order').notNull().default(0),
+}, (t) => [
+  index('tags_bingo_idx').on(t.bingoId),
+]);
+
 // All possible lines on the board (rows + cols + diagonals, generated from
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
 // line is a presentation wrapper around a node whose children are the line's
@@ -1003,7 +1067,8 @@ export const bingoAchievementSettings = sqliteTable('bingo_achievement_settings'
   uniqueIndex('bingo_achievement_settings_bingo_key_unq').on(t.bingoId, t.achievementKey),
 ]);
 
-// One row per player action Achievements care about. Written only while the bingo is Live and only for an
+// One row per player action Achievements care about. Written only while the action can earn one (from Board revealed
+// for Tile and rules opens and interest marks, else only Live) and only for an
 // eligible player (a Team member acting on their own Team's concern), whether or not any Achievement is currently
 // switched on — so a later switch-on can count activity that happened while it was off, back to the moment it was
 // FIRST switched on. `subjectId`/`tileId`/`creditedUserId` are populated per `kind` (see achievementService.ts):

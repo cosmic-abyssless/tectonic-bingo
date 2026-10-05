@@ -5,6 +5,7 @@ import { useCopyText } from "../../../core/ui/useCopyText";
 import { COMIC_FONT } from "../font";
 import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * The team's Codeword (CONTEXT.md), which every screenshot must show: a small cousin of the scouting banner (the same
@@ -26,7 +27,7 @@ export function CodewordBanner({ codeword }: { codeword: string }) {
       >
         <PrintedShade ink={colors.ON_LOUD} strength={22} from={25} />
         <span
-          className="comic-outline-text relative text-lg uppercase leading-none"
+          className={`${LETTERED} comic-outline-text relative text-lg uppercase leading-none`}
           style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", ["--comic-title-fill" as string]: colors.TITLE_FILL, ["--comic-title-stroke" as string]: colors.TITLE_STROKE }}
         >
           Codeword

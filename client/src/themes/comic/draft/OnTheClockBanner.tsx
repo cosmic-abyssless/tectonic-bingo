@@ -4,6 +4,7 @@ import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 // A comic caption box: thick ink border, hard offset shadow, and a tilted "ON THE CLOCK!" sticker that
 // stamps in on every turn change.
@@ -23,15 +24,15 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
             initial={reduced ? false : { scale: 2, rotate: 8, opacity: 0 }}
             animate={{ scale: 1, rotate: -4, opacity: 1 }}
             transition={{ type: "spring", stiffness: 500, damping: 16 }}
-            className="shrink-0 rounded-sm border-2 px-1.5 py-px text-xs uppercase leading-none tracking-wider"
+            className={`${LETTERED} shrink-0 rounded-sm border-2 px-1.5 py-px text-xs uppercase leading-none tracking-wider`}
             style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE }}
           >
             {isMyTurn ? "Your pick!" : "On the clock"}
           </motion.span>
-          <p className="min-w-0 flex-1 truncate text-xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+          <p className={`${LETTERED} min-w-0 flex-1 truncate text-xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
             {teamName}
           </p>
-          <p className="num shrink-0 text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+          <p className={`${LETTERED} num shrink-0 text-sm uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
             {pickLabel}
           </p>
         </div>
@@ -63,7 +64,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
           initial={reduced ? false : { scale: 2.2, rotate: 8, opacity: 0 }}
           animate={{ scale: 1, rotate: -3, opacity: 1 }}
           transition={{ type: "spring", stiffness: 500, damping: 16, delay: 0.1 }}
-          className="absolute -top-4 left-3 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase tracking-wider"
+          className={`${LETTERED} absolute -top-4 left-3 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase tracking-wider`}
           style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE }}
         >
           {isMyTurn ? "Your pick!" : "On the clock!"}
@@ -75,7 +76,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
             animate={{ opacity: 1, x: 0 }}
             transition={{ type: "spring", stiffness: 420, damping: 24 }}
           >
-            <p className="truncate text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+            <p className={`${LETTERED} truncate text-3xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
               {teamName}
             </p>
             {captains.length > 0 && (
@@ -91,7 +92,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
             )}
           </motion.div>
         </div>
-        <p className="num text-lg uppercase tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+        <p className={`${LETTERED} num text-lg uppercase tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
           {pickLabel}
         </p>
       </div>
@@ -111,13 +112,13 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
         initial={reduced ? false : { scale: 2.2, rotate: 8, opacity: 0 }}
         animate={{ scale: 1, rotate: -3, opacity: 1 }}
         transition={{ type: "spring", stiffness: 500, damping: 16, delay: 0.1 }}
-        className="absolute -top-3 left-4 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase tracking-wider"
+        className={`${LETTERED} absolute -top-3 left-4 rounded-sm border-[3px] px-2 py-0.5 text-sm uppercase tracking-wider`}
         style={{ fontFamily: COMIC_FONT, background: colors.PAPER, color: colors.INK, borderColor: colors.LINE }}
       >
         {isMyTurn ? "Your pick!" : "On the clock!"}
       </motion.span>
       <div className="min-w-0">
-        <p className="truncate text-4xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+        <p className={`${LETTERED} truncate text-4xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
           {teamName}
         </p>
         {captains.length > 0 && (
@@ -132,7 +133,7 @@ export function OnTheClockBanner({ teamName, teamColor, captains, pickLabel, isM
           </p>
         )}
       </div>
-      <p className="num text-lg uppercase tracking-wide" style={{ fontFamily: COMIC_FONT }}>
+      <p className={`${LETTERED} num text-lg uppercase tracking-wide`} style={{ fontFamily: COMIC_FONT }}>
         {pickLabel}
       </p>
     </motion.div>

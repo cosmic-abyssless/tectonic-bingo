@@ -6,6 +6,7 @@ import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { inkOn } from "./teamColor";
 import { groupByPick } from "./TeamRoster";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
@@ -24,7 +25,7 @@ function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPic
     >
       <header className="px-3 py-2.5" style={{ backgroundColor: color, color: ink }}>
         <div className="flex items-center justify-between gap-2">
-          <h4 className="truncate text-lg font-bold leading-tight" style={HEADING_FONT}>
+          <h4 className={`${HEADING_LETTERED} truncate text-lg font-bold leading-tight`} style={HEADING_FONT}>
             {team.name}
           </h4>
           {mine && <span className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">Your team</span>}

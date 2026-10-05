@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { COMIC_FONT } from "../font";
 import { sfxAt } from "../fx/SfxLayer";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 export type ComicButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "yellow";
 export type ComicButtonSize = "sm" | "md" | "lg";
@@ -41,7 +42,7 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
     return (
       <Link
         to={href}
-        className={`comic-link inline-flex items-center justify-center gap-2 whitespace-nowrap uppercase leading-none ${SIZE[size]} ${className ?? ""}`}
+        className={`${LETTERED} comic-link inline-flex items-center justify-center gap-2 whitespace-nowrap uppercase leading-none ${SIZE[size]} ${className ?? ""}`}
         style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", ["--comic-ink" as string]: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW, ["--comic-link-hover" as string]: colors.LINK_HOVER, ...style }}
       >
         {props.children}
@@ -86,7 +87,7 @@ export function ComicButton({ variant = "secondary", size = "md", tilt = 0, sfx,
       {...props}
       onPress={handlePress}
       style={s}
-      className={`comic-press ${raised ? "comic-lift" : "comic-ghost"} inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md border-[3px] select-none uppercase leading-none disabled:cursor-not-allowed disabled:opacity-40 ${SIZE[size]} ${className ?? ""}`}
+      className={`${LETTERED} comic-press ${raised ? "comic-lift" : "comic-ghost"} inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md border-[3px] select-none uppercase leading-none disabled:cursor-not-allowed disabled:opacity-40 ${SIZE[size]} ${className ?? ""}`}
     />
   );
 }

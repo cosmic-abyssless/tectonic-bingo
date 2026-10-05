@@ -55,6 +55,12 @@ export function makePlayers(rng: Rng, count: number, idPrefix: string): Player[]
   }));
 }
 
+/** A name none of the players goes by: an OSRS account someone outside the Bingo owns, for a Borrowed account. */
+export function outsiderName(rng: Rng, players: readonly Player[]): string {
+  const taken = new Set(players.map((p) => p.name.toLowerCase()));
+  return rng.pick(ADJECTIVES.flatMap((a) => NOUNS.map((n) => `${a}${n}`)).filter((name) => !taken.has(name.toLowerCase())));
+}
+
 /** Pairs off about `fraction` of the players as duo partners, and at least `atLeast` pairs (one to lead each duo Team). */
 export function pairUp(players: Player[], rng: Rng, fraction: number, atLeast = 0): [Player, Player][] {
   const candidates = rng.shuffle(players.filter((p) => !p.isMe));

@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, AddTagRequest, Bingo, BingoExportDocument, BoardTagsResponse, DiscordSyncStatus, OsrsBossSearchResult, Tag, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit, BoardDraftStatus, DraftBoardResponse, ExclusivityRule, PublishPreview,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -111,6 +111,18 @@ export type WomGroupCheck = { ok: true; groupName: string } | { ok: false; probl
 /** Checks a WOM group id and code without changing anything. Blank fields fall back to the saved ones. */
 export function checkWomGroup(slug: string, payload: { groupId?: string; verificationCode?: string }) {
   return api.post<WomGroupCheck>(`${base(slug)}/settings/wom-check`, payload);
+}
+/** What the Discord team sync has made for this bingo, and why it isn't syncing if it isn't. */
+export function getDiscordStatus(slug: string) {
+  return api.get<DiscordSyncStatus>(`${base(slug)}/discord`);
+}
+/** Syncs now, re-sending everything (puts back what was changed or deleted by hand in Discord). */
+export function syncDiscord(slug: string) {
+  return api.post<{ status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/sync`, {});
+}
+/** Turns the sync off and deletes every role and channel it made for this bingo. */
+export function removeDiscord(slug: string) {
+  return api.post<{ deleted: number; error: string | null; status: DiscordSyncStatus; bingo: Bingo }>(`${base(slug)}/discord/remove`, {});
 }
 export function searchBingoUsers(slug: string, q: string) {
   return api.get<{ users: User[] }>(`${base(slug)}/users?q=${encodeURIComponent(q)}`);
@@ -246,6 +258,24 @@ export function deleteTask(slug: string, id: string) {
   return api.delete(`${base(slug)}/tasks/${id}`);
 }
 
+// Tags (CONTEXT.md "Tag"): on a Tile, or on a Part by its node id. Each change answers with the Tile's or Part's tags.
+export function getBoardTags(slug: string) {
+  return api.get<BoardTagsResponse>(`${base(slug)}/tags`);
+}
+export function addTag(slug: string, owner: TagOwner, request: AddTagRequest) {
+  const path = "tileId" in owner ? `tiles/${owner.tileId}` : `parts/${owner.partId}`;
+  return api.post<{ tags: Tag[] }>(`${base(slug)}/${path}/tags`, request);
+}
+export function removeTag(slug: string, id: string) {
+  return api.delete<{ tags: Tag[] }>(`${base(slug)}/tags/${id}`);
+}
+/** The OSRS Wiki's Bosses category, filtered by what's typed: the board editor's boss picker. */
+export function searchBosses(slug: string, q: string) {
+  return api.get<{ bosses: OsrsBossSearchResult[] }>(`${base(slug)}/bosses?q=${encodeURIComponent(q)}`);
+}
+/** What a tag is on: a Tile, or one of its Parts. */
+export type TagOwner = { tileId: string } | { partId: string };
+
 export function getLines(slug: string) {
   return api.get<{ lines: BoardLine[] }>(`${base(slug)}/lines`);
 }
@@ -322,6 +352,14 @@ export function getLateSignupRsns(slug: string, userId: string) {
 }
 export function createLateSignup(slug: string, payload: { userId: string; rsn: string; teamId?: string | null }) {
   return api.post<{ signup: Signup }>(`${base(slug)}/late-signups`, payload);
+}
+
+/**
+ * A Borrowed account (CONTEXT.md "Signup"): puts the Signup on the account `rsn` with a reason. One of the Player's own
+ * clan RSNs sets them back; `ownAccount` says it's theirs when the clan has no RSNs on file to tell by.
+ */
+export function setSignupAccount(slug: string, signupId: string, payload: { rsn: string; reason: string; ownAccount?: boolean }) {
+  return api.put<{ signup: Signup }>(`${base(slug)}/signups/${signupId}/account`, payload);
 }
 
 // Every catalogue Achievement's current switch state for this bingo (CONTEXT.md "Achievement"), for the settings

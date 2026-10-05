@@ -1,12 +1,10 @@
 import type { LineModel } from "../../../headless/types";
 
+/** One pulse. comic-line-pulse's duration in comic.css is the same. */
 export const LINE_PULSE_PERIOD_MS = 2400;
 export const LINE_PULSE_PHASE = Math.PI / 2.5;
 
-export const IDLE_BASE = 0;
-export const IDLE_AMP = 0.2;
-export const BOOST_BASE = 0;
-export const BOOST_AMP = 0.5;
+/** How long a line that completes while the board is open pulses at the boosted amplitude (comic-line-pulse-boost). */
 export const BOOST_MS = 2500;
 
 export interface TilePos {
@@ -55,47 +53,41 @@ export function buildStopsByTileId(lines: LineModel[], posById: ReadonlyMap<stri
   return byTile;
 }
 
-export function pulseOpacityAt(
-  timeMs: number,
-  stops: LinePulseStop[],
-  boostedUntilByLineId: ReadonlyMap<string, number>,
-  nowMs: number,
-  reducedMotion: boolean,
-): number {
-  let max = 0;
-  for (const stop of stops) {
-    const opacity = pulseOpacityForIndex(timeMs, stop.index, stop.lineId, boostedUntilByLineId, nowMs, reducedMotion);
-    if (opacity > max) max = opacity;
-  }
-  return max;
+/**
+ * How far into its pulse (comic-line-pulse in comic.css) a wash layer that
+ * samples the wave `position` Tiles along its line is, as an `animation-delay`
+ * in (-period, 0], to the millisecond. Every layer's animation starts at the
+ * document timeline's zero (LineCompletionWash), so the delay alone sets its
+ * phase: the keyframe is (1 - cos)/2 from a trough, i.e. the sine
+ * (1 + sin(2πt/period - position × LINE_PULSE_PHASE))/2 a quarter period on,
+ * and each step along the line lags the one before it by LINE_PULSE_PHASE, so
+ * the crest travels from the line's first Tile to its last.
+ */
+export function linePulseDelayMs(position: number): number {
+  const lagMs = (position * LINE_PULSE_PHASE * LINE_PULSE_PERIOD_MS) / (2 * Math.PI);
+  const leadMs = Math.round((((LINE_PULSE_PERIOD_MS / 4 - lagMs) % LINE_PULSE_PERIOD_MS) + LINE_PULSE_PERIOD_MS) % LINE_PULSE_PERIOD_MS);
+  return leadMs === 0 || leadMs === LINE_PULSE_PERIOD_MS ? 0 : -leadMs;
 }
 
-export function pulseOpacityForIndex(
-  timeMs: number,
-  index: number,
-  lineId: string,
-  boostedUntilByLineId: ReadonlyMap<string, number>,
-  nowMs: number,
-  reducedMotion: boolean,
-): number {
-  const boosted = (boostedUntilByLineId.get(lineId) ?? 0) > nowMs;
-  const base = boosted ? BOOST_BASE : IDLE_BASE;
-  const amp = boosted ? BOOST_AMP : IDLE_AMP;
-  if (reducedMotion) return amp * 0.5;
-  const wave = 0.5 * (1 + Math.sin((2 * Math.PI * timeMs) / LINE_PULSE_PERIOD_MS - index * LINE_PULSE_PHASE));
-  return base + amp * wave;
+export interface LineWashLayer {
+  /** Where along the line, in Tiles, this layer samples the wave. */
+  position: number;
+  backgroundImage: string;
 }
 
-export function lineWashGradient(
-  timeMs: number,
-  stop: LinePulseStop,
-  boostedUntilByLineId: ReadonlyMap<string, number>,
-  nowMs: number,
-  reducedMotion: boolean,
-): string {
-  const start = pulseOpacityForIndex(timeMs, stop.index - 0.5, stop.lineId, boostedUntilByLineId, nowMs, reducedMotion);
-  const mid = pulseOpacityForIndex(timeMs, stop.index, stop.lineId, boostedUntilByLineId, nowMs, reducedMotion);
-  const end = pulseOpacityForIndex(timeMs, stop.index + 0.5, stop.lineId, boostedUntilByLineId, nowMs, reducedMotion);
-  const stopAt = (opacity: number) => `color-mix(in srgb, var(--tile-complete) ${Math.round(opacity * 100)}%, transparent)`;
-  return `linear-gradient(${stop.angleDeg}deg, ${stopAt(start)} 0%, ${stopAt(mid)} 50%, ${stopAt(end)} 100%)`;
+/**
+ * The layers a stop's wash is drawn with: the wave sampled at the Tile's near
+ * edge, middle and far edge, each a static tent of --tile-complete (at the
+ * --line-pulse-amp alpha) peaking where it samples and fading to nothing at its
+ * neighbour's peak. Stacked, with each layer's opacity pulsing on its own
+ * delay, they interpolate the wave across the Tile along the line's angle.
+ */
+export function lineWashLayers(stop: LinePulseStop): LineWashLayer[] {
+  const wash = "color-mix(in srgb, var(--tile-complete) var(--line-pulse-amp), transparent)";
+  const gradient = (stops: string) => `linear-gradient(${stop.angleDeg}deg, ${stops})`;
+  return [
+    { position: stop.index - 0.5, backgroundImage: gradient(`${wash} 0%, transparent 50%`) },
+    { position: stop.index, backgroundImage: gradient(`transparent 0%, ${wash} 50%, transparent 100%`) },
+    { position: stop.index + 0.5, backgroundImage: gradient(`transparent 50%, ${wash} 100%`) },
+  ];
 }

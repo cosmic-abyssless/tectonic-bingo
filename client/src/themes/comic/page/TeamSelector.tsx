@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useThemeVarsInPortal } from "../ui/ComicDialog";
 import { useComic } from "../ui/useComic";
+import { LETTERED, letteringClasses } from "../../lettering";
 
 /** Team color as a small ink-edged square — the comic take on the dot. */
 export function Swatch({ color, size = 12 }: { color: string | null | undefined; size?: number }) {
@@ -36,7 +37,7 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
       offset={8}
       triggerRef={triggerRef}
       style={{ ...portalVars, background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}` }}
-      className="comic-panel-pop z-[60] min-w-52 overflow-hidden rounded-md border-[3px] outline-none"
+      className={`${letteringClasses(portalVars)} comic-panel-pop z-[60] min-w-52 overflow-hidden rounded-md border-[3px] outline-none`}
     >
       <AriaMenu
         onAction={(key) => (key === ALL_KEY ? all?.select() : selector.select(String(key)))}
@@ -48,7 +49,7 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
             <UsersIcon size={14} />
             <span className="truncate font-medium">All Teams</span>
             {all.selected && (
-              <span className="ml-auto text-base leading-none" style={{ fontFamily: COMIC_FONT }}>
+              <span className={`${LETTERED} ml-auto text-base leading-none`} style={{ fontFamily: COMIC_FONT }}>
                 Viewing
               </span>
             )}
@@ -65,11 +66,11 @@ export function TeamMenu({ selector, triggerRef }: { selector: TeamSelectorModel
             <Swatch color={team.color} />
             <span className="truncate font-medium">{team.name}</span>
             {team.id === selected?.id ? (
-              <span className="ml-auto text-base leading-none" style={{ fontFamily: COMIC_FONT }}>
+              <span className={`${LETTERED} ml-auto text-base leading-none`} style={{ fontFamily: COMIC_FONT }}>
                 Viewing
               </span>
             ) : team.isMine ? (
-              <span className="ml-auto text-base leading-none opacity-60" style={{ fontFamily: COMIC_FONT }}>
+              <span className={`${LETTERED} ml-auto text-base leading-none opacity-60`} style={{ fontFamily: COMIC_FONT }}>
                 You
               </span>
             ) : null}

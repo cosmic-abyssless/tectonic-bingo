@@ -11,6 +11,7 @@ import type { AchievementKey } from "./achievements.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 import { describeRestrictionTarget } from "./permissions.ts";
+import type { TagKind } from "./tags.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system";
@@ -111,6 +112,11 @@ export interface AuditDetailsMap {
       womEnabled: boolean;
       womGroupId: string | null;
       womGroupVerificationCode: string;
+      discordEnabled: boolean;
+      discordCategoryName: string | null;
+      discordCategoryId: string | null;
+      discordGuildId: string | null;
+      discordChannelsJson: string;
       achievementsEnabled: boolean;
       sealedTiles: boolean;
       hideRules: boolean;
@@ -135,6 +141,12 @@ export interface AuditDetailsMap {
   "tile.updated": { changes: FieldChanges<{ name: string; boardRow: number; boardCol: number; categoryId: string | null; imageUrl: string | null; hasFreezePeriod: boolean; freezeDurationMinutes: number; notes: string | null }> };
   "tile.deleted": { name: string; boardRow: number; boardCol: number; taskCount: number };
   "tile.bonus_points_updated": { points: { before: number; after: number } };
+  /**
+   * A Tag (CONTEXT.md) added to or removed from a Tile, or from one of its Parts (`partLabel`). A Boss tag's `aliases`:
+   * how many of the wiki's names for the boss came with it, or went with it.
+   */
+  "tag.added": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
+  "tag.removed": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
 
   "task.created": { tileId: string; tileName: string; after: TaskSnapshot };
   "task.updated": { tileId: string; tileName: string; before: TaskSnapshot; after: TaskSnapshot };
@@ -272,6 +284,11 @@ export interface AuditDetailsMap {
   "signup.stats_fetch_failed": { message: string };
   /** The player's account was renamed in-game: found by its WOM id when a mod refreshed their stats. */
   "signup.name_changed": { before: string; after: string; womId: string };
+  /**
+   * An Admin set a Signup on a Borrowed account (CONTEXT.md "Signup"), or back on the Player's own (`borrowed` false).
+   * `player`: their Discord name then, since inside the Bingo they're named by whichever account they're on.
+   */
+  "signup.account_borrowed": { before: string; after: string; borrowed: boolean; womId: string | null; reason: string; player: string };
 
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
@@ -279,6 +296,13 @@ export interface AuditDetailsMap {
   /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
   "wom.participants_updated": { competitionId: number };
   "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
+
+  /** The Discord team sync (discordTeamService.ts) changed something: labels of what it made, edited or deleted. */
+  "discord.synced": { created: string[]; updated: string[]; deleted: string[]; membersAdded: number; membersRemoved: number };
+  /** Recorded once per distinct failure (a broken setup would otherwise add one per change). */
+  "discord.sync_failed": { message: string };
+  /** An Admin removed every Discord role and channel the sync made for the Bingo. */
+  "discord.removed": { deleted: number };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -360,6 +384,10 @@ const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const settingValue = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v));
 // ` on "Pets"`, or nothing when the tile's name isn't there.
 const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
+// `the boss tag "Abyssal Sire" (and 112 of its names)`, `the tag "kq"`; and what it's on: `Part A on "Vorkath"`.
+const describeTag = (d: { kind: TagKind; text: string; aliases?: number }) =>
+  d.kind === "boss" ? `the boss tag "${d.text}"${d.aliases ? ` (and ${d.aliases} of its names)` : ""}` : `the tag "${d.text}"`;
+const tagOwner = (d: { tileName: string; partLabel?: string | null }) => (d.partLabel ? `${d.partLabel} on "${d.tileName}"` : `"${d.tileName}"`);
 /** "feedback" or "signup": which form a question audit entry is about (absent: signup, as before Feedback questions). */
 const formWord = (d: { form?: "feedback" }) => (d.form === "feedback" ? "feedback" : "signup");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
@@ -613,6 +641,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} set "${i.entityLabel ?? ""}"'s full-completion bonus to ${i.details.points.after} pts`
         : `${actor(i)} removed "${i.entityLabel ?? ""}"'s full-completion bonus`,
   },
+  "tag.added": { category: "board", tone: "ok", visibility: "mods", title: "Tag added", label: (i) => `${actor(i)} added ${describeTag(i.details)} to ${tagOwner(i.details)}` },
+  "tag.removed": { category: "board", tone: "danger", visibility: "mods", title: "Tag removed", label: (i) => `${actor(i)} removed ${describeTag(i.details)} from ${tagOwner(i.details)}` },
   // The tile's name can be missing: entries whose details went over the size cap before it kept the small fields.
   "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task${onTile("to", i.details.tileName)}` },
   "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task${onTile("on", i.details.tileName)}` },
@@ -952,6 +982,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Name change",
     label: (i) => `${i.details.before} changed their name to ${i.details.after}`,
   },
+  "signup.account_borrowed": {
+    category: "signup",
+    tone: "info",
+    visibility: "mods",
+    title: "Borrowed account",
+    label: (i) =>
+      i.details.borrowed
+        ? `${actor(i)} put ${i.details.player} on the borrowed account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`
+        : `${actor(i)} put ${i.details.player} back on their own account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`,
+  },
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
   "wom.roster_synced": {
     category: "system",
@@ -973,6 +1013,25 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
+  "discord.synced": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Discord synced",
+    label: (i) => {
+      const d = i.details;
+      const parts = [
+        d.created.length ? `created ${joinList(d.created)}` : null,
+        d.updated.length ? `updated ${joinList(d.updated)}` : null,
+        d.deleted.length ? `deleted ${joinList(d.deleted)}` : null,
+        d.membersAdded ? `gave ${d.membersAdded} ${d.membersAdded === 1 ? "player" : "players"} their team role` : null,
+        d.membersRemoved ? `took the team role from ${d.membersRemoved} ${d.membersRemoved === 1 ? "player" : "players"}` : null,
+      ].filter((p): p is string => !!p);
+      return parts.length ? `Discord: ${parts.join("; ")}` : "Synced the teams to Discord";
+    },
+  },
+  "discord.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "Discord sync failed", label: (i) => `Discord sync failed: ${i.details.message}` },
+  "discord.removed": { category: "system", tone: "warn", visibility: "mods", title: "Discord removed", label: (i) => `Removed ${i.details.deleted} Discord roles and channels` },
   "mcp.tool_called": {
     category: "system",
     tone: "neutral",

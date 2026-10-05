@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import { Stamp } from "../ui/Stamp";
 import { ComicField } from "./ComicField";
+import { LETTERED } from "../../lettering";
 
 /**
  * The evidence photo. An empty comic panel with a dashed "paste photo here"
@@ -34,7 +35,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
             <span aria-hidden className="absolute -top-2 left-6 h-4 w-14 -rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.LINE}` }} />
             <span aria-hidden className="absolute -top-2 right-6 h-4 w-14 rotate-6" style={{ background: colors.YELLOW, opacity: 0.85, border: `2px solid ${colors.LINE}` }} />
             <span
-              className="absolute bottom-2 right-2 border-[2px] px-2 py-0.5 text-sm uppercase leading-none"
+              className={`${LETTERED} absolute bottom-2 right-2 border-[2px] px-2 py-0.5 text-sm uppercase leading-none`}
               style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.PAPER, color: colors.INK }}
             >
               Click to swap
@@ -43,7 +44,7 @@ export function ScreenshotDropzone({ screenshot }: { screenshot: SubmissionFlowM
         ) : (
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5" style={{ color: colors.INK_SUBTLE }}>
             <ImageIcon size={30} />
-            <span className="text-2xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+            <span className={`${LETTERED} text-2xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
               {screenshot.dragOver ? "Drop it!" : "Drop or paste a screenshot"}
             </span>
             <span className="text-xs">Drag & drop or click · PNG, JPG, WebP · max {MAX_UPLOAD_MB} MB</span>

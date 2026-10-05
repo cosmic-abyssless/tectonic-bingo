@@ -9,6 +9,7 @@ import { useComic } from "../ui/useComic";
 import { RewindSfxBubble } from "./RewindSfxBubble";
 import { ComicIconButton } from "../ui/ComicButton";
 import { ScreenshotLink } from "../../../core/submissions/ScreenshotThumb";
+import { LETTERED } from "../../lettering";
 
 const noop = () => {};
 
@@ -47,7 +48,7 @@ export function RewindPopup({ popup, pointer }: { popup: RewindPopupModel; point
         <div className={`overflow-hidden rounded-[13px] ${s.rejected ? "opacity-60" : ""}`}>
           <div className="flex items-start gap-2 pb-2 pl-3 pr-8 pt-2.5">
             <div className="min-w-0 flex-1">
-              <p className={`truncate uppercase leading-tight tracking-wide ${big ? "text-xl" : "text-lg"}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+              <p className={`${LETTERED} truncate uppercase leading-tight tracking-wide ${big ? "text-xl" : "text-lg"}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                 {s.playerName ?? "Unknown player"}
               </p>
               <p className="truncate text-xs" style={{ color: colors.INK_SUBTLE }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, proofRequirementFor, proofStatus, type ClaimInput, type GraphNode, type ScreenshotAnalysis, type SubmissionKind } from "@bingo/shared";
 import { useAnalyzeScreenshot, useCreateSubmission } from "../api/queries";
+import { tileMatchesSearch } from "../core/board/tileSearch";
 import { buildLeafClaimMaps, itemLeafValue, leafComplete, sumTotal } from "../core/board/taskClaims";
 import { collectLeaves, collectLeavesWithAncestors } from "../core/board/requirementTree";
 import { leafLabel } from "../core/board/labels";
@@ -38,7 +39,7 @@ export function useSubmissionFlow({
   onClose: () => void;
   onSuccess: () => void;
 }): SubmissionFlowModel {
-  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks, viewingTeam, viewerId } = useBingoPageRaw();
+  const { slug, bingo, tiles, categories, nodeStates, teamSubmissions, locks, viewingTeam, viewerId, tileTags } = useBingoPageRaw();
 
   // Who the drop is for. On your own team you default to yourself and may pick a teammate; a mod on another team has to pick.
   const onViewingTeam = !!viewingTeam?.members.some((m) => m.id === viewerId);
@@ -381,6 +382,12 @@ export function useSubmissionFlow({
     tile: {
       selectedId: selectedTileId,
       options: tileOptions,
+      // As the board's search finds a Tile (core/board/tileSearch.ts), by its Tags (CONTEXT.md "Tag") too. Submitting is
+      // only open while Live, so the Tiles are never sealed here.
+      matches: (option, q) => {
+        const tile = tiles.find((t) => t.id === option.id);
+        return !!tile && tileMatchesSearch(tile, q, tileTags[tile.id]);
+      },
       select: (id) => {
         setSelectedTileId(id);
         setSelectedTaskId("");

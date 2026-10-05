@@ -8,13 +8,14 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
+import { runBorrowedAccount } from "./borrowedAccount";
 import { uploadWrappedArt } from "./wrappedArt";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
@@ -128,7 +129,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     },
   };
 
-  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
+  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme, options.discordGuildId, options.discordCategoryId);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
   await publishBoard(ctx, new Date(tl.createdAt.getTime() + 15 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
@@ -152,6 +153,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const restrictions = await runRestrictions(ctx, players, mods, seeds);
   log(`restrictions: ${restrictions.applied} applied, ${restrictions.lifted} lifted`);
   result.problems.push(...restrictions.problems);
+  const borrowed = await runBorrowedAccount(ctx, players, seeds);
+  if (borrowed.player) log(`borrowed account: ${borrowed.player.name} plays on ${borrowed.rsn}`);
   if (options.stage === "captains") {
     for (const p of result.problems) log(`SANITY CHECK FAILED: ${p}`);
     return result;
@@ -177,10 +180,12 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const byUserId = new Map(players.filter((p) => p.userId).map((p) => [p.userId!, p]));
   const teamRows = (await fetchTeams(ctx)).map((t) => ({ ...t, players: t.members.map((m) => byUserId.get(m.user.id)).filter((p): p is Player => !!p) }));
   const hands = handEvents(ctx, teamRows.map((t) => ({ teamId: t.id, members: t.players })), board);
-  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events], new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime())));
+  const opens = openEvents(ctx, teamRows.map((t) => ({ members: t.players })), board);
+  const revealEnd = new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime()));
+  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events, ...opens], revealEnd);
   const raised = hands.raised;
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
-  log(`${seeds.length} teams named, ${raised.length} hands raised`);
+  log(`${seeds.length} teams named, ${raised.length} hands raised, ${opens.filter((o) => o.at <= revealEnd).length} Tile and rules opens`);
   const categories = await ensureCategories(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 30 * 60_000));
   log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;

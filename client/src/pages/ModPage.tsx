@@ -46,7 +46,8 @@ import { useSetUrlParams, useUrlParam } from "../core/ui/useUrlParam";
 // Tabs without bounds are always shown.
 const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
   { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
-  { key: "signups", label: "Signups", adminOnly: false, until: "draft" },
+  // The roster (who's playing, on which account, their buy-ins) matters all the way through.
+  { key: "signups", label: "Signups", adminOnly: false },
   { key: "audit", label: "Audit log", adminOnly: false },
   // The Feedback form's results (CONTEXT.md "Feedback form"): the Bingo has to be Finished for there to be any.
   { key: "feedback", label: "Feedback", adminOnly: false, from: "complete" },

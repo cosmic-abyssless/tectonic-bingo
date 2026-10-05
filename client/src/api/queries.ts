@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
@@ -10,7 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMarkStatsRefreshing, useMarkStatsResult } from "../context/WebSocketContext";
 import { api, ApiError } from "./client";
 import * as bugReportsApi from "./bugReportsApi";
-import { readBoardCache, writeBoardCache } from "./boardCache";
+import { readBoardCache, scheduleBoardCacheWrite } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
@@ -81,14 +82,14 @@ export function useMyBugReports(enabled = true) {
 // `<slug>:<part>`), so a reload paints the whole page from storage and revalidates
 // behind it instead of showing "Loading…", then a board with nothing done. As with
 // the board, stored data is marked stale (initialDataUpdatedAt: 0), so it always
-// refetches, and every fresh response is stored again.
+// refetches, and every fresh response is stored again (once the browser is idle, and only if it changed).
 function persistedPart<T>(userId: string | undefined, slug: string | undefined, part: string) {
   const key = slug ? `${slug}:${part}` : undefined;
   return {
     initialData: () => (userId && key ? readBoardCache<T>(userId, key, __BUILD_ID__) : undefined),
     initialDataUpdatedAt: 0,
     save: (data: T) => {
-      if (userId && key) writeBoardCache(userId, key, __BUILD_ID__, data);
+      if (userId && key) scheduleBoardCacheWrite(userId, key, __BUILD_ID__, data);
       return data;
     },
   };
@@ -132,14 +133,14 @@ export function usePermissions(slug: string | undefined) {
 // The board structure is persisted per user (see boardCache.ts): a stored copy
 // is the query's initial data, so the grid paints immediately on load, but it is
 // marked stale (initialDataUpdatedAt: 0) so it always revalidates — a cheap 304
-// when nothing changed — and every fresh response is stored again.
+// when nothing changed — and every fresh response is stored again (see scheduleBoardCacheWrite).
 export function useBoard(slug: string | undefined) {
   const userId = useAuth().user?.id;
   return useQuery({
     queryKey: queryKeys.board(slug ?? ""),
     queryFn: async () => {
       const board = await api.get<ViewerBoardResponse>(`/api/bingos/${slug}/board`);
-      if (userId && slug) writeBoardCache(userId, slug, __BUILD_ID__, board);
+      if (userId && slug) scheduleBoardCacheWrite(userId, slug, __BUILD_ID__, board);
       return board;
     },
     enabled: !!slug,
@@ -903,8 +904,15 @@ export function useMarkTutorialSeen() {
   });
 }
 
+// Fire-and-forget, so not a useMutation: its pending and success states would re-render the whole Bingo page twice for
+// every Tile opened (#470), and nothing shows them. A failure is dropped, as before.
 export function useRecordAchievementOpened(slug: string) {
-  return useMutation({
-    mutationFn: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload),
-  });
+  return useMemo(
+    () => ({
+      mutate: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => {
+        api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload).catch(() => {});
+      },
+    }),
+    [slug],
+  );
 }

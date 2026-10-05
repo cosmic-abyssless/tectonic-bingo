@@ -47,6 +47,13 @@ export interface SearchComboProps<T> {
    * undefined to search instead: the caller owns the text (inputValue) and passes `items` already matched to it.
    */
   selectedKey?: string | null;
+  /**
+   * Picking one from a list: whether an item matches the text typed (lowercased, trimmed), when that's more than its
+   * text containing it (a Tile found by its Items or Tags). `onQueryChange` hears that text as it's typed ("" while the
+   * whole list shows), for a caller that has to look something up for it.
+   */
+  itemMatches?: (item: T, q: string) => boolean;
+  onQueryChange?: (q: string) => void;
   /** Searching: the box's text, which the caller matches `items` against. */
   inputValue?: string;
   onInputChange?: (value: string) => void;
@@ -80,6 +87,8 @@ export function SearchCombo<T>({
   renderItem,
   onPick,
   selectedKey,
+  itemMatches,
+  onQueryChange,
   inputValue,
   onInputChange,
   clearOnPick,
@@ -120,7 +129,11 @@ export function SearchCombo<T>({
 
   const query = choosing ? text : (inputValue ?? "");
   const q = query.trim().toLowerCase();
-  const shown = choosing && filtering && q ? items.filter((item) => itemText(item).toLowerCase().includes(q)) : items;
+  const shown = choosing && filtering && q ? items.filter((item) => (itemMatches ? itemMatches(item, q) : itemText(item).toLowerCase().includes(q))) : items;
+  const filterQuery = choosing && filtering ? q : "";
+  const onQueryChangeRef = useRef(onQueryChange);
+  onQueryChangeRef.current = onQueryChange;
+  useEffect(() => onQueryChangeRef.current?.(filterQuery), [filterQuery]);
 
   // Put the input away: focus goes to the enclosing dialog (or, with none, nowhere). Not to <body>: a modal's focus
   // trap would just hand focus back to the first field. A frame later: react-aria puts focus back on the box after a pick.
@@ -371,17 +384,26 @@ export function ComboPopover({
  * Keeps the top match highlighted while the list is open and no other row is, so Enter picks it. react-aria clears the
  * highlight whenever the text changes, in its own effect, after this component's and without a re-render when the
  * highlight was already set; so this puts it back on the first row a frame later, once react-aria is done.
+ * A match that arrives later and goes above the highlighted top row (the board's Tag matches come from the server) takes
+ * the highlight over, unless the keyboard or pointer has moved it since.
  */
 export function ComboFocusFirst({ enabled = true }: { enabled?: boolean }) {
   const state = useContext(ComboBoxStateContext);
+  // The row this highlighted itself: while the highlight is still there, it follows the top row.
+  const highlighted = useRef<Key | null>(null);
   useEffect(() => {
-    if (!enabled || !state?.isOpen) return;
+    if (!enabled || !state?.isOpen) {
+      highlighted.current = null;
+      return;
+    }
     const frame = requestAnimationFrame(() => {
       const { collection, selectionManager } = state;
-      if (selectionManager.focusedKey != null) return;
+      const focused = selectionManager.focusedKey;
+      if (focused != null && focused !== highlighted.current) return;
       let key = collection.getFirstKey();
       while (key != null && (collection.getItem(key)?.type !== "item" || selectionManager.isDisabled(key))) key = collection.getKeyAfter(key);
-      if (key != null) selectionManager.setFocusedKey(key);
+      if (key != null && key !== focused) selectionManager.setFocusedKey(key);
+      highlighted.current = key;
     });
     return () => cancelAnimationFrame(frame);
   });

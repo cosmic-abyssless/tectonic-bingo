@@ -9,11 +9,21 @@
 
 /* Bangers only ships one weight; a bold request is faked by the browser and
  * smears the letterforms. Pin every element lettered in it to 400, even when
- * a core component or a parent class asked for semibold/bold. */
+ * a core component or a parent class asked for semibold/bold.
+ * An element lettered by its inline style also carries a marker class
+ * (themes/lettering.ts: .lettered for Bangers, .heading-lettered for the
+ * theme's heading font), and its descendants are matched by that class, never
+ * by the style attribute: with [style*=…] left of a combinator, any change to
+ * an element's style attribute restyles its whole subtree, and animations
+ * write inline styles every frame (#470). Any element lettered inline must
+ * carry the class. On the element itself [style*=…] costs nothing, so it
+ * stays as a fallback for one that's missing it. */
 [style*="Bangers"],
 [style*="--font-heading"],
-[style*="Bangers"] *:not([style*="Sofia"]),
-[style*="--font-heading"] *:not([style*="Sofia"]) {
+.lettered,
+.heading-lettered,
+.lettered *:not([style*="Sofia"]),
+.heading-lettered *:not([style*="Sofia"]) {
   font-weight: 400 !important;
   font-synthesis: none;
 }
@@ -182,12 +192,23 @@
   }
 }
 
+/* A trough to a crest and back; eased per half so it reads as a sine. */
+@keyframes comic-line-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* ---- Motion (all gated) --------------------------------------------- */
 
-/* Only react-aria enter/exit hooks live here. Everything else that moves
- * (tile hover, SFX bursts, stamps, the book fly-in/hinge/page turns) is
- * driven by motion/react in the components, which also honours
- * prefers-reduced-motion via useReducedMotion(). */
+/* Only react-aria enter/exit hooks and the line completion wash (below) live
+ * here. Everything else that moves (tile hover, SFX bursts, stamps, the book
+ * fly-in/hinge/page turns) is driven by motion/react in the components, which
+ * also honours prefers-reduced-motion via useReducedMotion(). */
 
 @media (prefers-reduced-motion: no-preference) {
   .comic-backdrop[data-entering] {
@@ -208,6 +229,28 @@
 @media (prefers-reduced-motion: reduce) {
   .comic-rays-spin {
     animation: none;
+  }
+}
+
+/* The completed-line wash (LineCompletionWash): layers whose static gradient
+ * peaks at --line-pulse-amp of --tile-complete, pulsing in opacity only, so
+ * the compositor runs the wave and the board never repaints for it. The
+ * duration is LINE_PULSE_PERIOD_MS; each layer's inline animation-delay sets
+ * its place in the wave. A line that completes while the board is open pulses
+ * brighter for BOOST_MS. Without motion the wash holds at half its amplitude. */
+.comic-line-pulse {
+  --line-pulse-amp: 20%;
+  animation: comic-line-pulse 2400ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  will-change: opacity;
+}
+.comic-line-pulse-boost {
+  --line-pulse-amp: 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .comic-line-pulse {
+    animation: none;
+    opacity: 0.5;
+    will-change: auto;
   }
 }
 
@@ -323,10 +366,10 @@
 
 /* Bangers leans right: the last glyph of a line overhangs the text's box by up to ~0.17em, so wherever that box clips
    its overflow (truncated text) the edge of the last letter was sliced off. Every truncated element lettered in it, set
-   on itself or inherited from an ancestor (the theme sets the font inline, so the style attribute names it), gets a
-   little room on the right. One that sets its own right padding keeps it (the masthead title's allows for its drop shadow
-   too, headerStyle.ts). */
-:is([style*="Bangers"], [style*="Bangers"] *).truncate:not([class*="pr-"]) {
+   on itself or inherited from an ancestor (the theme sets the font inline, and marks it .lettered: see Lettering at the
+   top), gets a little room on the right. One that sets its own right padding keeps it (the masthead title's allows for
+   its drop shadow too, headerStyle.ts). */
+:is([style*="Bangers"], .lettered, .lettered *).truncate:not([class*="pr-"]) {
   padding-right: 0.2em;
 }
 

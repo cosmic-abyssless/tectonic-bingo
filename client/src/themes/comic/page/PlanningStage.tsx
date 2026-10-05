@@ -1,6 +1,7 @@
 import { COMIC_FONT } from "../font";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * Before signups open, and once they've closed until the draft: nothing to do yet, so a charcoal panel with the news
@@ -17,7 +18,7 @@ export function PlanningStage({ stage }: { stage: "planning" | "captains" }) {
       <Stamp kind="custom" rotate={-6} size="md">
         {planning ? "Coming soon" : "Closed"}
       </Stamp>
-      <h2 className="mt-2 text-3xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+      <h2 className={`${LETTERED} mt-2 text-3xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
         {planning ? "Signups haven't opened yet" : "Signups are closed"}
       </h2>
       <p className="max-w-md text-sm" style={{ color: colors.INK_BODY }}>

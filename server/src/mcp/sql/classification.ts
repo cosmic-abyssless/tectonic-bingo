@@ -97,6 +97,13 @@ export const SQL_TABLES: Record<string, TableClass> = {
       wrapped_credits_json: "Unused",
       wrapped_art_credits_json: "",
       historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
+      discord_enabled: "Discord team sync on (a role and private channels per Team)",
+      discord_guild_id: "Dev servers only: a Discord server to try the sync on instead of the clan's",
+      discord_category_id: "An existing Discord category the Teams' channels go in; null: one the sync makes",
+      discord_category_name: "Name of the Discord category the Teams' channels go in; null: the Bingo's name",
+      discord_channels_json: "The channels every Team gets: JSON array of {key, type (text or voice), name ({team} is the Team's name)}",
+      discord_sync_error: "",
+      discord_synced_at: TS,
     },
   },
   bingo_moderators: {
@@ -167,6 +174,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       timezone: "IANA zone",
       wom_id: "",
       rsn_verified: "",
+      account_borrowed: "1 on a Borrowed account: rsn and wom_id are an account an Admin set them to play on, not their own",
       wom_data_json: "Raw Wise Old Man player response at signup (large)",
       rune_profile_data_json: "Raw RuneProfile response at signup (large)",
       stats_fetched_at: TS,
@@ -270,6 +278,21 @@ export const SQL_TABLES: Record<string, TableClass> = {
     note: "Final places (and points, when known) of a Historical Bingo's Teams, as recorded on the old site.",
     columns: { id: "", bingo_id: "", team_id: "", place: "1 is first", points: "Null when the old site didn't record them" },
   },
+  discord_resources: {
+    note: "The Discord roles and channels the Discord team sync made: one row per Discord object. Kept after its Team or Bingo is deleted, until they're removed from Discord.",
+    columns: {
+      id: "",
+      bingo_id: "No foreign key: outlives the Bingo",
+      guild_id: "The Discord server it was made in",
+      team_id: "Null for the Bingo's category. No foreign key: outlives the Team",
+      kind: "category, role, text_channel or voice_channel",
+      channel_key: "A channel's entry in bingos.discord_channels_json (its key); null for the category and a role",
+      discord_id: "The role's or channel's Discord id",
+      applied_json: "What was last sent to Discord (name, color, permissions; a role's member Discord ids), JSON",
+      created_at: TS,
+      updated_at: TS,
+    },
+  },
   wom_past_competitions: {
     note: "Final results of Wise Old Man competitions, kept after WOM's own record changes.",
     columns: {
@@ -355,6 +378,19 @@ export const SQL_TABLES: Record<string, TableClass> = {
       proof_note: "What the Proof screenshot should show",
       rules_text: "A Historical Bingo's Tile rules, as written on the old site",
       created_at: TS,
+    },
+  },
+  tags: {
+    note: "Tags: words the board's search finds a Tile by, on a Tile (tile_id) or one of its Parts (node_id). Never shown to Players.",
+    columns: {
+      id: "",
+      bingo_id: "",
+      tile_id: "Set for a Tile's own tag",
+      node_id: "nodes.id of the Part, for a Part's tag",
+      kind: "text (any text) or boss (an OSRS Wiki boss page title)",
+      text: "",
+      boss_tag_id: "A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag",
+      sort_order: "The order they were added in, per Tile or Part",
     },
   },
   bingo_lines: {

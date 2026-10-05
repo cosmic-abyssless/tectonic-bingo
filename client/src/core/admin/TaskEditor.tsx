@@ -15,6 +15,7 @@ import { RequirementTreeEditor, type ExistingLeaf, type ExistingCondition } from
 import { Disclosure } from "../ui/Disclosure";
 import { Checkbox } from "../ui/Checkbox";
 import { SegmentedControl } from "../ui/SegmentedControl";
+import { TagsField } from "./TagsField";
 
 
 const SCORING_MODES = [
@@ -137,6 +138,8 @@ export function TaskEditor({
             <Field label="Description">
               <Textarea defaultValue={task.description ?? ""} onBlur={(e) => patch({ description: e.target.value })} rows={2} className="resize-none" />
             </Field>
+
+            <TagsField slug={slug} owner={{ partId: task.id }} locked={locked} hint="Words the board's search finds this tile by, for this task. Players never see them." />
 
             <Field label="Scoring mode" as="div">
               <SegmentedControl

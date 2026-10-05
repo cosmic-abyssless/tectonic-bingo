@@ -17,6 +17,7 @@ import * as mcpConnections from "../mcp/connections";
 import { userSiteRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { removeUploads } from "../services/uploadFiles";
+import { removeDiscordTeams } from "../services/discordTeamService";
 import { queryAuditLog } from "../audit/query";
 import { broadcast } from "../ws";
 import { can, type Action, type AuditAction, type AuditCategory, type AuditEntityType, type AuditLogFilters, type AuditVisibility, type BingoExportDocument } from "@bingo/shared";
@@ -89,6 +90,8 @@ router.delete(
     // Its files go once the rows have: the pictures and screenshots only it used.
     const { files } = bingoService.deleteBingo(db, req.params.id as string);
     removeUploads(UPLOADS_DIR, files);
+    // And the Discord roles and channels made for its Teams (their rows outlive the bingo for this). Fire-and-forget.
+    void removeDiscordTeams(db, req.params.id as string);
     res.status(204).end();
   }),
 );

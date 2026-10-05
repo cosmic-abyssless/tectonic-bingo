@@ -1,26 +1,38 @@
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { LazyMotion } from "motion/react";
+import { onSlowDown } from "./api/client";
 import { AuthProvider } from "./context/AuthContext";
 import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
-import { ToastRegion } from "./core/ui/Toast";
+import { ToastRegion, toastOnce } from "./core/ui/Toast";
+import { NewVersionNotice } from "./core/ui/NewVersionNotice";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
-import { PhoneLogin } from "./pages/PhoneLogin";
 import { BingoList } from "./pages/BingoList";
 import { LatestBingoRedirect } from "./pages/LatestBingoRedirect";
 import { BingoPage } from "./pages/BingoPage";
-import { ModPage } from "./pages/ModPage";
-import { BuyinsPage } from "./pages/BuyinsPage";
-import { DraftPage } from "./pages/DraftPage";
-import { StatsPage } from "./pages/StatsPage";
-import { RewindPage } from "./pages/RewindPage";
-import { WrappedPage } from "./pages/WrappedPage";
-import { FeedbackPage } from "./pages/FeedbackPage";
-import { SiteAdminPage } from "./pages/SiteAdminPage";
 import { ErrorBoundary } from "./core/ui/ErrorBoundary";
-import { PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
+import { PageLoading } from "./themes/default/page/PageStates";
 import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
 import { useAccessWatch } from "./headless/permissions";
+
+// The board page and the way to it load up front; every other page is its own
+// chunk, so a Player opening the Board doesn't download ag-grid, the Mod Panel or
+// stats first.
+const PhoneLogin = lazy(() => import("./pages/PhoneLogin").then((m) => ({ default: m.PhoneLogin })));
+const ModPage = lazy(() => import("./pages/ModPage").then((m) => ({ default: m.ModPage })));
+const BuyinsPage = lazy(() => import("./pages/BuyinsPage").then((m) => ({ default: m.BuyinsPage })));
+const DraftPage = lazy(() => import("./pages/DraftPage").then((m) => ({ default: m.DraftPage })));
+const StatsPage = lazy(() => import("./pages/StatsPage").then((m) => ({ default: m.StatsPage })));
+const RewindPage = lazy(() => import("./pages/RewindPage").then((m) => ({ default: m.RewindPage })));
+const WrappedPage = lazy(() => import("./pages/WrappedPage").then((m) => ({ default: m.WrappedPage })));
+const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })));
+const SiteAdminPage = lazy(() => import("./pages/SiteAdminPage").then((m) => ({ default: m.SiteAdminPage })));
+const TermsPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.TermsPage })));
+const PrivacyPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.PrivacyPage })));
+// The animation features of every `m` component (core/ui/motionFeatures.ts), fetched once the app has rendered.
+const loadMotionFeatures = () => import("./core/ui/motionFeatures").then((m) => m.default);
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate
@@ -42,13 +54,22 @@ function AccessWatch() {
   return null;
 }
 
+// The server's write limit refused a write (a 429): its "Slow down" message, once for the whole burst.
+function SlowDownNotice() {
+  useEffect(() => onSlowDown((error) => toastOnce("slow-down", { title: error.message, tone: "warning" })), []);
+  return null;
+}
+
 export default function App() {
   useSyncColorSchemeAttribute();
   return (
+    <LazyMotion features={loadMotionFeatures}>
     <BrowserRouter>
       <ErrorBoundary>
       <AuthProvider>
         <WebSocketProvider>
+          {/* A lazy page's first visit shows the same "Loading…" the board page shows for its own data. */}
+          <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/login" element={<Login />} />
             {/* Public: where a phone lands from a logged-in computer's "Log in on your phone" QR code. */}
@@ -148,12 +169,16 @@ export default function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
           <BingoGoneRedirect />
           <AccessWatch />
+          <SlowDownNotice />
+          <NewVersionNotice />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>
+    </LazyMotion>
   );
 }

@@ -2,13 +2,15 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput, NodeStatus, SealedBoardResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, submissions, teamNodeState, tileInterests } from "../db/schema";
+import { claims, submissions, tags, teamNodeState, tileInterests } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { describeTaskNode } from "../audit/describe";
 import { areTilesSealed, canViewTiles } from "./bingoService";
 import { PUBLISHED_BOARD, type BoardTables } from "./boardTables";
+import { tileSearchTags } from "./tagService";
+import { rescoreBingo } from "./scoringService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -58,9 +60,10 @@ export function getBoardLines(db: Db, bingoId: string, t: BoardTables = PUBLISHE
 // are sealed, only the sealed board; otherwise the full board. Whoever may see the hidden Board (view_hidden_board:
 // mods) always gets the full board.
 export function getBoardForViewer(db: Db, bingo: Bingo, seesHiddenBoard: boolean) {
-  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [] };
+  if (!canViewTiles(bingo, seesHiddenBoard)) return { sealed: false as const, tiles: [], lines: [], tileTags: {} };
   if (!seesHiddenBoard && areTilesSealed(bingo)) return getSealedBoard(db, bingo.id);
-  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id) };
+  // Tags ride along for the board's search, which runs in the browser; the sealed board above has none.
+  return { sealed: false as const, tiles: getBoardTiles(db, bingo.id), lines: getBoardLines(db, bingo.id), tileTags: tileSearchTags(db, bingo.id) };
 }
 
 // The board as Players and Captains get it while the Tiles are sealed (CONTEXT.md "Sealed Tiles"): only what a
@@ -186,19 +189,18 @@ export function updateCategory(db: Db, id: string, params: Partial<Omit<CreateCa
   return db.transaction((tx) => {
     const existing = tx.select().from(tileCategories).where(eq(tileCategories.id, id)).get();
     if (!existing) throw new ServiceError(404, "Category not found");
-    const updated = tx.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
-
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
-    if (changes) {
-      auditBoard(tx, t, {
-        action: "category.updated",
-        bingoId: existing.bingoId,
-        entity: { type: "category", id, label: existing.label },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
+    const changes = diffFields(existing, { ...existing, ...params }, { only: Object.keys(params) as (keyof typeof existing)[] });
+    if (!changes) {
+      markUnchanged();
+      return existing;
     }
+    const updated = tx.update(tileCategories).set(params).where(eq(tileCategories.id, id)).returning().get();
+    auditBoard(tx, t, {
+      action: "category.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "category", id, label: existing.label },
+      details: { changes: changes as never },
+    });
     return updated;
   });
 }
@@ -329,21 +331,24 @@ export function updateTile(db: Db, id: string, params: Partial<Omit<CreateTilePa
   return db.transaction((tx) => {
     const existing = tx.select().from(tiles).where(eq(tiles.id, id)).get();
     if (!existing) throw new ServiceError(404, "Tile not found");
-    const updated = tx.update(tiles).set({ ...params, ...tileProofFields(params) }).where(eq(tiles.id, id)).returning().get();
+    const set = { ...params, ...tileProofFields(params) };
+    const changes = diffFields(existing, { ...existing, ...set }, { only: Object.keys(set) as (keyof typeof existing)[] });
+    if (!changes) {
+      markUnchanged();
+      return existing;
+    }
+    const updated = tx.update(tiles).set(set).where(eq(tiles.id, id)).returning().get();
     if (updated.requiresProof && !existing.requiresProof) clearTaskProofs(tx, updated, t);
     if (updated.boardRow !== existing.boardRow || updated.boardCol !== existing.boardCol) syncTileLines(tx, updated, t);
-
-    const changes = diffFields(existing, updated, { only: Object.keys(params) as (keyof typeof existing)[] });
-    if (changes) {
-      auditBoard(tx, t, {
-        action: "tile.updated",
-        bingoId: existing.bingoId,
-        entity: { type: "tile", id, label: existing.name },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
-    }
+    auditBoard(tx, t, {
+      action: "tile.updated",
+      bingoId: existing.bingoId,
+      entity: { type: "tile", id, label: existing.name },
+      details: { changes: changes as never },
+    });
+    // Scores are a snapshot (rescoreBingo), so an edit that changed something re-scores; one that changed nothing doesn't.
+    // A Draft board edit scores nothing until it's published.
+    if (!t.draft) rescoreBingo(tx, existing.bingoId);
     return updated;
   });
 }
@@ -359,6 +364,10 @@ export function updateTileBonusPoints(db: Db, tileId: string, points: number, t:
     const tile = tx.select().from(tiles).where(eq(tiles.id, tileId)).get();
     if (!tile) throw new ServiceError(404, "Tile not found");
     const node = tx.select({ points: nodes.points }).from(nodes).where(eq(nodes.id, tile.nodeId)).get()!;
+    if (node.points === points) {
+      markUnchanged();
+      return tile;
+    }
     tx.update(nodes).set({ points }).where(eq(nodes.id, tile.nodeId)).run();
     auditBoard(tx, t, {
       action: "tile.bonus_points_updated",
@@ -366,6 +375,7 @@ export function updateTileBonusPoints(db: Db, tileId: string, points: number, t:
       entity: { type: "tile", id: tile.id, label: tile.name },
       details: { points: { before: node.points, after: points } },
     });
+    if (!t.draft) rescoreBingo(tx, tile.bingoId);
     return tile;
   });
 }
@@ -381,7 +391,12 @@ export function deleteTile(db: Db, id: string, t: BoardTables = PUBLISHED_BOARD)
     const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTileId, id)).all().length;
     if (proofs > 0) throw new ServiceError(409, `Can't delete "${tile.name}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it`);
     const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
-    if (!t.draft) tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
+    // Interest and Tags (CONTEXT.md "Tag") hang off the Published board's Tiles: a Draft board delete leaves them, and
+    // the Publish that applies it removes them. Its Parts' tags go with their nodes (deleteSubtree).
+    if (!t.draft) {
+      tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
+      tx.delete(tags).where(eq(tags.tileId, id)).run();
+    }
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId, t);
     auditBoard(tx, t, {
@@ -541,6 +556,10 @@ export function updateLinePoints(db: Db, id: string, points: number, t: BoardTab
     const line = tx.select().from(bingoLines).where(eq(bingoLines.id, id)).get();
     if (!line) throw new ServiceError(404, "Line not found");
     const node = tx.select({ points: nodes.points }).from(nodes).where(eq(nodes.id, line.nodeId)).get()!;
+    if (node.points === points) {
+      markUnchanged();
+      return line;
+    }
     tx.update(nodes).set({ points }).where(eq(nodes.id, line.nodeId)).run();
     auditBoard(tx, t, {
       action: "line.updated",
@@ -548,6 +567,7 @@ export function updateLinePoints(db: Db, id: string, points: number, t: BoardTab
       entity: { type: "line", id: line.id, label: `${line.lineType} ${line.lineIndex}` },
       details: { lineType: line.lineType, lineIndex: line.lineIndex, points: { before: node.points, after: points } },
     });
+    if (!t.draft) rescoreBingo(tx, line.bingoId);
     return line;
   });
 }

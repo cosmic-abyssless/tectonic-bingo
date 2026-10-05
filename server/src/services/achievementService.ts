@@ -13,6 +13,8 @@ import {
   ACHIEVEMENTS,
   ACHIEVEMENT_KEYS,
   achievementDef,
+  areRulesHidden,
+  areTilesSealed,
   isYamaTile,
   type AchievementCount,
   type AchievementKey,
@@ -62,9 +64,30 @@ function isTeamMember(db: Queryable, teamId: string, userId: string): boolean {
   return !!db.select({ id: teamMembers.id }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId))).get();
 }
 
+/**
+ * When an Achievement's action can earn it (CONTEXT.md "Achievement": earnable as soon as a Player can take the
+ * action). "live": only between the Bingo's start and end (Submissions, Reactions, Stats, Wise Old Man play).
+ * "reveal_or_live": also during Board revealed, for actions available then (opening Tiles, marking interest, reading
+ * the rules). Nothing is earned after Finished.
+ */
+type EarnWindow = "live" | "reveal_or_live";
+
+function isEarnable(stage: Bingo["stage"] | undefined, window: EarnWindow): boolean {
+  return stage === "live" || (window === "reveal_or_live" && stage === "reveal");
+}
+
+function loadStage(db: Queryable, bingoId: string): Pick<Bingo, "stage" | "sealedTiles" | "hideRules"> | undefined {
+  return db.select({ stage: bingos.stage, sealedTiles: bingos.sealedTiles, hideRules: bingos.hideRules }).from(bingos).where(eq(bingos.id, bingoId)).get();
+}
+
 function isLive(db: Queryable, bingoId: string): boolean {
-  const row = db.select({ stage: bingos.stage }).from(bingos).where(eq(bingos.id, bingoId)).get();
-  return row?.stage === "live";
+  return isEarnable(loadStage(db, bingoId)?.stage, "live");
+}
+
+/** Board revealed or Live, unless the Tiles are sealed (no opening Tiles or marking interest then). */
+function isTileActionEarnable(db: Queryable, bingoId: string): boolean {
+  const bingo = loadStage(db, bingoId);
+  return !!bingo && isEarnable(bingo.stage, "reveal_or_live") && !areTilesSealed(bingo);
 }
 
 function upsertActivity(
@@ -378,7 +401,7 @@ export interface InterestMarkedEvent {
 export function recordInterestMarked(db: Db, event: InterestMarkedEvent): void {
   safely(() => {
     db.transaction((tx) => {
-      if (!isLive(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
+      if (!isTileActionEarnable(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
       const settings = loadSettings(tx, event.bingoId);
       const { date, hour } = localTimeOf(event.occurredAt, getTimezone());
 
@@ -404,7 +427,7 @@ export function recordInterestMarked(db: Db, event: InterestMarkedEvent): void {
 export function recordInterestRemoved(db: Db, event: InterestMarkedEvent): void {
   safely(() => {
     db.transaction((tx) => {
-      if (!isLive(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
+      if (!isTileActionEarnable(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
       tryEarn(tx, event.bingoId, event.userId, "ragequit", event.occurredAt, loadSettings(tx, event.bingoId), () => true);
     });
   });
@@ -420,11 +443,22 @@ export interface PageOpenedEvent {
   occurredAt: Date;
 }
 
+/**
+ * Tiles and the Rules can be opened from Board revealed (not while the Tiles are sealed or the rules hidden); Stats
+ * only open once Live (view_team_stats).
+ */
+function isPageOpenEarnable(bingo: Pick<Bingo, "stage" | "sealedTiles" | "hideRules">, kind: PageOpenedEvent["kind"]): boolean {
+  if (kind === "stats") return isEarnable(bingo.stage, "live");
+  if (!isEarnable(bingo.stage, "reveal_or_live")) return false;
+  return kind === "tile" ? !areTilesSealed(bingo) : !areRulesHidden(bingo);
+}
+
 /** A Tile's details, the Rules, or the Stats page were opened: Drop detective, Rules lawyer, Number cruncher. Fire-and-forget: a caller ineligible for any reason just does nothing here. */
 export function recordPageOpened(db: Db, event: PageOpenedEvent): void {
   safely(() => {
     db.transaction((tx) => {
-      if (!isLive(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.userId)) return;
+      const bingo = loadStage(tx, event.bingoId);
+      if (!bingo || !isPageOpenEarnable(bingo, event.kind) || !isTeamMember(tx, event.teamId, event.userId)) return;
       const settings = loadSettings(tx, event.bingoId);
       const { date, hour } = localTimeOf(event.occurredAt, getTimezone());
       const activityKind: ActivityKind = event.kind === "tile" ? "tile_opened" : event.kind === "rules" ? "rules_opened" : "stats_opened";
@@ -766,19 +800,24 @@ export function getAchievementSettings(db: Db, bingoId: string): AchievementSett
 /**
  * Applies an admin's per-Achievement switches (called from within bingoService.updateBingoSettings's own
  * transaction). Turning one on for the first time stamps firstSwitchedOnAt now — never moved again; turning one off
- * (or back on) just flips `enabled`. Unknown keys are ignored.
+ * (or back on) just flips `enabled`. Unknown keys are ignored. Returns whether any switch changed.
  */
-export function applyAchievementSwitches(tx: Tx, bingoId: string, switches: Partial<Record<AchievementKey, boolean>>, now: Date = clockNow()): void {
+export function applyAchievementSwitches(tx: Tx, bingoId: string, switches: Partial<Record<AchievementKey, boolean>>, now: Date = clockNow()): boolean {
+  let changed = false;
   for (const [key, enabled] of Object.entries(switches) as [AchievementKey, boolean][]) {
     if (!(ACHIEVEMENT_KEYS as readonly string[]).includes(key)) continue;
     const existing = tx.select().from(bingoAchievementSettings).where(and(eq(bingoAchievementSettings.bingoId, bingoId), eq(bingoAchievementSettings.achievementKey, key))).get();
     if (existing) {
-      if (existing.enabled !== enabled) tx.update(bingoAchievementSettings).set({ enabled }).where(eq(bingoAchievementSettings.id, existing.id)).run();
+      if (existing.enabled === enabled) continue;
+      tx.update(bingoAchievementSettings).set({ enabled }).where(eq(bingoAchievementSettings.id, existing.id)).run();
     } else if (enabled) {
       tx.insert(bingoAchievementSettings).values({ bingoId, achievementKey: key, enabled: true, firstSwitchedOnAt: now }).run();
+    } else {
+      continue; // no row and switching off — already off, nothing to do.
     }
-    // else: no row and switching off — already off, nothing to do.
+    changed = true;
   }
+  return changed;
 }
 
 /** Currently-enabled keys, for export (bingoExportService.ts) — the admin's current configuration, not activity history. */

@@ -1,8 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BroadcastEvent } from "@bingo/shared";
+import type { BroadcastEvent, ClientSocketMessage, ServerSocketMessage } from "@bingo/shared";
 import { useAuth } from "./AuthContext";
-import { keyMentions, otherBingoSlugs } from "../api/bingoScope";
+import { keyMentions, otherBingoSlugs, unwatchedBingoSlugs, watchedBingoIds } from "../api/bingoScope";
+import { reconnectDelayMs } from "./reconnectDelay";
+import { noteServerBuild } from "../api/serverBuild";
 
 type Listener = (event: BroadcastEvent) => void;
 
@@ -19,11 +21,42 @@ const WebSocketContext = createContext<{
 export type StatsResult = "ok" | "failed";
 const STATS_RESULT_MS = 3000;
 
+/**
+ * Every query family a live event can change: those invalidateForEvent invalidates (its `invalidate` takes only these,
+ * so one it starts invalidating has to be listed), plus "myAchievements" (AchievementPopupHost). After a reconnect
+ * these are what the missed events may have left stale. The last three name no bingo.
+ */
+const REALTIME_QUERY_FAMILIES = [
+  "bingo", "permissions", "board", "teamProgress", "teamSubmissions", "modSubmissions", "pendingCount", "stats", "wrapped",
+  "superlatives", "feedback", "draftState", "signupRoster", "mySignup", "myPairing", "partnerCandidates", "unpairedSignups",
+  "playerProfile", "accountTypes", "auditLog", "teamActivity", "rewind", "bingoMods", "signupQuestions", "myAchievements",
+  "adminCaptainCandidates", "adminMods", "adminStaff", "adminQuestions", "adminSuperlatives", "adminWrappedArt",
+  "adminBoardTags", "adminLines", "adminBoardDraft", "adminBoardDraftStatus",
+  "adminSiteAdmins", "adminBugReports", "myBugReports",
+] as const;
+type RealtimeQueryFamily = (typeof REALTIME_QUERY_FAMILIES)[number];
+const realtimeQueryFamilies: ReadonlySet<unknown> = new Set(REALTIME_QUERY_FAMILIES);
+
+/** Up to this long after a reconnect before its refetch, at random: a deploy's open tabs reconnect together. */
+const RECONNECT_REFETCH_SPREAD_MS = 2000;
+
+/**
+ * After a reconnect: refetch what the events missed while the socket was down may have changed, for the Bingos this tab
+ * watches (and what names no bingo). The cached Bingos it doesn't watch heard no events before either, so their
+ * queries are left alone. With nothing watched yet (no shell cached, e.g. the Bingo list) nothing is left out.
+ */
+function refetchAfterReconnect(queryClient: QueryClient) {
+  const shells = queryClient.getQueryCache().findAll({ queryKey: ["bingo"] });
+  const watched = new Set(watchedBingoIds(shells.map((q) => q.state)));
+  const unwatched = unwatchedBingoSlugs(shells.map((q) => [q.queryKey, q.state.data] as const), watched);
+  void queryClient.invalidateQueries({ predicate: (query) => realtimeQueryFamilies.has(query.queryKey[0]) && !keyMentions(query.queryKey, unwatched) });
+}
+
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, viewerId: string | null) {
   // Only this event's bingo: a tab on another bingo would otherwise refetch its own board, progress and counts on
   // every write anywhere (e.g. a test data run next to it). An event for no bingo in particular is for every one.
   const others = "bingoId" in event && event.bingoId ? otherBingoSlugs(queryClient.getQueriesData({ queryKey: ["bingo"] }), event.bingoId) : new Set<string>();
-  const invalidate = (queryKey: readonly unknown[]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
+  const invalidate = (queryKey: readonly [RealtimeQueryFamily]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
   switch (event.type) {
     case "submission_created":
     case "submission_reviewed":
@@ -57,15 +90,45 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["bingo"]);
       break;
     case "team_updated":
+      // Team names, colours and members: the board's header and team picker.
       invalidate(["bingo"]);
       // The scouting/draft room lists teams from draft state.
       invalidate(["draftState"]);
       // Who can vote, and a removed Player's votes, change with the Team.
       invalidate(["superlatives"]);
+      // The mod roster shows each Player's Team, and who can still captain one changes with them.
+      invalidate(["signupRoster"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "mods_changed":
+      invalidate(["adminMods"]);
+      invalidate(["adminStaff"]);
+      invalidate(["bingoMods"]);
+      invalidate(["adminCaptainCandidates"]);
+      break;
+    case "questions_changed":
+      invalidate(["adminQuestions"]);
+      invalidate(["signupQuestions"]);
+      // The Feedback form's questions are edited there too.
+      invalidate(["feedback"]);
+      // The roster's answer columns.
+      invalidate(["signupRoster"]);
+      break;
+    case "superlative_categories_changed":
+      invalidate(["adminSuperlatives"]);
+      // Deleting a category drops its votes.
+      invalidate(["superlatives"]);
+      break;
+    case "wrapped_art_changed":
+      invalidate(["adminWrappedArt"]);
+      // Published Wrapped shows the art as it is now.
+      invalidate(["wrapped"]);
       break;
     case "bingo_changed":
       invalidate(["bingo"]);
       invalidate(["board"]);
+      // Tags (CONTEXT.md "Tag"): the board editor's (the board above carries them for its search).
+      invalidate(["adminBoardTags"]);
       // A board edit made while live re-scores every team, so everyone's progress moves too.
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);
@@ -119,6 +182,27 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["playerProfile"]);
       invalidate(["accountTypes"]);
       break;
+    case "player_renamed":
+      // A Player is named by their Signup's RSN in everything that shows them (CONTEXT.md "Player"): the shell's Teams,
+      // the roster and their own Signup, the draft, Submissions, stats, the audit log, Superlatives, Wrapped and Rewind.
+      // Their account's details (its type, its CA) change with it.
+      invalidate(["bingo"]);
+      invalidate(["signupRoster"]);
+      invalidate(["mySignup"]);
+      invalidate(["adminCaptainCandidates"]);
+      invalidate(["draftState"]);
+      invalidate(["teamProgress"]);
+      invalidate(["teamSubmissions"]);
+      invalidate(["modSubmissions"]);
+      invalidate(["stats"]);
+      invalidate(["auditLog"]);
+      invalidate(["teamActivity"]);
+      invalidate(["superlatives"]);
+      invalidate(["wrapped"]);
+      invalidate(["rewind"]);
+      invalidate(["playerProfile"]);
+      invalidate(["accountTypes"]);
+      break;
     case "audit_appended":
       invalidate(["auditLog"]);
       invalidate(["teamActivity"]);
@@ -157,6 +241,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statsRefreshingSignupIds, setStatsRefreshingSignupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [statsRefreshingUserIds, setStatsRefreshingUserIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -226,6 +311,27 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // down are gone for good, so on every RE-connect the page's data is refetched;
     // the first connect needs nothing (the queries are loading anyway).
     let hasConnected = false;
+    // Failed tries in a row, for the backoff; back to 0 once one opens.
+    let attempt = 0;
+
+    // The Bingos the server sends this client live events for: those it has a shell for (ClientSocketMessage), sent on
+    // connecting and whenever a shell is cached or dropped. A Bingo's events start arriving once its shell has loaded,
+    // about when its page's other queries do.
+    let lastWatch: string | null = null;
+    function sendWatch() {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const bingoIds = watchedBingoIds(queryClient.getQueryCache().findAll({ queryKey: ["bingo"] }).map((q) => q.state));
+      const key = bingoIds.join(",");
+      // Nothing to narrow to yet (no shell loaded): it keeps hearing everything rather than nothing.
+      if (key === lastWatch || (lastWatch === null && bingoIds.length === 0)) return;
+      lastWatch = key;
+      const msg: ClientSocketMessage = { type: "watch", bingoIds };
+      ws.send(JSON.stringify(msg));
+    }
+    const stopWatchingCache = queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === "bingo") sendWatch();
+    });
 
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -233,12 +339,24 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (hasConnected) queryClient.invalidateQueries();
+        if (hasConnected) {
+          if (refetchTimer.current) clearTimeout(refetchTimer.current);
+          refetchTimer.current = setTimeout(() => refetchAfterReconnect(queryClient), Math.random() * RECONNECT_REFETCH_SPREAD_MS);
+        }
         hasConnected = true;
+        attempt = 0;
+        // A new connection hears every Bingo until told.
+        lastWatch = null;
+        sendWatch();
       };
       ws.onmessage = (event) => {
         try {
-          const msg = JSON.parse(event.data) as BroadcastEvent;
+          const msg = JSON.parse(event.data) as BroadcastEvent | ServerSocketMessage;
+          // Not a broadcast: the build the server serves (core/ui/NewVersionNotice).
+          if (msg.type === "hello") {
+            noteServerBuild({ buildId: msg.buildId, forceReload: msg.forceReload });
+            return;
+          }
           applyStatsRefreshing(msg);
           invalidateForEvent(queryClient, msg, socketUserId);
           // Their Admin flag: the Site admin pages and every bingo go by it.
@@ -250,7 +368,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       };
       ws.onclose = () => {
         wsRef.current = null;
-        if (!closed) reconnectTimer.current = setTimeout(connect, 3000);
+        if (!closed) reconnectTimer.current = setTimeout(connect, reconnectDelayMs(attempt++, Math.random));
       };
       ws.onerror = () => ws.close();
     }
@@ -258,7 +376,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     connect();
     return () => {
       closed = true;
+      stopWatchingCache();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (refetchTimer.current) clearTimeout(refetchTimer.current);
       wsRef.current?.close();
     };
   }, [queryClient, applyStatsRefreshing, socketUserId]);

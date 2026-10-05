@@ -5,6 +5,7 @@ import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { ComicButton } from "../ui/ComicButton";
 import { useThemeVarsInPortal } from "../ui/ComicDialog";
 import { useComic } from "../ui/useComic";
+import { LETTERED, letteringClasses } from "../../lettering";
 
 /**
  * The Tutorial's card (the TutorialCard slot): a narration caption box, its step count in the corner, Skip (Exit once
@@ -15,7 +16,7 @@ export function TutorialCard({ card }: { card: TutorialCardModel }) {
   // Portalled to body with the overlay, so the comic's vars are put back on it.
   const portalVars = useThemeVarsInPortal();
   return (
-    <div style={portalVars}>
+    <div className={letteringClasses(portalVars)} style={portalVars}>
       {/* The welcome (large) is lettered bigger, in a roomier box. */}
       <CaptionBox
         tone="yellow"
@@ -34,7 +35,7 @@ export function TutorialCard({ card }: { card: TutorialCardModel }) {
             <p key={line}>{line}</p>
           ))}
         </div>
-        <div className="mt-3 flex items-center justify-end gap-2" style={{ fontFamily: COMIC_FONT }}>
+        <div className={`${LETTERED} mt-3 flex items-center justify-end gap-2`} style={{ fontFamily: COMIC_FONT }}>
           <ComicButton size="sm" variant="ghost" sfx={false} onPress={card.onSkip}>
             {card.skipLabel}
           </ComicButton>

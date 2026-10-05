@@ -5,6 +5,7 @@ import { getContrastTextColor, useDominantColor } from "../useDominantColor";
 import { thumbUrl, fullUrl } from "../../../api/imageVariants";
 import { formatCountdown } from "../../../core/ui/time";
 import { iceBlue, pageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
 
 /*
  * The face of a tile's comic book cover: extracted-from-artwork background,
@@ -170,7 +171,7 @@ export function BookCoverArt({
         </span>
         {/* A sealed tile's points are held back (CONTEXT.md "Sealed Tiles"), so its cover has no price. */}
         {!tile.sealed && (
-          <span className="leading-none whitespace-nowrap" style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "7cqw" }}>
+          <span className={`${LETTERED} leading-none whitespace-nowrap`} style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "7cqw" }}>
             {pointsAwarded}/{totalPoints}
             <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
           </span>
@@ -181,7 +182,7 @@ export function BookCoverArt({
           plain mark. Once dog-eared, ClosedBook draws it on the fold. */}
       {mark && !mark.dogEared && (
         <div
-          className="absolute right-[4cqw] top-[4cqw] leading-none"
+          className={`${LETTERED} absolute right-[4cqw] top-[4cqw] leading-none`}
           style={{ color: priceTextColor, fontFamily: COMIC_FONT, fontSize: "8.3cqw" }}
         >
           {mark.label}
@@ -252,7 +253,7 @@ function FreezeTimer({ colors, remainingMs }: { colors: ComicColors; remainingMs
   const ink = pageColors(colors).LINE;
   return (
     <div
-      className="pointer-events-none absolute left-1/2 flex items-center gap-[2.4cqw] whitespace-nowrap leading-none"
+      className={`${LETTERED} pointer-events-none absolute left-1/2 flex items-center gap-[2.4cqw] whitespace-nowrap leading-none`}
       style={{
         top: "64cqw",
         transform: "translate(-50%, -50%) rotate(-3deg)",
@@ -337,7 +338,7 @@ export function BookBackArt({
             legible whatever colour the cover is, which lettering straight onto the
             cover wouldn't be. */}
         <span
-          className="my-[1cqw] shrink-0 -rotate-3 whitespace-nowrap uppercase leading-none"
+          className={`${LETTERED} my-[1cqw] shrink-0 -rotate-3 whitespace-nowrap uppercase leading-none`}
           style={{
             fontFamily: COMIC_FONT,
             fontSize: "9cqw",
@@ -376,7 +377,7 @@ export function BookBackArt({
               </svg>
             </span>
           </div>
-          <ul className="flex min-w-0 flex-1 flex-col gap-[1.4cqw] leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "7.4cqw", letterSpacing: "0.02em" }}>
+          <ul className={`${LETTERED} flex min-w-0 flex-1 flex-col gap-[1.4cqw] leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "7.4cqw", letterSpacing: "0.02em" }}>
             {tile.tasks.map((task, i) => (
               <PointsRow key={task.id} label={task.label || `Part ${i + 1}`} points={task.pointsAwarded} />
             ))}
@@ -391,10 +392,10 @@ export function BookBackArt({
           className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"
           style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.SHADOW}` }}
         >
-          <span className="mb-[2cqw] uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
+          <span className={`${LETTERED} mb-[2cqw] uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
             Completed by
           </span>
-          <ul className="flex min-h-0 flex-col gap-[1.2cqw] leading-none" style={{ fontFamily: COMIC_FONT, fontSize: "8.4cqw", letterSpacing: "0.02em" }}>
+          <ul className={`${LETTERED} flex min-h-0 flex-col gap-[1.2cqw] leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "8.4cqw", letterSpacing: "0.02em" }}>
             {shown.map((name) => (
               <li key={name} className="truncate">
                 {name}

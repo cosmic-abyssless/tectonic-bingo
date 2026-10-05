@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   AnimatePresence,
   animate as animateValue,
@@ -9,12 +9,8 @@ import {
   type AnimationPlaybackControls,
   type AnimationSequence,
 } from "motion/react";
-import {
-  Button as AriaButton,
-  Dialog as AriaDialog,
-  Modal as AriaModal,
-  ModalOverlay,
-} from "react-aria-components";
+import { Button as AriaButton } from "react-aria-components";
+import { Overlay } from "react-aria";
 import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";
 import { useTutorial } from "../../../headless";
 import { SubmissionBubble } from "./SubmissionBubble";
@@ -57,6 +53,8 @@ import { PEEL_CLIP_BLEED, peelGeometry, toClipPolygon, type Point } from "./peel
 import { getBookPose, setBookAway } from "./bookFlight";
 import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from "./PinnedArt";
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
+import { useBookModal } from "./bookModal";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -116,8 +114,11 @@ import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./c
  * (overlay-backdrop / overlay-panel) are deliberately not used here.
  */
 
-/** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
-export function TileModal({
+/**
+ * `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). Memoised: the page above
+ * re-renders while the book flies, and the open issue (its Task rows, items and tooltips) has nothing new to draw (#470).
+ */
+export const TileModal = memo(function TileModal({
   tile,
   isOpen,
   onClose,
@@ -152,7 +153,7 @@ export function TileModal({
       )}
     </AnimatePresence>
   );
-}
+});
 
 // A turned leaf lies flat on the left (-180°); an unturned one flat on the
 // right (0°).
@@ -856,6 +857,12 @@ function FlyingBook({
       // The book simply appears open, in place.
       cover.style.transform = `rotateY(${OPEN_ANGLE}deg)`;
       page.style.transform = "rotateY(0deg)";
+      // Motion has to know the open pose too: a page turn animates the
+      // leaves' depth through it, and it rebuilds their transforms from the
+      // values it holds — without this, the cover's rotateY falls back to 0
+      // and the cover shuts over page 1 at the first turn.
+      animate(COVER, { rotateY: OPEN_ANGLE, z: leafDepth(0, 1) }, { duration: 0 });
+      animate(PAGE_FRONT, { rotateY: 0, z: leafDepth(1, 1) }, { duration: 0 });
       base.style.transform = `translateZ(${-BASE_DEPTH}px)`;
       base.style.filter = "none";
       const back = root.querySelector<HTMLElement>(BACK);
@@ -1172,6 +1179,12 @@ function FlyingBook({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPresent]);
 
+  // The modal around the book (see useBookModal): the page behind it can't be scrolled, and is hidden from screen
+  // readers, without being restyled.
+  const modalRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const { underlayProps, modalProps } = useBookModal({ modalRef, dialogRef, onClose });
+
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
   // typing in a field.
@@ -1192,11 +1205,11 @@ function FlyingBook({
   }, [isPresent, step]);
 
   return (
-    <ModalOverlay
+    // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
+    <Overlay shouldContainFocus isExiting={!isPresent}>
+    <div
       ref={overlayRef}
-      isOpen
-      onOpenChange={(open) => !open && onClose()}
-      isDismissable
+      {...underlayProps}
       // On a phone the book is drawn twice the screen's width (see `single`);
       // the half that's off-screen must not scroll, and neither may the overlay
       // itself: the book is sized to fit (PHONE_BOOK_MAX_WIDTH), and only a page's
@@ -1214,8 +1227,8 @@ function FlyingBook({
       <div className={`flex min-h-full items-center justify-center ${single ? "" : "py-10"}`}>
         {/* Width is what sizes the book (it's 4:3), so it's capped by the
             viewport's height too — an open comic should fit on screen. */}
-        <AriaModal className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
-          <AriaDialog aria-label={tile.name} className="outline-none">
+        <div ref={modalRef} {...modalProps} className="w-full outline-none" style={{ maxWidth: single ? PHONE_BOOK_MAX_WIDTH : BOOK_MAX_WIDTH }}>
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={tile.name} tabIndex={-1} className="outline-none">
             {/* Inert to the pointer while the book is still flying out (see `opening`). A click on its spot lands on
                 the modal around it, so it doesn't count as clicking off; only the backdrop cancels. */}
             <div style={{ pointerEvents: opening ? "none" : undefined }}>
@@ -1227,6 +1240,8 @@ function FlyingBook({
                 lastSpread={lastSpread}
                 curlCopy={curlCopy}
                 single={single}
+                opening={opening}
+                printAtOnce={!!reduceMotion}
                 onFlipTo={flipTo}
                 onStep={step}
                 onCurl={curl}
@@ -1237,10 +1252,11 @@ function FlyingBook({
                 onPostProof={onPostProof}
               />
             </div>
-          </AriaDialog>
-        </AriaModal>
+          </div>
+        </div>
       </div>
-    </ModalOverlay>
+    </div>
+    </Overlay>
   );
 }
 
@@ -1252,6 +1268,8 @@ function TileDetails({
   lastSpread,
   curlCopy,
   single,
+  opening,
+  printAtOnce,
   onFlipTo,
   onStep,
   onCurl,
@@ -1269,6 +1287,10 @@ function TileDetails({
   curlCopy: { leaf: number; side: Side } | null;
   /** Phone view: one page at a time (the book's right half; see bookShape). */
   single: boolean;
+  /** The book is still flying out (FlyingBook's `opening`): nothing can be turned or peeled yet. */
+  opening: boolean;
+  /** Print the open spread in the first frame (reduced motion: the book appears already open, no cover over it). */
+  printAtOnce: boolean;
   onFlipTo: (spread: number) => void;
   /** One step of paging: a spread on desktop, a page on a phone. */
   onStep: (dir: 1 | -1) => void;
@@ -1346,6 +1368,34 @@ function TileDetails({
     <SubmissionsPage key="submissions" submissions={tile.submissions} colors={page} />,
   ];
 
+  // What's printed on the pages comes in as they come into view (#470): mounting every page's Task rows, items and
+  // tooltips at once was the longest frame of a Tile opening. The book takes off with blank pages, and the spread it
+  // opens on is printed in the next task, still under the cover (it starts to swing a quarter of a second in). While
+  // the book flies only that spread can show (nothing turns or peels until it lands), so every other page stays blank
+  // paper until the book has landed and the browser is idle, or a peel or turn reaches it first. A page once printed
+  // stays printed.
+  const [tookOff, setTookOff] = useState(printAtOnce);
+  useEffect(() => {
+    // A task of its own: the open comes from a click, whose effects React runs in the same task as the commit.
+    const id = window.setTimeout(() => setTookOff(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
+  const printedPages = useRef(new Set<number>());
+  for (const i of single ? [spread] : [2 * spread, 2 * spread + 1]) printedPages.current.add(i);
+  const [idleAfterOpening, setIdleAfterOpening] = useState(false);
+  const printedAll = useRef(false);
+  if (idleAfterOpening || curlCopy) printedAll.current = true;
+  useEffect(() => {
+    if (opening || printedAll.current) return;
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(() => setIdleAfterOpening(true), { timeout: 500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(() => setIdleAfterOpening(true), 0);
+    return () => window.clearTimeout(id);
+  }, [opening]);
+  const isPrinted = (i: number) => printedAll.current || (tookOff && printedPages.current.has(i));
+
   // Page i (0-based) as it appears on a face: numbered and scrollable.
   // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
   // fold-back keeps its gutter shadow: that only comes into the fold-back
@@ -1362,7 +1412,7 @@ function TileDetails({
   const face = (i: number, side: Side): ReactNode => (
     <PageColorsContext.Provider value={page}>
       <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single} fill={i === 0}>
-        {pages[i]}
+        {isPrinted(i) ? pages[i] : null}
       </BookPage>
     </PageColorsContext.Provider>
   );
@@ -1536,7 +1586,7 @@ function TileDetails({
       >
         <XIcon size={24} />
       </AriaButton>
-      <div data-extra className="mt-5 flex items-center justify-center gap-4" style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
+      <div data-extra className={`${LETTERED} mt-5 flex items-center justify-center gap-4`} style={{ opacity: 0, color: page.INK, fontFamily: COMIC_FONT }}>
         <NavButton label="Previous page" onPress={() => onStep(-1)} disabled={spread <= 0} colors={page}>
           <ArrowLeftIcon size={20} />
         </NavButton>
@@ -1806,11 +1856,11 @@ function SummaryPage({
       >
         Tectonic
       </span>
-      <h2 className="text-3xl leading-none [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
+      <h2 className={`${LETTERED} text-3xl leading-none [overflow-wrap:anywhere]`} style={{ fontFamily: COMIC_FONT }}>
         {tile.name}
       </h2>
       {tile.category && (
-        <span className="text-sm uppercase tracking-wide" style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
+        <span className={`${LETTERED} text-sm uppercase tracking-wide`} style={{ fontFamily: COMIC_FONT, color: tile.category.color ?? colors.INK_SUBTLE }}>
           {tile.category.label}
         </span>
       )}
@@ -1825,7 +1875,7 @@ function SummaryPage({
   const progressCards = (
     <>
       <CaptionBox tone="yellow" title={cardTitle("Points")} className={cardPad}>
-        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
+        <span className={`${LETTERED} num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: progress.pointsAwarded >= progress.totalPoints && progress.totalPoints > 0 ? colors.OK : colors.INK }}>
           {progress.pointsAwarded}
         </span>
         <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
@@ -1833,7 +1883,7 @@ function SummaryPage({
         </span>
       </CaptionBox>
       <CaptionBox tone="paper" title={cardTitle("Parts")} className={cardPad}>
-        <span className={`num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+        <span className={`${LETTERED} num ${bigNum}`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           {progress.completedTasks}
         </span>
         <span className={`num ${smallNum}`} style={{ color: colors.INK_SUBTLE }}>
@@ -1881,7 +1931,7 @@ function SummaryPage({
       {/* Parts (table of contents) */}
       {ordered.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h3 className="text-xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+          <h3 className={`${LETTERED} text-xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT }}>
             Parts
           </h3>
           <ol className="flex flex-col gap-2">
@@ -1908,7 +1958,7 @@ function SummaryPage({
                     }}
                   >
                     <span
-                      className="flex size-7 shrink-0 items-center justify-center border-2 text-sm"
+                      className={`${LETTERED} flex size-7 shrink-0 items-center justify-center border-2 text-sm`}
                       style={{
                         fontFamily: COMIC_FONT,
                         borderColor: colors.LINE,
@@ -1919,7 +1969,7 @@ function SummaryPage({
                       {task.complete ? <CheckIcon size={14} /> : task.locked ? <LockIcon size={12} /> : number}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-base leading-tight" style={{ fontFamily: COMIC_FONT }}>
+                      <span className={`${LETTERED} block truncate text-base leading-tight`} style={{ fontFamily: COMIC_FONT }}>
                         {task.label}
                       </span>
                       <span className="block truncate text-xs" style={{ color: claimed.length > 0 ? colors.INK_BODY : tone }}>
@@ -1941,10 +1991,10 @@ function SummaryPage({
                         )}
                       </span>
                     </span>
-                    <span className="num shrink-0 text-sm" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                    <span className={`${LETTERED} num shrink-0 text-sm`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                       {task.points} pts
                     </span>
-                    <span className="shrink-0 text-xs uppercase" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+                    <span className={`${LETTERED} shrink-0 text-xs uppercase`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
                       p.{i + 2}
                     </span>
                   </button>
@@ -2012,7 +2062,7 @@ function TaskPage({
     <div className="relative flex min-h-full flex-col p-6" style={{ color: colors.INK }}>
       {/* Tilted Part Number Badge */}
       <div
-        className="absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl"
+        className={`${LETTERED} absolute right-5 top-5 flex size-10 items-center justify-center border-[3px] text-2xl`}
         style={{
           fontFamily: COMIC_FONT,
           borderColor: colors.LINE,
@@ -2075,7 +2125,7 @@ function TaskPage({
       {/* (The approved / pending / locked stamp is the one TaskPanel draws
           beside the part's title — not repeated down here.) */}
       <div className="mt-4 pt-2 border-t-[2px] border-dashed" style={{ borderColor: `${colors.LINE}44` }}>
-        <span className="text-xs uppercase tracking-wider" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+        <span className={`${LETTERED} text-xs uppercase tracking-wider`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
           Part {number} of {tile.tasks.length}
         </span>
       </div>
@@ -2089,11 +2139,11 @@ function SubmissionsPage({ submissions, colors }: { submissions: SubmissionModel
   return (
     <div className="flex flex-col gap-4 p-6" style={{ color: colors.INK }}>
       <div className="flex items-center justify-between">
-        <h3 className="text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT }}>
+        <h3 className={`${LETTERED} text-2xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT }}>
           Submissions
         </h3>
         <span
-          className="rounded-full border-[2px] px-2 py-0.5 text-xs uppercase"
+          className={`${LETTERED} rounded-full border-[2px] px-2 py-0.5 text-xs uppercase`}
           style={{
             borderColor: colors.LINE,
             background: colors.YELLOW,

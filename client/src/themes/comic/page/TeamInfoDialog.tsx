@@ -13,6 +13,7 @@ import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
 import { ComicField } from "../submission/ComicField";
+import { LETTERED } from "../../lettering";
 
 /** The team roster and recent activity, plus the captain's rename field. */
 export function TeamInfoDialog({ slug, team, stage, onClose }: { slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }) {
@@ -83,7 +84,7 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
             >
               <img src={member.avatarUrl} alt="" className="size-9 shrink-0 border-[2px] object-cover" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }} />
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-lg leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                <span className={`${LETTERED} block truncate text-lg leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                   <PlayerName userId={member.id}>{member.displayName}</PlayerName>
                 </span>
                 <span className="text-xs" style={{ color: colors.INK_SUBTLE }}>

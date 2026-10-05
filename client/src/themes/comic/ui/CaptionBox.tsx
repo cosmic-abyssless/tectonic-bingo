@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { COMIC_FONT } from "../font";
 import { PrintedShade, toneColors, type Tone } from "./tones";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * Rectangular narration caption: a tone's tint (or plain raised paper), thick
@@ -34,7 +35,7 @@ export function CaptionBox({
       {toned && <PrintedShade ink={toned.loud} />}
       <div className="relative">
         {title !== undefined && (
-          <div className="mb-1 text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+          <div className={`${LETTERED} mb-1 text-lg uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
             {title}
           </div>
         )}
@@ -49,7 +50,7 @@ export function InkTag({ children, color, fill, className }: { children: ReactNo
   const { colors } = useComic();
   return (
     <span
-      className={`inline-flex items-center gap-1 border-2 px-1.5 py-px text-sm uppercase leading-none ${className ?? ""}`}
+      className={`${LETTERED} inline-flex items-center gap-1 border-2 px-1.5 py-px text-sm uppercase leading-none ${className ?? ""}`}
       style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", borderColor: colors.LINE, background: fill ?? colors.PAPER_RAISED, color: color ?? colors.INK }}
     >
       {children}

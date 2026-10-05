@@ -274,6 +274,7 @@ export function queryTeamActivity(db: Db, bingoId: string, teamId: string, opts:
 | `submission.screenshot_analyzed` / `.screenshot_analysis_failed` | `submissionService.recordScreenshotAnalysis` / `markScreenshotAnalysisFailed`; `actor: "system"` | submission | via submission row | mods | `{codewordVerified, detectedItemName, textLength}` / `{}` |
 | `signup.stats_fetched` / `.stats_fetch_failed` | `playerStatsService.fetchAndPersistPlayerStats`; `actor: "system"`; bingoId via signup row | signup / rsn | — | mods | `{womFound, runeProfileFound}` / `{message}` (never the blobs) |
 | `signup.name_changed` | `rsnSyncService.syncSignupRsn` (in tx), from the mod's refresh-stats: the signup's WOM id now goes by a different name on tectonic-api | signup / new rsn | the player | mods | `{before, after, womId}` |
+| `signup.account_borrowed` | `signupService.setSignupAccount` (in tx), from an Admin's Set borrowed account (CONTEXT.md "Borrowed account"), either way | signup / new rsn | the player | mods | `{before, after, borrowed, womId, reason, player}` (`borrowed` false: back on their own account; `player`: their Discord name) |
 | `wom.competition_created` / `.roster_synced` / `.sync_failed` | `womCompetitionService.syncWomCompetitionAfterDraft` / `syncWomTeamRename`; `actor: "system"` | bingo / name | — | mods | `{competitionId}` / `{}` / `{operation: "create" \| "rename", message}` |
 | `http.mutation` | fallback middleware only | http / `METHOD url` | — | mods | see §4 |
 

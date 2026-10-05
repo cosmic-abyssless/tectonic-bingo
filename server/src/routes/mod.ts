@@ -20,6 +20,7 @@ import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
 import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 import { getWomReadQueue, queueBingoReads } from "../services/womReadService";
 import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
@@ -28,7 +29,7 @@ import { syncSignupRsn } from "../services/rsnSyncService";
 import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
 import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
-import { broadcast } from "../ws";
+import { broadcastChange } from "../broadcastChange";
 import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
@@ -80,20 +81,20 @@ router.patch(
         action === "approve"
           ? approveSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes })
           : rejectSubmission(db, { submissionId, reviewedByUserId: req.user!.id, reviewerNotes });
-      broadcast({
+      broadcastChange({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
         payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
       });
       // A Finished Bingo set to publish Wrapped on its own does so once the last pending Submission is reviewed.
-      if (wrappedService.publishWhenReady(db, req.bingo!, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
+      if (wrappedService.publishWhenReady(db, req.bingo!, req.user!.id)) broadcastChange({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
       res.json(result);
       return;
     }
 
     if (action === "undo") {
       const result = undoSubmissionReview(db, { submissionId, undoneByUserId: req.user!.id });
-      broadcast({
+      broadcastChange({
         type: "submission_reviewed",
         bingoId: req.bingo!.id,
         payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
@@ -114,7 +115,7 @@ router.patch(
     if (!userId) throw new ServiceError(400, "userId is required");
     const submission = changeSubmissionAttribution(db, req.bingo!, { submissionId: req.params.id as string, userId, changedByUserId: req.user!.id });
     // The same refresh a review triggers: drawers, the mod queue and the board all show who it is credited to.
-    broadcast({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
+    broadcastChange({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
     res.json({ submission });
   }),
 );
@@ -132,7 +133,7 @@ router.post(
   "/wrapped/publish",
   asyncHandler(async (req, res) => {
     const state = wrappedService.publishWrapped(db, req.bingo!, req.user!.id);
-    broadcast({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
     res.json(state);
   }),
 );
@@ -179,7 +180,7 @@ router.post(
       reason,
       createdByUserId: req.user!.id,
     });
-    broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: adjustment.teamId } });
+    broadcastChange({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: adjustment.teamId } });
     res.status(201).json({ adjustment });
   }),
 );
@@ -195,13 +196,16 @@ router.post(
     }
     const fromStage = req.bingo!.stage;
     const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id });
-    broadcast({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
+    broadcastChange({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
     // Fire-and-forget: a WOM outage or bad credentials must never block the
     // stage change itself. syncWomCompetitionAfterDraft no-ops when the
     // integration isn't configured.
     if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
     // With no start date set, the bingo starts when it goes live: the competition's start moves to match.
     if (toStage === "live") void syncWomCompetition(db, bingo.id);
+    // Discord roles and channels are made as the draft finishes, alongside the WOM competition; later stage changes
+    // (back to the Draft too, which undoes Teams) keep them in step.
+    void syncDiscordTeams(db, bingo.id);
     // Same fire-and-forget convention: snapshot the bingo's WOM competition
     // once it's actually over, so its per-player gains survive independently
     // of WOM's own record. No-ops when the bingo has no linked competition.
@@ -210,7 +214,7 @@ router.post(
     if (toStage === "live" || toStage === "complete") queueBingoReads(db, getWomReadQueue(db), bingo.id);
     // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"); late Wise Old Man reads (queued above) need a
     // Re-publish.
-    if (toStage === "complete" && wrappedService.publishWhenReady(db, bingo, req.user!.id)) broadcast({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
+    if (toStage === "complete" && wrappedService.publishWhenReady(db, bingo, req.user!.id)) broadcastChange({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );
@@ -224,7 +228,7 @@ router.post(
       .filter((t) => t.draftOrder != null)
       .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
       .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
-    broadcast({ type: "draft_order_shuffled", bingoId: req.bingo!.id, payload: { lockedUntil: lockedUntil.toISOString(), order } });
+    broadcastChange({ type: "draft_order_shuffled", bingoId: req.bingo!.id, payload: { lockedUntil: lockedUntil.toISOString(), order } });
     res.json({ teams, lockedUntil: lockedUntil.toISOString() });
   }),
 );
@@ -240,7 +244,7 @@ router.put(
       .filter((t) => t.draftOrder != null)
       .sort((a, b) => (a.draftOrder ?? 0) - (b.draftOrder ?? 0))
       .map((t) => ({ teamId: t.id, draftOrder: t.draftOrder! }));
-    broadcast({ type: "draft_order_set", bingoId: req.bingo!.id, payload: { order } });
+    broadcastChange({ type: "draft_order_set", bingoId: req.bingo!.id, payload: { order } });
     res.json({ teams });
   }),
 );
@@ -250,7 +254,7 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const teams = draftService.startDraft(db, req.bingo!);
-    broadcast({ type: "draft_started", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "draft_started", bingoId: req.bingo!.id, payload: {} });
     res.json({ teams });
   }),
 );
@@ -334,7 +338,7 @@ router.post(
     const { userIdA, userIdB } = req.body as { userIdA?: string; userIdB?: string };
     if (!userIdA || !userIdB) throw new ServiceError(400, "userIdA and userIdB are required");
     const pairing = pairingService.adminPair(db, req.bingo!, { userIdA, userIdB, createdByUserId: req.user!.id });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ pairing });
   }),
 );
@@ -343,7 +347,7 @@ router.delete(
   "/pairings/:id",
   asyncHandler(async (req, res) => {
     pairingService.unpair(db, req.bingo!, req.params.id as string);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
   }),
 );
@@ -366,7 +370,7 @@ router.post(
     // button doesn't sit idle between 204 and the first lookup. Skip when
     // the E2E hook disables the fetch — otherwise the spinner would stick.
     if (process.env.PLAYER_STATS_FETCH_DISABLED !== "true") {
-      broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: { signupId: row.id, userId: row.userId, statsRefreshing: true } });
+      broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: { signupId: row.id, userId: row.userId, statsRefreshing: true } });
     }
     void fetchAndPersistPlayerStats(db, row.id, rsn);
     res.status(204).end();
@@ -384,7 +388,7 @@ router.patch(
       collectedByUserId,
       recordedByUserId: req.user!.id,
     });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -396,7 +400,7 @@ router.patch(
     const { timezone } = req.body as { timezone?: string | null };
     if (timezone !== null && typeof timezone !== "string") throw new ServiceError(400, "timezone must be a string or null");
     const signup = signupService.setSignupTimezone(db, req.bingo!, req.params.id as string, timezone, req.user!.id);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -407,7 +411,7 @@ router.delete(
   "/signups/:id",
   asyncHandler(async (req, res) => {
     const signup = signupService.withdrawSignup(db, req.bingo!, req.params.id as string, { byMod: true });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -416,8 +420,8 @@ router.delete(
 // Players (restrictionService). The restricted user's client refetches its Actions (access_changed), the mods' their
 // roster (restrictions_changed).
 function restrictionsChanged(bingoId: string, userId: string): void {
-  broadcast({ type: "access_changed", bingoId, payload: { userIds: [userId] } });
-  broadcast({ type: "restrictions_changed", bingoId, payload: {} });
+  broadcastChange({ type: "access_changed", bingoId, payload: { userIds: [userId] } });
+  broadcastChange({ type: "restrictions_changed", bingoId, payload: {} });
 }
 
 router.post(

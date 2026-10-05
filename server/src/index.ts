@@ -49,6 +49,10 @@ import clientErrorsRouter from "./routes/clientErrors";
 import { shouldReportError } from "./errorReporting";
 import { createMcpRouter } from "./mcp/router";
 import { startReplicaJob } from "./mcp/sql/replica";
+import { LoadWarnings, loadWarningSettings, loadWarningsEnabled, startEventLoopMonitor } from "./loadWarnings";
+import { loadWarningsMiddleware } from "./middleware/loadWarnings";
+import { WriteLimit, writeLimitMiddleware, writeLimitPerWindow } from "./middleware/writeLimit";
+import { buildHeaders, readBuildId, setBuildId } from "./buildInfo";
 
 const REQUIRED_ENV = [
   "DISCORD_CLIENT_ID",
@@ -124,7 +128,9 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 
 // gzip/deflate for API JSON (the board is ~175 KB raw, ~18 KB compressed). The
-// default filter skips already-compressed types, so images pass through.
+// default filter skips already-compressed types, so images pass through, and a
+// response that already has a Content-Encoding is left alone: the client's
+// hashed assets go out as the build's own Brotli/gzip copies (precompressedAssets).
 app.use(compression());
 
 // Session middleware — backed by SQLite so sessions survive a server restart
@@ -175,6 +181,16 @@ app.use((req, _res, next) => {
 // passport.session() (needs req.user) and before the routers.
 app.use(auditContext);
 app.use(requestLog);
+// Unsampled counters that raise Sentry warning issues when the server is slow or flooded (loadWarnings.ts).
+const loadWarnings = loadWarningsEnabled() ? new LoadWarnings({ settings: loadWarningSettings() }) : null;
+if (loadWarnings) app.use(loadWarningsMiddleware(loadWarnings));
+// The build this server serves, on every API response, so an open page from an older build offers a reload (buildInfo.ts).
+const CLIENT_DIST = path.join(__dirname, "../../client/dist");
+setBuildId(readBuildId(CLIENT_DIST));
+app.use("/api", buildHeaders);
+// One user's API writes are capped, so one page (or an old tab) can't flood the server (middleware/writeLimit.ts).
+const writesPerWindow = writeLimitPerWindow();
+if (writesPerWindow) app.use(writeLimitMiddleware(new WriteLimit(writesPerWindow), loadWarnings ? (hit) => loadWarnings.recordWriteLimited(hit) : undefined));
 
 // Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -221,7 +237,7 @@ app.use("/api/client-errors", clientErrorsRouter);
 // mismatch, and the client's already-relative fetch/WS URLs (see
 // WebSocketContext.tsx's `window.location.host`) just work unmodified.
 // The built client, when there is one (see mountClientApp; in dev the client is served by Vite instead).
-mountClientApp(app, path.join(__dirname, "../../client/dist"), readRuntimeConfig());
+mountClientApp(app, CLIENT_DIST, readRuntimeConfig());
 
 // After every route, before our own handler: reports unexpected errors (not deliberate 4xx refusals) to Sentry.
 Sentry.setupExpressErrorHandler(app, { shouldHandleError: shouldReportError });
@@ -231,6 +247,7 @@ const server = http.createServer(app);
 // A socket needs a logged-in clan member, checked against the same session store and Passport user as HTTP requests.
 initWebSocketServer(server, authorizeWithSession(sessionAuth));
 
+let stopEventLoopMonitor: (() => void) | null = null;
 server.listen(PORT, () => {
   log.info("server listening", {
     port: Number(PORT),
@@ -255,6 +272,7 @@ server.listen(PORT, () => {
   startWomReads(db);
   // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
   if (mcpEnabled) startReplicaJob(DB_PATH);
+  if (loadWarnings) stopEventLoopMonitor = startEventLoopMonitor(loadWarnings);
 });
 
 // SQLite cannot be shared by overlapping replicas. On SIGTERM (Railway
@@ -266,6 +284,7 @@ function shutdown(signal: string): void {
   shuttingDown = true;
   log.info("shutdown", { signal });
   closeWebSocketServer();
+  stopEventLoopMonitor?.();
   if (sessionStore._sessionCleanup) clearInterval(sessionStore._sessionCleanup);
   server.close(() => {
     // Give Sentry a moment to send anything still buffered (a no-op when it is switched off).

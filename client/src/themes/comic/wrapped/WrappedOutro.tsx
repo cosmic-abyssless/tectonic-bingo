@@ -9,6 +9,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { COVER, CoverCaption, CoverGround, CoverTitle, coverShadow } from "./coverParts";
+import { LETTERED } from "../../lettering";
 
 /**
  * The back cover (#419): the Outro, as the cover of the book's last page. A "That's a wrap" panel with the credits, then
@@ -25,7 +26,7 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
         <Reveal step={0} className="wrapped-back-panel">
           <div className="text-center">
             {hasCredits && (
-              <p className="mb-2 uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 14, letterSpacing: "0.12em", color: "var(--comic-ink)" }}>
+              <p className={`${LETTERED} mb-2 uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 14, letterSpacing: "0.12em", color: "var(--comic-ink)" }}>
                 Brought to you by
               </p>
             )}
@@ -48,7 +49,7 @@ export function WrappedOutro({ section, preview, onRewind, onBoard }: { section:
       {section.cards.map((card) => (
         <WrappedScene key={card.key} steps={1}>
           <Reveal step={0} className="w-full">
-            <p className="mb-3 text-center uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 21, letterSpacing: "0.05em", color: "var(--comic-ink)" }}>
+            <p className={`${LETTERED} mb-3 text-center uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 21, letterSpacing: "0.05em", color: "var(--comic-ink)" }}>
               Share your {card.label}
             </p>
             <WrappedShareCardItem card={card} preview={preview} Card={ShareCard} />
@@ -68,7 +69,7 @@ function Teaser({ tag, title, blurb, button, icon, variant = "secondary", onPres
         <CoverCaption tilt={-2} fill={COVER.YELLOW} size={13} style={{ display: "inline-block", boxShadow: coverShadow(2) }}>
           {tag}
         </CoverCaption>
-        <p className="mt-2 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 30, letterSpacing: "0.03em", color: colors.INK }}>
+        <p className={`${LETTERED} mt-2 uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 30, letterSpacing: "0.03em", color: colors.INK }}>
           {title}
         </p>
         <p className="mt-1 text-[14px]" style={{ color: colors.INK_BODY }}>

@@ -124,6 +124,8 @@ export class TectonicUnavailableError extends Error {
 
 export class TectonicClient {
   private cache = new Map<string, CacheEntry>();
+  /** When the next insert drops expired entries: at most once per TTL, so URLs asked for once don't pile up. */
+  private nextSweepAt = 0;
 
   constructor(
     private cfg: TectonicConfig,
@@ -151,7 +153,12 @@ export class TectonicClient {
       throw new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
     }
     const value = (await res.json()) as T;
-    this.cache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    const now = Date.now();
+    if (now >= this.nextSweepAt) {
+      for (const [key, entry] of this.cache) if (entry.expiresAt <= now) this.cache.delete(key);
+      this.nextSweepAt = now + CACHE_TTL_MS;
+    }
+    this.cache.set(url, { value, expiresAt: now + CACHE_TTL_MS });
     return value;
   }
 
