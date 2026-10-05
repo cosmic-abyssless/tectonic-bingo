@@ -1587,10 +1587,13 @@ export type BroadcastEvent =
   // unauthenticated socket may carry IDs, not snapshots.
   // statsFailed: with statsRefreshing false, whether that stats lookup failed (the roster's refresh button shows a tick or a cross).
   | { type: "signup_changed"; bingoId: string; payload: { signupId?: string; userId?: string; statsRefreshing?: boolean; statsFailed?: boolean } }
-  // An Admin changed the board (Categories, Tiles, Tasks, Lines, Tags) or the settings, or made a change too broad to
-  // name (a Cut review). Coarse on purpose: clients refetch the shell, the board and everything scored from it. An Admin
-  // write that changes less sends one of the narrower events instead (server/src/routes/admin.ts).
+  // An Admin changed the board (a Publish of the Draft board) or the settings, or made a change too broad to name (a
+  // Cut review). Coarse on purpose: clients refetch the shell, the board and everything scored from it. An Admin write
+  // that changes less sends one of the narrower events instead (server/src/routes/admin.ts).
   | { type: "bingo_changed"; bingoId: string; payload: Record<string, never> }
+  // The Draft board changed (CONTEXT.md "Draft board"): an Admin's edit to it, or a Discard. Nobody else sees the draft,
+  // so only the Admins' board editor and its "Unpublished changes" bar refetch; the Players' board is untouched.
+  | { type: "board_draft_changed"; bingoId: string; payload: Record<string, never> }
   // The Bingo's Moderators or Staff changed (the people themselves hear it as access_changed).
   | { type: "mods_changed"; bingoId: string; payload: Record<string, never> }
   // A signup or Feedback question was added, edited, removed or moved.

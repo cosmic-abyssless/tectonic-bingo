@@ -50,6 +50,7 @@ export const COALESCE_RULES: { [T in BroadcastEvent["type"]]: Rule<EventOf<T>> }
   // A stats refresh starting or ending shows on that signup's row.
   signup_changed: { each: (event) => event.payload.statsRefreshing !== undefined },
   bingo_changed: {},
+  board_draft_changed: {},
   mods_changed: {},
   questions_changed: {},
   superlative_categories_changed: {},

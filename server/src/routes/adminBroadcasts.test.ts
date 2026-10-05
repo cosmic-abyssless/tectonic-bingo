@@ -1,6 +1,6 @@
 // What an Admin write tells the open pages (docs/postmortems/2026-10-03-colour-picker.md): bingo_changed, which refetches
-// the board and everything scored from it, only for the board and settings; anything less sends the narrow event that
-// covers it. And a Captain's Pick Rating is told only to the leads who see it. Real routers over a real in-memory DB,
+// the board and everything scored from it, only for the settings and a Publish of the board; anything less sends the
+// narrow event that covers it (a Draft board edit, board_draft_changed). And a Captain's Pick Rating is told only to the leads who see it. Real routers over a real in-memory DB,
 // with the logged-in user faked, hit over HTTP.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
@@ -101,9 +101,30 @@ describe("an Admin write", () => {
     expect(sent()).toEqual([bingoEvent("bingo_changed")]);
   });
 
-  it("to the board tells everyone the Bingo changed", async () => {
+  it("to the board goes to the Draft board, which only the Admins' editor hears of; its Publish tells everyone", async () => {
     expect(await call(admin, "POST", "/admin/categories", { label: "Raids" })).toBe(201);
+    expect(sent()).toEqual([bingoEvent("board_draft_changed")]);
+    broadcast.mockClear();
+    const revision = db.select().from(schema.boardDrafts).get()!.revision;
+    expect(await call(admin, "POST", "/admin/board-draft/publish", { revision })).toBe(200);
     expect(sent()).toEqual([bingoEvent("bingo_changed")]);
+  });
+
+  it("to the Draft board that changes nothing tells nobody and leaves the draft's revision (#456)", async () => {
+    expect(await call(admin, "POST", "/admin/categories", { label: "Raids", colorHex: "#112233" })).toBe(201);
+    const draft = db.select().from(schema.boardDrafts).get()!;
+    const category = db.select().from(schema.draftTileCategories).get()!;
+    broadcast.mockClear();
+    expect(await call(admin, "PATCH", `/admin/categories/${category.id}`, { colorHex: "#112233" })).toBe(200);
+    expect(sent()).toEqual([]);
+    expect(db.select().from(schema.boardDrafts).get()!.revision).toBe(draft.revision);
+  });
+
+  it("discarding the Draft board tells only the Admins' editor", async () => {
+    expect(await call(admin, "POST", "/admin/categories", { label: "Raids" })).toBe(201);
+    broadcast.mockClear();
+    expect(await call(admin, "POST", "/admin/board-draft/discard")).toBe(204);
+    expect(sent()).toEqual([bingoEvent("board_draft_changed")]);
   });
 
   it("to a Team (its colour) tells everyone only the Team changed", async () => {

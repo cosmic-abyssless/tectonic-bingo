@@ -71,7 +71,7 @@ function broadcastInstead(res: Response, events: BroadcastEvent | BroadcastEvent
 }
 
 /** One of the narrow events that only say "this changed in this Bingo". */
-function changed(req: Request, type: "mods_changed" | "questions_changed" | "superlative_categories_changed" | "wrapped_art_changed"): BroadcastEvent {
+function changed(req: Request, type: "mods_changed" | "questions_changed" | "superlative_categories_changed" | "wrapped_art_changed" | "board_draft_changed"): BroadcastEvent {
   return { type, bingoId: req.bingo!.id, payload: {} };
 }
 
@@ -325,9 +325,13 @@ router.delete(
 
 const DRAFT_EDIT = "Draft board edit: audited when it's published (board.published)";
 
-/** Runs a board edit on the Draft board, for the Admin making the request. */
+/**
+ * Runs a board edit on the Draft board, for the Admin making the request. Only the Admins' editor hears of it
+ * (board_draft_changed): nothing Players see changes until a Publish.
+ */
 function editDraft<T>(req: Request, edit: (t: boardDraftService.BoardTablesArg) => T): T {
   bingoService.assertBoardEditable(req.bingo!);
+  broadcastInstead(req.res!, changed(req, "board_draft_changed"));
   return boardDraftService.editDraft(db, req.bingo!.id, req.user!.id, edit);
 }
 
@@ -362,6 +366,7 @@ router.patch(
       ...("rulesMarkdown" in body ? { rulesMarkdown: body.rulesMarkdown as string | null } : {}),
       ...("exclusivityRules" in body ? { exclusivityRules: body.exclusivityRules } : {}),
     });
+    broadcastInstead(res, changed(req, "board_draft_changed"));
     res.json({ status: boardDraftService.getDraftStatus(db, req.bingo!.id) });
   }),
 );
@@ -381,6 +386,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const { files } = boardDraftService.discardDraft(db, req.bingo!, req.user!.id);
     removeUploads(UPLOADS_DIR, files);
+    // Nothing Players see changes: only the Admins' editor hears of it. (A Publish tells everyone: bingo_changed.)
+    broadcastInstead(res, changed(req, "board_draft_changed"));
     res.status(204).end();
   }),
 );
@@ -600,8 +607,10 @@ async function addTag(req: Request, owner: tagService.TagOwner) {
   if ("boss" in body) {
     if (!isOsrsItemSearchEnabled()) throw new ServiceError(503, "Looking bosses up on the OSRS Wiki is turned off on this server");
     const found = await tagService.lookUpBoss(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient(), boardDraftService.editorTables(db, req.bingo!.id));
+    // A boss it already has: nothing changed, nobody to tell.
     if ("tags" in found) {
       markAuditedNoop();
+      broadcastInstead(req.res!, false);
       return found.tags;
     }
     return editDraft(req, (t) => tagService.addBossTagFromPage(db, req.bingo!.id, owner, found.boss, t));

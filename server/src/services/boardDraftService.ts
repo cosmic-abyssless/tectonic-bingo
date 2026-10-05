@@ -31,7 +31,7 @@ import {
 import * as schema from "../db/schema";
 import { bingos, boardDrafts, claims, submissions, teamNodeState, teamPointAdjustments, teams, tileInterests } from "../db/schema";
 import { now as clockNow } from "../clock";
-import { audit } from "../audit/record";
+import { audit, changedNothing } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { ServiceError } from "./errors";
 import { DRAFT_BOARD, PUBLISHED_BOARD, type BoardTables } from "./boardTables";
@@ -139,9 +139,9 @@ function inChunks<T>(rows: T[], insert: (chunk: T[]) => void): void {
   for (let i = 0; i < rows.length; i += CHUNK) insert(rows.slice(i, i + CHUNK));
 }
 
-/** Copies the Published board into a new draft, unless the Bingo already has one. */
-function ensureDraft(q: Queryable, bingoId: string, userId: string | null): void {
-  if (draftRow(q, bingoId)) return;
+/** Copies the Published board into a new draft, unless the Bingo already has one. True when it made one. */
+function ensureDraft(q: Queryable, bingoId: string, userId: string | null): boolean {
+  if (draftRow(q, bingoId)) return false;
   const p = loadRows(q, bingoId, PUBLISHED_BOARD);
   const d = DRAFT_BOARD;
   inChunks(p.categories, (c) => q.insert(d.tileCategories).values(c).run());
@@ -154,6 +154,7 @@ function ensureDraft(q: Queryable, bingoId: string, userId: string | null): void
   q.insert(boardDrafts)
     .values({ bingoId, revision: crypto.randomUUID(), exclusivityRulesJson: p.exclusivityRulesJson, rulesMarkdown: p.rulesMarkdown, updatedByUserId: userId, updatedAt: now, createdAt: now })
     .run();
+  return true;
 }
 
 function dropDraft(q: Queryable, bingoId: string): void {
@@ -182,8 +183,11 @@ function settleDraft(q: Queryable, bingoId: string, userId: string | null): void
  */
 export function editDraft<T>(db: Db, bingoId: string, userId: string | null, edit: (t: BoardTables) => T): T {
   return db.transaction(() => {
-    ensureDraft(db, bingoId, userId);
+    const made = ensureDraft(db, bingoId, userId);
     const result = edit(DRAFT_BOARD);
+    // An edit that found nothing to change (#456) leaves an existing draft as it was: no new revision (which would
+    // send an open Publish screen back for a fresh look), no "changed by". A draft made for it is dropped again below.
+    if (!made && changedNothing()) return result;
     settleDraft(db, bingoId, userId);
     return result;
   });
