@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { compression } from "vite-plugin-compression2";
 
 // Overridable so the E2E suite can run its own client+server pair on
 // alternate ports alongside a manually-running dev server (see
@@ -44,6 +45,15 @@ export default defineConfig({
         this.emitFile({ type: "asset", fileName: "build-id.txt", source: buildId });
       },
     },
+    // Brotli and gzip copies beside each hashed text asset over 1 KB, which the server sends as they are
+    // (precompressedAssets in server/src/middleware/staticCaching.ts) instead of gzipping per request. Only under
+    // assets/: index.html and build-id.txt are read by the server, and the public files are images. The originals stay,
+    // for clients that accept neither encoding.
+    compression({
+      include: /^assets\/.+\.(js|mjs|css|json|svg|wasm)$/,
+      threshold: 1024,
+      algorithms: ["brotliCompress", "gzip"],
+    }),
     ...(sentryToken
       ? [
           sentryVitePlugin({

@@ -6,15 +6,24 @@ import { Button } from "./Button";
 import { AlertIcon } from "./icons";
 import { toastQueue } from "./Toast";
 
-const FORCE_DELAY_MS = 10_000;
+// A forced reload waits at random within this range, per page: a deploy's open pages all hear of it at once, and
+// reloading together would pull the bundle and every page's queries through the server in the same few seconds.
+const FORCE_DELAY_MIN_MS = 10_000;
+const FORCE_DELAY_MAX_MS = 60_000;
+
+/** How long a page waits before a forced reload, for `random` in [0, 1). */
+export function forceReloadDelayMs(random: () => number): number {
+  return FORCE_DELAY_MIN_MS + random() * (FORCE_DELAY_MAX_MS - FORCE_DELAY_MIN_MS);
+}
+
 const TITLE = "A new version of the site is out";
 const reload = () => window.location.reload();
 
 /**
  * Site-wide: when the server serves a newer build than this page's (api/serverBuild.ts), a toast offers a reload, once
  * per new build (closing it dismisses that build). When the server forces it (FORCE_CLIENT_RELOAD), the page reloads at
- * its next navigation, or after a 10-second notice, never without one: that notice is its own, not a toast, so it can't
- * wait unseen in the toast queue behind others while the 10 seconds run.
+ * its next navigation, or after a notice of 10 to 60 seconds (forceReloadDelayMs), never without one: that notice is its
+ * own, not a toast, so it can't wait unseen in the toast queue behind others while the seconds run.
  */
 export function NewVersionNotice() {
   const server = useSyncExternalStore(subscribeServerBuild, getServerBuild);
@@ -37,7 +46,8 @@ export function NewVersionNotice() {
 
   useEffect(() => {
     if (action !== "force") return;
-    const timer = setTimeout(reload, FORCE_DELAY_MS);
+    // Chosen once, as the notice appears.
+    const timer = setTimeout(reload, forceReloadDelayMs(Math.random));
     return () => clearTimeout(timer);
   }, [action]);
 
@@ -62,7 +72,7 @@ export function NewVersionNotice() {
         <AlertIcon className="mt-0.5 shrink-0 text-warn" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-on-surface">{TITLE}</p>
-          <p className="mt-0.5 text-sm text-on-surface-muted">This page reloads in 10 seconds to get it.</p>
+          <p className="mt-0.5 text-sm text-on-surface-muted">This page reloads in about a minute to get it.</p>
           <Button size="sm" variant="secondary" className="mt-2" onPress={reload}>
             Reload now
           </Button>

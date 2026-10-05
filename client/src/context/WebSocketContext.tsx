@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { BroadcastEvent, ClientSocketMessage, ServerSocketMessage } from "@bingo/shared";
 import { useAuth } from "./AuthContext";
-import { keyMentions, otherBingoSlugs, watchedBingoIds } from "../api/bingoScope";
+import { keyMentions, otherBingoSlugs, unwatchedBingoSlugs, watchedBingoIds } from "../api/bingoScope";
+import { reconnectDelayMs } from "./reconnectDelay";
 import { noteServerBuild } from "../api/serverBuild";
 
 type Listener = (event: BroadcastEvent) => void;
@@ -20,11 +21,42 @@ const WebSocketContext = createContext<{
 export type StatsResult = "ok" | "failed";
 const STATS_RESULT_MS = 3000;
 
+/**
+ * Every query family a live event can change: those invalidateForEvent invalidates (its `invalidate` takes only these,
+ * so one it starts invalidating has to be listed), plus "myAchievements" (AchievementPopupHost). After a reconnect
+ * these are what the missed events may have left stale. The last three name no bingo.
+ */
+const REALTIME_QUERY_FAMILIES = [
+  "bingo", "permissions", "board", "teamProgress", "teamSubmissions", "modSubmissions", "pendingCount", "stats", "wrapped",
+  "superlatives", "feedback", "draftState", "signupRoster", "mySignup", "myPairing", "partnerCandidates", "unpairedSignups",
+  "playerProfile", "accountTypes", "auditLog", "teamActivity", "rewind", "bingoMods", "signupQuestions", "myAchievements",
+  "adminCaptainCandidates", "adminMods", "adminStaff", "adminQuestions", "adminSuperlatives", "adminWrappedArt",
+  "adminBoardTags", "adminLines",
+  "adminSiteAdmins", "adminBugReports", "myBugReports",
+] as const;
+type RealtimeQueryFamily = (typeof REALTIME_QUERY_FAMILIES)[number];
+const realtimeQueryFamilies: ReadonlySet<unknown> = new Set(REALTIME_QUERY_FAMILIES);
+
+/** Up to this long after a reconnect before its refetch, at random: a deploy's open tabs reconnect together. */
+const RECONNECT_REFETCH_SPREAD_MS = 2000;
+
+/**
+ * After a reconnect: refetch what the events missed while the socket was down may have changed, for the Bingos this tab
+ * watches (and what names no bingo). The cached Bingos it doesn't watch heard no events before either, so their
+ * queries are left alone. With nothing watched yet (no shell cached, e.g. the Bingo list) nothing is left out.
+ */
+function refetchAfterReconnect(queryClient: QueryClient) {
+  const shells = queryClient.getQueryCache().findAll({ queryKey: ["bingo"] });
+  const watched = new Set(watchedBingoIds(shells.map((q) => q.state)));
+  const unwatched = unwatchedBingoSlugs(shells.map((q) => [q.queryKey, q.state.data] as const), watched);
+  void queryClient.invalidateQueries({ predicate: (query) => realtimeQueryFamilies.has(query.queryKey[0]) && !keyMentions(query.queryKey, unwatched) });
+}
+
 function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, viewerId: string | null) {
   // Only this event's bingo: a tab on another bingo would otherwise refetch its own board, progress and counts on
   // every write anywhere (e.g. a test data run next to it). An event for no bingo in particular is for every one.
   const others = "bingoId" in event && event.bingoId ? otherBingoSlugs(queryClient.getQueriesData({ queryKey: ["bingo"] }), event.bingoId) : new Set<string>();
-  const invalidate = (queryKey: readonly unknown[]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
+  const invalidate = (queryKey: readonly [RealtimeQueryFamily]) => queryClient.invalidateQueries({ queryKey, predicate: (query) => !keyMentions(query.queryKey, others) });
   switch (event.type) {
     case "submission_created":
     case "submission_reviewed":
@@ -205,6 +237,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const listenersRef = useRef<Set<Listener>>(new Set());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [statsRefreshingSignupIds, setStatsRefreshingSignupIds] = useState<ReadonlySet<string>>(() => new Set());
   const [statsRefreshingUserIds, setStatsRefreshingUserIds] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -274,6 +307,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // down are gone for good, so on every RE-connect the page's data is refetched;
     // the first connect needs nothing (the queries are loading anyway).
     let hasConnected = false;
+    // Failed tries in a row, for the backoff; back to 0 once one opens.
+    let attempt = 0;
 
     // The Bingos the server sends this client live events for: those it has a shell for (ClientSocketMessage), sent on
     // connecting and whenever a shell is cached or dropped. A Bingo's events start arriving once its shell has loaded,
@@ -300,8 +335,12 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (hasConnected) queryClient.invalidateQueries();
+        if (hasConnected) {
+          if (refetchTimer.current) clearTimeout(refetchTimer.current);
+          refetchTimer.current = setTimeout(() => refetchAfterReconnect(queryClient), Math.random() * RECONNECT_REFETCH_SPREAD_MS);
+        }
         hasConnected = true;
+        attempt = 0;
         // A new connection hears every Bingo until told.
         lastWatch = null;
         sendWatch();
@@ -325,7 +364,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       };
       ws.onclose = () => {
         wsRef.current = null;
-        if (!closed) reconnectTimer.current = setTimeout(connect, 3000);
+        if (!closed) reconnectTimer.current = setTimeout(connect, reconnectDelayMs(attempt++, Math.random));
       };
       ws.onerror = () => ws.close();
     }
@@ -335,6 +374,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       closed = true;
       stopWatchingCache();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (refetchTimer.current) clearTimeout(refetchTimer.current);
       wsRef.current?.close();
     };
   }, [queryClient, applyStatsRefreshing, socketUserId]);

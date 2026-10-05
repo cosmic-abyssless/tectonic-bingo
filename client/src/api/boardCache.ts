@@ -19,8 +19,16 @@ export const BOARD_CACHE_MAX_AGE_MS = 7 * 24 * 3600_000;
  * team progress, team submissions — see queries.ts), so it allows a few bingos' worth.
  */
 export const BOARD_CACHE_MAX_ENTRIES = 12;
+/**
+ * How long an unchanged copy goes without being written again. A refetch that returns what is already stored skips
+ * the write (and the scan of every other entry) unless the stored copy is older than this, so its age and its place
+ * among the newest entries stay current to within this window.
+ */
+export const BOARD_CACHE_REFRESH_MS = 3600_000;
 
 const PREFIX = "board:v";
+/** Every stored copy starts with this, then its savedAt (see writeBoardCache). */
+const SAVED_AT = '{"savedAt":';
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
@@ -77,11 +85,28 @@ export function readBoardCache<T>(userId: string, slug: string, build: string, n
   return undefined;
 }
 
-/** Saves the board, then drops the oldest copies beyond BOARD_CACHE_MAX_ENTRIES. */
+/** The stored form of one copy, built by hand so the payload is serialised once and its tail can be compared as-is. */
+function storedTail(build: string, json: string): string {
+  return `,"build":${JSON.stringify(build)},"data":${json}}`;
+}
+
+/**
+ * Saves the board, then drops the oldest copies beyond BOARD_CACHE_MAX_ENTRIES. Does nothing when storage already
+ * holds this exact data from this build, written less than BOARD_CACHE_REFRESH_MS ago.
+ */
 export function writeBoardCache<T>(userId: string, slug: string, build: string, data: T, now = Date.now(), storage: StorageLike | null = defaultStorage()): void {
   if (!storage) return;
   const key = boardCacheKey(userId, slug);
-  const value = JSON.stringify({ savedAt: now, build, data } satisfies Stored<T>);
+  const json = JSON.stringify(data) as string | undefined;
+  if (json === undefined) return;
+  const tail = storedTail(build, json);
+  try {
+    const raw = storage.getItem(key);
+    if (raw?.startsWith(SAVED_AT) && raw.endsWith(tail) && now - Number(raw.slice(SAVED_AT.length, raw.length - tail.length)) < BOARD_CACHE_REFRESH_MS) return;
+  } catch {
+    // Unreadable: fall through and try to write.
+  }
+  const value = `${SAVED_AT}${now}${tail}`;
   try {
     try {
       storage.setItem(key, value);
@@ -98,10 +123,47 @@ export function writeBoardCache<T>(userId: string, slug: string, build: string, 
   }
 }
 
+interface PendingWrite {
+  userId: string;
+  slug: string;
+  build: string;
+  data: unknown;
+  now: number;
+}
+
+/** Writes waiting for the browser to be idle, by storage key: a later write to the same key replaces the earlier one. */
+const pending = new Map<string, PendingWrite>();
+let flushScheduled = false;
+
+/** Runs every waiting write now. Also runs as the page is hidden or unloaded, so a reload still finds the latest copy. */
+export function flushBoardCacheWrites(storage: StorageLike | null = defaultStorage()): void {
+  flushScheduled = false;
+  const writes = [...pending.values()];
+  pending.clear();
+  for (const w of writes) writeBoardCache(w.userId, w.slug, w.build, w.data, w.now, storage);
+}
+
+if (typeof window !== "undefined") window.addEventListener("pagehide", () => flushBoardCacheWrites());
+
+/**
+ * writeBoardCache once the browser is idle, so serialising a large response never runs between the fetch resolving
+ * and the page re-rendering with it. Only the latest data per key is written.
+ */
+export function scheduleBoardCacheWrite<T>(userId: string, slug: string, build: string, data: T, now = Date.now()): void {
+  pending.set(boardCacheKey(userId, slug), { userId, slug, build, data, now });
+  if (flushScheduled) return;
+  flushScheduled = true;
+  const flush = () => flushBoardCacheWrites();
+  if (typeof requestIdleCallback === "function") requestIdleCallback(flush, { timeout: 2000 });
+  else setTimeout(flush, 0);
+}
+
 /** Removes this user's copies for one bingo: its board and the page-load parts stored beside it (`<slug>:<part>`). */
 export function removeBoardCacheForSlug(userId: string, slug: string, storage: StorageLike | null = defaultStorage()): void {
-  if (!storage) return;
   const exact = boardCacheKey(userId, slug);
+  // A write still waiting would otherwise put the copy back.
+  for (const key of pending.keys()) if (key === exact || key.startsWith(`${exact}:`)) pending.delete(key);
+  if (!storage) return;
   try {
     for (const key of boardKeys(storage)) if (key === exact || key.startsWith(`${exact}:`)) storage.removeItem(key);
   } catch {
@@ -111,6 +173,8 @@ export function removeBoardCacheForSlug(userId: string, slug: string, storage: S
 
 /** Removes every persisted board (all users, all schema versions) — used on logout. */
 export function clearBoardCache(storage: StorageLike | null = defaultStorage()): void {
+  // Including writes still waiting, which would otherwise put a logged-out user's copy back.
+  pending.clear();
   if (!storage) return;
   try {
     for (const key of boardKeys(storage)) storage.removeItem(key);

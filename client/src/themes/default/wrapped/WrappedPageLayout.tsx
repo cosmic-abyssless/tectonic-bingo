@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion, useReducedMotion, useScroll } from "motion/react";
+import { useReducedMotion, useScroll } from "motion/react";
+import * as m from "motion/react-m";
 import type { WrappedArtFrames } from "@bingo/shared";
 import { useBingoHeader, useBingoMenuEntries, useWrappedModel } from "../../../headless";
 import type { WrappedSectionModel } from "../../../headless/types";
@@ -72,7 +73,7 @@ export function WrappedPageLayout() {
       >
         {header?.canModerate && <ModPanelButton slug={wrapped.slug} pendingCount={header.pendingCount} />}
       </AppHeader>
-      <motion.div aria-hidden className="fixed inset-x-0 top-0 z-50 h-1 origin-left bg-on-surface" style={{ scaleX: scrollYProgress }} />
+      <m.div aria-hidden className="fixed inset-x-0 top-0 z-50 h-1 origin-left bg-on-surface" style={{ scaleX: scrollYProgress }} />
 
       <nav aria-label="Wrapped sections" className="fixed top-1/2 right-3 z-40 hidden -translate-y-1/2 flex-col gap-3 md:flex">
         {wrapped.sections.map((s) => (
@@ -132,9 +133,9 @@ function useActiveSection(ids: string[]): string | null {
 function SideArt({ frames, side }: { frames: WrappedArtFrames; side: "left" | "right" }) {
   return (
     <div aria-hidden className={`pointer-events-none absolute inset-y-0 hidden w-[calc((100vw-48rem)/2-3rem)] max-w-sm xl:block ${side === "left" ? "left-4" : "right-12"}`}>
-      <motion.div className="sticky top-[15vh] h-[70vh]" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ amount: 0.3 }} transition={{ duration: 0.5 }}>
+      <m.div className="sticky top-[15vh] h-[70vh]" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ amount: 0.3 }} transition={{ duration: 0.5 }}>
         <StickerArt frames={frames} className="size-full" phase={side === "left" ? 0 : 0.5} />
-      </motion.div>
+      </m.div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSlot } from "../../themes/context";
-import { motion, useReducedMotion } from "motion/react";
+import { useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
@@ -276,7 +277,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
   // Each team's column: its card, then its picks. The same columns in both layouts, in a different grid.
   const rosters = state.teams.map((team) => (
-    <motion.div
+    <m.div
       key={team.id}
       layout
       transition={
@@ -295,7 +296,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         pairRows={pairRows}
         undo={undoLatest && latestPickTeam?.id === team.id ? undoLatest : undefined}
       />
-    </motion.div>
+    </m.div>
   ));
 
   // The state of the draft above everything else: scouting, the pre-draft setup, revealing, started, complete.
