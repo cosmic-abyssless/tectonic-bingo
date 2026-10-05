@@ -57,8 +57,8 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   }
   if (header.canCollectBuyins) entries.push({ id: "buyins", text: "Buy-ins", label: "Buy-ins", wikiIcon: "Coins 10000", current: page === "buyins", onAction: goTo("buyins") });
   if (header.canOpenWrapped) entries.push({ id: "wrapped", text: "Wrapped", label: "Wrapped", wikiIcon: "Present", current: page === "wrapped", onAction: goTo("wrapped") });
-  // Nothing can be unlocked before Live, so there's nothing to look at until then.
-  const achievementsStarted = header.stage === "live" || header.stage === "complete";
+  // The first ones can be earned from Board revealed (CONTEXT.md "Achievement"); before that there's nothing to look at.
+  const achievementsStarted = header.stage === "reveal" || header.stage === "live" || header.stage === "complete";
   if (achievementsEligible && openAchievements && achievementsStarted) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
   if (replayTutorial) entries.push({ id: "tutorial", text: "Tutorial", label: "Tutorial", wikiIcon: "Quest point icon", onAction: replayTutorial, tutorial: "menu-tutorial" });
   return entries;
