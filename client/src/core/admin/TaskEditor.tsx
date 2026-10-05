@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BoardResponse, GraphNode, GraphNodeInput } from "@bingo/shared";
+import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
-import { optimisticUpdate } from "../../api/optimistic";
-import { queryKeys } from "../../api/queries";
-import { adminQueryKeys, useItemGroups } from "../../api/adminQueries";
+import { adminQueryKeys, optimisticDraftBoard, useItemGroups } from "../../api/adminQueries";
 import { previewGraphNode, toGraphNodeInput as toInput } from "../board/requirementTree";
 import { buildLeafClaimMaps } from "../board/taskClaims";
 import { buildRequirementTree } from "../../headless/boardModel";
@@ -29,9 +27,9 @@ const SCORING_MODES = [
 // back if the server rejects them, so tree edits and deletes don't wait on
 // the round trip.
 export function optimisticTasks(queryClient: QueryClient, slug: string, tileId: string, update: (tasks: GraphNode[]) => GraphNode[], request: () => Promise<unknown>) {
-  return optimisticUpdate<BoardResponse>(
+  return optimisticDraftBoard(
     queryClient,
-    queryKeys.board(slug),
+    slug,
     (board) => ({ ...board, tiles: board.tiles.map((tile) => (tile.id === tileId ? { ...tile, node: { ...tile.node, children: update(tile.node.children) } } : tile)) }),
     request,
   );

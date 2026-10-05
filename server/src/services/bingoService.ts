@@ -46,7 +46,14 @@ import {
   womReads,
   womSnapshots,
   wrappedArt,
+  boardDrafts,
   discordResources,
+  draftBingoLines,
+  draftNodeEdges,
+  draftNodes,
+  draftTileCategories,
+  draftTags,
+  draftTiles,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
@@ -378,12 +385,13 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
 
 // Removes a bingo and everything hanging off it. The schema has no ON DELETE
 // CASCADE, so children are deleted leaf-first in one transaction.
-/** Every /uploads/ file a Bingo's rows point at: its Tile pictures, Submission and Proof screenshots, and Wrapped art. */
+/** Every /uploads/ file a Bingo's rows point at: its Tile pictures (the Draft board's too), Submission and Proof screenshots, and Wrapped art. */
 function uploadUrlsOf(tx: Tx, bingoId: string): Set<string> {
   const teamIds = tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId));
   const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
   const urls = [
     ...tx.select({ url: tiles.imageUrl }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.url),
+    ...tx.select({ url: draftTiles.imageUrl }).from(draftTiles).where(eq(draftTiles.bingoId, bingoId)).all().map((t) => t.url),
     ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all().map((s) => s.url),
     ...tx.select().from(wrappedArt).where(eq(wrappedArt.bingoId, bingoId)).all().flatMap((a) => [a.originalUrl, a.frame1Url, a.frame2Url]),
   ];
@@ -392,11 +400,12 @@ function uploadUrlsOf(tx: Tx, bingoId: string): Set<string> {
 }
 
 /** Of `urls`, the ones no row of any Bingo points at: a new Bingo's Wrapped art shares the previous one's files. */
-function unreferencedUploads(tx: Tx, urls: Set<string>): string[] {
+export function unreferencedUploads(tx: Tx, urls: Set<string>): string[] {
   if (urls.size === 0) return [];
   const list = [...urls];
   const used = new Set<string | null>([
     ...tx.select({ url: tiles.imageUrl }).from(tiles).where(inArray(tiles.imageUrl, list)).all().map((t) => t.url),
+    ...tx.select({ url: draftTiles.imageUrl }).from(draftTiles).where(inArray(draftTiles.imageUrl, list)).all().map((t) => t.url),
     ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.storageUrl, list)).all().map((s) => s.url),
     ...tx
       .select()
@@ -468,6 +477,14 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(feedbackAnswers).where(inArray(feedbackAnswers.responseId, feedbackResponseIds)).run();
     tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
+    // The Draft board (CONTEXT.md), if any: the same tables over again.
+    tx.delete(draftTags).where(eq(draftTags.bingoId, bingoId)).run();
+    tx.delete(draftBingoLines).where(eq(draftBingoLines.bingoId, bingoId)).run();
+    tx.delete(draftTiles).where(eq(draftTiles.bingoId, bingoId)).run();
+    tx.delete(draftNodeEdges).where(inArray(draftNodeEdges.parentId, tx.select({ id: draftNodes.id }).from(draftNodes).where(eq(draftNodes.bingoId, bingoId)))).run();
+    tx.delete(draftNodes).where(eq(draftNodes.bingoId, bingoId)).run();
+    tx.delete(draftTileCategories).where(eq(draftTileCategories.bingoId, bingoId)).run();
+    tx.delete(boardDrafts).where(eq(boardDrafts.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
     tx.delete(tags).where(eq(tags.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();

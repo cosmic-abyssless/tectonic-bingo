@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -685,7 +685,9 @@ export const bugReports = sqliteTable('bug_reports', {
 // single-name leaves). See docs/item-quantity-model.md §2.
 // ---------------------------------------------------------------------------
 
-export const nodes = sqliteTable('nodes', {
+// The columns of a node, shared by the Published board's `nodes` and the Draft board's `draft_nodes` (CONTEXT.md
+// "Draft board"), so the two can't drift apart.
+const nodeColumns = () => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'SUM', 'ITEM', 'MANUAL'] }).notNull(),
@@ -720,14 +722,23 @@ export const nodes = sqliteTable('nodes', {
   proofNote: text('proof_note'),
 });
 
+export const nodes = sqliteTable('nodes', {
+  ...nodeColumns(),
+  // Set when a Publish removed this node while Claims still pointed at it (CONTEXT.md "Publish"): the row stays so the
+  // Claims and their Submissions keep their history, but it has no edges, isn't on the board and never scores
+  // (getFullGraph and getApprovedClaims leave it out). Null on every node still on the board.
+  removedAt: integer('removed_at', { mode: 'timestamp' }),
+});
+
 // A node may have several parents (DAG). sortOrder is scoped to one parent —
 // a node's position among its siblings can differ per parent.
-export const nodeEdges = sqliteTable('node_edges', {
+const nodeEdgeColumns = (nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  parentId: text('parent_id').notNull().references(() => nodes.id),
-  childId: text('child_id').notNull().references(() => nodes.id),
+  parentId: text('parent_id').notNull().references(() => nodeTable().id),
+  childId: text('child_id').notNull().references(() => nodeTable().id),
   sortOrder: integer('sort_order').notNull().default(0),
-}, (t) => [
+});
+export const nodeEdges = sqliteTable('node_edges', nodeEdgeColumns(() => nodes), (t) => [
   uniqueIndex('node_edges_parent_child_unq').on(t.parentId, t.childId),
 ]);
 
@@ -737,23 +748,24 @@ export const nodeEdges = sqliteTable('node_edges', {
 
 // Optional per-bingo row/category labels (replaces v1's hardcoded 7-category
 // enum). A bingo can leave this empty and just use raw grid positions.
-export const tileCategories = sqliteTable('tile_categories', {
+const tileCategoryColumns = () => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   label: text('label').notNull(),
   colorHex: text('color_hex'),
   sortOrder: integer('sort_order').notNull().default(0),
 });
+export const tileCategories = sqliteTable('tile_categories', tileCategoryColumns());
 
 // A tile is a presentation/submission wrapper (grid position, image, freeze
 // window) around one node — its tasks are that node's children.
-export const tiles = sqliteTable('tiles', {
+const tileColumns = (nodeTable: () => { id: AnySQLiteColumn }, categoryTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
+  nodeId: text('node_id').notNull().references(() => nodeTable().id),
   name: text('name').notNull(),
   imageUrl: text('image_url'), // uploaded via the admin panel
-  categoryId: text('category_id').references(() => tileCategories.id),
+  categoryId: text('category_id').references(() => categoryTable().id),
   boardRow: integer('board_row').notNull(), // 0-indexed
   boardCol: integer('board_col').notNull(), // 0-indexed
   hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
@@ -767,7 +779,8 @@ export const tiles = sqliteTable('tiles', {
   // dialog. Null on every Bingo run here, whose Tiles say what they take through their Tasks.
   rulesText: text('rules_text'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (t) => [
+});
+export const tiles = sqliteTable('tiles', tileColumns(() => nodes, () => tileCategories), (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
   uniqueIndex('tiles_node_unq').on(t.nodeId),
 ]);
@@ -776,11 +789,13 @@ export const tiles = sqliteTable('tiles', {
 // (tileId) or on one of its Parts (nodeId, a tile node's direct child), never both. Its own table rather than columns
 // on tiles/nodes, so nothing that serialises a Tile or a node to Players can carry them by accident: only the board
 // editor, the search endpoint (which answers with Tile ids) and the export read it.
-export const tags = sqliteTable('tags', {
+// Shared by the Published board's `tags` and the Draft board's `draft_tags` (CONTEXT.md "Draft board"), each pointing at
+// its own board's Tiles and Parts.
+const tagColumns = (tileTable: () => { id: AnySQLiteColumn }, nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  tileId: text('tile_id').references(() => tiles.id),
-  nodeId: text('node_id').references(() => nodes.id),
+  tileId: text('tile_id').references(() => tileTable().id),
+  nodeId: text('node_id').references(() => nodeTable().id),
   // A Text tag is any text; a Boss tag's text is the boss's OSRS Wiki page title.
   kind: text('kind', { enum: ['text', 'boss'] }).notNull(),
   text: text('text').notNull(),
@@ -789,7 +804,8 @@ export const tags = sqliteTable('tags', {
   bossTagId: text('boss_tag_id'),
   // The order the tags were added in, per Tile or Part.
   sortOrder: integer('sort_order').notNull().default(0),
-}, (t) => [
+});
+export const tags = sqliteTable('tags', tagColumns(() => tiles, () => nodes), (t) => [
   index('tags_bingo_idx').on(t.bingoId),
 ]);
 
@@ -797,14 +813,56 @@ export const tags = sqliteTable('tags', {
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
 // line is a presentation wrapper around a node whose children are the line's
 // tile nodes (an ALL by convention) and whose points are the line bonus.
-export const bingoLines = sqliteTable('bingo_lines', {
+const bingoLineColumns = (nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
+  nodeId: text('node_id').notNull().references(() => nodeTable().id),
   lineType: text('line_type', { enum: ['row', 'column', 'diagonal', 'custom'] }).notNull(),
   lineIndex: integer('line_index').notNull(),
-}, (t) => [
+});
+export const bingoLines = sqliteTable('bingo_lines', bingoLineColumns(() => nodes), (t) => [
   uniqueIndex('bingo_lines_node_unq').on(t.nodeId),
+]);
+
+// ---------------------------------------------------------------------------
+// DRAFT BOARD (CONTEXT.md "Draft board", #437)
+//
+// The Admins' working copy of a Bingo's Board: a full copy of its nodes, edges, Tiles, lines, Categories and Tags, plus
+// its Exclusive Item rules and Rules text, in tables of the same shape as the Published board's. A row present in both
+// boards has the same id in both, so Claims, team scores and Task interest (which point at the Published board's
+// ids) still point at it after a Publish; only rows the draft added or removed gain or lose ids. Players, Moderators,
+// scoring and the export never read these tables (boardDraftService.ts is their only reader and writer, through
+// boardService's and tagService's DRAFT table set). A Bingo has a draft only while it differs from its Published board:
+// an edit that brings it back level drops it, as do Publish and Discard.
+// ---------------------------------------------------------------------------
+
+export const boardDrafts = sqliteTable('board_drafts', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  // A fresh random value on every edit, so a Publish can tell the draft it previewed from one changed since.
+  revision: text('revision').notNull(),
+  exclusivityRulesJson: text('exclusivity_rules_json').notNull().default('[]'),
+  rulesMarkdown: text('rules_markdown'),
+  // Who changed it last, and when (the "Unpublished changes" bar).
+  updatedByUserId: text('updated_by_user_id').references(() => users.id),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const draftNodes = sqliteTable('draft_nodes', nodeColumns(), (t) => [index('draft_nodes_bingo_idx').on(t.bingoId)]);
+export const draftNodeEdges = sqliteTable('draft_node_edges', nodeEdgeColumns(() => draftNodes), (t) => [
+  uniqueIndex('draft_node_edges_parent_child_unq').on(t.parentId, t.childId),
+]);
+export const draftTileCategories = sqliteTable('draft_tile_categories', tileCategoryColumns());
+export const draftTiles = sqliteTable('draft_tiles', tileColumns(() => draftNodes, () => draftTileCategories), (t) => [
+  uniqueIndex('draft_tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
+  uniqueIndex('draft_tiles_node_unq').on(t.nodeId),
+]);
+export const draftBingoLines = sqliteTable('draft_bingo_lines', bingoLineColumns(() => draftNodes), (t) => [
+  uniqueIndex('draft_bingo_lines_node_unq').on(t.nodeId),
+]);
+// Tags (CONTEXT.md "Tag") go through the draft with the rest of the Board: a Publish applies them, keeping their ids.
+export const draftTags = sqliteTable('draft_tags', tagColumns(() => draftTiles, () => draftNodes), (t) => [
+  index('draft_tags_bingo_idx').on(t.bingoId),
 ]);
 
 // ---------------------------------------------------------------------------

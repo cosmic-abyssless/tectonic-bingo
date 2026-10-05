@@ -5,6 +5,7 @@ import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
+import { useBoardDraftStatus } from "../api/adminQueries";
 import { useCan, usePageAccess } from "../headless/permissions";
 import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
@@ -26,7 +27,7 @@ import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Button } from "../core/ui/Button";
-import { Notice } from "../core/ui/Card";
+import { Badge, Notice } from "../core/ui/Card";
 import { InfoIcon } from "../core/ui/icons";
 import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { usePreference } from "../core/ui/preferences";
@@ -101,6 +102,10 @@ export function ModPage() {
   const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
 
   const historical = shell?.historical ?? null;
+  // The Draft board (CONTEXT.md): while it has unpublished changes, the Board tab says so (Admins only), and it and the
+  // Lines tab stay in stage whatever the stage, so the changes are never out of sight.
+  const { data: draftStatus } = useBoardDraftStatus(slug ?? "", !!slug && canAdminister && !historical);
+  const unpublished = canAdminister && !!draftStatus?.hasChanges;
   const visibleTabs = useMemo(() => {
     if (!stage) return [];
     // A Historical Bingo (CONTEXT.md) is read-only: only the lists of what it recorded, whatever the stage says, and for
@@ -109,10 +114,10 @@ export function ModPage() {
       return TABS.filter(
         (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && canAdminister),
       ).map((t) => ({ ...t, dimmed: false }));
-    const allowed = TABS.filter((t) => !t.adminOnly || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) }));
+    const allowed = TABS.filter((t) => !t.adminOnly || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) && !(unpublished && (t.key === "board" || t.key === "lines")) }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
-  }, [stage, canAdminister, outOfStageTabs, historical]);
+  }, [stage, canAdminister, outOfStageTabs, historical, unpublished]);
 
   // The tab is in the URL (?tab=...) so a link opens it. Without one, or with one this mod can't see (an admin-only
   // tab, or one the stage has moved past), it's the stage's natural landing tab; Settings is the fallback since it's
@@ -196,6 +201,11 @@ export function ModPage() {
                   {visibleTabs.map((t) => (
                     <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
                       {t.label}
+                      {t.key === "board" && unpublished && (
+                        <Badge tone="warn" className="ml-1.5">
+                          Unpublished
+                        </Badge>
+                      )}
                     </Tab>
                   ))}
                 </TabList>
@@ -222,7 +232,7 @@ export function ModPage() {
               {canAdminister && (
                 <TabPanel id="board">
                   <div className={NARROW}>
-                    <BoardEditor slug={slug} bingo={shell.bingo} categories={shell.categories} />
+                    <BoardEditor slug={slug} bingo={shell.bingo} />
                   </div>
                 </TabPanel>
               )}
@@ -240,7 +250,7 @@ export function ModPage() {
                   </TabPanel>
                   <TabPanel id="lines">
                     <div className={NARROW}>
-                      <LineEditor slug={slug} />
+                      <LineEditor slug={slug} bingo={shell.bingo} />
                     </div>
                   </TabPanel>
                   <TabPanel id="questions">

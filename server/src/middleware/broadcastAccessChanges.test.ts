@@ -83,6 +83,11 @@ const ROUTES: Record<string, boolean> = {
   "POST /api/bingos/:slug/admin/historical/screenshots/:key": false,
   // routes/admin.ts
   "PATCH /api/bingos/:slug/admin/settings": true,
+  // The Draft board (CONTEXT.md): its Rules, and the Publish that applies it to the board, the Rules text and the Exclusive
+  // Item rules. Roles read none of those.
+  "PATCH /api/bingos/:slug/admin/board-draft/rules": false,
+  "POST /api/bingos/:slug/admin/board-draft/publish": false,
+  "POST /api/bingos/:slug/admin/board-draft/discard": false,
   "POST /api/bingos/:slug/admin/settings/wom-check": false,
   "POST /api/bingos/:slug/admin/discord/sync": false,
   "POST /api/bingos/:slug/admin/discord/remove": false,

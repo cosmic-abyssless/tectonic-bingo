@@ -14,8 +14,8 @@ import { PlusIcon, XIcon } from "../ui/icons";
 /**
  * A Tile's or a Part's Tags (CONTEXT.md "Tag"), in the board editor: each a removable chip. Typing and Enter adds a
  * Text tag; "+ Boss" opens a picker over the OSRS Wiki's Bosses category, and the Boss tag picked brings the wiki's
- * names for the boss along, listed under it, each removable on its own. Saved as soon as they change, like the rest of
- * the editor. Never shown to Players.
+ * names for the boss along, listed under it, each removable on its own. Saved to the Draft board as soon as they change,
+ * like the rest of the editor, and published with it. Never shown to Players.
  */
 export function TagsField({ slug, owner, hint, locked }: { slug: string; owner: adminApi.TagOwner; hint: string; locked: boolean }) {
   const queryClient = useQueryClient();
@@ -33,8 +33,10 @@ export function TagsField({ slug, owner, hint, locked }: { slug: string; owner: 
       const base = all ?? { tiles: {}, parts: {} };
       return "tileId" in owner ? { ...base, tiles: { ...base.tiles, [owner.tileId]: next } } : { ...base, parts: { ...base.parts, [owner.partId]: next } };
     });
-    // The board carries the Tags for its search (BoardResponse.tileTags).
-    queryClient.invalidateQueries({ queryKey: ["board", slug] });
+    // A tag change is a Draft board edit (CONTEXT.md "Draft board"): the "Unpublished changes" bar catches up (the tags
+    // themselves are set above). Players' search keeps the Published board's tags until it's published.
+    void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraft(slug) });
+    void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraftStatus(slug) });
   }
   async function run(note: string, action: () => Promise<{ tags: Tag[] }>): Promise<boolean> {
     setError(null);

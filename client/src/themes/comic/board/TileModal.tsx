@@ -1183,7 +1183,7 @@ function FlyingBook({
   // readers, without being restyled.
   const modalRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const { underlayProps, modalProps } = useBookModal({ modalRef, dialogRef, onClose });
+  const { underlayProps, modalProps } = useBookModal({ overlayRef, modalRef, dialogRef, onClose });
 
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
@@ -1207,8 +1207,11 @@ function FlyingBook({
   return (
     // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
     <Overlay shouldContainFocus isExiting={!isPresent}>
+    // A top layer (react-aria's mark): opened from inside another modal (the board editor's preview), it's kept out of
+    // what that modal hides from the page, focus may go into it, and a click in it isn't a click off that modal.
     <div
       ref={overlayRef}
+      data-react-aria-top-layer="true"
       {...underlayProps}
       // On a phone the book is drawn twice the screen's width (see `single`);
       // the half that's off-screen must not scroll, and neither may the overlay

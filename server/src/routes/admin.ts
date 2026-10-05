@@ -12,11 +12,12 @@ import { db } from "../db";
 import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
+import * as boardDraftService from "../services/boardDraftService";
+import { removeUploads } from "../services/uploadFiles";
 import * as tagService from "../services/tagService";
 import { getOsrsWikiClient, WikiUnavailableError } from "../services/osrsWikiService";
 import { isOsrsItemSearchEnabled } from "./osrsItems";
 import * as wrappedArtService from "../services/wrappedArtService";
-import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import { assertUserCan } from "../services/permissions";
 import { QUESTION_FORMS, type QuestionForm } from "@bingo/shared";
@@ -34,7 +35,7 @@ import { TESTDATA_PREFIX } from "../services/devTestDataService";
 import { skipsIntegrations } from "../audit/context";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
-import { changedNothing, diffFields } from "../audit/record";
+import { changedNothing, diffFields, markAuditedNoop } from "../audit/record";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { countPricedSubmissions, repriceNodeClaims } from "../services/gpRepriceService";
@@ -70,7 +71,7 @@ function broadcastInstead(res: Response, events: BroadcastEvent | BroadcastEvent
 }
 
 /** One of the narrow events that only say "this changed in this Bingo". */
-function changed(req: Request, type: "mods_changed" | "questions_changed" | "superlative_categories_changed" | "wrapped_art_changed"): BroadcastEvent {
+function changed(req: Request, type: "mods_changed" | "questions_changed" | "superlative_categories_changed" | "wrapped_art_changed" | "board_draft_changed"): BroadcastEvent {
   return { type, bingoId: req.bingo!.id, payload: {} };
 }
 
@@ -86,7 +87,7 @@ router.patch(
     const body = req.body as Record<string, unknown>;
     const dateFields = ["signupOpensAt", "draftScheduledAt", "revealScheduledAt", "startsAt", "endsAt"] as const;
     const params: bingoService.UpdateBingoSettingsParams = {};
-    for (const key of ["name", "description", "theme", "buyinAmount", "bonusPotAmount", "rulesMarkdown"] as const) {
+    for (const key of ["name", "description", "theme", "buyinAmount", "bonusPotAmount"] as const) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key];
     }
     if ("signupMode" in body) {
@@ -104,8 +105,6 @@ router.patch(
       if (typeof body[key] !== "boolean") throw new ServiceError(400, `${key} must be a boolean`);
       params[key] = body[key];
     }
-    // Validated and cleaned by the service (label, scope, names).
-    if ("exclusivityRules" in body) params.exclusivityRules = body.exclusivityRules as never;
     for (const key of dateFields) {
       if (key in body) (params as Record<string, unknown>)[key] = body[key] ? new Date(body[key] as string) : null;
     }
@@ -160,13 +159,22 @@ router.patch(
       }
       params.achievements = switches;
     }
+    // The Exclusive Item rules and the Rules text go through the Draft board with the Board (CONTEXT.md "Draft board"):
+    // published, and only then scored, with it. Every other setting saves straight away.
+    if ("rulesMarkdown" in body || "exclusivityRules" in body) {
+      bingoService.assertBoardEditable(req.bingo!);
+      boardDraftService.updateDraftRules(db, req.bingo!.id, req.user!.id, {
+        ...("rulesMarkdown" in body ? { rulesMarkdown: body.rulesMarkdown as string | null } : {}),
+        ...("exclusivityRules" in body ? { exclusivityRules: body.exclusivityRules } : {}),
+      });
+    }
     const before = req.bingo!;
-    const bingo = bingoService.updateBingoSettings(db, req.bingo!.id, params);
-    // What follows a setting runs only when it changed (#456): saving the form untouched starts nothing.
+    // Only the draft's two fields sent: nothing else to save (an empty update is no update).
+    const bingo = Object.keys(params).length ? bingoService.updateBingoSettings(db, req.bingo!.id, params) : bingoService.getBingoBySlug(db, req.bingo!.slug)!;
+    // What follows a setting runs only when it changed (#456): saving the form untouched starts nothing. (A change to
+    // the Exclusive Item rules re-scores with the Publish that applies it.)
     const diff = diffFields(before, bingo)?.after ?? {};
     const changed = (...keys: (keyof typeof bingo)[]) => keys.some((key) => key in diff);
-    // Rules decide which claims count, so a change re-scores every team (a rule added mid-event takes effect now).
-    if (changed("exclusivityRulesJson")) rescoreBingo(db, req.bingo!.id);
     // The WOM competition carries the bingo's name and dates (fire-and-forget; a no-op without a competition).
     if (changed("name", "startsAt", "endsAt")) void syncWomCompetition(db, req.bingo!.id);
     // The Discord category carries the bingo's name; turning the sync on, or editing its category or channels, applies them.
@@ -310,38 +318,121 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
+// The Draft board (CONTEXT.md "Draft board", "Publish"). Every edit to the Board below (its Categories, Tiles, Tasks
+// and Lines) is made to the Draft board, which nobody but Admins sees, and reaches Players only when an Admin
+// publishes it: nothing is rescored until then. An edit is audited by the Publish it goes out with, not on its own.
+// ---------------------------------------------------------------------------
+
+const DRAFT_EDIT = "Draft board edit: audited when it's published (board.published)";
+
+/**
+ * Runs a board edit on the Draft board, for the Admin making the request. Only the Admins' editor hears of it
+ * (board_draft_changed): nothing Players see changes until a Publish.
+ */
+function editDraft<T>(req: Request, edit: (t: boardDraftService.BoardTablesArg) => T): T {
+  bingoService.assertBoardEditable(req.bingo!);
+  broadcastInstead(req.res!, changed(req, "board_draft_changed"));
+  return boardDraftService.editDraft(db, req.bingo!.id, req.user!.id, edit);
+}
+
+// The board the editor shows: the Draft board while there are unpublished changes, else the Published board.
+router.get(
+  "/board-draft",
+  asyncHandler(async (req, res) => {
+    res.json(boardDraftService.getEditorBoard(db, req.bingo!.id));
+  }),
+);
+router.get(
+  "/board-draft/status",
+  asyncHandler(async (req, res) => {
+    res.json({ status: boardDraftService.getDraftStatus(db, req.bingo!.id) });
+  }),
+);
+// What publishing would change: the diff, Claims it stops counting, and each Team's points before and after.
+router.get(
+  "/board-draft/preview",
+  asyncHandler(async (req, res) => {
+    res.json({ preview: boardDraftService.getPublishPreview(db, req.bingo!.id) });
+  }),
+);
+// The Exclusive Item rules and the Rules text, which go through the draft with the Board.
+router.patch(
+  "/board-draft/rules",
+  auditSkip(DRAFT_EDIT),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as { rulesMarkdown?: unknown; exclusivityRules?: unknown };
+    bingoService.assertBoardEditable(req.bingo!);
+    boardDraftService.updateDraftRules(db, req.bingo!.id, req.user!.id, {
+      ...("rulesMarkdown" in body ? { rulesMarkdown: body.rulesMarkdown as string | null } : {}),
+      ...("exclusivityRules" in body ? { exclusivityRules: body.exclusivityRules } : {}),
+    });
+    broadcastInstead(res, changed(req, "board_draft_changed"));
+    res.json({ status: boardDraftService.getDraftStatus(db, req.bingo!.id) });
+  }),
+);
+// Publish exactly the draft the Admin previewed (its `revision`), then rescore every Team.
+router.post(
+  "/board-draft/publish",
+  asyncHandler(async (req, res) => {
+    bingoService.assertBoardEditable(req.bingo!);
+    const { revision } = (req.body ?? {}) as { revision?: unknown };
+    const { preview, files } = boardDraftService.publishDraft(db, req.bingo!, revision, req.user!.id);
+    removeUploads(UPLOADS_DIR, files);
+    res.json({ preview });
+  }),
+);
+router.post(
+  "/board-draft/discard",
+  asyncHandler(async (req, res) => {
+    const { files } = boardDraftService.discardDraft(db, req.bingo!, req.user!.id);
+    removeUploads(UPLOADS_DIR, files);
+    // Nothing Players see changes: only the Admins' editor hears of it. (A Publish tells everyone: bingo_changed.)
+    broadcastInstead(res, changed(req, "board_draft_changed"));
+    res.status(204).end();
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Categories
 // ---------------------------------------------------------------------------
 
 router.get(
   "/categories",
   asyncHandler(async (req, res) => {
-    res.json({ categories: boardService.getCategories(db, req.bingo!.id) });
+    res.json({ categories: boardService.getCategories(db, req.bingo!.id, boardDraftService.editorTables(db, req.bingo!.id)) });
   }),
 );
 router.post(
   "/categories",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { label, colorHex, sortOrder } = req.body as { label?: string; colorHex?: string; sortOrder?: number };
     if (!label) throw new ServiceError(400, "label is required");
-    const category = boardService.createCategory(db, { bingoId: req.bingo!.id, label, colorHex, sortOrder });
+    const category = editDraft(req, (t) => boardService.createCategory(db, { bingoId: req.bingo!.id, label, colorHex, sortOrder }, t));
     res.status(201).json({ category });
   }),
 );
 router.patch(
   "/categories/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const category = boardService.updateCategory(db, req.params.id as string, req.body);
+    const id = req.params.id as string;
+    const category = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "category", id);
+      return boardService.updateCategory(db, id, req.body, t);
+    });
     res.json({ category });
   }),
 );
 router.delete(
   "/categories/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteCategory(db, req.params.id as string);
+    const id = req.params.id as string;
+    editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "category", id);
+      boardService.deleteCategory(db, id, t);
+    });
     res.status(204).end();
   }),
 );
@@ -352,54 +443,70 @@ router.delete(
 
 router.post(
   "/tiles",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { name, boardRow, boardCol, categoryId, hasFreezePeriod, freezeDurationMinutes, notes } = req.body as {
       name?: string; boardRow?: number; boardCol?: number; categoryId?: string | null;
       hasFreezePeriod?: boolean; freezeDurationMinutes?: number; notes?: string | null;
     };
     if (!name || boardRow === undefined || boardCol === undefined) throw new ServiceError(400, "name, boardRow, and boardCol are required");
-    const tile = boardService.createTile(db, { bingoId: req.bingo!.id, name, boardRow, boardCol, categoryId, hasFreezePeriod, freezeDurationMinutes, notes });
-    rescoreBingo(db, req.bingo!.id);
+    const tile = editDraft(req, (t) => boardService.createTile(db, { bingoId: req.bingo!.id, name, boardRow, boardCol, categoryId, hasFreezePeriod, freezeDurationMinutes, notes }, t));
     res.status(201).json({ tile });
   }),
 );
 router.patch(
   "/tiles/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const tile = boardService.updateTile(db, req.params.id as string, req.body);
+    const id = req.params.id as string;
+    const tile = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "tile", id);
+      return boardService.updateTile(db, id, req.body, t);
+    });
     res.json({ tile });
   }),
 );
 router.delete(
   "/tiles/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteTile(db, req.params.id as string);
-    rescoreBingo(db, req.bingo!.id);
+    const id = req.params.id as string;
+    editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "tile", id, { allowMissing: true });
+      boardService.deleteTile(db, id, t);
+    });
     res.status(204).end();
   }),
 );
 router.patch(
   "/tiles/:id/bonus-points",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
-    const tile = boardService.updateTileBonusPoints(db, req.params.id as string, points);
+    const id = req.params.id as string;
+    const tile = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "tile", id);
+      return boardService.updateTileBonusPoints(db, id, points, t);
+    });
     res.json({ tile });
   }),
 );
 
+// The picture is stored at once, but only the Draft board points at it: Players see it once it's published.
 const tileImageUpload = imageUpload(path.join(UPLOADS_DIR, "tiles"), { variants: true });
 router.post(
   "/tiles/:id/image",
+  auditSkip(DRAFT_EDIT),
   tileImageUpload.single("image"),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     if (!req.file) throw new ServiceError(400, "image is required");
-    const tile = boardService.updateTile(db, req.params.id as string, { imageUrl: `/uploads/tiles/${req.file.filename}` });
+    const id = req.params.id as string;
+    const imageUrl = `/uploads/tiles/${req.file.filename}`;
+    const tile = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "tile", id);
+      return boardService.updateTile(db, id, { imageUrl }, t);
+    });
     res.json({ tile });
   }),
 );
@@ -481,43 +588,54 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// Tags (CONTEXT.md "Tag"): on a Tile or a Part, for the board's search. Only the board editor reads them.
+// Tags (CONTEXT.md "Tag"): on a Tile or a Part, for the board's search. Only the board editor reads them. On the Draft
+// board like the rest of the Board: the editor reads the draft's while there is one, and Publish applies them.
 // ---------------------------------------------------------------------------
 
 router.get(
   "/tags",
   asyncHandler(async (req, res) => {
-    res.json(tagService.getBoardTags(db, req.bingo!.id));
+    res.json(tagService.getBoardTags(db, req.bingo!.id, boardDraftService.editorTables(db, req.bingo!.id)));
   }),
 );
 
 // A Text tag ({ text }) or a Boss tag ({ boss: its wiki page title }), which brings the wiki's names for the boss.
+// The wiki is asked before the draft edit, outside its transaction.
 async function addTag(req: Request, owner: tagService.TagOwner) {
   bingoService.assertBoardEditable(req.bingo!);
   const body = (req.body ?? {}) as { [K in keyof AddTagRequest]?: unknown } & { text?: unknown; boss?: unknown };
   if ("boss" in body) {
     if (!isOsrsItemSearchEnabled()) throw new ServiceError(503, "Looking bosses up on the OSRS Wiki is turned off on this server");
-    return tagService.addBossTag(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient());
+    const found = await tagService.lookUpBoss(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient(), boardDraftService.editorTables(db, req.bingo!.id));
+    // A boss it already has: nothing changed, nobody to tell.
+    if ("tags" in found) {
+      markAuditedNoop();
+      broadcastInstead(req.res!, false);
+      return found.tags;
+    }
+    return editDraft(req, (t) => tagService.addBossTagFromPage(db, req.bingo!.id, owner, found.boss, t));
   }
-  return tagService.addTextTag(db, req.bingo!.id, owner, body.text);
+  return editDraft(req, (t) => tagService.addTextTag(db, req.bingo!.id, owner, body.text, t));
 }
 router.post(
   "/tiles/:tileId/tags",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
     res.status(201).json({ tags: await addTag(req, { tileId: req.params.tileId as string }) });
   }),
 );
 router.post(
   "/parts/:partId/tags",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
     res.status(201).json({ tags: await addTag(req, { partId: req.params.partId as string }) });
   }),
 );
 router.delete(
   "/tags/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    res.json({ tags: tagService.removeTag(db, req.bingo!.id, req.params.id as string) });
+    res.json({ tags: editDraft(req, (t) => tagService.removeTag(db, req.bingo!.id, req.params.id as string, t)) });
   }),
 );
 
@@ -540,30 +658,37 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
-// Tasks
+// Tasks (on the Draft board, like the rest of the Board above)
 // ---------------------------------------------------------------------------
 
 router.post(
   "/tiles/:tileId/tasks",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { sortOrder, ...input } = req.body as GraphNodeInput & { sortOrder?: number };
     if (!input.kind) throw new ServiceError(400, "kind is required");
-    const task = boardService.createTask(db, req.params.tileId as string, input, sortOrder);
-    rescoreBingo(db, req.bingo!.id);
+    const tileId = req.params.tileId as string;
+    const task = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "tile", tileId);
+      return boardService.createTask(db, tileId, input, sortOrder, t);
+    });
     res.status(201).json({ task });
   }),
 );
 router.patch(
   "/tasks/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    const task = boardService.updateNode(db, req.params.id as string, req.body as GraphNodeInput);
-    rescoreBingo(db, req.bingo!.id);
+    const id = req.params.id as string;
+    const task = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "node", id);
+      return boardService.updateNode(db, id, req.body as GraphNodeInput, t);
+    });
     res.json({ task });
   }),
 );
-// Changing a Task's Valued as mid-bingo: how many submissions already have a Drop value from it, and re-pricing them.
+// Changing a Task's Valued as mid-bingo: how many submissions already have a Drop value from it, and re-pricing them
+// (from the Published board's Valued as: a draft's isn't anyone's yet).
 router.get(
   "/nodes/:nodeId/priced-submissions",
   asyncHandler(async (req, res) => {
@@ -581,50 +706,59 @@ router.post(
 
 router.delete(
   "/tasks/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteTask(db, req.params.id as string);
-    rescoreBingo(db, req.bingo!.id);
+    const id = req.params.id as string;
+    editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "node", id, { allowMissing: true });
+      boardService.deleteTask(db, id, t);
+    });
     res.status(204).end();
   }),
 );
 
 // ---------------------------------------------------------------------------
-// Lines
+// Lines (on the Draft board too)
 // ---------------------------------------------------------------------------
 
 router.get(
   "/lines",
   asyncHandler(async (req, res) => {
-    res.json({ lines: boardService.getBoardLines(db, req.bingo!.id) });
+    res.json({ lines: boardService.getBoardLines(db, req.bingo!.id, boardDraftService.editorTables(db, req.bingo!.id)) });
   }),
 );
 router.post(
   "/lines/generate",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { pointsPerLine } = req.body as { pointsPerLine?: number };
-    const lines = boardService.generateLines(db, req.bingo!, pointsPerLine);
-    rescoreBingo(db, req.bingo!.id);
+    const lines = editDraft(req, (t) => boardService.generateLines(db, req.bingo!, pointsPerLine, t));
     res.status(201).json({ lines });
   }),
 );
 router.patch(
   "/lines/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
     const { points } = req.body as { points?: number };
     if (points === undefined) throw new ServiceError(400, "points is required");
-    const line = boardService.updateLinePoints(db, req.params.id as string, points);
+    const id = req.params.id as string;
+    const line = editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "line", id);
+      return boardService.updateLinePoints(db, id, points, t);
+    });
     res.json({ line });
   }),
 );
 router.delete(
   "/lines/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    boardService.deleteLine(db, req.params.id as string);
-    rescoreBingo(db, req.bingo!.id);
+    const id = req.params.id as string;
+    editDraft(req, (t) => {
+      boardDraftService.assertOnBoard(db, t, req.bingo!.id, "line", id, { allowMissing: true });
+      boardService.deleteLine(db, id, t);
+    });
     res.status(204).end();
   }),
 );

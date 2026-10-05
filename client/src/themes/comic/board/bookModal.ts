@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { useOverlay } from "react-aria";
 
 /**
@@ -9,8 +9,9 @@ import { useOverlay } from "react-aria";
  * and 900 elements): in the frame the book took off in, and, staged, in the one after it landed.
  *
  * Here nothing on the page behind changes but an attribute no style reads:
- * - Escape and clicking off close the book (react-aria's overlay stack, so a dialog opened from inside the book closes
- *   first).
+ * - Escape closes the book (react-aria's overlay stack, so a dialog opened from inside the book closes first), and so
+ *   does clicking off it (closeOnBackdrop: the overlay is a react-aria top layer, so react-aria doesn't count a click on
+ *   it as outside).
  * - Focus moves into it with the next frame's rendering, stays inside (Overlay, around this), and goes back to what
  *   opened it.
  * - The page can't be scrolled from inside it: a wheel, a touch drag or a scrolling key that nothing in its way can
@@ -19,15 +20,26 @@ import { useOverlay } from "react-aria";
  *   tabbed to (focus is contained), which `inert` would otherwise have been for.
  */
 export function useBookModal({
+  overlayRef,
   modalRef,
   dialogRef,
   onClose,
 }: {
+  overlayRef: RefObject<HTMLElement | null>;
   modalRef: RefObject<HTMLElement | null>;
   dialogRef: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
   const { overlayProps: modalProps, underlayProps } = useOverlay({ isOpen: true, onClose, isDismissable: true }, modalRef);
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const modal = modalRef.current;
+    if (!overlay || !modal) return;
+    return closeOnBackdrop(overlay, modal, () => close.current());
+  }, [overlayRef, modalRef]);
 
   // Into the dialog just before the next frame is drawn, when the browser works out styles anyway: focusing during the
   // mount would make it do that early, for the whole page, on top of the frame's own.
@@ -48,6 +60,30 @@ export function useBookModal({
   }, [modalRef]);
 
   return { underlayProps, modalProps };
+}
+
+/**
+ * A press that starts and ends on the overlay but off the book closes it. The DOM decides what's on the overlay, so a
+ * dialog opened from the book (portalled elsewhere, though React bubbles its events through the book) never counts.
+ * While focus is in something opened over the book (a popover), the press is that thing's to close it, not the book.
+ */
+function closeOnBackdrop(overlay: HTMLElement, modal: HTMLElement, close: () => void): () => void {
+  const offBook = (target: EventTarget | null) => target instanceof Node && overlay.contains(target) && !modal.contains(target);
+  const bookHasFocus = () => !document.activeElement || document.activeElement === document.body || modal.contains(document.activeElement);
+  let pressed = false;
+  const onDown = (e: PointerEvent) => {
+    pressed = e.isPrimary && e.button === 0 && offBook(e.target) && bookHasFocus();
+  };
+  const onUp = (e: PointerEvent) => {
+    if (pressed && offBook(e.target)) close();
+    pressed = false;
+  };
+  overlay.addEventListener("pointerdown", onDown);
+  overlay.addEventListener("pointerup", onUp);
+  return () => {
+    overlay.removeEventListener("pointerdown", onDown);
+    overlay.removeEventListener("pointerup", onUp);
+  };
 }
 
 type Axis = "x" | "y";

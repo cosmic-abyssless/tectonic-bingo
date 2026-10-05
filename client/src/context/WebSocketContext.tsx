@@ -31,7 +31,7 @@ const REALTIME_QUERY_FAMILIES = [
   "superlatives", "feedback", "draftState", "signupRoster", "mySignup", "myPairing", "partnerCandidates", "unpairedSignups",
   "playerProfile", "accountTypes", "auditLog", "teamActivity", "rewind", "bingoMods", "signupQuestions", "myAchievements",
   "adminCaptainCandidates", "adminMods", "adminStaff", "adminQuestions", "adminSuperlatives", "adminWrappedArt",
-  "adminBoardTags", "adminLines",
+  "adminBoardTags", "adminLines", "adminBoardDraft", "adminBoardDraftStatus",
   "adminSiteAdmins", "adminBugReports", "myBugReports",
 ] as const;
 type RealtimeQueryFamily = (typeof REALTIME_QUERY_FAMILIES)[number];
@@ -119,6 +119,15 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       // Deleting a category drops its votes.
       invalidate(["superlatives"]);
       break;
+    case "board_draft_changed":
+      // The Draft board (CONTEXT.md): another Admin's edit or a Discard. Only the board editor and its "Unpublished
+      // changes" bar read it. (An open Publish screen keeps its preview: a Publish made from it after the draft changed
+      // is refused and the new one shown.)
+      invalidate(["adminBoardDraft"]);
+      invalidate(["adminBoardDraftStatus"]);
+      invalidate(["adminBoardTags"]);
+      invalidate(["adminLines"]);
+      break;
     case "wrapped_art_changed":
       invalidate(["adminWrappedArt"]);
       // Published Wrapped shows the art as it is now.
@@ -133,6 +142,9 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);
       invalidate(["adminLines"]);
+      // The Draft board (CONTEXT.md): a Publish leaves none.
+      invalidate(["adminBoardDraft"]);
+      invalidate(["adminBoardDraftStatus"]);
       invalidate(["adminQuestions"]);
       // The Feedback form's questions are edited there too.
       invalidate(["feedback"]);
