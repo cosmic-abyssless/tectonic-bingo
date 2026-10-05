@@ -72,7 +72,9 @@ export function PrintedShade({ ink, strength = 30, from = 35 }: { ink: string; s
     // The observer's first report comes with the next layout, so mounting a page full of shades (an opening Tile's
     // Task rows) forces no layout of its own (#470); reading clientWidth here did, once per shade.
     if (typeof ResizeObserver === "undefined") return measure(el.clientWidth);
-    const observer = new ResizeObserver(([entry]) => measure(entry!.contentRect.width));
+    // clientWidth, not the entry's fractional contentRect: the same whole pixels as before, so the dots land the same.
+    // Read in the callback, layout is already up to date: nothing is forced.
+    const observer = new ResizeObserver(() => measure(el.clientWidth));
     observer.observe(el);
     return () => observer.disconnect();
   }, []);

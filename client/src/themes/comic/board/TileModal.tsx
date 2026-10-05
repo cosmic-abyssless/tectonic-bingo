@@ -1237,6 +1237,8 @@ function FlyingBook({
                 lastSpread={lastSpread}
                 curlCopy={curlCopy}
                 single={single}
+                opening={opening}
+                printAtOnce={!!reduceMotion}
                 onFlipTo={flipTo}
                 onStep={step}
                 onCurl={curl}
@@ -1262,6 +1264,8 @@ function TileDetails({
   lastSpread,
   curlCopy,
   single,
+  opening,
+  printAtOnce,
   onFlipTo,
   onStep,
   onCurl,
@@ -1279,6 +1283,10 @@ function TileDetails({
   curlCopy: { leaf: number; side: Side } | null;
   /** Phone view: one page at a time (the book's right half; see bookShape). */
   single: boolean;
+  /** The book is still flying out (FlyingBook's `opening`): nothing can be turned or peeled yet. */
+  opening: boolean;
+  /** Print the open spread in the first frame (reduced motion: the book appears already open, no cover over it). */
+  printAtOnce: boolean;
   onFlipTo: (spread: number) => void;
   /** One step of paging: a spread on desktop, a page on a phone. */
   onStep: (dir: 1 | -1) => void;
@@ -1356,6 +1364,34 @@ function TileDetails({
     <SubmissionsPage key="submissions" submissions={tile.submissions} colors={page} />,
   ];
 
+  // What's printed on the pages comes in as they come into view (#470): mounting every page's Task rows, items and
+  // tooltips at once was the longest frame of a Tile opening. The book takes off with blank pages, and the spread it
+  // opens on is printed in the next task, still under the cover (it starts to swing a quarter of a second in). While
+  // the book flies only that spread can show (nothing turns or peels until it lands), so every other page stays blank
+  // paper until the book has landed and the browser is idle, or a peel or turn reaches it first. A page once printed
+  // stays printed.
+  const [tookOff, setTookOff] = useState(printAtOnce);
+  useEffect(() => {
+    // A task of its own: the open comes from a click, whose effects React runs in the same task as the commit.
+    const id = window.setTimeout(() => setTookOff(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
+  const printedPages = useRef(new Set<number>());
+  for (const i of single ? [spread] : [2 * spread, 2 * spread + 1]) printedPages.current.add(i);
+  const [idleAfterOpening, setIdleAfterOpening] = useState(false);
+  const printedAll = useRef(false);
+  if (idleAfterOpening || curlCopy) printedAll.current = true;
+  useEffect(() => {
+    if (opening || printedAll.current) return;
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(() => setIdleAfterOpening(true), { timeout: 500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(() => setIdleAfterOpening(true), 0);
+    return () => window.clearTimeout(id);
+  }, [opening]);
+  const isPrinted = (i: number) => printedAll.current || (tookOff && printedPages.current.has(i));
+
   // Page i (0-based) as it appears on a face: numbered and scrollable.
   // Fronts are right-hand pages, backs left-hand ones. The copy drawn on a
   // fold-back keeps its gutter shadow: that only comes into the fold-back
@@ -1372,7 +1408,7 @@ function TileDetails({
   const face = (i: number, side: Side): ReactNode => (
     <PageColorsContext.Provider value={page}>
       <BookPage colors={page} side={side === "front" ? "right" : "left"} no={i + 1} role={roleOf(i)} dragScroll={single} fill={i === 0}>
-        {pages[i]}
+        {isPrinted(i) ? pages[i] : null}
       </BookPage>
     </PageColorsContext.Provider>
   );
