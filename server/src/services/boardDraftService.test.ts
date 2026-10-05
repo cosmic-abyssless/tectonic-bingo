@@ -17,6 +17,7 @@ import { getTeamProgress } from "./teamService";
 import { exportBingo, importBingo } from "./bingoExportService";
 import { deleteBingo, toViewerBingo } from "./bingoService";
 import { ServiceError } from "./errors";
+import { addTextTag, getBoardTags } from "./tagService";
 
 vi.mock("../ws", () => ({ broadcast: vi.fn() }));
 
@@ -314,6 +315,20 @@ describe("Claims on removed Items", () => {
     publishDraft(db, s.bingo, getPublishPreview(db, s.bingo.id).revision);
     expect(db.select().from(schema.nodes).where(eq(schema.nodes.id, s.page.id)).get()).toBeUndefined();
     expect(db.select().from(schema.tiles).where(eq(schema.tiles.id, s.zulrah.id)).get()).toBeUndefined();
+  });
+
+  it("takes the Tags of a removed Tile and a removed Part with them", () => {
+    const s = seed();
+    addTextTag(db, s.bingo.id, { tileId: s.zulrah.id }, "snake");
+    addTextTag(db, s.bingo.id, { partId: s.page.id }, "fangs");
+    addTextTag(db, s.bingo.id, { partId: s.visage.id }, "visage");
+    addTextTag(db, s.bingo.id, { tileId: s.vorkath.id }, "dragon");
+    asDraft(s, (t) => deleteTile(db, s.zulrah.id, t));
+    asDraft(s, (t) => deleteTask(db, s.visage.id, t));
+    publishDraft(db, s.bingo, getPublishPreview(db, s.bingo.id).revision);
+    const left = getBoardTags(db, s.bingo.id);
+    expect(Object.values(left.tiles).flat().map((t) => t.text)).toEqual(["dragon"]);
+    expect(Object.values(left.parts).flat()).toEqual([]);
   });
 });
 

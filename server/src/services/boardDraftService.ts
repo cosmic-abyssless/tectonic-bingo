@@ -29,7 +29,7 @@ import {
   type TeamScorePreview,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { bingos, boardDrafts, claims, submissions, teamNodeState, teamPointAdjustments, teams, tileInterests } from "../db/schema";
+import { bingos, boardDrafts, claims, submissions, tags, teamNodeState, teamPointAdjustments, teams, tileInterests } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { audit } from "../audit/record";
 import { userLabelById } from "../audit/describe";
@@ -643,11 +643,12 @@ function applyDraft(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): void
   tx.delete(P.nodeEdges).where(inArray(P.nodeEdges.parentId, nodeIds)).run();
   inChunks(d.rows.edges, (c) => tx.insert(P.nodeEdges).values(c).run());
 
-  // Tiles: removed ones go (with the Task interest on them); moved ones are parked off the grid first, so two Tiles
-  // swapping places never meet on one cell.
+  // Tiles: removed ones go (with the Task interest and Tags on them); moved ones are parked off the grid first, so two
+  // Tiles swapping places never meet on one cell.
   for (const t of p.rows.tiles) {
     if (d.tile.has(t.id)) continue;
     tx.delete(tileInterests).where(eq(tileInterests.tileId, t.id)).run();
+    tx.delete(tags).where(eq(tags.tileId, t.id)).run();
     tx.delete(P.tiles).where(eq(P.tiles.id, t.id)).run();
   }
   const changed = d.rows.tiles.filter((t) => p.tile.has(t.id) && !sameFields(p.tile.get(t.id)!, t, TILE_FIELDS));
@@ -664,12 +665,13 @@ function applyDraft(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): void
   }
 
   // Nodes the draft removed. A team's completions on them are rebuilt by the rescore; a raised hand on a removed Task
-  // means nothing. One that Claims point at stays, off the board and no longer scoring (nodes.removedAt), so its
-  // Claims and Submissions keep their history.
+  // means nothing, and a removed Part's Tags (CONTEXT.md "Tag") go with it. One that Claims point at stays, off the
+  // board and no longer scoring (nodes.removedAt), so its Claims and Submissions keep their history.
   const removed = p.rows.nodes.filter((n) => !d.node.has(n.id)).map((n) => n.id);
   if (removed.length) {
     tx.delete(teamNodeState).where(inArray(teamNodeState.nodeId, removed)).run();
     tx.delete(tileInterests).where(inArray(tileInterests.taskId, removed)).run();
+    tx.delete(tags).where(inArray(tags.nodeId, removed)).run();
     const claimed = new Set(tx.selectDistinct({ nodeId: claims.nodeId }).from(claims).where(inArray(claims.nodeId, removed)).all().map((c) => c.nodeId));
     const kept = removed.filter((id) => claimed.has(id));
     const gone = removed.filter((id) => !claimed.has(id));
