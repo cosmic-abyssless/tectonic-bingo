@@ -531,22 +531,25 @@ interface WomPoint {
 }
 
 /**
- * How long after the Bingo's start (or the Achievement's switch-on, if later) its Wise Old Man Achievements start
- * counting play (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer
- * than 6 hours, so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update
- * sent at start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Titles and Luck still count from the start.
+ * How long after the Bingo's start (or the Achievement's switch-on, if later) Leech and Skiller start counting play
+ * (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer than 6 hours,
+ * so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update sent at
+ * start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Long weekend and Diversification count from the start
+ * instead, like the Wise Old Man competition (EHB) they'd otherwise be compared against, as do Titles and Luck.
  */
 export const WOM_ACHIEVEMENT_DELAY_MS = 7 * 60 * 60 * 1000;
+const WOM_DELAYED: ReadonlySet<AchievementKey> = new Set(["leech", "skiller"]);
+const womDelayFor = (key: AchievementKey) => (WOM_DELAYED.has(key) ? WOM_ACHIEVEMENT_DELAY_MS : 0);
 
 /**
  * A Player's Wise Old Man snapshots bracketing their play during the Bingo: their latest one taken by its end, and a
- * baseline — their last snapshot at or before WOM_ACHIEVEMENT_DELAY_MS after it started (or after the Achievement was
- * switched on, if that's later), else their first one since. Null until there's a snapshot after that cutoff.
+ * baseline — their last snapshot at or before `delayMs` after it started (or after the Achievement was switched on, if
+ * that's later), else their first one since. Null until there's a snapshot after that cutoff.
  */
-function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date): { baseline: WomPoint; latest: WomPoint } | null {
+function womWindow(q: Queryable, bingo: Bingo, userId: string, firstSwitchedOnAt: Date, delayMs: number): { baseline: WomPoint; latest: WomPoint } | null {
   const start = effectiveStartsAt(q, bingo);
   if (!start) return null;
-  const cutoff = new Date(Math.max(firstSwitchedOnAt.getTime(), start.getTime()) + WOM_ACHIEVEMENT_DELAY_MS);
+  const cutoff = new Date(Math.max(firstSwitchedOnAt.getTime(), start.getTime()) + delayMs);
   const end = endedAt(q, bingo);
   const snapshots = q
     .select({ at: womSnapshots.takenAt, clues: womSnapshots.clues, ehb: womSnapshots.ehb, ehp: womSnapshots.ehp, bossKillsJson: womSnapshots.bossKillsJson })
@@ -572,7 +575,8 @@ const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
  * Bingo: any clue gain), Long weekend (20 EHB gained during it), Diversification (10 different bosses killed during it)
- * and Skiller (3 EHP gained during it), from womWindow (so from 7 hours after the start). Checked on every read, the final one after the Bingo is Finished too, since that read is still
+ * and Skiller (3 EHP gained during it), from womWindow: Leech and Skiller from 7 hours after the start, the other two from
+ * the start. Checked on every read, the final one after the Bingo is Finished too, since that read is still
  * about play while it was Live; snapshots after its end don't count.
  */
 export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string): void {
@@ -598,7 +602,7 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
       for (const [key, reached] of goals) {
         const setting = settings.get(key);
         if (!setting) continue;
-        const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt);
+        const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt, womDelayFor(key));
         if (window) tryEarn(tx, bingoId, userId, key, window.latest.at, settings, () => reached(window));
       }
     });
@@ -720,7 +724,7 @@ function progressFor(
   }
   if (key === "long_weekend") {
     // Whole hours: "12/20", never rounded up to a goal not yet reached.
-    const window = womWindow(db, bingo, userId, cutoff);
+    const window = womWindow(db, bingo, userId, cutoff, womDelayFor("long_weekend"));
     return { current: Math.min(Math.floor(window ? ehbGained(window) : 0), LONG_WEEKEND_EHB), target: LONG_WEEKEND_EHB };
   }
   return null;
