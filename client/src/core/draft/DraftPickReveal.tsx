@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, useAnimate } from "motion/react";
+import { useAnimate } from "motion/react";
+import * as m from "motion/react-m";
 import { useSlot } from "../../themes/context";
 import { flightTo, isOnScreen, type Box, type PendingPick } from "./revealMath";
 
@@ -105,7 +106,7 @@ export function DraftPickReveal({
 
   return createPortal(
     <div data-testid="draft-reveal" className="pointer-events-none fixed inset-0 z-[70] flex items-start justify-center pt-[16vh]" role="status" aria-live="polite">
-      <motion.div className="absolute inset-0 bg-scrim/70" initial={{ opacity: 0 }} animate={{ opacity: flying ? 0 : 1 }} transition={{ duration: flying ? FLIGHT_S * 0.6 : 0.2 }} />
+      <m.div className="absolute inset-0 bg-scrim/70" initial={{ opacity: 0 }} animate={{ opacity: flying ? 0 : 1 }} transition={{ duration: flying ? FLIGHT_S * 0.6 : 0.2 }} />
       <div ref={scope} className="relative" style={{ opacity: 0 }}>
         <Burst names={names} teamName={teamName} teamColor={teamColor} />
       </div>

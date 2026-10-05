@@ -19,10 +19,18 @@ export function keyMentions(queryKey: readonly unknown[], slugs: ReadonlySet<str
  * A slug with no cached shell is never in here, so its queries are still refreshed (the safe side).
  */
 export function otherBingoSlugs(shells: readonly (readonly [readonly unknown[], unknown])[], bingoId: string): Set<string> {
+  return unwatchedBingoSlugs(shells, new Set([bingoId]));
+}
+
+/**
+ * The slugs of the cached bingo shells whose bingo is not among `bingoIds`: a refetch for those bingos leaves their
+ * queries alone. As otherBingoSlugs, a slug with no cached shell is never in here.
+ */
+export function unwatchedBingoSlugs(shells: readonly (readonly [readonly unknown[], unknown])[], bingoIds: ReadonlySet<string>): Set<string> {
   const slugs = new Set<string>();
   for (const [queryKey, data] of shells) {
     const id = (data as { bingo?: { id?: unknown } } | undefined)?.bingo?.id;
-    if (typeof queryKey[1] === "string" && typeof id === "string" && id !== bingoId) slugs.add(queryKey[1]);
+    if (typeof queryKey[1] === "string" && typeof id === "string" && !bingoIds.has(id)) slugs.add(queryKey[1]);
   }
   return slugs;
 }

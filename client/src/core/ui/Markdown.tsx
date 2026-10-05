@@ -1,5 +1,10 @@
-import ReactMarkdown, { type Components } from "react-markdown";
+import { lazy, Suspense } from "react";
+import type { Components } from "react-markdown";
 import { Link } from "react-router-dom";
+
+// react-markdown and its unified chain load the first time any markdown shows (the rules dialog is always mounted on
+// the board page, so a static import would put them in the board's first download).
+const ReactMarkdown = lazy(() => import("react-markdown"));
 
 const components: Components = {
   h1: (p) => <h1 className="mt-4 mb-2 text-lg font-semibold text-on-surface first:mt-0" {...p} />,
@@ -22,6 +27,11 @@ const components: Components = {
 
 // Renders admin-authored rules/description markdown. Replaces v1's
 // hardcoded-prose RulesModal — content now lives in bingos.rulesMarkdown.
+// Until the renderer loads, the raw text, styled like a paragraph.
 export function Markdown({ children }: { children: string }) {
-  return <ReactMarkdown components={components}>{children}</ReactMarkdown>;
+  return (
+    <Suspense fallback={<p className="text-sm leading-relaxed whitespace-pre-wrap text-on-surface-muted">{children}</p>}>
+      <ReactMarkdown components={components}>{children}</ReactMarkdown>
+    </Suspense>
+  );
 }

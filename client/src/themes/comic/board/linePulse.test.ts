@@ -1,18 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { LineModel } from "../../../headless/types";
-import {
-  BOOST_AMP,
-  BOOST_BASE,
-  IDLE_AMP,
-  IDLE_BASE,
-  LINE_PULSE_PERIOD_MS,
-  LINE_PULSE_PHASE,
-  buildStopsByTileId,
-  gradientAngleDeg,
-  lineWashGradient,
-  pulseOpacityAt,
-} from "./linePulse";
+import { LINE_PULSE_PERIOD_MS, LINE_PULSE_PHASE, buildStopsByTileId, gradientAngleDeg, linePulseDelayMs, lineWashLayers } from "./linePulse";
 
 const line = (over: Partial<LineModel> & Pick<LineModel, "id" | "tileIds" | "complete">): LineModel => ({
   lineType: "row",
@@ -77,60 +66,55 @@ describe("buildStopsByTileId", () => {
   });
 });
 
-describe("pulseOpacityAt", () => {
-  const idle = [{ lineId: "r0", index: 0, length: 3, angleDeg: 90 }];
+describe("linePulseDelayMs", () => {
+  // comic-line-pulse: opacity (1 - cos)/2 over one period, from a trough.
+  const keyframe = (activeMs: number) => 0.5 * (1 - Math.cos((2 * Math.PI * activeMs) / LINE_PULSE_PERIOD_MS));
+  // The layer's animation starts at timeline zero, so at time t it is t - delay in.
+  const cssOpacity = (timeMs: number, position: number) => keyframe(timeMs - linePulseDelayMs(position));
+  // The wave the board has always drawn, as a fraction of the amplitude.
+  const wave = (timeMs: number, position: number) =>
+    0.5 * (1 + Math.sin((2 * Math.PI * timeMs) / LINE_PULSE_PERIOD_MS - position * LINE_PULSE_PHASE));
 
-  it("is a static mid-wave when reduced motion", () => {
-    expect(pulseOpacityAt(0, idle, new Map(), 0, true)).toBeCloseTo(IDLE_AMP * 0.5);
+  it("stays within one period before the start", () => {
+    for (const position of [-0.5, 0, 0.5, 1, 2.5, 4, 6.5, 10]) {
+      const delay = linePulseDelayMs(position);
+      expect(delay).toBeLessThanOrEqual(0);
+      expect(delay).toBeGreaterThan(-LINE_PULSE_PERIOD_MS);
+    }
   });
 
-  it("uses a stronger static mid-wave when reduced motion and the line is boosted", () => {
-    expect(pulseOpacityAt(0, idle, new Map([["r0", 100]]), 50, true)).toBeCloseTo(BOOST_AMP * 0.5);
+  it("puts the line's first Tile a quarter period in, rising from mid-wave", () => {
+    expect(linePulseDelayMs(0)).toBeCloseTo(-LINE_PULSE_PERIOD_MS / 4);
   });
 
-  it("waves from mid idle at t=0, index 0", () => {
-    expect(pulseOpacityAt(0, idle, new Map(), 0, false)).toBeCloseTo(IDLE_BASE + IDLE_AMP * 0.5);
+  it("lags each Tile along the line by LINE_PULSE_PHASE", () => {
+    const stepMs = (LINE_PULSE_PHASE / (2 * Math.PI)) * LINE_PULSE_PERIOD_MS;
+    const lead = (position: number) => -linePulseDelayMs(position);
+    expect((lead(0) - lead(1) + LINE_PULSE_PERIOD_MS) % LINE_PULSE_PERIOD_MS).toBeCloseTo(stepMs);
   });
 
-  it("troughs to zero at three-quarter period", () => {
-    expect(pulseOpacityAt((LINE_PULSE_PERIOD_MS * 3) / 4, idle, new Map(), 0, false)).toBeCloseTo(0);
-  });
-
-  it("peaks idle at a quarter period", () => {
-    expect(pulseOpacityAt(LINE_PULSE_PERIOD_MS / 4, idle, new Map(), 0, false)).toBeCloseTo(IDLE_BASE + IDLE_AMP);
-  });
-
-  it("staggers adjacent tiles by LINE_PULSE_PHASE", () => {
-    const next = [{ lineId: "r0", index: 1, length: 3, angleDeg: 90 }];
-    const expected = IDLE_BASE + IDLE_AMP * 0.5 * (1 + Math.sin(-LINE_PULSE_PHASE));
-    expect(pulseOpacityAt(0, next, new Map(), 0, false)).toBeCloseTo(expected);
-  });
-
-  it("takes the max when a tile sits on two lines", () => {
-    const stops = [
-      { lineId: "r0", index: 0, length: 3, angleDeg: 90 },
-      { lineId: "c0", index: 1, length: 3, angleDeg: 180 },
-    ];
-    const a = pulseOpacityAt(0, [stops[0]!], new Map(), 0, false);
-    const b = pulseOpacityAt(0, [stops[1]!], new Map(), 0, false);
-    expect(pulseOpacityAt(0, stops, new Map(), 0, false)).toBeCloseTo(Math.max(a, b));
-  });
-
-  it("uses boost amplitude while nowMs is before expiry", () => {
-    const boosted = pulseOpacityAt(0, idle, new Map([["r0", 100]]), 50, false);
-    expect(boosted).toBeCloseTo(BOOST_BASE + BOOST_AMP * 0.5);
-    expect(pulseOpacityAt(0, idle, new Map([["r0", 100]]), 100, false)).toBeCloseTo(IDLE_BASE + IDLE_AMP * 0.5);
+  it("reproduces the travelling sine at every time and position", () => {
+    for (const position of [-0.5, 0, 0.5, 1, 1.5, 3, 4.5]) {
+      for (const timeMs of [0, 137, 600, 1200, 1800, 2399, 5000, 98765]) {
+        expect(cssOpacity(timeMs, position)).toBeCloseTo(wave(timeMs, position));
+      }
+    }
   });
 });
 
-describe("lineWashGradient", () => {
+describe("lineWashLayers", () => {
   const stop = { lineId: "r0", index: 1, length: 3, angleDeg: 90 };
 
-  it("orients along the line and samples neighbors in the sine", () => {
-    const css = lineWashGradient(0, stop, new Map(), 0, false);
-    expect(css.startsWith("linear-gradient(90deg, ")).toBe(true);
-    expect(css).toContain("0%");
-    expect(css).toContain("50%");
-    expect(css).toContain("100%");
+  it("samples the near edge, middle and far edge of the Tile", () => {
+    expect(lineWashLayers(stop).map((layer) => layer.position)).toEqual([0.5, 1, 1.5]);
+  });
+
+  it("orients every layer along the line, each peaking where it samples", () => {
+    const wash = "color-mix(in srgb, var(--tile-complete) var(--line-pulse-amp), transparent)";
+    expect(lineWashLayers(stop).map((layer) => layer.backgroundImage)).toEqual([
+      `linear-gradient(90deg, ${wash} 0%, transparent 50%)`,
+      `linear-gradient(90deg, transparent 0%, ${wash} 50%, transparent 100%)`,
+      `linear-gradient(90deg, transparent 50%, ${wash} 100%)`,
+    ]);
   });
 });

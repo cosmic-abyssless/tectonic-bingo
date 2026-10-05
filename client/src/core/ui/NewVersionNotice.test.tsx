@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { noteServerBuild } from "../../api/serverBuild";
-import { NewVersionNotice } from "./NewVersionNotice";
+import { forceReloadDelayMs, NewVersionNotice } from "./NewVersionNotice";
 import { toast, toastQueue } from "./Toast";
 
 afterEach(() => {
@@ -22,7 +22,14 @@ describe("NewVersionNotice", () => {
         <NewVersionNotice />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("alert").textContent).toContain("This page reloads in 10 seconds");
+    expect(screen.getByRole("alert").textContent).toContain("This page reloads in about a minute");
     expect(screen.getByRole("button", { name: "Reload now" })).toBeTruthy();
+  });
+
+  it("waits 10 to 60 seconds before a forced reload, at random", () => {
+    expect(forceReloadDelayMs(() => 0)).toBe(10_000);
+    expect(forceReloadDelayMs(() => 0.5)).toBe(35_000);
+    expect(forceReloadDelayMs(() => 0.999)).toBeLessThan(60_000);
+    expect(forceReloadDelayMs(() => 0.999)).toBeGreaterThan(59_000);
   });
 });
