@@ -67,10 +67,11 @@ export function PrintedShade({ ink, strength = 30, from = 35 }: { ink: string; s
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current!;
-    const measure = () => setWidth(Math.ceil(el.clientWidth / 16) * 16);
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
+    const measure = (width: number) => setWidth(Math.ceil(width / 16) * 16);
+    // The observer's first report comes with the next layout, so mounting a page full of shades (an opening Tile's
+    // Task rows) forces no layout of its own (#470); reading clientWidth here did, once per shade.
+    if (typeof ResizeObserver === "undefined") return measure(el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => measure(entry!.contentRect.width));
     observer.observe(el);
     return () => observer.disconnect();
   }, []);

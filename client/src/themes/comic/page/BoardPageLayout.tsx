@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useMemo, useRef, type ComponentType } from "react";
 import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel, useTileSearchModel } from "../../../headless";
 import type { TileSearchModel } from "../../../headless/types";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
@@ -25,6 +25,29 @@ export function BoardPageLayout() {
   const modalTile = useTileModel(page.openTile.id);
   const { dragActive } = useScreenshotCapture(page);
   const { colors } = useComic();
+
+  // The Tile dialog's callbacks, the same functions for the page's whole life so the memoised dialog skips the page's
+  // re-renders while the book flies (#470). Each reads the latest page and Tile when called.
+  const latest = useRef({ page, modalTile });
+  latest.current = { page, modalTile };
+  const tileModalActions = useMemo(
+    () => ({
+      close: () => latest.current.page.openTile.close(),
+      toggleInterest: (taskId: string) => {
+        const { page, modalTile } = latest.current;
+        if (modalTile) page.tileInterest.toggle(modalTile.id, taskId);
+      },
+      submit: (taskId?: string) => {
+        const { page } = latest.current;
+        page.submit.show(page.openTile.id ?? undefined, undefined, taskId);
+      },
+      postProof: (taskId?: string) => {
+        const { page, modalTile } = latest.current;
+        if (modalTile) page.submit.showProof(modalTile.id, taskId);
+      },
+    }),
+    [],
+  );
 
   const PageHeader = useSlot("PageHeader");
   const SignupStage = useSlot("SignupStage");
@@ -144,14 +167,10 @@ export function BoardPageLayout() {
         <TileModal
           tile={modalTile}
           isOpen={page.openTile.id !== null}
-          onClose={page.openTile.close}
-          onToggleInterest={modalTile?.interest.canToggle ? (taskId) => page.tileInterest.toggle(modalTile.id, taskId) : undefined}
-          onSubmit={
-            page.canSubmit
-              ? (taskId) => page.submit.show(page.openTile.id ?? undefined, undefined, taskId)
-              : undefined
-          }
-          onPostProof={page.canSubmit && modalTile ? (taskId) => page.submit.showProof(modalTile.id, taskId) : undefined}
+          onClose={tileModalActions.close}
+          onToggleInterest={modalTile?.interest.canToggle ? tileModalActions.toggleInterest : undefined}
+          onSubmit={page.canSubmit ? tileModalActions.submit : undefined}
+          onPostProof={page.canSubmit && modalTile ? tileModalActions.postProof : undefined}
         />
       </ComicPage>
     </ScreenshotViewerHost>

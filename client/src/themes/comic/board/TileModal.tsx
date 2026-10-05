@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   AnimatePresence,
   animate as animateValue,
@@ -116,8 +116,11 @@ import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./c
  * (overlay-backdrop / overlay-panel) are deliberately not used here.
  */
 
-/** `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). */
-export function TileModal({
+/**
+ * `tile` null while `isOpen` transitions closed (kept mounted so it can animate out). Memoised: the page above
+ * re-renders while the book flies, and the open issue (its Task rows, items and tooltips) has nothing new to draw (#470).
+ */
+export const TileModal = memo(function TileModal({
   tile,
   isOpen,
   onClose,
@@ -152,7 +155,7 @@ export function TileModal({
       )}
     </AnimatePresence>
   );
-}
+});
 
 // A turned leaf lies flat on the left (-180°); an unturned one flat on the
 // right (0°).

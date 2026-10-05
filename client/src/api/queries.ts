@@ -904,8 +904,15 @@ export function useMarkTutorialSeen() {
   });
 }
 
+// Fire-and-forget, so not a useMutation: its pending and success states would re-render the whole Bingo page twice for
+// every Tile opened (#470), and nothing shows them. A failure is dropped, as before.
 export function useRecordAchievementOpened(slug: string) {
-  return useMutation({
-    mutationFn: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload),
-  });
+  return useMemo(
+    () => ({
+      mutate: (payload: { kind: "tile"; tileId: string } | { kind: "rules" } | { kind: "stats" }) => {
+        api.post<void>(`/api/bingos/${slug}/achievements/opened`, payload).catch(() => {});
+      },
+    }),
+    [slug],
+  );
 }
