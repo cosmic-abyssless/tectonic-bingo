@@ -50,7 +50,7 @@ export function UnpublishedChangesBar({ slug, bingo, draft, locked }: { slug: st
               Discard
             </Button>
             <Button size="sm" variant="primary" onPress={() => setPublishing(true)} isDisabled={locked}>
-              Publish…
+              Review and publish
             </Button>
           </>
         )}
