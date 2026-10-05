@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, nodes, submissions, tags, teamNodeState, tileInterests } from "../db/schema";
+import { claims, nodes, submissions, teamNodeState, tileInterests } from "../db/schema";
 import { ServiceError } from "./errors";
 import { valuedAsOf } from "./gpValueService";
 import type { ApprovedClaim, EngineNode } from "./engine";
@@ -364,9 +364,9 @@ function deleteNodeForce(tx: Tx, id: string, t: BoardTables): void {
     // raised hand on a task that no longer exists means nothing.
     tx.delete(teamNodeState).where(eq(teamNodeState.nodeId, id)).run();
     tx.delete(tileInterests).where(eq(tileInterests.taskId, id)).run();
-    // A Part's Tags (CONTEXT.md "Tag") go with it.
-    tx.delete(tags).where(eq(tags.nodeId, id)).run();
   }
+  // A Part's Tags (CONTEXT.md "Tag"), on the same board as it, go with it.
+  tx.delete(t.tags).where(eq(t.tags.nodeId, id)).run();
   const childIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, id)).all().map((r) => r.childId);
   tx.delete(nodeEdges).where(or(eq(nodeEdges.parentId, id), eq(nodeEdges.childId, id))).run();
   tx.delete(nodes).where(eq(nodes.id, id)).run();

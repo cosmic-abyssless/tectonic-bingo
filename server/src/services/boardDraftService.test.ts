@@ -17,7 +17,7 @@ import { getTeamProgress } from "./teamService";
 import { exportBingo, importBingo } from "./bingoExportService";
 import { deleteBingo, toViewerBingo } from "./bingoService";
 import { ServiceError } from "./errors";
-import { addTextTag, getBoardTags } from "./tagService";
+import { addTextTag, getBoardTags, removeTag, tileSearchTags } from "./tagService";
 
 vi.mock("../ws", () => ({ broadcast: vi.fn() }));
 
@@ -329,6 +329,70 @@ describe("Claims on removed Items", () => {
     const left = getBoardTags(db, s.bingo.id);
     expect(Object.values(left.tiles).flat().map((t) => t.text)).toEqual(["dragon"]);
     expect(Object.values(left.parts).flat()).toEqual([]);
+  });
+});
+
+describe("Tags", () => {
+  const tagTexts = (tags: ReturnType<typeof getBoardTags>, tileId: string) => (tags.tiles[tileId] ?? []).map((t) => t.text);
+
+  it("stage in the draft: the Players' search keeps the Published board's until a Publish applies them, ids and all", () => {
+    const s = seed();
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: s.vorkath.id }, "dragon", t));
+    expect(getDraftStatus(db, s.bingo.id).hasChanges).toBe(true);
+    expect(tileSearchTags(db, s.bingo.id)).toEqual({});
+    expect(tagTexts(getBoardTags(db, s.bingo.id), s.vorkath.id)).toEqual([]);
+    const staged = getBoardTags(db, s.bingo.id, DRAFT_BOARD).tiles[s.vorkath.id]!;
+    expect(staged.map((t) => t.text)).toEqual(["dragon"]);
+
+    publishDraft(db, s.bingo, getPublishPreview(db, s.bingo.id).revision);
+    expect(tileSearchTags(db, s.bingo.id)).toEqual({ [s.vorkath.id]: ["dragon"] });
+    expect(getBoardTags(db, s.bingo.id).tiles[s.vorkath.id]!.map((t) => t.id)).toEqual(staged.map((t) => t.id));
+    expect(hasDraft(db, s.bingo.id)).toBe(false);
+  });
+
+  it("can tag a Tile and a Part that so far exist only in the draft, and publishes them with it", () => {
+    const s = seed();
+    const tile = asDraft(s, (t) => createTile(db, { bingoId: s.bingo.id, name: "Hydra", boardRow: 1, boardCol: 0 }, t));
+    const part = asDraft(s, (t) => createTask(db, tile.id, { kind: "ITEM", label: "Claw", points: 10, itemName: "Hydra's claw" }, undefined, t));
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: tile.id }, "alchemical", t));
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { partId: part.id }, "claw", t));
+    publishDraft(db, s.bingo, getPublishPreview(db, s.bingo.id).revision);
+    expect(tileSearchTags(db, s.bingo.id)).toEqual({ [tile.id]: ["alchemical", "claw"] });
+  });
+
+  it("lists a Tile's tag changes in the Publish preview, and a removal publishes", () => {
+    const s = seed();
+    addTextTag(db, s.bingo.id, { tileId: s.zulrah.id }, "snake");
+    const [snake] = getBoardTags(db, s.bingo.id).tiles[s.zulrah.id]!;
+    asDraft(s, (t) => removeTag(db, s.bingo.id, snake!.id, t));
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: s.zulrah.id }, "serpent", t));
+    const preview = getPublishPreview(db, s.bingo.id);
+    const zulrah = preview.diff.tiles.find((t) => t.tileId === s.zulrah.id)!;
+    expect(zulrah.change).toBe("changed");
+    expect(zulrah.fields).toContainEqual({ field: "Tags", before: "snake", after: "serpent" });
+    publishDraft(db, s.bingo, preview.revision);
+    expect(tileSearchTags(db, s.bingo.id)).toEqual({ [s.zulrah.id]: ["serpent"] });
+  });
+
+  it("leaves no draft once a tag is added and taken off again, and a Discard puts the tags back", () => {
+    const s = seed();
+    addTextTag(db, s.bingo.id, { tileId: s.zulrah.id }, "snake");
+    const added = asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: s.vorkath.id }, "dragon", t));
+    asDraft(s, (t) => removeTag(db, s.bingo.id, added[0]!.id, t));
+    expect(hasDraft(db, s.bingo.id)).toBe(false);
+
+    const [snake] = getBoardTags(db, s.bingo.id).tiles[s.zulrah.id]!;
+    asDraft(s, (t) => removeTag(db, s.bingo.id, snake!.id, t));
+    discardDraft(db, s.bingo);
+    expect(tagTexts(getBoardTags(db, s.bingo.id), s.zulrah.id)).toEqual(["snake"]);
+    expect(hasDraft(db, s.bingo.id)).toBe(false);
+  });
+
+  it("writes no audit entry per tag edit on the draft", () => {
+    const s = seed();
+    const before = db.select().from(schema.auditLog).all().length;
+    asDraft(s, (t) => addTextTag(db, s.bingo.id, { tileId: s.vorkath.id }, "dragon", t));
+    expect(db.select().from(schema.auditLog).all().length).toBe(before);
   });
 });
 

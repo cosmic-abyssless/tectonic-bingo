@@ -789,11 +789,13 @@ export const tiles = sqliteTable('tiles', tileColumns(() => nodes, () => tileCat
 // (tileId) or on one of its Parts (nodeId, a tile node's direct child), never both. Its own table rather than columns
 // on tiles/nodes, so nothing that serialises a Tile or a node to Players can carry them by accident: only the board
 // editor, the search endpoint (which answers with Tile ids) and the export read it.
-export const tags = sqliteTable('tags', {
+// Shared by the Published board's `tags` and the Draft board's `draft_tags` (CONTEXT.md "Draft board"), each pointing at
+// its own board's Tiles and Parts.
+const tagColumns = (tileTable: () => { id: AnySQLiteColumn }, nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  tileId: text('tile_id').references(() => tiles.id),
-  nodeId: text('node_id').references(() => nodes.id),
+  tileId: text('tile_id').references(() => tileTable().id),
+  nodeId: text('node_id').references(() => nodeTable().id),
   // A Text tag is any text; a Boss tag's text is the boss's OSRS Wiki page title.
   kind: text('kind', { enum: ['text', 'boss'] }).notNull(),
   text: text('text').notNull(),
@@ -802,7 +804,8 @@ export const tags = sqliteTable('tags', {
   bossTagId: text('boss_tag_id'),
   // The order the tags were added in, per Tile or Part.
   sortOrder: integer('sort_order').notNull().default(0),
-}, (t) => [
+});
+export const tags = sqliteTable('tags', tagColumns(() => tiles, () => nodes), (t) => [
   index('tags_bingo_idx').on(t.bingoId),
 ]);
 
@@ -824,13 +827,13 @@ export const bingoLines = sqliteTable('bingo_lines', bingoLineColumns(() => node
 // ---------------------------------------------------------------------------
 // DRAFT BOARD (CONTEXT.md "Draft board", #437)
 //
-// The Admins' working copy of a Bingo's Board: a full copy of its nodes, edges, Tiles, lines and Categories, plus its
-// Exclusive Item rules and Rules text, in tables of the same shape as the Published board's. A row present in both
+// The Admins' working copy of a Bingo's Board: a full copy of its nodes, edges, Tiles, lines, Categories and Tags, plus
+// its Exclusive Item rules and Rules text, in tables of the same shape as the Published board's. A row present in both
 // boards has the same id in both, so Claims, team scores and Task interest (which point at the Published board's
 // ids) still point at it after a Publish; only rows the draft added or removed gain or lose ids. Players, Moderators,
 // scoring and the export never read these tables (boardDraftService.ts is their only reader and writer, through
-// boardService's DRAFT table set). A Bingo has a draft only while it differs from its Published board: an edit that
-// brings it back level drops it, as do Publish and Discard.
+// boardService's and tagService's DRAFT table set). A Bingo has a draft only while it differs from its Published board:
+// an edit that brings it back level drops it, as do Publish and Discard.
 // ---------------------------------------------------------------------------
 
 export const boardDrafts = sqliteTable('board_drafts', {
@@ -856,6 +859,10 @@ export const draftTiles = sqliteTable('draft_tiles', tileColumns(() => draftNode
 ]);
 export const draftBingoLines = sqliteTable('draft_bingo_lines', bingoLineColumns(() => draftNodes), (t) => [
   uniqueIndex('draft_bingo_lines_node_unq').on(t.nodeId),
+]);
+// Tags (CONTEXT.md "Tag") go through the draft with the rest of the Board: a Publish applies them, keeping their ids.
+export const draftTags = sqliteTable('draft_tags', tagColumns(() => draftTiles, () => draftNodes), (t) => [
+  index('draft_tags_bingo_idx').on(t.bingoId),
 ]);
 
 // ---------------------------------------------------------------------------

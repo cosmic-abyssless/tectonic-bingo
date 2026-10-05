@@ -49,8 +49,8 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
   "POST /api/bingos/:slug/admin/discord/remove": ["settings.updated", "discord.removed"],
-  // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, and the Exclusive Item rules and Rules
-  // text at .../board-draft/rules) are auditSkip()'d, audited instead by the Publish that applies them.
+  // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, tags, and the Exclusive Item rules and
+  // Rules text at .../board-draft/rules) are auditSkip()'d, audited instead by the Publish that applies them.
   "POST /api/bingos/:slug/admin/board-draft/publish": ["board.published", "points.rescored"],
   "POST /api/bingos/:slug/admin/board-draft/discard": ["board.discarded"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
@@ -64,9 +64,6 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_set"],
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id/recut": ["wrapped.art_recut"],
   "DELETE /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_removed"],
-  "POST /api/bingos/:slug/admin/tiles/:tileId/tags": ["tag.added"],
-  "POST /api/bingos/:slug/admin/parts/:partId/tags": ["tag.added"],
-  "DELETE /api/bingos/:slug/admin/tags/:id": ["tag.removed"],
   "POST /api/bingos/:slug/admin/nodes/:nodeId/reprice": ["submission.repriced"],
   "POST /api/bingos/:slug/admin/questions": ["question.created"],
   "PATCH /api/bingos/:slug/admin/questions/:id": ["question.updated"],

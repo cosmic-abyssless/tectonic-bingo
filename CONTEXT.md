@@ -161,7 +161,7 @@ The full grid of Tiles presented to players for a Bingo.
 - **Two copies:** Admins edit the Draft board; everyone else sees the Published board. "The board", unqualified, is the Published board.
 
 ### Draft board
-The Admins' working copy of a Bingo's Board (its Tiles, Parts, Tasks, points, lines, Categories and Tile images, plus its Exclusive Item rules and Rules text). Edits go here; nobody else sees it. One per Bingo, shared by every Admin.
+The Admins' working copy of a Bingo's Board (its Tiles, Parts, Tasks, points, lines, Categories, Tags and Tile images, plus its Exclusive Item rules and Rules text). Edits go here; nobody else sees it. One per Bingo, shared by every Admin.
 - **Rules:** Any Admin edits it, and it records who changed it last and when. Any Admin can Publish or Discard it. While it differs from the Published board, the Board tab says so ("Unpublished changes") with who changed it last, to Admins only. Admins can preview it as Players would see it. It works the same in every stage; a Finished Bingo's board stays locked.
 - **What goes through it:** The Board, the Exclusive Item rules and the Rules text. Every other setting (name, theme, dates, signups, Pot, Wise Old Man, reveal options, Once Finished) saves at once.
 - **Tile images:** One uploaded to the draft is stored at once, but shown to Players only once published.
@@ -172,7 +172,7 @@ The Board everyone plays on: what Players see, what Moderators review against, w
 
 ### Publish
 Applies the Draft board to the Published board, after showing what changes and how every Team's points move.
-- **The Publish screen:** Every Tile, Part and Task added, removed or changed, with old and new values, plus changed line bonuses, Categories, Exclusive Item rules and Rules text; a warning about Claims on Items it removes; and each Team's points before and after, with the Tiles and Parts it gains or loses as complete. Points share isn't previewed.
+- **The Publish screen:** Every Tile, Part and Task added, removed or changed, with old and new values (Tags included), plus changed line bonuses, Categories, Exclusive Item rules and Rules text; a warning about Claims on Items it removes; and each Team's points before and after, with the Tiles and Parts it gains or loses as complete. Points share isn't previewed.
 - **Rules:** It publishes exactly the draft the screen showed: if the draft changed since, it's refused and the new changes are shown. Publishing rescores every Team. A Tile, Part, Task or Item on both boards stays the same one, so its Claims and points stay with it. Claims on an Item it removes stop counting; their Submissions are kept. Players' boards refresh, with no announcement. Recorded in the audit log as "Board published" (who, what changed, each Team's points before and after), for Moderators and Admins.
 - **Valued as:** An Item whose Valued as it changes can have the Submissions already priced re-priced, once published, if the Admin asks.
 
@@ -199,6 +199,7 @@ A distinct top-level section, milestone, or page within a Tile.
 
 ### Tag
 A word a Tile or Part is found by in the board's search, never shown to Players. A **Text tag** is any text. A **Boss tag** is a boss, raid or minigame from the wiki (Vorkath, Chambers of Xeric, The Gauntlet); adding one adds the wiki's names for it (aliases and common misspellings) as Text tags, which can be removed one by one, and removing the Boss tag removes them. Not searched while the Tiles are sealed.
+- **Rules:** Edited on the Draft board with the rest of the Board: Players' search uses the Published board's Tags until a Publish.
 
 ### Task
 A concrete objective, check, or nested requirement that must be satisfied.

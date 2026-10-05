@@ -72,11 +72,12 @@ export function usePublishPreview(slug: string, enabled: boolean) {
   return useQuery({ queryKey: adminQueryKeys.publishPreview(slug), queryFn: async () => (await adminApi.getPublishPreview(slug)).preview, enabled, staleTime: Infinity, gcTime: 0, retry: false });
 }
 
-/** After an edit to the draft: the editor's board and the "Unpublished changes" bar both catch up. */
+/** After an edit to the draft, a Publish or a Discard: the editor's board, its Tags and the "Unpublished changes" bar catch up. */
 export function invalidateBoardDraft(queryClient: QueryClient, slug: string) {
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraft(slug) });
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraftStatus(slug) });
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.lines(slug) });
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardTags(slug) });
 }
 
 /** optimisticUpdate on the editor's board (the draft), with the status bar refreshed afterwards. */

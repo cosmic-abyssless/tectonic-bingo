@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNodeInput, NodeStatus, SealedBoardResponse } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { claims, submissions, tags, teamNodeState, tileInterests } from "../db/schema";
+import { claims, submissions, teamNodeState, tileInterests } from "../db/schema";
 import { ServiceError } from "./errors";
 import { deleteNode, deleteSubtree, getFullGraph, getNodeTree, getNodeTrees, insertSubtree, replaceSubtree } from "./graphService";
 import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
@@ -391,12 +391,10 @@ export function deleteTile(db: Db, id: string, t: BoardTables = PUBLISHED_BOARD)
     const proofs = tx.select({ id: submissions.id }).from(submissions).where(eq(submissions.proofTileId, id)).all().length;
     if (proofs > 0) throw new ServiceError(409, `Can't delete "${tile.name}": ${proofs} Proof screenshot${proofs === 1 ? "" : "s"} were posted for it`);
     const taskCount = tx.select({ id: nodeEdges.id }).from(nodeEdges).where(eq(nodeEdges.parentId, tile.nodeId)).all().length;
-    // Interest and Tags (CONTEXT.md "Tag") hang off the Published board's Tiles: a Draft board delete leaves them, and
-    // the Publish that applies it removes them. Its Parts' tags go with their nodes (deleteSubtree).
-    if (!t.draft) {
-      tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
-      tx.delete(tags).where(eq(tags.tileId, id)).run();
-    }
+    // Task interest hangs off the Published board's Tiles: a Draft board delete leaves it for the Publish to remove.
+    if (!t.draft) tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
+    // Its Tags (CONTEXT.md "Tag") are on the same board as it; its Parts' go with their nodes (deleteSubtree).
+    tx.delete(t.tags).where(eq(t.tags.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId, t);
     auditBoard(tx, t, {

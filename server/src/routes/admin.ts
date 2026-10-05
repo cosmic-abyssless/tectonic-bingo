@@ -35,7 +35,7 @@ import { TESTDATA_PREFIX } from "../services/devTestDataService";
 import { skipsIntegrations } from "../audit/context";
 import { getDiscordSyncStatus, removeDiscordTeams, syncDiscordTeams } from "../services/discordTeamService";
 import { auditSkip } from "../audit/middleware";
-import { changedNothing, diffFields } from "../audit/record";
+import { changedNothing, diffFields, markAuditedNoop } from "../audit/record";
 import { ServiceError } from "../services/errors";
 import { broadcast } from "../ws";
 import { countPricedSubmissions, repriceNodeClaims } from "../services/gpRepriceService";
@@ -581,43 +581,52 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// Tags (CONTEXT.md "Tag"): on a Tile or a Part, for the board's search. Only the board editor reads them.
+// Tags (CONTEXT.md "Tag"): on a Tile or a Part, for the board's search. Only the board editor reads them. On the Draft
+// board like the rest of the Board: the editor reads the draft's while there is one, and Publish applies them.
 // ---------------------------------------------------------------------------
 
 router.get(
   "/tags",
   asyncHandler(async (req, res) => {
-    res.json(tagService.getBoardTags(db, req.bingo!.id));
+    res.json(tagService.getBoardTags(db, req.bingo!.id, boardDraftService.editorTables(db, req.bingo!.id)));
   }),
 );
 
 // A Text tag ({ text }) or a Boss tag ({ boss: its wiki page title }), which brings the wiki's names for the boss.
+// The wiki is asked before the draft edit, outside its transaction.
 async function addTag(req: Request, owner: tagService.TagOwner) {
   bingoService.assertBoardEditable(req.bingo!);
   const body = (req.body ?? {}) as { [K in keyof AddTagRequest]?: unknown } & { text?: unknown; boss?: unknown };
   if ("boss" in body) {
     if (!isOsrsItemSearchEnabled()) throw new ServiceError(503, "Looking bosses up on the OSRS Wiki is turned off on this server");
-    return tagService.addBossTag(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient());
+    const found = await tagService.lookUpBoss(db, req.bingo!.id, owner, body.boss, getOsrsWikiClient(), boardDraftService.editorTables(db, req.bingo!.id));
+    if ("tags" in found) {
+      markAuditedNoop();
+      return found.tags;
+    }
+    return editDraft(req, (t) => tagService.addBossTagFromPage(db, req.bingo!.id, owner, found.boss, t));
   }
-  return tagService.addTextTag(db, req.bingo!.id, owner, body.text);
+  return editDraft(req, (t) => tagService.addTextTag(db, req.bingo!.id, owner, body.text, t));
 }
 router.post(
   "/tiles/:tileId/tags",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
     res.status(201).json({ tags: await addTag(req, { tileId: req.params.tileId as string }) });
   }),
 );
 router.post(
   "/parts/:partId/tags",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
     res.status(201).json({ tags: await addTag(req, { partId: req.params.partId as string }) });
   }),
 );
 router.delete(
   "/tags/:id",
+  auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
-    bingoService.assertBoardEditable(req.bingo!);
-    res.json({ tags: tagService.removeTag(db, req.bingo!.id, req.params.id as string) });
+    res.json({ tags: editDraft(req, (t) => tagService.removeTag(db, req.bingo!.id, req.params.id as string, t)) });
   }),
 );
 

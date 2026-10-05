@@ -36,6 +36,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
   draft_tiles: { denied: "The Draft board's unpublished Tiles." },
   draft_tile_categories: { denied: "The Draft board's unpublished Categories." },
   draft_bingo_lines: { denied: "The Draft board's unpublished Lines." },
+  draft_tags: { denied: "The Draft board's unpublished Tags." },
 
   // ---- identity & platform ---------------------------------------------------------------------------------------
   users: {

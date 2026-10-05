@@ -1,4 +1,4 @@
-// The two copies of a Bingo's Board (CONTEXT.md "Draft board", "Published board"): the same five tables, once for
+// The two copies of a Bingo's Board (CONTEXT.md "Draft board", "Published board"): the same six tables, once for
 // the Board everyone plays on and once for the Admins' working copy. boardService and graphService take one of these
 // sets, so the same editing code writes either; everything that serves Players, Moderators, scoring or the export
 // reads the Published set (the default everywhere).
@@ -13,6 +13,8 @@ export interface BoardTables {
   tiles: typeof schema.draftTiles;
   bingoLines: typeof schema.draftBingoLines;
   tileCategories: typeof schema.draftTileCategories;
+  /** Tags (CONTEXT.md "Tag") on this board's Tiles and Parts. */
+  tags: typeof schema.draftTags;
 }
 
 export const PUBLISHED_BOARD: BoardTables = {
@@ -22,6 +24,7 @@ export const PUBLISHED_BOARD: BoardTables = {
   tiles: schema.tiles as unknown as typeof schema.draftTiles,
   bingoLines: schema.bingoLines as unknown as typeof schema.draftBingoLines,
   tileCategories: schema.tileCategories as unknown as typeof schema.draftTileCategories,
+  tags: schema.tags as unknown as typeof schema.draftTags,
 };
 
 export const DRAFT_BOARD: BoardTables = {
@@ -31,4 +34,5 @@ export const DRAFT_BOARD: BoardTables = {
   tiles: schema.draftTiles,
   bingoLines: schema.draftBingoLines,
   tileCategories: schema.draftTileCategories,
+  tags: schema.draftTags,
 };
