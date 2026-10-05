@@ -121,7 +121,8 @@ export interface FinishedRequest {
   /** The route pattern, e.g. "/api/bingos/:slug/admin/teams/:id"; never the raw URL. */
   route: string;
   ms: number;
-  status: number;
+  /** Null when the browser gave up before it was answered (the connection closed first): there was no status to send. */
+  status: number | null;
   userId?: string | null;
   bingoId?: string | null;
   /** The test data generator's (it writes through the real endpoints at speed): not counted towards write floods. */
@@ -227,7 +228,7 @@ export class LoadWarnings {
     const slowMs = isSlowByDesign(method, route) ? s.slowByDesignMs : s.slowRequestMs;
     if (ms > slowMs && !UNTIMED.has(label)) {
       this.fire(["slow_request", label], () => ({
-        message: `Slow request: ${label} took ${Math.round(ms)} ms`,
+        message: `Slow request: ${label} took ${Math.round(ms)} ms${status === null ? ", and the browser gave up before it was answered" : ""}`,
         extra: { method, route, ms: Math.round(ms), status, thresholdMs: slowMs },
       }));
     }

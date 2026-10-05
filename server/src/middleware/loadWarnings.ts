@@ -64,7 +64,8 @@ function watch(warnings: LoadWarnings, req: Request, res: Response): void {
         method: req.method,
         route: route() ?? "(no route)",
         ms: performance.now() - started,
-        status: res.statusCode,
+        // Answered, or closed before the answer was finished (the browser gave up): statusCode then is only the default.
+        status: res.writableFinished ? res.statusCode : null,
         // An anonymous route (the Feedback form's) names no user here either.
         userId: req.audit?.anonymous ? null : (req.user?.id ?? null),
         bingoId: req.bingo?.id ?? null,

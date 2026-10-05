@@ -82,6 +82,14 @@ describe("slow_request", () => {
     expect(reported.map((w) => w.message)).toEqual(["Slow request: POST /token took 30001 ms"]);
   });
 
+  it("says when the browser gave up before the request was answered", () => {
+    const { request, reported } = setup();
+    request({ method: "GET", route: "/api/bingos/:slug/players/:userId", ms: 58_766, status: null });
+    expect(reported.map((w) => [w.message, w.extra.status])).toEqual([
+      ["Slow request: GET /api/bingos/:slug/players/:userId took 58766 ms, and the browser gave up before it was answered", null],
+    ]);
+  });
+
   it("knows which routes are slow by design, by method too", () => {
     expect(isSlowByDesign("POST", "/api/bingos/:slug/submissions")).toBe(true);
     expect(isSlowByDesign("GET", "/api/bingos/:slug/submissions")).toBe(false);
