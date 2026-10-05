@@ -65,6 +65,44 @@ describe("TectonicClient", () => {
     await expect(client.getDetailedUser("111")).rejects.toBeInstanceOf(TectonicUnavailableError);
   });
 
+  describe("a lookup tectonic-api doesn't answer in time (TECTONIC-SERVER-7)", () => {
+    const quick = { timeoutMs: 40, attempts: 2 };
+    // Never answers: settles only when the request's own timeout aborts it, as a dead connection does.
+    const hang = (_url: string | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)));
+    const answer = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+
+    it("is tried again, and the second try's answer is used", async () => {
+      const fetchImpl = vi.fn().mockImplementationOnce(hang).mockImplementationOnce(() => answer([{ user_id: "1" }]));
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).resolves.toEqual([{ user_id: "1" }]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("gives up after the second try, as unavailable", async () => {
+      const fetchImpl = vi.fn(hang);
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).rejects.toThrow(/no answer in 40 ms/);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("counts an answer whose body never finishes arriving", async () => {
+      const stalledBody = (_url: string | URL, init?: RequestInit) =>
+        Promise.resolve({ ok: true, status: 200, json: () => hang(_url, init) } as unknown as Response);
+      const fetchImpl = vi.fn().mockImplementationOnce(stalledBody).mockImplementationOnce(() => answer([]));
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).resolves.toEqual([]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("isn't tried again on an HTTP error: that's tectonic-api's answer", async () => {
+      const fetchImpl = mockFetch({ "/users/": { status: 500, body: {} } });
+      const client = new TectonicClient(cfg, fetchImpl, quick);
+      await expect(client.getDetailedUsers(["1"])).rejects.toBeInstanceOf(TectonicUnavailableError);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("caches successful responses and skips refetching within the TTL", async () => {
     const fetchImpl = mockFetch({ "/leaderboard": { body: [] } });
     const client = new TectonicClient(cfg, fetchImpl);
