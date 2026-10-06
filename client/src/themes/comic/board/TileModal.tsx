@@ -55,6 +55,7 @@ import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from 
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 import { LETTERED } from "../../lettering";
 import { useBookModal } from "./bookModal";
+import { useInsideModal } from "../../../core/ui/insideModal";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -1183,7 +1184,8 @@ function FlyingBook({
   // readers, without being restyled.
   const modalRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const { underlayProps, modalProps } = useBookModal({ overlayRef, modalRef, dialogRef, onClose });
+  const topLayer = useInsideModal();
+  const { underlayProps, modalProps } = useBookModal({ overlayRef, modalRef, dialogRef, onClose, topLayer });
 
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
@@ -1207,11 +1209,13 @@ function FlyingBook({
   return (
     // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
     <Overlay shouldContainFocus isExiting={!isPresent}>
-    // A top layer (react-aria's mark): opened from inside another modal (the board editor's preview), it's kept out of
-    // what that modal hides from the page, focus may go into it, and a click in it isn't a click off that modal.
+    // A top layer (react-aria's mark) only when opened from inside another modal (the board editor's preview): it's
+    // kept out of what that modal hides from the page, focus may go into it, and a click in it isn't a click off that
+    // modal. Not on the board itself: react-aria never counts a click on a top layer as outside, so a popover opened
+    // over the book (who's interested, a reaction) wouldn't close on a click on the book.
     <div
       ref={overlayRef}
-      data-react-aria-top-layer="true"
+      data-react-aria-top-layer={topLayer ? "true" : undefined}
       {...underlayProps}
       // On a phone the book is drawn twice the screen's width (see `single`);
       // the half that's off-screen must not scroll, and neither may the overlay
