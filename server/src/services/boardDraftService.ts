@@ -767,6 +767,7 @@ export function publishDraft(db: Db, bingo: { id: string; name: string }, revisi
         summary: preview.summary,
         removedClaims: preview.removedClaims.claims,
         teams: preview.teams.map((t) => ({ teamId: t.teamId, teamName: t.teamName, before: t.before, after: t.after })),
+        diff: preview.diff,
       },
       ...(actorUserId ? { actor: { userId: actorUserId } } : {}),
     });

@@ -44,8 +44,14 @@ order (a newest-first feed lists the points above the approval that awarded
 them). A board edit is made to the Draft board (CONTEXT.md) and isn't audited
 on its own (its routes are `auditSkip`ped: Moderators read the log, and the draft
 is for Admins only). Its Publish writes one `board.published` entry (a summary of
-what changed and every team's points before and after), then a net
-`points.rescored` per team whose total moved; a Discard writes `board.discarded`.
+what changed, the whole diff the Publish screen showed, and every team's points
+before and after), then a net `points.rescored` per team whose total moved; a
+Discard writes `board.discarded`. Expanding a `board.published` entry in the
+audit log shows that diff the way the Publish screen does (`BoardDiffView`).
+It's the one action with a bigger details cap (256 KB rather than 8 KB,
+`DETAILS_MAX_BYTES_FOR` in `server/src/audit/record.ts`), since a Bingo's first
+Publish lists its whole board; entries from before the diff was kept show only
+the summary.
 `submission.created` labels name what was submitted (`describeClaims`).
 
 Every read goes through `server/src/audit/query.ts`'s `queryAuditLog` /
