@@ -18,6 +18,7 @@
     "generate-bingo:teardown": "tsx scripts/generate-bingo/teardown.ts",
     "mock-wom-competition": "tsx scripts/mock-wom-competition.ts",
     "historical:bundle": "tsx scripts/historical/bundle.ts",
+    "ocr:compare": "tsx scripts/ocr-compare.ts",
     "typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "test": "vitest run"
   },
