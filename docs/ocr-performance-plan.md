@@ -1,7 +1,8 @@
 # Faster screenshot OCR — findings and plan
 
-**Status: THEORETICAL.** Measured 2026-10-06; nothing here is implemented. The two recommended changes are one-line
-settings in `server/src/ocrEngine.ts`; the rest is infrastructure or ruled out.
+**Status: THEORETICAL.** Measured 2026-10-06. The two recommended changes are one-line settings in
+`server/src/ocrEngine.ts`, being made in their own pull request; the infrastructure levers are tabled until after the
+Bingo; the rest is ruled out.
 
 ## Where the time goes
 
@@ -73,7 +74,10 @@ reads exactly or within one edit (the matcher's tolerance), against the producti
 | PP-OCRv5 English mobile, its INT8 build, PP-OCRv4 English | ±5% | No faster (the recognition backbone dominates, not the dictionary head) and 1–2 more key terms missed. |
 | Running 2 readings at once | 0 | `session.run` is serialized per process (above). |
 
-## Infrastructure levers (not measured on the box)
+## Infrastructure levers — tabled (2026-10-06)
+
+Not measured on the box, and **tabled until after the Bingo**: no infrastructure changes this close to going live.
+Kept here for afterwards.
 
 1. **Give the `ocr` container 4 CPUs with a low CPU share instead of a hard 2-CPU quota.** `cpus: 2` in
    `deploy/stack.yml` is a CFS quota: the container is throttled at 2 CPUs even while the other two idle, which is
