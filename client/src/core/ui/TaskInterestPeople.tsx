@@ -1,158 +1,109 @@
-import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
-import type { TaskInterestModel } from "../../headless/types";
-import { UsersIcon } from "./icons";
+import type { CSSProperties } from "react";
+import { Button as AriaButton, Dialog, DialogTrigger, Heading, Popover } from "react-aria-components";
+import type { InterestedPerson, TaskInterestModel } from "../../headless/types";
 import { PlayerName } from "../tectonic/PlayerName";
-import { COMIC_FONT } from "../../themes/comic/font";
-import { LETTERED } from "../../themes/lettering";
 
 export interface TaskInterestPeopleProps {
   interest: TaskInterestModel;
-  /** Optional theme styling variant */
-  variant?: "default" | "comic";
 }
 
-export function TaskInterestPeople({
-  interest,
-  variant = "default",
-}: TaskInterestPeopleProps) {
+/** How a theme draws the stack and its list: classes and inline style for each part. */
+export interface TaskInterestSkin {
+  /** "Unclaimed", when nobody has a hand up. */
+  empty: Look;
+  /** The button around the stack. */
+  trigger: Look;
+  /** One picture in the stack: its ring has to be the colour behind the stack, so the overlaps read as cut-outs. */
+  avatar: Look;
+  /** The "+5" circle at the end of a stack that doesn't fit. */
+  more: Look;
+  popover: Look;
+  heading: Look;
+}
+type Look = { className: string; style?: CSSProperties };
+
+/** At most this many circles: a longer list shows one fewer picture and then "+N" for the rest. */
+const MAX_CIRCLES = 5;
+
+/**
+ * Who has a hand up on a part (CONTEXT.md "Task interest"): their pictures stacked in overlapping circles, "+N" at the
+ * end when there are more than fit, and the whole stack a button that opens the list of names. Inside the Tile dialog,
+ * so the list is a react-aria popover: it stacks above the dialog, scrolls on its own, and closes on Escape or a click
+ * off without closing the dialog.
+ */
+export function TaskInterestPeople({ interest }: TaskInterestPeopleProps) {
+  return <TaskInterestPeopleView interest={interest} skin={PLAIN_SKIN} />;
+}
+
+const PLAIN_SKIN: TaskInterestSkin = {
+  empty: { className: "text-sm text-on-surface-subtle" },
+  trigger: { className: "rounded-full hover:brightness-110" },
+  avatar: { className: "bg-surface-raised ring-2 ring-surface" },
+  more: { className: "bg-surface-raised text-on-surface-muted ring-2 ring-surface" },
+  popover: { className: "rounded-md border border-outline bg-surface-raised shadow-pop" },
+  heading: { className: "border-b border-outline text-on-surface" },
+};
+
+/** The stack with a theme's skin. */
+export function TaskInterestPeopleView({ interest, skin }: TaskInterestPeopleProps & { skin: TaskInterestSkin }) {
   const people = interest.people;
-  const [isOpen, setIsOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-
   const count = people.length;
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function updatePosition() {
-      if (!triggerRef.current) return;
-      const rect = triggerRef.current.getBoundingClientRect();
-      const popoverEl = popoverRef.current;
-      const popoverWidth = popoverEl ? popoverEl.offsetWidth : 192;
-      const popoverHeight = popoverEl ? popoverEl.offsetHeight : 160;
-
-      let top = rect.bottom + 6;
-      let left = rect.left;
-
-      // Keep within viewport boundaries
-      if (left + popoverWidth > window.innerWidth - 12) {
-        left = Math.max(12, window.innerWidth - popoverWidth - 12);
-      }
-      if (top + popoverHeight > window.innerHeight - 12 && rect.top - popoverHeight - 6 > 0) {
-        top = rect.top - popoverHeight - 6;
-      }
-
-      setCoords({ top, left });
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target as Node) &&
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
   if (count === 0) {
     return (
-      <span className={variant === "comic" ? "text-xs italic" : "text-sm text-on-surface-subtle"}>
+      <span className={skin.empty.className} style={skin.empty.style}>
         Unclaimed
       </span>
     );
   }
 
-  const isComic = variant === "comic";
+  const overflow = count > MAX_CIRCLES;
+  const shown = overflow ? people.slice(0, MAX_CIRCLES - 1) : people;
+  const label = `${count} ${count === 1 ? "teammate" : "teammates"} interested: ${people.map((p) => p.displayName).join(", ")}`;
 
   return (
-    <span className="inline-flex items-center">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen((prev) => !prev);
-        }}
-        className={
-          isComic
-            ? `${LETTERED} inline-flex items-center gap-1.5 rounded-full border-2 border-black bg-white px-2 py-0.5 text-xs font-bold leading-none text-black shadow-[2px_2px_0_#000] transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer select-none`
-            : "inline-flex items-center gap-1.5 rounded-full border border-outline bg-surface-raised px-2 py-0.5 text-xs font-medium text-on-surface-muted transition-colors hover:border-outline-strong hover:text-on-surface cursor-pointer select-none"
-        }
-        style={isComic ? { fontFamily: COMIC_FONT } : undefined}
-        aria-expanded={isOpen}
-        aria-label={`${count} ${count === 1 ? "teammate" : "teammates"} interested: view list`}
+    <DialogTrigger>
+      <AriaButton
+        aria-label={label}
+        className={`inline-flex shrink-0 cursor-pointer items-center outline-none transition focus-visible:ring-2 focus-visible:ring-accent ${skin.trigger.className}`}
+        style={skin.trigger.style}
       >
-        <UsersIcon size={12} className={isComic ? "text-black" : "text-on-surface-subtle"} />
-        <span className="num font-semibold">{count}</span>
-      </button>
-
-      {isOpen &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            style={{
-              position: "fixed",
-              top: `${coords.top}px`,
-              left: `${coords.left}px`,
-              zIndex: 9999,
-            }}
-            className={
-              isComic
-                ? "min-w-48 max-w-64 border-[3px] border-black bg-white p-3 shadow-[4px_4px_0_#000] text-black text-xs"
-                : "overlay-panel min-w-48 max-w-64 rounded-md border border-outline bg-surface-raised p-3 text-xs shadow-pop"
-            }
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col gap-2">
-              <div
-                className={
-                  isComic
-                    ? `${LETTERED} border-b-2 border-black/20 pb-1 text-xs font-black uppercase tracking-wider text-black`
-                    : "border-b border-outline pb-1 font-semibold text-on-surface"
-                }
-                style={isComic ? { fontFamily: COMIC_FONT } : undefined}
-              >
-                Interested teammates ({count})
-              </div>
-              <ul className="flex max-h-48 flex-col gap-1.5 overflow-y-auto">
-                {people.map((p) => (
-                  <li key={p.id} className="truncate">
-                    <PlayerName userId={p.id} className="font-medium">
-                      {p.displayName}
-                    </PlayerName>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>,
-          document.body
-        )}
-    </span>
+        <span className="flex -space-x-2" aria-hidden>
+          {shown.map((p) => (
+            <Avatar key={p.id} person={p} look={skin.avatar} />
+          ))}
+          {overflow && (
+            <span className={`num flex size-7 items-center justify-center rounded-full text-[11px] font-bold ${skin.more.className}`} style={skin.more.style}>
+              +{count - shown.length}
+            </span>
+          )}
+        </span>
+      </AriaButton>
+      <Popover placement="bottom start" offset={6} className={`overlay-panel w-64 max-w-[calc(100vw-2rem)] outline-none ${skin.popover.className}`} style={skin.popover.style}>
+        <Dialog aria-label="Interested teammates" className="flex max-h-[min(60vh,24rem)] flex-col outline-none">
+          <Heading slot="title" className={`shrink-0 px-3 pb-1.5 pt-2.5 text-xs font-semibold ${skin.heading.className}`} style={skin.heading.style}>
+            Interested teammates ({count})
+          </Heading>
+          <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain px-3 py-2.5 text-sm">
+            {people.map((p) => (
+              // shrink-0: a row in this scrolling column keeps its height. (The list it replaces truncated each row, and
+              // overflow-hidden rows in a flex column shrink to nothing instead of scrolling: past ~10 names they overlapped.)
+              <li key={p.id} className="flex min-w-0 shrink-0 items-center gap-2">
+                <img src={p.avatarUrl} alt="" loading="lazy" className="size-6 shrink-0 rounded-full" />
+                {/* Wraps rather than truncates: a long RSN is read in full. */}
+                <span className="min-w-0 break-words">
+                  <PlayerName userId={p.id} className="font-medium">
+                    {p.displayName}
+                  </PlayerName>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
   );
+}
+
+function Avatar({ person, look }: { person: InterestedPerson; look: Look }) {
+  return <img src={person.avatarUrl} alt="" loading="lazy" draggable={false} className={`size-7 shrink-0 rounded-full object-cover ${look.className}`} style={look.style} />;
 }

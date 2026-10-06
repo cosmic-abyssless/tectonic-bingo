@@ -105,7 +105,7 @@ function TileDetails({
           {tile.tasks.map((task) => (
             <li key={task.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-2.5">
               <span className="min-w-0 flex-1 truncate font-medium text-on-surface">{task.label}</span>
-              <TaskInterestPeople interest={task.interest} variant="default" />
+              <TaskInterestPeople interest={task.interest} />
               {onToggleInterest && task.interest.canToggle && (
                 <Button
                   variant={task.interest.mine ? "primary" : "secondary"}

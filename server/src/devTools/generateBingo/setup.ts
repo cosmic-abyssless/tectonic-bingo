@@ -417,17 +417,38 @@ export function handEvents(
       const key = `${player.index}:${part.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const at = new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
-      events.push({
-        at,
-        run: async () => {
-          await ctx.api.as(player.discordId).put(path(ctx, `/tiles/${part.tileId}/tasks/${part.id}/interest`), { interested: true }, { at });
-          raised.push({ teamId: team.teamId, player, part });
-        },
-      });
+      events.push(raiseHand(ctx, team.teamId, player, part, rng, windowEnd, raised));
+    }
+  }
+  // Every Team also has one crowded part (a raid everyone wants in on): most of its members put a hand up, so the Tile
+  // dialog's stack of pictures overflows into "+N". A hand is a wish, not a claim, so not only those able to do it
+  // (ctx.capable isn't asked, which also leaves its random stream to the simulation). Its own random stream, so the
+  // hands above don't change.
+  const crowdRng = ctx.rng.fork("crowd");
+  for (const team of teams) {
+    if (reachable.length === 0) break;
+    const part = crowdRng.pick(reachable);
+    for (const player of team.members) {
+      const key = `${player.index}:${part.id}`;
+      if (seen.has(key) || !crowdRng.chance(0.85)) continue;
+      seen.add(key);
+      events.push(raiseHand(ctx, team.teamId, player, part, crowdRng, windowEnd, raised));
     }
   }
   return { events, raised };
+}
+
+/** One member putting their hand up for a part, at a random time in the reveal window. */
+function raiseHand(ctx: Ctx, teamId: string, player: Player, part: PartModel, rng: Rng, windowEnd: number, raised: { teamId: string; player: Player; part: PartModel }[]): Timed {
+  const { tl } = ctx;
+  const at = new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
+  return {
+    at,
+    run: async () => {
+      await ctx.api.as(player.discordId).put(path(ctx, `/tiles/${part.tileId}/tasks/${part.id}/interest`), { interested: true }, { at });
+      raised.push({ teamId, player, part });
+    },
+  };
 }
 
 /**

@@ -16,7 +16,7 @@ import { useTutorial } from "../../../headless";
 import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
-import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
+import { ComicTaskInterestPeople } from "../ui/ComicTaskInterestPeople";
 import { formatCountdown } from "../../../core/ui/time";
 import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
@@ -2107,7 +2107,7 @@ function TaskPage({
                     {interest.mine ? "I'm on it" : "I'll do this"}
                   </ComicButton>
                 )}
-                <TaskInterestPeople interest={interest} variant="comic" />
+                <ComicTaskInterestPeople interest={interest} />
               </div>
             )}
           </div>
