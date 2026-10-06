@@ -9,7 +9,7 @@ export function ComicTaskInterestPeople(props: TaskInterestPeopleProps) {
   const { colors } = useComic();
   const skin: TaskInterestSkin = {
     empty: { className: "text-xs italic", style: { color: colors.INK_SUBTLE } },
-    trigger: { className: "rounded-full transition-transform hover:-translate-y-0.5 active:translate-y-0" },
+    room: { className: "" },
     avatar: { className: "border-2", style: { borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `0 0 0 2px ${colors.PAPER}` } },
     more: {
       className: `${LETTERED} border-2`,

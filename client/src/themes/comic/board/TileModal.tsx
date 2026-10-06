@@ -56,6 +56,7 @@ import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./c
 import { LETTERED } from "../../lettering";
 import { useBookModal } from "./bookModal";
 import { useInsideModal } from "../../../core/ui/insideModal";
+import type { TaskPanelProps } from "../../slots";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -2047,7 +2048,7 @@ function TaskPage({
   /** The task's own number (its place in the tile's task list), whatever page it's on. */
   number: number;
   colors: ComicColors;
-  TaskPanel: React.ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
+  TaskPanel: React.ComponentType<TaskPanelProps>;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
   /** Posting this part's own Proof screenshot (task.proof). */
@@ -2056,6 +2057,8 @@ function TaskPage({
   const { interest } = task;
   const canClaim = !!onToggleInterest && interest.canToggle;
   const showCrew = canClaim || interest.people.length > 0;
+  const crewBar = !tile.progress.allComplete && showCrew;
+  const submitShown = !tile.progress.allComplete && !!onSubmit;
   const submitDisabled = task.complete || task.locked || tile.freeze.isFrozen;
   const submitReason = task.complete
     ? "Already approved."
@@ -2083,50 +2086,48 @@ function TaskPage({
         {number}
       </div>
 
-      {/* Part Action Bar */}
-      {!tile.progress.allComplete && (onSubmit || showCrew) && (
+      {/* Who's on it: the hand and the teammates' pictures, which get the rest of the row (Submit is on the title line). */}
+      {crewBar && (
         <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.LINE }}>
-          <div className="flex flex-wrap items-center gap-3">
-            {onSubmit && (
+          <div className="flex min-w-0 items-center gap-3">
+            {canClaim && (
               <ComicButton
-                variant="primary"
-                isDisabled={submitDisabled}
-                data-tutorial={submitDisabled ? undefined : "part-submit"}
-                onPress={() => onSubmit(task.id)}
+                variant={interest.mine ? "yellow" : "secondary"}
+                aria-pressed={interest.mine}
+                data-tutorial="task-interest"
+                onPress={() => onToggleInterest!(task.id)}
               >
-                Submit
+                <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />
+                {interest.mine ? "I'm on it" : "I'll do this"}
               </ComicButton>
             )}
-
-            {showCrew && (
-              <div className="flex min-w-0 items-center gap-2">
-                {canClaim && (
-                  <ComicButton
-                    variant={interest.mine ? "yellow" : "secondary"}
-                    aria-pressed={interest.mine}
-                    data-tutorial="task-interest"
-                    onPress={() => onToggleInterest!(task.id)}
-                  >
-                    <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />
-                    {interest.mine ? "I'm on it" : "I'll do this"}
-                  </ComicButton>
-                )}
-                <ComicTaskInterestPeople interest={interest} />
-              </div>
-            )}
+            <ComicTaskInterestPeople interest={interest} />
           </div>
-
-          {submitReason && (
-            <div className="mt-1.5 text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
-              {submitReason}
-            </div>
-          )}
         </div>
       )}
 
       {/* Main Task Requirements & Checklist */}
       <div className="flex-1">
-        <TaskPanel task={task} onPostProof={onPostProof} />
+        <TaskPanel
+          task={task}
+          onPostProof={onPostProof}
+          titleAction={
+            submitShown && (
+              // Clear of the part's number badge when there's no bar above to push the title down.
+              <div className={crewBar ? undefined : "mr-10"}>
+                <ComicButton
+                  variant="primary"
+                  isDisabled={submitDisabled}
+                  data-tutorial={submitDisabled ? undefined : "part-submit"}
+                  onPress={() => onSubmit!(task.id)}
+                >
+                  Submit
+                </ComicButton>
+              </div>
+            )
+          }
+          titleNote={submitShown && submitReason}
+        />
       </div>
 
       {/* (The approved / pending / locked stamp is the one TaskPanel draws
