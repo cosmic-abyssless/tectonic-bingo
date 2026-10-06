@@ -41,7 +41,7 @@ export function getOcrService(): Promise<PaddleOcrService> {
         // minimumAreaThreshold: a detected box of 120 px² or less on the detection map (at full resolution, given
         // the cap above: ~11×11 px) is a lone digit or an icon fragment (inventory counts, skill levels, minimap
         // numbers), never a word. Not recognizing them cut 18% off a full-client screenshot with the same recall on
-        // 56 hand-read key terms (docs/ocr-performance-plan.md); the smallest text that matters, the 9 px-tall
+        // 56 hand-read key terms (issue #485); the smallest text that matters, the 9 px-tall
         // screenshot label on a 933 px-wide client, is ~200. The library's default is 20.
         detection: { maxSideLength: 4000, minimumAreaThreshold: 120 },
         // charactersDictionary is typed as required here, but the library
@@ -61,7 +61,7 @@ export function getOcrService(): Promise<PaddleOcrService> {
         recognition: { maxCropSourceSideLength: 4000, charactersDictionary: [], strategy: "per-box" },
         // One thread per CPU this process may use, not per CPU of the host: see ocrThreads. "parallel" lets ONNX
         // Runtime run independent branches of a model's graph at once on those same threads: 6% faster on a
-        // screenshot, with byte-identical text (docs/ocr-performance-plan.md).
+        // screenshot, with byte-identical text (issue #485).
         session: { intraOpNumThreads: ocrThreads(), interOpNumThreads: ocrThreads(), executionMode: "parallel" },
       });
       await service.initialize();
