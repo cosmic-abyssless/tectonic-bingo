@@ -245,11 +245,12 @@ describe("Publish", () => {
     expect(points(s.teamA.id)).toBe(40);
   });
 
-  it("writes one Board published entry, for Moderators and Admins, with the summary and every Team's points before and after", () => {
+  it("writes one Board published entry, for Moderators and Admins, with the summary, the diff and every Team's points before and after", () => {
     const s = seed();
     claim(s, s.head.id, "Vorkath's head");
     setHeadPoints(s, 60);
-    publishDraft(db, s.bingo, getPublishPreview(db, s.bingo.id).revision);
+    const preview = getPublishPreview(db, s.bingo.id);
+    publishDraft(db, s.bingo, preview.revision);
     const entries = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "board.published")).all();
     expect(entries).toHaveLength(1);
     expect(entries[0]!.visibility).toBe("mods");
@@ -260,9 +261,26 @@ describe("Publish", () => {
         { teamId: s.teamA.id, teamName: "Team A", before: 40, after: 60 },
         { teamId: s.teamB.id, teamName: "Team B", before: 0, after: 0 },
       ],
+      diff: preview.diff,
     });
+    expect(preview.diff.tiles[0]!.nodes[0]!.fields).toEqual([{ field: "Points", before: "40", after: "60" }]);
     // ...followed by the rescore it caused.
     expect(db.select().from(schema.auditLog).where(and(eq(schema.auditLog.action, "points.rescored"), eq(schema.auditLog.teamId, s.teamA.id))).all()).toHaveLength(1);
+  });
+
+  it("keeps a first Publish's whole diff, though it's past the usual size cap for an entry's details", () => {
+    const s = seed();
+    asDraft(s, (t) => {
+      for (let i = 0; i < 25; i++) {
+        const tile = createTile(db, { bingoId: s.bingo.id, name: `Boss ${i}`, boardRow: 2 + Math.floor(i / 5), boardCol: i % 5 }, t);
+        for (let j = 0; j < 3; j++) createTask(db, tile.id, { kind: "ITEM", label: `Drop ${j}`, points: 10, itemName: `Unique drop ${i}-${j}` }, undefined, t);
+      }
+    });
+    const preview = getPublishPreview(db, s.bingo.id);
+    expect(JSON.stringify(preview.diff).length).toBeGreaterThan(8000);
+    publishDraft(db, s.bingo, preview.revision);
+    const entry = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "board.published")).get()!;
+    expect(JSON.parse(entry.details)).toMatchObject({ summary: ["25 Tiles added"], diff: preview.diff });
   });
 
   it("lists Items whose Valued as changed and already have priced Submissions, to re-price once published", () => {

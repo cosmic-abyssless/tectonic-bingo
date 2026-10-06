@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AuditCategory, AuditEntry } from "@bingo/shared";
+import type { AuditCategory, AuditDetailsMap, AuditEntry, BoardDiff } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
 import { actorFilter, useAuditFilters } from "./auditFilters";
 import { displayName } from "../ui/user";
@@ -16,6 +16,7 @@ import { isRangeSet } from "../ui/timeRange";
 import { toCsv } from "../ui/csv";
 import { TableSearchInput } from "../ui/tableSearch";
 import { TooltipSpan } from "../ui/Tooltip";
+import { BoardDiffView } from "../admin/BoardDiffView";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
 // reported from a bingo's own pages, so this filter is meaningful in both.
@@ -146,6 +147,27 @@ export function DetailsView({ details }: { details: unknown }) {
   );
 }
 
+// A Board published entry from before it kept the diff, or one too big to keep, has none: its summary stands alone.
+function hasBoardDiff(details: unknown): details is AuditDetailsMap["board.published"] & { diff: BoardDiff } {
+  const diff = (details as { diff?: Partial<BoardDiff> } | null)?.diff;
+  return !!diff && Array.isArray(diff.tiles) && Array.isArray(diff.lines) && Array.isArray(diff.categories);
+}
+
+/** An entry's details, expanded. A Board published entry also shows everything that Publish changed, as its Publish screen did. */
+export function EntryDetails({ entry }: { entry: AuditEntry }) {
+  if (entry.action !== "board.published" || !hasBoardDiff(entry.details)) return <DetailsView details={entry.details} />;
+  const { diff, ...rest } = entry.details;
+  return (
+    <div className="space-y-3">
+      <DetailsView details={rest} />
+      <div className="text-xs">
+        <div className="mb-1 font-medium text-on-surface-subtle">What changed</div>
+        <BoardDiffView diff={diff} />
+      </div>
+    </div>
+  );
+}
+
 export function AuditLog({ slug }: { slug: string }) {
   // The filters are in the URL, so a link opens the log filtered the same way.
   const { filters, update, search, setSearch } = useAuditFilters();
@@ -259,7 +281,7 @@ export function AuditLog({ slug }: { slug: string }) {
                 </div>
                 {isExpanded && (
                   <div className="border-t border-outline bg-background px-4 py-3">
-                    <DetailsView details={entry.details} />
+                    <EntryDetails entry={entry} />
                   </div>
                 )}
               </Card>

@@ -4,7 +4,7 @@ import { useSiteAuditLog } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
 import { AUDIT_FILTER_PARAMS, actorFilter, useAuditFilters } from "../mod/auditFilters";
 import { useUrlParam } from "../ui/useUrlParam";
-import { CATEGORIES, DetailsView, actorOptionsFrom, buildCsv, useActorCatalog } from "../mod/AuditLog";
+import { CATEGORIES, EntryDetails, actorOptionsFrom, buildCsv, useActorCatalog } from "../mod/AuditLog";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { displayName } from "../ui/user";
 import { timeAgo } from "../ui/time";
@@ -140,7 +140,7 @@ export function SiteAuditLog() {
                 </div>
                 {isExpanded && (
                   <div className="border-t border-outline bg-background px-4 py-3">
-                    <DetailsView details={entry.details} />
+                    <EntryDetails entry={entry} />
                   </div>
                 )}
               </Card>

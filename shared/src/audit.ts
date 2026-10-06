@@ -8,6 +8,7 @@
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
 import type { AchievementKey } from "./achievements.ts";
+import type { BoardDiff } from "./boardDraft.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 import { describeRestrictionTarget } from "./permissions.ts";
@@ -158,8 +159,10 @@ export interface AuditDetailsMap {
   /**
    * The Draft board was published (CONTEXT.md "Publish"): `summary` is one line per kind of change ("2 Tiles changed"),
    * `removedClaims` the Claims it stopped counting, and each Team's points before and after (Points share aside).
+   * `diff`: everything it changed, as the Publish screen showed it. Absent on entries from before it was kept, and on
+   * one too big to keep (its `dropped` names it).
    */
-  "board.published": { summary: string[]; removedClaims: number; teams: { teamId: string; teamName: string; before: number; after: number }[] };
+  "board.published": { summary: string[]; removedClaims: number; teams: { teamId: string; teamName: string; before: number; after: number }[]; diff?: BoardDiff };
   /** The Draft board was thrown away (CONTEXT.md "Discard"); `summary` is what it had changed. */
   "board.discarded": { summary: string[] };
 
