@@ -103,12 +103,12 @@ export function TaskInterestPeopleView({ interest, skin }: TaskInterestPeoplePro
   );
 }
 
-// One picture: a button to the player's profile, their name on hover. Lifts above its neighbours on hover and focus,
-// so the whole circle shows.
+// One picture: a button to the player's profile, their name the moment it's hovered (a picture says nothing on its own).
+// Lifts above its neighbours on hover and focus, so the whole circle shows.
 function Avatar({ person, look }: { person: InterestedPerson; look: Look }) {
   const open = useOpenProfile();
   return (
-    <TextTooltip text={person.displayName}>
+    <TextTooltip text={person.displayName} delay={0}>
       <AriaButton
         aria-label={`${person.displayName}: view player profile`}
         isDisabled={!open}
