@@ -12,6 +12,6 @@
     { "file": "a3316299-d7cc-4d53-87c6-28ea9c2ff1f8.jpg", "codeword": "Ember", "terms": ["Armadyl chestplate"], "kind": "drop" },
     { "file": "929d4ca8-0586-4a44-a683-6c08df45cc93.png", "codeword": "Frost", "terms": ["Spirit shield"], "kind": "drop" },
     { "file": "728d71ad-f9b9-4595-aff3-5e65838bf558.png", "codeword": "Cartel", "terms": [], "kind": "proof", "note": "Blood Shards tile: collection log showing the current shard count" },
-    { "file": "7b711606-24e8-4b24-8c1b-6340e41798e2.png", "codeword": "Blaze", "terms": ["Opulent Salvage"], "kind": "proof", "note": "Sailing tile: bank search for Opulent Salvage" }
+    { "file": "7b711606-24e8-4b24-8c1b-6340e41798e2.png", "codeword": "Blaze", "terms": [], "kind": "proof", "note": "Sailing tile: bank search for salvage showing (0 found), so no item name on screen" }
   ]
 }
