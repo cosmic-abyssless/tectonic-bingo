@@ -329,7 +329,12 @@ export function createBingo(db: Db, params: CreateBingoParams) {
 export interface AdvanceStageParams {
   bingoId: string;
   toStage: Stage;
-  changedByUserId: string;
+  /** Null when the system makes the change: going Live by itself at the start date (bingoStartService.ts). */
+  changedByUserId: string | null;
+  /** Going Live ahead of the start date: start now, moving the start date to this moment. */
+  startNow?: boolean;
+  /** Only from this stage: a change decided on before the transaction (the automatic start) isn't made if the stage moved since. */
+  fromStage?: Stage;
   now?: Date; // injectable for tests
 }
 
@@ -344,7 +349,10 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // A Historical Bingo (CONTEXT.md) is always Finished.
     assertNotHistorical(bingo, "its stage can't change");
     if (params.toStage === bingo.stage) {
-      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
+      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`, "already_in_stage");
+    }
+    if (params.fromStage && params.fromStage !== bingo.stage) {
+      throw new ServiceError(409, `The bingo moved to the "${bingo.stage}" stage in the meantime`, "stage_moved");
     }
 
     // Cut review (CONTEXT.md): can't move into the Draft while any cut is Avoidable and no review has been
@@ -356,26 +364,42 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       assertCutReviewSatisfied(tx, bingo);
     }
 
-    // `startsAt` is only ever what an admin set in the settings; it is not written here. Tile freezes
-    // and the submission gate run from the effective start (bingoStart.ts): that date if there is
-    // one, otherwise the moment the bingo was last put live, which the transition logged below
-    // records. (This used to stamp "now" into startsAt the first time the bingo went live, which
-    // pinned the freeze to that first time: moving back to reveal and live again never restarted it.)
+    // `startsAt` is what an admin set in the settings; a stage change only writes it when starting early (below). Tile
+    // freezes and the submission gate run from the effective start (bingoStart.ts): that date if there is one,
+    // otherwise the moment the bingo was last put live, which the transition logged below records. (This used to stamp
+    // "now" into startsAt the first time the bingo went live, which pinned the freeze to that first time: moving back to
+    // reveal and live again never restarted it.)
     const now = params.now ?? clockNow();
 
-    tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
+    // Live always means started (CONTEXT.md "Stage"). With the start date still ahead, the Bingo goes Live by itself
+    // then (bingoStartService.ts); going Live sooner is starting now, which moves the start date to this moment, so
+    // Submissions, Tile freezes and the Wise Old Man competition all start from it.
+    // Only from before Live: a Finished Bingo has started already, so its start date is never rewritten (and can't be
+    // set ahead, updateBingoSettings).
+    const startsEarly =
+      params.toStage === "live" && STAGE_ORDER.indexOf(bingo.stage) < STAGE_ORDER.indexOf("live") && !!bingo.startsAt && bingo.startsAt.getTime() > now.getTime();
+    if (startsEarly && !params.startNow) {
+      throw new ServiceError(400, "The bingo's start date is still ahead: it goes live by itself then. Start it now to go live sooner.", "start_date_ahead");
+    }
+
+    tx.update(bingos).set({ stage: params.toStage, ...(startsEarly ? { startsAt: now } : {}) }).where(eq(bingos.id, bingo.id)).run();
     // A Finished Bingo keeps the Title settings and Titles it finished with (#221); leaving Finished drops them.
     if (params.toStage === "complete") freezeTitleSettings(tx, bingo.id, now);
     else if (bingo.stage === "complete") unfreezeTitleSettings(tx, bingo.id);
     tx.insert(stageTransitions)
-      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId, createdAt: now })
+      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId ?? bingo.createdByUserId, createdAt: now })
       .run();
     audit(tx, {
       action: "stage.changed",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { from: bingo.stage as Stage, to: params.toStage },
-      actor: { userId: params.changedByUserId },
+      details: {
+        from: bingo.stage as Stage,
+        to: params.toStage,
+        ...(params.changedByUserId === null ? { automatic: true } : {}),
+        ...(startsEarly ? { startedEarly: true, scheduledStart: bingo.startsAt!.toISOString() } : {}),
+      },
+      actor: params.changedByUserId === null ? "system" : { userId: params.changedByUserId },
       now: params.now,
     });
 
@@ -681,6 +705,18 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     const signupMode = params.signupMode ?? existing.signupMode;
     if (params.cutMode === "pairs_only" && signupMode !== "duo") throw new ServiceError(400, "Pairs only is for duo bingos");
     if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
+    // A Live or Finished Bingo has started (CONTEXT.md "Stage"), so its start date can't move into the future: that
+    // would make it Live but not started. Moving the start into the future means going back to Board revealed first.
+    if (params.startsAt && (existing.stage === "live" || existing.stage === "complete") && params.startsAt.getTime() > clockNow().getTime()) {
+      throw new ServiceError(400, "The bingo has already started, so its start date can't be in the future. Move it back to Board revealed first.");
+    }
+    // The mirror at Board revealed: a start date moved into the past would start the Bingo at once (bingoStartService.ts),
+    // which is Start now's job, said in its confirmation. Only a change counts: the settings form sends the date it
+    // loaded back with every save, to the minute.
+    const startMoved = params.startsAt && (!existing.startsAt || Math.abs(params.startsAt.getTime() - existing.startsAt.getTime()) >= 60_000);
+    if (startMoved && existing.stage === "reveal" && params.startsAt!.getTime() <= clockNow().getTime()) {
+      throw new ServiceError(400, "That start date has already passed, so the bingo would go live at once. To start it now, use Start now.");
+    }
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }

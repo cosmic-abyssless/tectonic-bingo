@@ -49,6 +49,36 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 }
 
 /**
+ * How the run's Bingo goes Live (CONTEXT.md "Stage"): mostly by itself at its start date, sometimes by an Admin's Start
+ * now a little ahead of it, which moves the start date to that moment. `at` is when it goes Live.
+ */
+export interface GoLivePlan {
+  at: Date;
+  startNow: boolean;
+}
+
+export function planGoLive(rng: Rng, tl: Ctx["tl"]): GoLivePlan {
+  if (!rng.chance(1 / 3)) return { at: tl.startsAt, startNow: false };
+  return { at: plus(tl.startsAt, -rng.int(5, 30) * MINUTE), startNow: true };
+}
+
+/**
+ * Goes Live as planned, through the real code: Start now through the stage endpoint, or the server's own start round
+ * (bingoStartService.ts) run for this Bingo at the start date on the run's clock. The real clock's round leaves the
+ * Bingo alone while the run is building it (job.ts).
+ */
+export async function goLive(ctx: Ctx, plan: GoLivePlan): Promise<void> {
+  if (plan.startNow) {
+    await ctx.api.as(ctx.admin).post(path(ctx, "/mod/stage"), { toStage: "live", startNow: true }, { at: plan.at });
+    ctx.log(`stage -> live at ${fmt(plan.at)}: an Admin's Start now, ahead of the start date ${fmt(ctx.tl.startsAt)}`);
+    return;
+  }
+  const { started } = await ctx.api.as(ctx.admin).post<{ started: number }>(`/api/dev/bingos/${ctx.slug}/start-round`, {}, { at: plan.at });
+  if (started !== 1) throw new Error(`the start round at ${fmt(plan.at)} didn't start ${ctx.slug}`);
+  ctx.log(`stage -> live at ${fmt(plan.at)}: by itself, at its start date`);
+}
+
+/**
  * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, turns on
  * the Discord team sync (with an extra channel), and sets its theme when one was asked for (the import keeps the board's own otherwise).
  */

@@ -8,7 +8,7 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, goLive, planGoLive, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
@@ -181,7 +181,9 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const teamRows = (await fetchTeams(ctx)).map((t) => ({ ...t, players: t.members.map((m) => byUserId.get(m.user.id)).filter((p): p is Player => !!p) }));
   const hands = handEvents(ctx, teamRows.map((t) => ({ teamId: t.id, members: t.players })), board);
   const opens = openEvents(ctx, teamRows.map((t) => ({ members: t.players })), board);
-  const revealEnd = new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime()));
+  // A run that goes Live stops Board revealed's activity there (a Start now ends it early); one that stays at Board revealed runs to its limit.
+  const live = options.stage === "reveal" ? null : planGoLive(rng.fork("go-live"), tl);
+  const revealEnd = new Date(Math.min((live?.at ?? tl.startsAt).getTime(), ctx.limit.getTime()));
   await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events, ...opens], revealEnd);
   const raised = hands.raised;
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
@@ -190,7 +192,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;
 
-  await setStage(ctx, "live", tl.startsAt);
+  await goLive(ctx, live!);
   const simRng = rng.fork("teams");
   const totalCost = board.parts.filter((p) => !board.deadlocked.has(p.id)).reduce((sum, p) => sum + p.effort, 0);
   const simTeams: SimTeam[] = teamRows.map((t) => {

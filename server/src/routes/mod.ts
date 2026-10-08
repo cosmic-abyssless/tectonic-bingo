@@ -19,10 +19,6 @@ import { applyRosterNames } from "../services/pairingNames";
 import * as pairingService from "../services/pairingService";
 import * as teamService from "../services/teamService";
 import * as cutReviewService from "../services/cutReviewService";
-import { syncWomCompetition, syncWomCompetitionAfterDraft } from "../services/womCompetitionService";
-import { syncDiscordTeams } from "../services/discordTeamService";
-import { getWomReadQueue, queueBingoReads } from "../services/womReadService";
-import { archiveBingoCompetition } from "../services/pastWomCompetitionService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncSignupRsn } from "../services/rsnSyncService";
@@ -30,6 +26,7 @@ import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../se
 import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcastChange } from "../broadcastChange";
+import { afterStageChange } from "../services/stageChangeEffects";
 import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
 import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
@@ -190,31 +187,14 @@ router.post(
   "/stage",
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { toStage } = req.body as { toStage?: bingoService.Stage };
+    const { toStage, startNow } = req.body as { toStage?: bingoService.Stage; startNow?: unknown };
     if (!toStage || !bingoService.STAGE_ORDER.includes(toStage)) {
       throw new ServiceError(400, "toStage must be a valid stage");
     }
     const fromStage = req.bingo!.stage;
-    const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id });
-    broadcastChange({ type: "stage_changed", bingoId: bingo.id, payload: { stage: bingo.stage } });
-    // Fire-and-forget: a WOM outage or bad credentials must never block the
-    // stage change itself. syncWomCompetitionAfterDraft no-ops when the
-    // integration isn't configured.
-    if (fromStage === "draft") void syncWomCompetitionAfterDraft(db, bingo.id);
-    // With no start date set, the bingo starts when it goes live: the competition's start moves to match.
-    if (toStage === "live") void syncWomCompetition(db, bingo.id);
-    // Discord roles and channels are made as the draft finishes, alongside the WOM competition; later stage changes
-    // (back to the Draft too, which undoes Teams) keep them in step.
-    void syncDiscordTeams(db, bingo.id);
-    // Same fire-and-forget convention: snapshot the bingo's WOM competition
-    // once it's actually over, so its per-player gains survive independently
-    // of WOM's own record. No-ops when the bingo has no linked competition.
-    if (toStage === "complete") void archiveBingoCompetition(db, bingo.id);
-    // Wise Old Man snapshots for Titles: a first read (with the baseline) as it goes live, and the final one as it ends.
-    if (toStage === "live" || toStage === "complete") queueBingoReads(db, getWomReadQueue(db), bingo.id);
-    // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"); late Wise Old Man reads (queued above) need a
-    // Re-publish.
-    if (toStage === "complete" && wrappedService.publishWhenReady(db, bingo, req.user!.id)) broadcastChange({ type: "wrapped_published", bingoId: bingo.id, payload: {} });
+    // startNow: going Live ahead of the start date, which moves the start date to now (bingoService.advanceStage).
+    const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id, startNow: startNow === true });
+    afterStageChange(db, bingo, fromStage, toStage, req.user!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),
 );

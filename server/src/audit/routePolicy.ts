@@ -109,4 +109,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/bugReports.ts, mounted at /api/bug-reports
   "POST /api/bug-reports/": ["bug_report.created"],
+
+  // routes/dev.ts, mounted at /api/dev (dev mode only); the rest are auditSkip()'d test data.
+  "POST /api/dev/bingos/:slug/start-round": ["stage.changed"],
 };

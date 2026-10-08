@@ -14,6 +14,8 @@ import * as devTestDataService from "../services/devTestDataService";
 import { removeDiscordTeams } from "../services/discordTeamService";
 import { removeUploads } from "../services/uploadFiles";
 import { mockPastCompetition } from "../services/pastWomCompetitionService";
+import { startDueBingos } from "../services/bingoStartService";
+import { now as clockNow } from "../clock";
 import { OptionsError, normalizeOptions, type RawOptions } from "../devTools/generateBingo/options";
 import { fillFakeWomSnapshots } from "../devTools/generateBingo/womSnapshots";
 import { getGenerateJob, isGenerateJobRunning, jobView, startGenerateJob } from "../devTools/generateBingo/job";
@@ -75,6 +77,21 @@ router.post(
     const { title, metric, gainedMin, gainedMax } = req.body as { title?: string; metric?: string; gainedMin?: number; gainedMax?: number };
     const competition = mockPastCompetition(db, bingo.id, { title, metric, gainedMin, gainedMax });
     res.status(201).json({ competition });
+  }),
+);
+
+// The generator's own round of the Bingo start (bingoStartService.ts) for the Bingo it's building, at the run's clock
+// (X-Dev-Now): the system makes it Live at its start date, as the real round does on the real clock. Audited, as the
+// real round is: stage.changed, by the system.
+router.post(
+  "/bingos/:slug/start-round",
+  asyncHandler(async (req, res) => {
+    const slug = req.params.slug as string;
+    if (!slug.startsWith(devTestDataService.TESTDATA_PREFIX)) throw new ServiceError(400, "Only a generated bingo's start round can be run");
+    const started = startDueBingos(db, clockNow(), { slug });
+    // Nothing started (not at Board revealed, or its start date is still ahead on the run's clock) is the run's error.
+    if (started.length === 0) throw new ServiceError(409, `${slug} wasn't due to start at ${clockNow().toISOString()}`);
+    res.json({ started: started.length });
   }),
 );
 

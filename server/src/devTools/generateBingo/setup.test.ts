@@ -12,7 +12,8 @@ import { editDraft, getDraftStatus, getEditorBoard, getPublishPreview, publishDr
 import { DRAFT_BOARD } from "../../services/boardTables";
 import { exportBingo, importBingo as realImport } from "../../services/bingoExportService";
 import { getBoardTags } from "../../services/tagService";
-import { importBingo, publishBoard, weighAnItem, type Ctx } from "./setup";
+import { goLive, importBingo, planGoLive, publishBoard, weighAnItem, type Ctx } from "./setup";
+import { Rng } from "./rng";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -146,6 +147,55 @@ describe("importBingo", () => {
     await importBingo(ctx, { bingo: {} } as never, "Test data t", null, "700000000000000000");
     expect(calls[1]!.body).toMatchObject({ discordGuildId: "700000000000000000", discordEnabled: true });
     expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
+  });
+});
+
+// Going Live (CONTEXT.md "Stage"): the run's Bingo goes Live as a real one does, by itself at its start date or by an
+// Admin's Start now ahead of it, through the real code at the run's clock.
+describe("goLive", () => {
+  const at = new Date("2026-09-19T12:00:00Z");
+  function fakeCtx(started = 1) {
+    const calls: { path: string; body: unknown; at?: Date }[] = [];
+    const session = {
+      post: async (path: string, body: unknown, opts?: { at?: Date }) => {
+        calls.push({ path, body, at: opts?.at });
+        return { started };
+      },
+    };
+    const tl = { now: at, startsAt: at } as Ctx["tl"];
+    return { calls, ctx: { api: { as: () => session }, slug: "testdata-t", admin: "admin", tl, log: () => {} } as unknown as Ctx };
+  }
+
+  it("by itself: the server's start round, run at the start date", async () => {
+    const { calls, ctx } = fakeCtx();
+    await goLive(ctx, { at, startNow: false });
+    expect(calls).toEqual([{ path: "/api/dev/bingos/testdata-t/start-round", body: {}, at }]);
+  });
+
+  it("fails the run when the round didn't start it", async () => {
+    const { ctx } = fakeCtx(0);
+    await expect(goLive(ctx, { at, startNow: false })).rejects.toThrow(/didn't start/);
+  });
+
+  it("by Start now: the stage endpoint, ahead of the start date", async () => {
+    const { calls, ctx } = fakeCtx();
+    const early = new Date(at.getTime() - 10 * 60_000);
+    await goLive(ctx, { at: early, startNow: true });
+    expect(calls).toEqual([{ path: "/api/bingos/testdata-t/mod/stage", body: { toStage: "live", startNow: true }, at: early }]);
+  });
+
+  it("plans both, from the seed: mostly at the start date, sometimes a Start now 5 to 30 minutes ahead", () => {
+    const tl = { startsAt: at } as Ctx["tl"];
+    const plans = Array.from({ length: 60 }, (_, seed) => planGoLive(new Rng(seed), tl));
+    const early = plans.filter((p) => p.startNow);
+    expect(early.length).toBeGreaterThan(0);
+    expect(plans.length - early.length).toBeGreaterThan(early.length);
+    for (const p of plans.filter((p) => !p.startNow)) expect(p.at).toEqual(at);
+    for (const p of early) {
+      const minutesAhead = (at.getTime() - p.at.getTime()) / 60_000;
+      expect(minutesAhead).toBeGreaterThanOrEqual(5);
+      expect(minutesAhead).toBeLessThanOrEqual(30);
+    }
   });
 });
 

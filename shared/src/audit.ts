@@ -226,7 +226,9 @@ export interface AuditDetailsMap {
   "points.rescored": { delta: number };
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
-  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
+  // automatic: the Bingo went Live by itself at its start date. startedEarly: an Admin started it ahead of its start
+  // date ("Start now"), which moved the start date (scheduledStart, ISO) to that moment.
+  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean; automatic?: boolean; startedEarly?: boolean; scheduledStart?: string };
 
   // Wrapped (CONTEXT.md): a Moderator publishing it, or publishing it again, which recomputes every Player's.
   "wrapped.published": { players: number };
@@ -820,7 +822,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "public",
     title: "Stage changed",
-    label: (i) => `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
+    label: (i) =>
+      i.details.automatic
+        ? "The bingo went live at its start date"
+        : i.details.startedEarly
+          ? `${actor(i)} started the bingo early from ${i.details.from}, moving its start date to now`
+          : `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
   },
   "wrapped.published": {
     category: "bingo",
