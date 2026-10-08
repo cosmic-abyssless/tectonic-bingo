@@ -101,6 +101,36 @@ describe("findBestMatch", () => {
   it("returns null when nothing matches", () => {
     expect(findBestMatch(["Nothing relevant here"], items)).toEqual({ detectedMatch: null });
   });
+
+  // Seen on real screenshots of the Historical Bingo "Who's That Pokémon!?", where the first item in query order used to
+  // win whatever else was on screen.
+  const item = (itemName: string) => ({ nodeId: itemName, itemName, tileId: "t", tileName: "t" });
+
+  it("prefers a name read exactly over one read nearly, whatever the query order", () => {
+    // "Kodai wand" is one edit from "Kodai wane"; "Saradomin sword" is there as written.
+    expect(findBestMatch(["Kodai wane", "Valuable drop: Saradomin sword"], [item("Kodai wand"), item("Saradomin sword")]).detectedMatch?.itemName).toBe("Saradomin sword");
+  });
+
+  it("gives a name inside another matched name way to it", () => {
+    const lines = ["Valuable drop: Enhanced crystal weapon seed"];
+    expect(findBestMatch(lines, [item("Crystal weapon seed"), item("Enhanced crystal weapon seed")]).detectedMatch?.itemName).toBe("Enhanced crystal weapon seed");
+  });
+
+  it("finds a short name only as whole words: no Pet inside competition", () => {
+    expect(findBestMatch(["Wise Old Man competition", "Valuable drop: Blood shard"], [item("Pet"), item("Blood shard")]).detectedMatch?.itemName).toBe("Blood shard");
+    expect(findBestMatch(["You have a funny feeling like you would have been followed: Pet"], [item("Pet")]).detectedMatch?.itemName).toBe("Pet");
+  });
+
+  it("keeps query order between unrelated names read equally well, not the longest", () => {
+    const lines = ["Bank: Tumeken's shadow", "Valuable drop: Warrior ring"];
+    expect(findBestMatch(lines, [item("Warrior ring"), item("Tumeken's shadow")]).detectedMatch?.itemName).toBe("Warrior ring");
+  });
+});
+
+describe("fuzzyIncludes for a short Codeword", () => {
+  it("still finds it run into the date beside it", () => {
+    expect(fuzzyIncludes(["Frost05/03/2026 20:31 UTC"], "Frost", { maxEdits: 1 })).toBe(true);
+  });
 });
 
 // A chat message wrapped onto a second line: a real screenshot from the Historical Bingo "Who's That Pokémon!?", the
