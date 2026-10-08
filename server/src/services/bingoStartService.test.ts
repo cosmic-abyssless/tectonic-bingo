@@ -48,7 +48,8 @@ describe("startDueBingos", () => {
     expect(stageOf(bingo.id)).toBe("live");
     // The start date stays the admin's, and the transition is the system's.
     expect(effectiveStartsAt(db, started[0]!)).toEqual(START);
-    expect(db.select().from(schema.stageTransitions).get()!.changedByUserId).toBeNull();
+    // stage_transitions needs a user, so it names the Bingo's creator: the audit log says it was the system.
+    expect(db.select().from(schema.stageTransitions).get()!.changedByUserId).toBe(bingo.createdByUserId);
     const entry = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "stage.changed")).get()!;
     expect(entry.actorType).toBe("system");
     expect(JSON.parse(entry.details)).toEqual({ from: "reveal", to: "live", automatic: true });

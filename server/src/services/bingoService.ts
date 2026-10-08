@@ -384,7 +384,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     if (params.toStage === "complete") freezeTitleSettings(tx, bingo.id, now);
     else if (bingo.stage === "complete") unfreezeTitleSettings(tx, bingo.id);
     tx.insert(stageTransitions)
-      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId, createdAt: now })
+      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId ?? bingo.createdByUserId, createdAt: now })
       .run();
     audit(tx, {
       action: "stage.changed",

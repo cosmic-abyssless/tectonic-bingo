@@ -255,8 +255,9 @@ export const stageTransitions = sqliteTable('stage_transitions', {
   toStage: text('to_stage', {
     enum: ['planning', 'signup', 'captains', 'draft', 'reveal', 'live', 'complete'],
   }).notNull(),
-  // Null when the system made the change: a Bingo going Live by itself at its start date (bingoStartService.ts).
-  changedByUserId: text('changed_by_user_id').references(() => users.id),
+  // When the system made the change (a Bingo going Live by itself at its start date, bingoStartService.ts), the Bingo's
+  // creator: the audit log's "system" actor is the record of who.
+  changedByUserId: text('changed_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
