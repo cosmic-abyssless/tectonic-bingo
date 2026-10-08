@@ -23,3 +23,20 @@ export function resolveSentryOptions(runtime: RuntimeConfig | undefined, build: 
     release: runtime?.release || build.release || undefined,
   };
 }
+
+/** The frames of an event's exceptions: the shape of Sentry's, as much as is read here. */
+interface EventLike {
+  exception?: { values?: { stacktrace?: { frames?: { filename?: string; abs_path?: string }[] } }[] };
+}
+
+// Scripts a headless scraping browser injects into the page under its own name. Obscura (a Rust headless browser with an
+// emulated DOM) has no <template> content, so react-aria's collections crash it on the home page (TECTONIC-CLIENT-4):
+// a bot, not a player, and nothing a real browser hits.
+const SCRAPER_FRAMES = ["<obscura:"];
+
+/** Whether an error came from a headless scraper's own injected script (see SCRAPER_FRAMES): not worth reporting. */
+export function isFromHeadlessScraper(event: EventLike): boolean {
+  return (event.exception?.values ?? []).some((value) =>
+    (value.stacktrace?.frames ?? []).some((frame) => SCRAPER_FRAMES.some((prefix) => frame.filename?.startsWith(prefix) || frame.abs_path?.startsWith(prefix))),
+  );
+}
