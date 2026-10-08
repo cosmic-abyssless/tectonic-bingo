@@ -123,10 +123,11 @@ function Avatar({ person, look }: { person: InterestedPerson; look: Look }) {
 }
 
 // The circle that always ends the stack, opening the list of everyone: a list icon, or "+N" for the pictures that didn't fit.
+// Its tooltip shows at once, like the pictures beside it: an icon or a number says little on its own.
 function ViewAll({ people, hidden, skin }: { people: InterestedPerson[]; hidden: number; skin: TaskInterestSkin }) {
   return (
     <DialogTrigger>
-      <TextTooltip text="View all interested">
+      <TextTooltip text="View all interested" delay={0}>
         <AriaButton
           aria-label={`View all ${people.length} interested teammates`}
           className={`num relative flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[11px] font-bold outline-none transition-transform hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-accent ${skin.more.className}`}
