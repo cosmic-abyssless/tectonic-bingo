@@ -1,10 +1,8 @@
 import { useCountdown } from "../../../core/ui/CountdownTimer";
 import { Notice } from "../../../core/ui/Card";
 import { ClockIcon } from "../../../core/ui/icons";
+import { FINAL_STRETCH_MS } from "../../../core/ui/startCountdown";
 import { formatDuration, formatLocalDateTime, formatMinutesSeconds } from "../../../core/ui/time";
-
-/** The last minutes before the start, when the countdown grows and shows its seconds. */
-const FINAL_STRETCH_MS = 10 * 60_000;
 
 /**
  * Above the Board until the Bingo starts: how long until it does, and when that is in the player's own time zone. In
