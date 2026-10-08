@@ -1,17 +1,17 @@
 {
-  "$comment": "Twelve real screenshots from the Historical Bingo 'Who's That Pokémon!?' (slug whos-that-pokemon), picked for a spread of Teams, items and formats: ten approved drops and two approved Proof screenshots. `codeword` is the Team's Codeword at the time; `terms` is what the matcher must find (the approved Claim's item name for a drop). The files live in the site's uploads directory under `file` and need a logged-in clan member to download (see ocr-compare.ts --fetch-from).",
+  "$comment": "Twelve real screenshots from the Historical Bingo 'Who's That Pokémon!?' (slug whos-that-pokemon), picked for a spread of Teams, items and formats: ten approved drops and two approved Proof screenshots. `codeword` is the word the Team showed on screen at the time (the old site's Codeword, next to the date stamp or typed in chat; the import gave the Teams new ones, so it isn't in the database); `terms` is what the matcher must find (the approved Claim's item name for a drop). The files live in the site's uploads directory under `file` and need a logged-in clan member to download (see ocr-compare.ts --fetch-from).",
   "images": [
-    { "file": "e707cfb3-3cdb-4022-becf-830d6fea8ca4.png", "codeword": "golden-hawk", "terms": ["Pendant of Ates"], "kind": "drop" },
-    { "file": "0f94f002-e010-40da-a496-283acdf2a6c2.png", "codeword": "amber-raven", "terms": ["Mokhaiotl cloth"], "kind": "drop" },
-    { "file": "59389ea2-8537-4308-8119-ef49cf7b9d3b.jpg", "codeword": "amber-raven", "terms": ["Soaked page"], "kind": "drop" },
-    { "file": "83e22f26-f23e-410a-9143-d217df789e2d.png", "codeword": "silver-hawk", "terms": ["Dharok's helm"], "kind": "drop" },
-    { "file": "9abb0584-ad0d-4c4a-ad85-093418e6cb39.png", "codeword": "violet-phoenix", "terms": ["Enhanced crystal weapon seed"], "kind": "drop" },
-    { "file": "43bad023-110a-47d7-b1b0-8a68c0cb9336.png", "codeword": "violet-wolf", "terms": ["Tumeken's shadow"], "kind": "drop" },
-    { "file": "ad28c94b-7758-4baa-8cc2-e4b9e318176e.png", "codeword": "violet-wolf", "terms": ["Twisted ancestral colour kit"], "kind": "drop" },
-    { "file": "08e5e8f3-ced6-4e76-95b3-88886e3283c8.png", "codeword": "golden-hawk", "terms": ["Eclipse Moon helm"], "kind": "drop" },
-    { "file": "a3316299-d7cc-4d53-87c6-28ea9c2ff1f8.jpg", "codeword": "amber-raven", "terms": ["Armadyl chestplate"], "kind": "drop" },
-    { "file": "929d4ca8-0586-4a44-a683-6c08df45cc93.png", "codeword": "golden-hawk", "terms": ["Spirit shield"], "kind": "drop" },
-    { "file": "728d71ad-f9b9-4595-aff3-5e65838bf558.png", "codeword": "golden-falcon", "terms": [], "kind": "proof", "note": "Blood Shards tile: collection log showing the current shard count" },
-    { "file": "7b711606-24e8-4b24-8c1b-6340e41798e2.png", "codeword": "violet-wolf", "terms": ["Opulent Salvage"], "kind": "proof", "note": "Sailing tile: bank search for Opulent Salvage" }
+    { "file": "e707cfb3-3cdb-4022-becf-830d6fea8ca4.png", "codeword": "Frost", "terms": ["Pendant of Ates"], "kind": "drop" },
+    { "file": "0f94f002-e010-40da-a496-283acdf2a6c2.png", "codeword": "Ember", "terms": ["Mokhaiotl cloth"], "kind": "drop" },
+    { "file": "59389ea2-8537-4308-8119-ef49cf7b9d3b.jpg", "codeword": "Ember", "terms": ["Soaked page"], "kind": "drop" },
+    { "file": "83e22f26-f23e-410a-9143-d217df789e2d.png", "codeword": "Spark", "terms": ["Dharok's helm"], "kind": "drop" },
+    { "file": "9abb0584-ad0d-4c4a-ad85-093418e6cb39.png", "codeword": "Charm", "terms": ["Enhanced crystal weapon seed"], "kind": "drop" },
+    { "file": "43bad023-110a-47d7-b1b0-8a68c0cb9336.png", "codeword": "Blaze", "terms": ["Tumeken's shadow"], "kind": "drop" },
+    { "file": "ad28c94b-7758-4baa-8cc2-e4b9e318176e.png", "codeword": "Blaze", "terms": ["Twisted ancestral colour kit"], "kind": "drop" },
+    { "file": "08e5e8f3-ced6-4e76-95b3-88886e3283c8.png", "codeword": "Frost", "terms": ["Eclipse Moon helm"], "kind": "drop" },
+    { "file": "a3316299-d7cc-4d53-87c6-28ea9c2ff1f8.jpg", "codeword": "Ember", "terms": ["Armadyl chestplate"], "kind": "drop" },
+    { "file": "929d4ca8-0586-4a44-a683-6c08df45cc93.png", "codeword": "Frost", "terms": ["Spirit shield"], "kind": "drop" },
+    { "file": "728d71ad-f9b9-4595-aff3-5e65838bf558.png", "codeword": "Cartel", "terms": [], "kind": "proof", "note": "Blood Shards tile: collection log showing the current shard count" },
+    { "file": "7b711606-24e8-4b24-8c1b-6340e41798e2.png", "codeword": "Blaze", "terms": ["Opulent Salvage"], "kind": "proof", "note": "Sailing tile: bank search for Opulent Salvage" }
   ]
 }
