@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Button as AriaButton, Dialog, DialogTrigger, Heading, Popover } from "react-aria-components";
 import type { InterestedPerson, TaskInterestModel } from "../../headless/types";
 import { PlayerName, useOpenProfile } from "../tectonic/PlayerName";
-import { HandIcon } from "./icons";
+import { ListIcon } from "./icons";
 import { TextTooltip } from "./Tooltip";
 
 export interface TaskInterestPeopleProps {
@@ -17,7 +17,7 @@ export interface TaskInterestSkin {
   room: Look;
   /** One picture in the stack: its ring has to be the colour behind the stack, so the overlaps read as cut-outs. */
   avatar: Look;
-  /** The circle always at the end of the stack: a hand, or "+5" when the pictures don't all fit. */
+  /** The circle always at the end of the stack: a list icon, or "+5" when the pictures don't all fit. */
   more: Look;
   popover: Look;
   heading: Look;
@@ -31,7 +31,7 @@ const STEP = CIRCLE - 8;
 const stackWidth = (n: number) => (n <= 0 ? 0 : CIRCLE + STEP * (n - 1));
 
 /**
- * How many pictures fit in `width` beside the circle that always ends the stack (the hand, or "+N" for the rest): all
+ * How many pictures fit in `width` beside the circle that always ends the stack (a list icon, or "+N" for the rest): all
  * of them, or as many as there's room for. Before the room is known (the first render), all of them.
  */
 export function picturesThatFit(count: number, width: number | null): number {
@@ -44,7 +44,7 @@ export function picturesThatFit(count: number, width: number | null): number {
 /**
  * Who has a hand up on a part (CONTEXT.md "Task interest"): their pictures in overlapping circles, as many as there's
  * room for, each a button to their profile with their name on hover. The stack always ends in a circle that opens the
- * whole list ("View all"): a hand, or "+N" once the pictures run out of room. The list is a react-aria popover: it
+ * whole list ("View all interested"): a list icon, or "+N" once the pictures run out of room. The list is a react-aria popover: it
  * stacks above the Tile dialog, scrolls on its own, and closes on Escape or a click off without closing the dialog.
  * Takes the width it's given (flex-1), so put it where the row's spare room is.
  */
@@ -122,17 +122,17 @@ function Avatar({ person, look }: { person: InterestedPerson; look: Look }) {
   );
 }
 
-// The circle that always ends the stack, opening the list of everyone: a hand, or "+N" for the pictures that didn't fit.
+// The circle that always ends the stack, opening the list of everyone: a list icon, or "+N" for the pictures that didn't fit.
 function ViewAll({ people, hidden, skin }: { people: InterestedPerson[]; hidden: number; skin: TaskInterestSkin }) {
   return (
     <DialogTrigger>
-      <TextTooltip text="View all">
+      <TextTooltip text="View all interested">
         <AriaButton
           aria-label={`View all ${people.length} interested teammates`}
           className={`num relative flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[11px] font-bold outline-none transition-transform hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-accent ${skin.more.className}`}
           style={skin.more.style}
         >
-          {hidden > 0 ? `+${hidden}` : <HandIcon size={14} />}
+          {hidden > 0 ? `+${hidden}` : <ListIcon size={14} />}
         </AriaButton>
       </TextTooltip>
       <Popover placement="bottom end" offset={6} className={`overlay-panel w-64 max-w-[calc(100vw-2rem)] outline-none ${skin.popover.className}`} style={skin.popover.style}>
