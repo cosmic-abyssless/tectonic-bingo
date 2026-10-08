@@ -29,6 +29,7 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { NotPartStage } from "./page/NotPartStage";
 import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { ComicPreStartBanner } from "./board/ComicPreStartBanner";
 import { CodewordBanner } from "./page/CodewordBanner";
 import { BugReportButton } from "./page/BugReportButton";
 import { HeaderMenu } from "./page/HeaderMenu";
@@ -183,6 +184,7 @@ const comicTheme: ThemeDefinition = {
     NotPartStage,
     PlanningStage,
     ScoutBanner,
+    PreStartBanner: ComicPreStartBanner,
     CodewordBanner,
     SignupStage,
     BugReportButton,
