@@ -47,6 +47,8 @@ export interface FuzzyIncludesOptions {
 // (within edit-distance tolerance) in any single line of `lines`. Lines are
 // checked individually, never joined — a needle must not straddle two
 // unrelated lines just because they happen to be adjacent in the screenshot.
+// (findBestMatch's second pass joins a line with its wrapped continuation, see
+// wrappedLines.)
 export function fuzzyIncludes(lines: string[], needle: string, opts: FuzzyIncludesOptions = {}): boolean {
   const normNeedle = normalizeForMatch(needle);
   if (!normNeedle) return false;
@@ -89,12 +91,35 @@ export interface DetectedItemMatch {
   itemName: string;
 }
 
+/**
+ * Each wrapped continuation joined onto the line it continues. A continuation starts with a lowercase letter, as a chat
+ * message wrapped onto a second line does ("…received a new collection log item: Eclipse moon" / "helm (738/1698)"); a
+ * line starting otherwise (a capital, a bracket, a timestamp) begins something of its own. The line it continues is
+ * its neighbour on either side: the local engine reads the two halves in order, but Cloud Vision can return the
+ * continuation first.
+ */
+export function wrappedLines(lines: string[]): string[] {
+  const joined: string[] = [];
+  lines.forEach((line, i) => {
+    if (!/^[a-z]/.test(line.trimStart())) return;
+    if (i > 0) joined.push(`${lines[i - 1]} ${line}`);
+    if (i + 1 < lines.length) joined.push(`${lines[i + 1]} ${line}`);
+  });
+  return joined;
+}
+
 // First item in query order wins. Pure decision logic — no DB or OCR
 // involved — so it's testable on its own from plain extracted-text fixtures.
+//
+// Two passes: every item on single lines first, exactly as before; only when none matches, every item on a line joined
+// with its wrapped continuation (wrappedLines). Long names wrap in chat, but joining can also put two unrelated lines
+// side by side, so a join never outranks a name found whole on one line.
 export function findBestMatch(extractedText: string[], items: MatchableItem[]): { detectedMatch: DetectedItemMatch | null } {
-  for (const item of items) {
-    if (fuzzyIncludes(extractedText, item.itemName)) {
-      return { detectedMatch: { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName } };
+  for (const lines of [extractedText, wrappedLines(extractedText)]) {
+    for (const item of items) {
+      if (fuzzyIncludes(lines, item.itemName)) {
+        return { detectedMatch: { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName } };
+      }
     }
   }
   return { detectedMatch: null };
