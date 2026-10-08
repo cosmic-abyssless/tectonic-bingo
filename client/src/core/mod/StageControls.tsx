@@ -85,6 +85,12 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
     setConfirming(toStage);
   }
 
+  // Closing the confirmation forgets the server's "start date still ahead": by the next one, the date may have passed.
+  function closeConfirmation() {
+    setConfirming(null);
+    setServerSaysAhead(false);
+  }
+
   async function go(toStage: Stage) {
     setError(null);
     try {
@@ -92,6 +98,12 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
       setConfirming(null);
       setServerSaysAhead(false);
     } catch (e: unknown) {
+      // Already there: the Bingo went Live by itself at its start date while the confirmation was open. The refreshed
+      // shell shows it.
+      if (e instanceof ApiError && e.code === "already_in_stage") {
+        closeConfirmation();
+        return;
+      }
       // Started early after all, on the server's clock: the confirmation turns into Start now's, to confirm again.
       if (e instanceof ApiError && e.code === "start_date_ahead") {
         setServerSaysAhead(true);
@@ -148,7 +160,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
       <Dialog
         isOpen={canChange && !!confirming}
         onClose={() => {
-          setConfirming(null);
+          closeConfirmation();
           setError(null);
         }}
       >
@@ -157,10 +169,13 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
             <DialogHeader
               title={startingEarly ? "Start the bingo now?" : `Move to ${STAGE_LABEL[confirming]}?`}
               subtitle={`From ${STAGE_LABEL[bingo.stage]}`}
-              onClose={() => setConfirming(null)}
+              onClose={closeConfirmation}
             />
             <div className="space-y-3 p-5 text-sm">
-              {startingEarly ? <StartEarlyEffects startsAt={startsAt!} endsAt={bingo.endsAt ? new Date(bingo.endsAt).getTime() : null} fromReveal={bingo.stage === "reveal"} /> : <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>}
+              {startingEarly ? <StartEarlyEffects startsAt={startsAt!} endsAt={bingo.endsAt ? new Date(bingo.endsAt).getTime() : null} fromReveal={bingo.stage === "reveal"} hasWomCompetition={bingo.womCompetitionId !== null} /> : <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>}
+              {confirming === "reveal" && startsAt !== null && startsAt <= Date.now() && (
+                <Notice tone="warn">Its start date has already passed, so it goes Live by itself within seconds of reaching Board revealed.</Notice>
+              )}
               {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
               {confirming === "draft" && (
                 <DraftCutsPreview
@@ -175,7 +190,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
               )}
               {error && <Notice tone="danger">{error}</Notice>}
               <div className="flex justify-end gap-2 pt-1">
-                <Button size="sm" variant="ghost" onPress={() => setConfirming(null)}>
+                <Button size="sm" variant="ghost" onPress={closeConfirmation}>
                   Cancel
                 </Button>
                 <Button size="sm" variant={cutPlayers > 0 ? "danger" : "primary"} onPress={() => go(confirming)} isDisabled={advanceStage.isPending}>
@@ -203,7 +218,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
 }
 
 /** What starting ahead of the start date does, said before it's done: it can't be put back to the old start date. */
-function StartEarlyEffects({ startsAt, endsAt, fromReveal }: { startsAt: number; endsAt: number | null; fromReveal: boolean }) {
+function StartEarlyEffects({ startsAt, endsAt, fromReveal, hasWomCompetition }: { startsAt: number; endsAt: number | null; fromReveal: boolean; hasWomCompetition: boolean }) {
   return (
     <div className="space-y-2 text-on-surface-muted">
       <p>
@@ -217,7 +232,7 @@ function StartEarlyEffects({ startsAt, endsAt, fromReveal }: { startsAt: number;
           <strong>Moves the start date to now,</strong> the moment you confirm. The old start date isn't kept.
         </li>
         <li>Opens Submissions straight away, and starts Tile freezes from now.</li>
-        <li>Moves the Wise Old Man competition's start to now.</li>
+        {hasWomCompetition && <li>Moves the Wise Old Man competition's start to now.</li>}
         <li>Ends the countdown players are watching on the Board early.</li>
       </ul>
       {endsAt !== null && (

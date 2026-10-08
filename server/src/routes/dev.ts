@@ -89,6 +89,8 @@ router.post(
     const slug = req.params.slug as string;
     if (!slug.startsWith(devTestDataService.TESTDATA_PREFIX)) throw new ServiceError(400, "Only a generated bingo's start round can be run");
     const started = startDueBingos(db, clockNow(), { slug });
+    // Nothing started (not at Board revealed, or its start date is still ahead on the run's clock) is the run's error.
+    if (started.length === 0) throw new ServiceError(409, `${slug} wasn't due to start at ${clockNow().toISOString()}`);
     res.json({ started: started.length });
   }),
 );

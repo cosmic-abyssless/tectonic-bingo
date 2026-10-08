@@ -710,6 +710,13 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.startsAt && (existing.stage === "live" || existing.stage === "complete") && params.startsAt.getTime() > clockNow().getTime()) {
       throw new ServiceError(400, "The bingo has already started, so its start date can't be in the future. Move it back to Board revealed first.");
     }
+    // The mirror at Board revealed: a start date moved into the past would start the Bingo at once (bingoStartService.ts),
+    // which is Start now's job, said in its confirmation. Only a change counts: the settings form sends the date it
+    // loaded back with every save, to the minute.
+    const startMoved = params.startsAt && (!existing.startsAt || Math.abs(params.startsAt.getTime() - existing.startsAt.getTime()) >= 60_000);
+    if (startMoved && existing.stage === "reveal" && params.startsAt!.getTime() <= clockNow().getTime()) {
+      throw new ServiceError(400, "That start date has already passed, so the bingo would go live at once. To start it now, use Start now.");
+    }
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }

@@ -472,6 +472,20 @@ describe("updateBingoSettings — start date once started", () => {
     expect(updateBingoSettings(db, bingo.id, { startsAt: past }).startsAt?.getTime()).toBe(Math.floor(past.getTime() / 1000) * 1000);
   });
 
+  // At Board revealed, a start date moved into the past would start the Bingo at once: that's Start now's job.
+  it("refuses moving the start date into the past at Board revealed, but takes the one it has back unchanged", () => {
+    const past = new Date(Math.floor((Date.now() - 3_600_000) / 1000) * 1000);
+    const bingo = seedBingo({ stage: "reveal", startsAt: past });
+    expect(() => updateBingoSettings(db, bingo.id, { startsAt: new Date(past.getTime() - 3_600_000) })).toThrow(/use Start now/);
+    // The settings form sends the loaded date back with every save, to the minute.
+    expect(updateBingoSettings(db, bingo.id, { startsAt: new Date(past.getTime() - (past.getTime() % 60_000)) }).stage).toBe("reveal");
+  });
+
+  it("accepts a past start date before Board revealed, where nothing starts by itself", () => {
+    const past = new Date(Date.now() - 3_600_000);
+    expect(updateBingoSettings(db, seedBingo({ stage: "draft" }).id, { startsAt: past }).startsAt).not.toBeNull();
+  });
+
   it("allows a future start date before the bingo is Live", () => {
     const bingo = seedBingo({ stage: "reveal" });
     const future = new Date(Date.now() + 3_600_000);
