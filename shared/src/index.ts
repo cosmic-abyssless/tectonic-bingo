@@ -568,7 +568,7 @@ export interface TileInterest {
   tileId: string;
   /** The task node (a direct child of the tile's root) the hand is raised on. */
   taskId: string;
-  user: MinimalUser;
+  user: AvatarUser;
   createdAt: string;
 }
 

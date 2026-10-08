@@ -11,7 +11,7 @@ import { wikiIconUrl } from "../api/wikiIcons";
 import { submissionSummary } from "../core/submissions/claimsSummary";
 import { timeAgo } from "../core/ui/time";
 import { avatarUrl, displayName } from "../core/ui/user";
-import type { BoardModel, CategoryModel, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
+import type { BoardModel, CategoryModel, InterestedPerson, LineModel, RequirementNodeModel, SubmissionModel, TaskModel, TeamModel, TileModel } from "./types";
 import type { CanCheck } from "./permissionCheck";
 
 // Moved from BoardGrid.tsx, unchanged.
@@ -237,7 +237,7 @@ export function buildTaskModels(
       available: !complete && !locked,
       tree: isManual ? null : buildRequirementTree(task, maps, summary.statusByNodeId, false, locks),
       interest: {
-        people: taskInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user) })),
+        people: taskInterests.map((i) => ({ id: i.user.id, displayName: displayName(i.user), avatarUrl: avatarUrl(i.user) })),
         mine: taskInterests.some((i) => i.user.id === viewerUserId),
       },
     };
@@ -356,7 +356,7 @@ export function buildTileModelsStatic(args: {
     const freezeUnlocksAt = getFreezeUnlockAt(bingoStartsAt, tile);
     const submissionIds = submissionIdsByTile.get(tile.id);
     const tasks = buildTaskModels(tile, summary, claimMaps, interestsByTask, viewerUserId, locks, (taskId) => proofStatusOf(tile.id, taskId));
-    const people = new Map<string, { id: string; displayName: string }>();
+    const people = new Map<string, InterestedPerson>();
     for (const task of tasks) for (const p of task.interest.people) if (!people.has(p.id)) people.set(p.id, p);
 
     return {

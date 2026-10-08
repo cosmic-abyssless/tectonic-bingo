@@ -53,6 +53,14 @@ export interface OnTheClockProps {
   compact?: boolean;
 }
 
+/** One part's panel in the Tile dialog (the TaskPanel slot). */
+export interface TaskPanelProps {
+  task: TaskModel;
+  onPostProof?: () => void;
+  titleAction?: ReactNode;
+  titleNote?: ReactNode;
+}
+
 export interface ThemeSlots {
   // Whole-surface composition — may call headless hooks directly.
   BoardPage: ComponentType<Record<string, never>>;
@@ -229,8 +237,9 @@ export interface ThemeSlots {
     onPostProof?: (taskId?: string) => void;
   }>;
   // onPostProof: opens the Submit flow on posting a Proof screenshot for the Task (see TaskModel.proof); absent when
-  // the viewer can't submit.
-  TaskPanel: ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
+  // the viewer can't submit. titleAction sits at the end of the part's title line (the comic page's Submit), and
+  // titleNote on its own line under it (why that Submit is off); a theme whose dialog has neither can ignore both.
+  TaskPanel: ComponentType<TaskPanelProps>;
   RequirementTree: ComponentType<{ node: RequirementNodeModel; root?: boolean }>;
   TileSubmissions: ComponentType<{ submissions: SubmissionModel[] }>;
 

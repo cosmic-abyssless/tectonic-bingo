@@ -133,7 +133,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
    with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,
    leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)
 4. **Reveal**: each Captain names their Team (the only stage a Captain can), and members raise hands on the parts
-   they mean to do and look the Board over (about half read the rules, most open a few Tiles, the odd one opens every
+   they mean to do (and most of a Team on one crowded part, so the Tile dialog's stack of pictures shows "+N") and look
+   the Board over (about half read the rules, most open a few Tiles, the odd one opens every
    Tile), which earns the Achievements open from Board revealed. The Admin adds the
    **Superlative** categories ("Team MVP", "Team Spirit", "The Grinder") unless the board brought its own.
 5. **Live**: an hourly simulation (see below), with each Team voting on its Superlatives along the way: about 4 in

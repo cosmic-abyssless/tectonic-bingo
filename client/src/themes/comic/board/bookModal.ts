@@ -10,8 +10,9 @@ import { useOverlay } from "react-aria";
  *
  * Here nothing on the page behind changes but an attribute no style reads:
  * - Escape closes the book (react-aria's overlay stack, so a dialog opened from inside the book closes first), and so
- *   does clicking off it (closeOnBackdrop: the overlay is a react-aria top layer, so react-aria doesn't count a click on
- *   it as outside).
+ *   does clicking off it: react-aria's own outside-click, through the same stack, so a popover opened over the book
+ *   closes first. Inside another modal the overlay is a react-aria top layer (`topLayer`, see InsideModalContext),
+ *   whose clicks react-aria never counts as outside, so there it's closeOnBackdrop's.
  * - Focus moves into it with the next frame's rendering, stays inside (Overlay, around this), and goes back to what
  *   opened it.
  * - The page can't be scrolled from inside it: a wheel, a touch drag or a scrolling key that nothing in its way can
@@ -24,11 +25,14 @@ export function useBookModal({
   modalRef,
   dialogRef,
   onClose,
+  topLayer,
 }: {
   overlayRef: RefObject<HTMLElement | null>;
   modalRef: RefObject<HTMLElement | null>;
   dialogRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  /** The overlay carries react-aria's top-layer mark (opened inside another modal). */
+  topLayer: boolean;
 }) {
   const { overlayProps: modalProps, underlayProps } = useOverlay({ isOpen: true, onClose, isDismissable: true }, modalRef);
   const close = useRef(onClose);
@@ -37,9 +41,9 @@ export function useBookModal({
   useEffect(() => {
     const overlay = overlayRef.current;
     const modal = modalRef.current;
-    if (!overlay || !modal) return;
+    if (!topLayer || !overlay || !modal) return;
     return closeOnBackdrop(overlay, modal, () => close.current());
-  }, [overlayRef, modalRef]);
+  }, [overlayRef, modalRef, topLayer]);
 
   // Into the dialog just before the next frame is drawn, when the browser works out styles anyway: focusing during the
   // mount would make it do that early, for the whole page, on top of the frame's own.

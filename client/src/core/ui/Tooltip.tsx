@@ -34,17 +34,20 @@ export function Tooltip({
   content,
   placement = "top",
   excludeFromTabOrder,
+  delay = DELAY_MS,
 }: {
   children: FocusableChild;
   content: ReactNode;
   placement?: Placement;
   /** For a trigger that repeats something a keyboard already reaches (an overlay on a Tile): hover only. */
   excludeFromTabOrder?: boolean;
+  /** How long a hover waits before showing it, in ms: 0 for something that's only a picture without it (an avatar). */
+  delay?: number;
 }) {
   const off = useContext(TooltipsOff);
   if (!content || off) return children;
   return (
-    <TooltipTrigger delay={DELAY_MS} closeDelay={0}>
+    <TooltipTrigger delay={delay} closeDelay={0}>
       {/* TooltipTrigger only provides context with the hover/focus wiring — react-aria-components' own
           <Button>/<Link> know to read it, but a plain element (our <span>) doesn't unless wrapped in
           <Focusable>, which applies it via cloneElement regardless of the child's type. */}
@@ -61,9 +64,9 @@ export function Tooltip({
 }
 
 /** Tooltip whose content is just text — the common case (a truncated cell, an abbreviated label, ...). */
-export function TextTooltip({ children, text, placement }: { children: FocusableChild; text: string; placement?: Placement }) {
+export function TextTooltip({ children, text, placement, delay }: { children: FocusableChild; text: string; placement?: Placement; delay?: number }) {
   return (
-    <Tooltip content={text} placement={placement}>
+    <Tooltip content={text} placement={placement} delay={delay}>
       {children}
     </Tooltip>
   );

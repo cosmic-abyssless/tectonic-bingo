@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
-  MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
+  AvatarUser, MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
@@ -175,7 +175,7 @@ export function useTeamProgress(slug: string | undefined, teamId: string | undef
 export function useSetTileInterest(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ teamId, tileId, taskId, user, interested }: { teamId: string; tileId: string; taskId: string; user: MinimalUser; interested: boolean }) =>
+    mutationFn: ({ teamId, tileId, taskId, user, interested }: { teamId: string; tileId: string; taskId: string; user: AvatarUser; interested: boolean }) =>
       optimisticUpdate<TeamProgressSummary>(
         queryClient,
         queryKeys.teamProgress(slug, teamId),

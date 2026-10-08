@@ -16,7 +16,7 @@ import { useTutorial } from "../../../headless";
 import { SubmissionBubble } from "./SubmissionBubble";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClockIcon, HandIcon, LockIcon, XIcon } from "../../../core/ui/icons";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
-import { TaskInterestPeople } from "../../../core/ui/TaskInterestPeople";
+import { ComicTaskInterestPeople } from "../ui/ComicTaskInterestPeople";
 import { formatCountdown } from "../../../core/ui/time";
 import { useSlot, useThemeTokens } from "../../context";
 import { COMIC_FONT, COMIC_LOGO_FONT } from "../font";
@@ -55,6 +55,8 @@ import { ArtViewer, ART_VIEWER, hidePin, PinnedArt, pinSequence, PIN_ART } from 
 import { pageColors, tilePageColors, TECTONIC_LOGO, type ComicColors } from "./colors";
 import { LETTERED } from "../../lettering";
 import { useBookModal } from "./bookModal";
+import { useInsideModal } from "../../../core/ui/insideModal";
+import type { TaskPanelProps } from "../../slots";
 
 /*
  * The tile modal IS the tile's comic book, opened — and it's a whole comic:
@@ -1183,7 +1185,8 @@ function FlyingBook({
   // readers, without being restyled.
   const modalRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const { underlayProps, modalProps } = useBookModal({ overlayRef, modalRef, dialogRef, onClose });
+  const topLayer = useInsideModal();
+  const { underlayProps, modalProps } = useBookModal({ overlayRef, modalRef, dialogRef, onClose, topLayer });
 
   // Arrow keys turn the pages. On the document rather than the dialog, so
   // they work wherever focus has ended up inside the modal — but not while
@@ -1207,11 +1210,13 @@ function FlyingBook({
   return (
     // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
     <Overlay shouldContainFocus isExiting={!isPresent}>
-    // A top layer (react-aria's mark): opened from inside another modal (the board editor's preview), it's kept out of
-    // what that modal hides from the page, focus may go into it, and a click in it isn't a click off that modal.
+    // A top layer (react-aria's mark) only when opened from inside another modal (the board editor's preview): it's
+    // kept out of what that modal hides from the page, focus may go into it, and a click in it isn't a click off that
+    // modal. Not on the board itself: react-aria never counts a click on a top layer as outside, so a popover opened
+    // over the book (who's interested, a reaction) wouldn't close on a click on the book.
     <div
       ref={overlayRef}
-      data-react-aria-top-layer="true"
+      data-react-aria-top-layer={topLayer ? "true" : undefined}
       {...underlayProps}
       // On a phone the book is drawn twice the screen's width (see `single`);
       // the half that's off-screen must not scroll, and neither may the overlay
@@ -2043,7 +2048,7 @@ function TaskPage({
   /** The task's own number (its place in the tile's task list), whatever page it's on. */
   number: number;
   colors: ComicColors;
-  TaskPanel: React.ComponentType<{ task: TaskModel; onPostProof?: () => void }>;
+  TaskPanel: React.ComponentType<TaskPanelProps>;
   onSubmit?: (taskId?: string) => void;
   onToggleInterest?: (taskId: string) => void;
   /** Posting this part's own Proof screenshot (task.proof). */
@@ -2052,6 +2057,8 @@ function TaskPage({
   const { interest } = task;
   const canClaim = !!onToggleInterest && interest.canToggle;
   const showCrew = canClaim || interest.people.length > 0;
+  const crewBar = !tile.progress.allComplete && showCrew;
+  const submitShown = !tile.progress.allComplete && !!onSubmit;
   const submitDisabled = task.complete || task.locked || tile.freeze.isFrozen;
   const submitReason = task.complete
     ? "Already approved."
@@ -2079,50 +2086,48 @@ function TaskPage({
         {number}
       </div>
 
-      {/* Part Action Bar */}
-      {!tile.progress.allComplete && (onSubmit || showCrew) && (
+      {/* Who's on it: the hand and the teammates' pictures, which get the rest of the row (Submit is on the title line). */}
+      {crewBar && (
         <div className="mb-4 border-b-[3px] pb-3 pr-12" style={{ borderColor: colors.LINE }}>
-          <div className="flex flex-wrap items-center gap-3">
-            {onSubmit && (
+          <div className="flex min-w-0 items-center gap-3">
+            {canClaim && (
               <ComicButton
-                variant="primary"
-                isDisabled={submitDisabled}
-                data-tutorial={submitDisabled ? undefined : "part-submit"}
-                onPress={() => onSubmit(task.id)}
+                variant={interest.mine ? "yellow" : "secondary"}
+                aria-pressed={interest.mine}
+                data-tutorial="task-interest"
+                onPress={() => onToggleInterest!(task.id)}
               >
-                Submit
+                <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />
+                {interest.mine ? "I'm on it" : "I'll do this"}
               </ComicButton>
             )}
-
-            {showCrew && (
-              <div className="flex min-w-0 items-center gap-2">
-                {canClaim && (
-                  <ComicButton
-                    variant={interest.mine ? "yellow" : "secondary"}
-                    aria-pressed={interest.mine}
-                    data-tutorial="task-interest"
-                    onPress={() => onToggleInterest!(task.id)}
-                  >
-                    <HandIcon size={16} fill={interest.mine ? "currentColor" : "none"} />
-                    {interest.mine ? "I'm on it" : "I'll do this"}
-                  </ComicButton>
-                )}
-                <TaskInterestPeople interest={interest} variant="comic" />
-              </div>
-            )}
+            <ComicTaskInterestPeople interest={interest} />
           </div>
-
-          {submitReason && (
-            <div className="mt-1.5 text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
-              {submitReason}
-            </div>
-          )}
         </div>
       )}
 
       {/* Main Task Requirements & Checklist */}
       <div className="flex-1">
-        <TaskPanel task={task} onPostProof={onPostProof} />
+        <TaskPanel
+          task={task}
+          onPostProof={onPostProof}
+          titleAction={
+            submitShown && (
+              // Clear of the part's number badge when there's no bar above to push the title down.
+              <div className={crewBar ? undefined : "mr-10"}>
+                <ComicButton
+                  variant="primary"
+                  isDisabled={submitDisabled}
+                  data-tutorial={submitDisabled ? undefined : "part-submit"}
+                  onPress={() => onSubmit!(task.id)}
+                >
+                  Submit
+                </ComicButton>
+              </div>
+            )
+          }
+          titleNote={submitShown && submitReason}
+        />
       </div>
 
       {/* (The approved / pending / locked stamp is the one TaskPanel draws

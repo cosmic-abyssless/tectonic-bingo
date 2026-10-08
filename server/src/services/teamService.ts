@@ -132,14 +132,15 @@ export interface TeamProgressSummary {
   nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
-  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn: string | null }; createdAt: Date }[];
+  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordId" | "discordAvatar"> & { rsn: string | null }; createdAt: Date }[];
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
   const interestRows = db
-    .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
+    // With the avatar: the Tile dialog shows who's on a part as a stack of their pictures.
+    .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar }, createdAt: tileInterests.createdAt })
     .from(tileInterests)
     .innerJoin(users, eq(tileInterests.userId, users.id))
     .where(eq(tileInterests.teamId, teamId))

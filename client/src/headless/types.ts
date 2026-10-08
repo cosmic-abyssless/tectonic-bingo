@@ -144,8 +144,15 @@ export interface TaskModel {
   interest: TaskInterestModel;
 }
 
+/** Someone with a hand up on a part: who they are and their Discord avatar. */
+export interface InterestedPerson {
+  id: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
 export interface TaskInterestModel {
-  people: { id: string; displayName: string }[];
+  people: InterestedPerson[];
   /** The viewer is one of them. */
   mine: boolean;
   /** Viewer is on the team whose board this is and the part isn't done — page.tileInterest.toggle() works. */
@@ -232,7 +239,7 @@ export interface TileModel {
    * lives on each TaskModel.interest.
    */
   interest: {
-    people: { id: string; displayName: string }[];
+    people: InterestedPerson[];
     /** The viewer is on at least one part. */
     mine: boolean;
     /** Viewer is on the team whose board this is and the tile isn't done — some part can still be toggled. */

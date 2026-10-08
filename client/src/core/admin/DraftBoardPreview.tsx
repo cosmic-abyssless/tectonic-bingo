@@ -9,6 +9,7 @@ import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { InfoIcon } from "../ui/icons";
+import { InsideModalContext } from "../ui/insideModal";
 
 const NO_STATES: TeamNodeState[] = [];
 const NO_SUBMISSIONS: SubmissionDetails[] = [];
@@ -26,7 +27,9 @@ export function DraftBoardPreview({ bingo, draft, isOpen, onClose }: { bingo: Bi
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {isOpen && (
           <ThemeProvider themeKey={bingo.theme} fallback={<p className="text-sm text-on-surface-subtle">Loading the bingo's theme…</p>}>
-            <PreviewBoard bingo={bingo} draft={draft} />
+            <InsideModalContext.Provider value={true}>
+              <PreviewBoard bingo={bingo} draft={draft} />
+            </InsideModalContext.Provider>
           </ThemeProvider>
         )}
       </div>
