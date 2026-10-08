@@ -9,6 +9,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
 import { closeSocketsForSession } from "../ws";
 import { RETURN_COOKIE, authorizeReturnPath } from "../mcp/oauthProvider";
+import { onRefusedSignInCode } from "../auth/refusedSignIn";
 import { LINK_TTL_MS, createPhoneLoginLink, getPhoneLoginLinkStatus, previewPhoneLoginLink, redeemPhoneLoginLink } from "../services/phoneLoginService";
 
 const router = Router();
@@ -29,7 +30,8 @@ router.get(
       return;
     }
     res.redirect(`${process.env.CLIENT_URL}/`);
-  }
+  },
+  onRefusedSignInCode,
 );
 
 // Log in on a phone from a browser that's already logged in (services/phoneLoginService.ts). The browser makes a

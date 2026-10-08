@@ -2,7 +2,7 @@
 // too. The settings come from the server at runtime (window.__APP_CONFIG__) with the build's values as the fallback,
 // see core/logging/sentryConfig.ts. With no DSN anywhere (local development) Sentry stays off and sends nothing.
 import * as Sentry from "@sentry/react";
-import { resolveSentryOptions } from "./core/logging/sentryConfig";
+import { isFromHeadlessScraper, resolveSentryOptions } from "./core/logging/sentryConfig";
 
 const options = resolveSentryOptions(window.__APP_CONFIG__, {
   dsn: import.meta.env.VITE_SENTRY_DSN,
@@ -18,6 +18,8 @@ Sentry.init({
   sendDefaultPii: false,
   // A sample of page loads and navigations is enough to see where time goes on the free plan.
   tracesSampleRate: 0.1,
+  // A headless scraper crashing on its own emulated DOM isn't a player's error (see isFromHeadlessScraper).
+  beforeSend: (event) => (isFromHeadlessScraper(event) ? null : event),
 });
 
 // Tracing is its own chunk (sentryTracing.ts), fetched now and added when it arrives rather than downloaded with the
