@@ -846,7 +846,8 @@ export function useTeamActivity(slug: string | undefined, teamId: string | undef
 export function useAdvanceStage(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (toStage: Stage) => api.post<{ bingo: BingoShellResponse["bingo"] }>(`/api/bingos/${slug}/mod/stage`, { toStage }),
+    // startNow: going Live ahead of the start date, which moves the start date to now.
+    mutationFn: ({ toStage, startNow }: { toStage: Stage; startNow?: boolean }) => api.post<{ bingo: BingoShellResponse["bingo"] }>(`/api/bingos/${slug}/mod/stage`, { toStage, startNow }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.bingo(slug) });
       queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });

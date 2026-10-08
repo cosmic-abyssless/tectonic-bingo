@@ -11,6 +11,7 @@ import { Button } from "../ui/Button";
 import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
 import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
+import { formatDuration, formatLocalDateTime } from "../ui/time";
 import { CutReviewModal } from "./CutReviewModal";
 import { TextButton } from "../ui/TextButton";
 
@@ -21,7 +22,7 @@ const ENTER_EFFECT: Record<Stage, string> = {
   captains: "Signups close and the roster is final. Captains keep scouting, and every player can look through the signups, until the draft starts.",
   draft: "Captains can enter the draft room. Start the draft from there once everyone is present.",
   reveal: "Teams and the board become visible to players. The board locks for editing.",
-  live: "Submissions open. If no start time is set, the bingo starts now.",
+  live: "Submissions open. If no start date is set, the bingo starts now.",
   complete: "Submissions close; the board and stats stay visible.",
 };
 
@@ -39,6 +40,12 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   const cutReview = useCutReview(slug, confirming === "draft");
   // Moving into the draft with anyone to cut: the button says so.
   const cutPlayers = confirming === "draft" && cuts.data?.shares ? cuts.data.cut.reduce((n, c) => n + c.names.length, 0) : 0;
+
+  // Live always means started (CONTEXT.md "Stage"): with the start date still ahead, the Bingo goes Live by itself
+  // then, and going Live sooner is starting now, which moves the start date to that moment.
+  const startsAt = bingo.startsAt ? new Date(bingo.startsAt).getTime() : null;
+  const startAhead = startsAt !== null && startsAt > Date.now();
+  const startingEarly = confirming === "live" && startAhead;
 
   const idx = STAGE_ORDER.indexOf(bingo.stage);
   const nextStage = idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : null;
@@ -77,7 +84,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   async function go(toStage: Stage) {
     setError(null);
     try {
-      await advanceStage.mutateAsync(toStage);
+      await advanceStage.mutateAsync({ toStage, startNow: toStage === "live" && startAhead });
       setConfirming(null);
     } catch (e: unknown) {
       // The roster changed since the last review (or none was applied): review the cuts, then confirm again.
@@ -106,7 +113,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
           )}
           {canChange && nextStage && (
             <Button size="sm" variant="primary" onPress={() => request(nextStage)}>
-              Advance to {STAGE_LABEL[nextStage]}
+              {nextStage === "live" && startAhead ? "Start now" : `Advance to ${STAGE_LABEL[nextStage]}`}
               <ArrowRightIcon />
             </Button>
           )}
@@ -117,6 +124,12 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         <StageStepper stage={bingo.stage} onSelect={canChange ? request : undefined} />
         <MilestoneCountdown milestone={nextMilestone(bingo)} />
       </div>
+
+      {bingo.stage === "reveal" && startAhead && (
+        <p className="text-sm text-on-surface-muted">
+          It goes Live by itself at the start date. Start now to begin sooner.
+        </p>
+      )}
 
       {error && !confirming && <Notice tone="danger">{error}</Notice>}
 
@@ -131,9 +144,13 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
       >
         {confirming && (
           <>
-            <DialogHeader title={`Move to ${STAGE_LABEL[confirming]}?`} subtitle={`From ${STAGE_LABEL[bingo.stage]}`} onClose={() => setConfirming(null)} />
+            <DialogHeader
+              title={startingEarly ? "Start the bingo now?" : `Move to ${STAGE_LABEL[confirming]}?`}
+              subtitle={`From ${STAGE_LABEL[bingo.stage]}`}
+              onClose={() => setConfirming(null)}
+            />
             <div className="space-y-3 p-5 text-sm">
-              <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>
+              {startingEarly ? <StartEarlyEffects startsAt={startsAt!} endsAt={bingo.endsAt ? new Date(bingo.endsAt).getTime() : null} fromReveal={bingo.stage === "reveal"} /> : <p className="text-on-surface-muted">{ENTER_EFFECT[confirming]}</p>}
               {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
               {confirming === "draft" && (
                 <DraftCutsPreview
@@ -152,7 +169,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
                   Cancel
                 </Button>
                 <Button size="sm" variant={cutPlayers > 0 ? "danger" : "primary"} onPress={() => go(confirming)} isDisabled={advanceStage.isPending}>
-                  {cutPlayers > 0 ? `Cut ${cutPlayers} and move to ${STAGE_LABEL[confirming]}` : "Confirm"}
+                  {cutPlayers > 0 ? `Cut ${cutPlayers} and move to ${STAGE_LABEL[confirming]}` : startingEarly ? "Start now" : "Confirm"}
                 </Button>
               </div>
             </div>
@@ -172,6 +189,32 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         />
       )}
     </Card>
+  );
+}
+
+/** What starting ahead of the start date does, said before it's done: it can't be put back to the old start date. */
+function StartEarlyEffects({ startsAt, endsAt, fromReveal }: { startsAt: number; endsAt: number | null; fromReveal: boolean }) {
+  return (
+    <div className="space-y-2 text-on-surface-muted">
+      <p>
+        The bingo is set to start <span className="text-on-surface">{formatLocalDateTime(startsAt)}</span> (in {formatDuration(startsAt - Date.now())}), your local time.
+        {fromReveal ? " It goes Live by itself then, so there's nothing you need to do." : " From Board revealed, it goes Live by itself then."}
+      </p>
+      <p>Starting it now instead:</p>
+      <ul className="list-disc space-y-1 pl-5">
+        <li>
+          <strong>Moves the start date to now,</strong> the moment you confirm. The old start date isn't kept.
+        </li>
+        <li>Opens Submissions straight away, and starts Tile freezes from now.</li>
+        <li>Moves the Wise Old Man competition's start to now.</li>
+        <li>Ends the countdown players are watching on the Board early.</li>
+      </ul>
+      {endsAt !== null && (
+        <p>
+          The end date stays <span className="text-on-surface">{formatLocalDateTime(endsAt)}</span>.
+        </p>
+      )}
+    </div>
   );
 }
 

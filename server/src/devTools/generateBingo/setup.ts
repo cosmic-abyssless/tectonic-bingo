@@ -49,6 +49,20 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 }
 
 /**
+ * A start date already past (a Live or Finished run) is held back until the run goes Live: with it set, the server would
+ * make the Bingo Live by itself (bingoStartService.ts) at the real now, partway through the run's Board revealed.
+ */
+export function holdsStartDate(tl: Ctx["tl"]): boolean {
+  return tl.startsAt.getTime() <= tl.now.getTime();
+}
+
+/** Goes Live at the start date, then sets the start date held back until now (holdsStartDate). */
+export async function goLive(ctx: Ctx): Promise<void> {
+  await setStage(ctx, "live", ctx.tl.startsAt);
+  if (holdsStartDate(ctx.tl)) await ctx.api.as(ctx.admin).patch(path(ctx, "/admin/settings"), { startsAt: ctx.tl.startsAt.toISOString() }, { at: ctx.tl.startsAt });
+}
+
+/**
  * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, turns on
  * the Discord team sync (with an extra channel), and sets its theme when one was asked for (the import keeps the board's own otherwise).
  */
@@ -62,7 +76,7 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
       signupOpensAt: tl.signupOpensAt.toISOString(),
       draftScheduledAt: tl.draftAt.toISOString(),
       revealScheduledAt: tl.revealAt.toISOString(),
-      startsAt: tl.startsAt.toISOString(),
+      ...(holdsStartDate(tl) ? {} : { startsAt: tl.startsAt.toISOString() }),
       endsAt: tl.endsAt.toISOString(),
       // Discord team roles and channels on, with a channel added to the list, as an admin would: the settings panel
       // shows it, while the sync itself never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).

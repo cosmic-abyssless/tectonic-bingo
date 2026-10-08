@@ -41,15 +41,47 @@ describe("advanceStage", () => {
     expect(effectiveStartsAt(db, updated)).toEqual(now);
   });
 
-  it("leaves a start date an admin set alone, whether it is still ahead or already past", () => {
+  it("leaves a start date an admin set alone once it has passed", () => {
     const now = new Date("2026-03-01T00:00:00Z");
-    const bingo = seedBingo();
-    for (const scheduled of [new Date("2099-01-01T00:00:00Z"), new Date("2026-02-27T18:00:00Z")]) {
-      db.update(bingos).set({ stage: "reveal", startsAt: scheduled }).where(eq(bingos.id, bingo.id)).run();
-      const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
-      expect(updated.startsAt).toEqual(scheduled);
-      expect(effectiveStartsAt(db, updated)).toEqual(scheduled); // the admin's date wins over the moment it went live
-    }
+    const scheduled = new Date("2026-02-27T18:00:00Z");
+    const bingo = seedBingo({ startsAt: scheduled });
+    const updated = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
+    expect(updated.startsAt).toEqual(scheduled);
+    expect(effectiveStartsAt(db, updated)).toEqual(scheduled); // the admin's date wins over the moment it went live
+  });
+
+  // Live always means started (CONTEXT.md "Stage"): a Bingo whose start date is still ahead goes Live by itself then.
+  describe("before the start date", () => {
+    const now = new Date("2026-03-01T00:00:00Z");
+    const scheduled = new Date("2026-03-02T18:00:00Z");
+
+    it("refuses to go Live, saying it starts by itself", () => {
+      const bingo = seedBingo({ startsAt: scheduled });
+      let error: unknown;
+      try {
+        advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, now });
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(ServiceError);
+      expect((error as ServiceError).code).toBe("start_date_ahead");
+      expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("reveal");
+    });
+
+    it("starts now with Start now, moving the start date to that moment and saying so in the audit log", () => {
+      const bingo = seedBingo({ startsAt: scheduled });
+      const live = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, startNow: true, now });
+      expect(live.stage).toBe("live");
+      expect(live.startsAt).toEqual(now);
+      expect(effectiveStartsAt(db, live)).toEqual(now);
+      const entry = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "stage.changed")).get()!;
+      expect(JSON.parse(entry.details)).toEqual({ from: "reveal", to: "live", startedEarly: true, scheduledStart: scheduled.toISOString() });
+    });
+
+    it("lets other stages move as before, a start date ahead or not", () => {
+      const bingo = seedBingo({ startsAt: scheduled, stage: "draft" });
+      expect(advanceStage(db, { bingoId: bingo.id, toStage: "reveal", changedByUserId: bingo.createdByUserId, now }).stage).toBe("reveal");
+    });
   });
 
   it("restarts the count when the bingo is put live again (reveal, live, reveal, live), if no start date is set", () => {
@@ -419,6 +451,22 @@ describe("updateBingoSettings — WOM fields", () => {
     const bingo = seedBingo({ womGroupId: "123" });
     const updated = updateBingoSettings(db, bingo.id, { womGroupId: null });
     expect(updated.womGroupId).toBeNull();
+  });
+});
+
+describe("updateBingoSettings — start date while Live", () => {
+  // A Live Bingo has started: moving its start date into the future would make it Live but not started.
+  it("refuses a future start date while the bingo is Live, and allows a past one", () => {
+    const bingo = seedBingo({ stage: "live", startsAt: new Date("2026-01-01T00:00:00Z") });
+    expect(() => updateBingoSettings(db, bingo.id, { startsAt: new Date(Date.now() + 3_600_000) })).toThrow(/can't be in the future/);
+    const past = new Date(Date.now() - 3_600_000);
+    expect(updateBingoSettings(db, bingo.id, { startsAt: past }).startsAt?.getTime()).toBe(Math.floor(past.getTime() / 1000) * 1000);
+  });
+
+  it("allows a future start date before the bingo is Live", () => {
+    const bingo = seedBingo({ stage: "reveal" });
+    const future = new Date(Date.now() + 3_600_000);
+    expect(updateBingoSettings(db, bingo.id, { startsAt: future }).startsAt).not.toBeNull();
   });
 });
 

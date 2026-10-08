@@ -34,6 +34,7 @@ import { DB_PATH, db, sqlite } from "./db";
 import { refreshPricesAndFill } from "./services/gpValueService";
 import { fillAuditSearchText } from "./audit/searchText";
 import { startWomReads } from "./services/womReadService";
+import { startBingoStarts } from "./services/bingoStartService";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
@@ -270,6 +271,8 @@ server.listen(PORT, () => {
   }
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);
+  // Each Bingo goes Live by itself at its start date, checked every few seconds.
+  startBingoStarts(db);
   // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
   if (mcpEnabled) startReplicaJob(DB_PATH);
   if (loadWarnings) stopEventLoopMonitor = startEventLoopMonitor(loadWarnings);

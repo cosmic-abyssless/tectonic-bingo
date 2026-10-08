@@ -12,7 +12,7 @@ import { editDraft, getDraftStatus, getEditorBoard, getPublishPreview, publishDr
 import { DRAFT_BOARD } from "../../services/boardTables";
 import { exportBingo, importBingo as realImport } from "../../services/bingoExportService";
 import { getBoardTags } from "../../services/tagService";
-import { importBingo, publishBoard, weighAnItem, type Ctx } from "./setup";
+import { goLive, importBingo, publishBoard, weighAnItem, type Ctx } from "./setup";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -126,7 +126,7 @@ describe("importBingo", () => {
       patch: async (path: string, body: Record<string, unknown>) => void calls.push({ method: "PATCH", path, body }),
     };
     const at = new Date("2026-09-19T12:00:00Z");
-    const tl = { createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const tl = { now: new Date(at.getTime() - 60_000), createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
     const ctx = { api: { as: () => session }, slug: "testdata-t", admin: "admin", tl, log: () => {} } as unknown as Ctx;
 
     await importBingo(ctx, { bingo: {} } as never, "Test data t", "comic");
@@ -147,6 +147,29 @@ describe("importBingo", () => {
     expect(calls[1]!.body).toMatchObject({ discordGuildId: "700000000000000000", discordEnabled: true });
     expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
   });
+
+  // Set, a start date already past would make the server put the Bingo Live by itself (bingoStartService.ts) at the real
+  // now, partway through the run's Board revealed: the run sets it as it goes Live instead.
+  it("holds back a start date already past until the run goes Live, then sets it", async () => {
+    const calls: { method: string; path: string; body: Record<string, unknown>; at?: Date }[] = [];
+    const session = {
+      post: async (path: string, body: Record<string, unknown>, opts?: { at?: Date }) => void calls.push({ method: "POST", path, body, at: opts?.at }),
+      patch: async (path: string, body: Record<string, unknown>, opts?: { at?: Date }) => void calls.push({ method: "PATCH", path, body, at: opts?.at }),
+    };
+    const at = new Date("2026-09-19T12:00:00Z");
+    const tl = { now: new Date(at.getTime() + 60_000), createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const ctx = { api: { as: () => session }, slug: "testdata-t", admin: "admin", tl, log: () => {} } as unknown as Ctx;
+
+    await importBingo(ctx, { bingo: {} } as never, "Test data t", null);
+    expect(calls[1]!.body).not.toHaveProperty("startsAt");
+
+    calls.length = 0;
+    await goLive(ctx);
+    expect(calls).toEqual([
+      { method: "POST", path: "/api/bingos/testdata-t/mod/stage", body: { toStage: "live" }, at },
+      { method: "PATCH", path: "/api/bingos/testdata-t/admin/settings", body: { startsAt: at.toISOString() }, at },
+    ]);
+  });
 });
 
 // Tags (CONTEXT.md "Tag"): a run adds none of its own. The generated Bingo has exactly its board's, which the import
@@ -165,7 +188,7 @@ describe("tags", () => {
       patch: async () => ({}),
     };
     const at = new Date("2026-09-19T12:00:00Z");
-    const tl = { createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const tl = { now: new Date(at.getTime() - 60_000), createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
     const ctx = { api: { as: () => session }, slug: "testdata-tags", admin: "admin", tl, log: () => {} } as unknown as Ctx;
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await importBingo(ctx, document, "Test data tags", null);

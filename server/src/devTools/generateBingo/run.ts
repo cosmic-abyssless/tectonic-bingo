@@ -8,7 +8,7 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, goLive, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
@@ -190,7 +190,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;
 
-  await setStage(ctx, "live", tl.startsAt);
+  await goLive(ctx);
   const simRng = rng.fork("teams");
   const totalCost = board.parts.filter((p) => !board.deadlocked.has(p.id)).reduce((sum, p) => sum + p.effort, 0);
   const simTeams: SimTeam[] = teamRows.map((t) => {
