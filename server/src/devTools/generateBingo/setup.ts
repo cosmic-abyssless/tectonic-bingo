@@ -49,17 +49,33 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 }
 
 /**
- * A start date already past (a Live or Finished run) is held back until the run goes Live: with it set, the server would
- * make the Bingo Live by itself (bingoStartService.ts) at the real now, partway through the run's Board revealed.
+ * How the run's Bingo goes Live (CONTEXT.md "Stage"): mostly by itself at its start date, sometimes by an Admin's Start
+ * now a little ahead of it, which moves the start date to that moment. `at` is when it goes Live.
  */
-export function holdsStartDate(tl: Ctx["tl"]): boolean {
-  return tl.startsAt.getTime() <= tl.now.getTime();
+export interface GoLivePlan {
+  at: Date;
+  startNow: boolean;
 }
 
-/** Goes Live at the start date, then sets the start date held back until now (holdsStartDate). */
-export async function goLive(ctx: Ctx): Promise<void> {
-  await setStage(ctx, "live", ctx.tl.startsAt);
-  if (holdsStartDate(ctx.tl)) await ctx.api.as(ctx.admin).patch(path(ctx, "/admin/settings"), { startsAt: ctx.tl.startsAt.toISOString() }, { at: ctx.tl.startsAt });
+export function planGoLive(rng: Rng, tl: Ctx["tl"]): GoLivePlan {
+  if (!rng.chance(1 / 3)) return { at: tl.startsAt, startNow: false };
+  return { at: plus(tl.startsAt, -rng.int(5, 30) * MINUTE), startNow: true };
+}
+
+/**
+ * Goes Live as planned, through the real code: Start now through the stage endpoint, or the server's own start round
+ * (bingoStartService.ts) run for this Bingo at the start date on the run's clock. The real clock's round leaves the
+ * Bingo alone while the run is building it (job.ts).
+ */
+export async function goLive(ctx: Ctx, plan: GoLivePlan): Promise<void> {
+  if (plan.startNow) {
+    await ctx.api.as(ctx.admin).post(path(ctx, "/mod/stage"), { toStage: "live", startNow: true }, { at: plan.at });
+    ctx.log(`stage -> live at ${fmt(plan.at)}: an Admin's Start now, ahead of the start date ${fmt(ctx.tl.startsAt)}`);
+    return;
+  }
+  const { started } = await ctx.api.as(ctx.admin).post<{ started: number }>(`/api/dev/bingos/${ctx.slug}/start-round`, {}, { at: plan.at });
+  if (started !== 1) throw new Error(`the start round at ${fmt(plan.at)} didn't start ${ctx.slug}`);
+  ctx.log(`stage -> live at ${fmt(plan.at)}: by itself, at its start date`);
 }
 
 /**
@@ -76,7 +92,7 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
       signupOpensAt: tl.signupOpensAt.toISOString(),
       draftScheduledAt: tl.draftAt.toISOString(),
       revealScheduledAt: tl.revealAt.toISOString(),
-      ...(holdsStartDate(tl) ? {} : { startsAt: tl.startsAt.toISOString() }),
+      startsAt: tl.startsAt.toISOString(),
       endsAt: tl.endsAt.toISOString(),
       // Discord team roles and channels on, with a channel added to the list, as an admin would: the settings panel
       // shows it, while the sync itself never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).

@@ -349,7 +349,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // A Historical Bingo (CONTEXT.md) is always Finished.
     assertNotHistorical(bingo, "its stage can't change");
     if (params.toStage === bingo.stage) {
-      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
+      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`, "already_in_stage");
     }
     if (params.fromStage && params.fromStage !== bingo.stage) {
       throw new ServiceError(409, `The bingo moved to the "${bingo.stage}" stage in the meantime`, "stage_moved");
@@ -374,7 +374,10 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // Live always means started (CONTEXT.md "Stage"). With the start date still ahead, the Bingo goes Live by itself
     // then (bingoStartService.ts); going Live sooner is starting now, which moves the start date to this moment, so
     // Submissions, Tile freezes and the Wise Old Man competition all start from it.
-    const startsEarly = params.toStage === "live" && !!bingo.startsAt && bingo.startsAt.getTime() > now.getTime();
+    // Only from before Live: a Finished Bingo has started already, so its start date is never rewritten (and can't be
+    // set ahead, updateBingoSettings).
+    const startsEarly =
+      params.toStage === "live" && STAGE_ORDER.indexOf(bingo.stage) < STAGE_ORDER.indexOf("live") && !!bingo.startsAt && bingo.startsAt.getTime() > now.getTime();
     if (startsEarly && !params.startNow) {
       throw new ServiceError(400, "The bingo's start date is still ahead: it goes live by itself then. Start it now to go live sooner.", "start_date_ahead");
     }
@@ -702,10 +705,10 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     const signupMode = params.signupMode ?? existing.signupMode;
     if (params.cutMode === "pairs_only" && signupMode !== "duo") throw new ServiceError(400, "Pairs only is for duo bingos");
     if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
-    // A Live Bingo has started (CONTEXT.md "Stage"), so its start date can't move into the future: that would make it
-    // Live but not started. Moving the start into the future means going back to Board revealed first.
-    if (params.startsAt && existing.stage === "live" && params.startsAt.getTime() > clockNow().getTime()) {
-      throw new ServiceError(400, "The bingo is live, so it has already started: its start date can't be in the future. Move it back to Board revealed first.");
+    // A Live or Finished Bingo has started (CONTEXT.md "Stage"), so its start date can't move into the future: that
+    // would make it Live but not started. Moving the start into the future means going back to Board revealed first.
+    if (params.startsAt && (existing.stage === "live" || existing.stage === "complete") && params.startsAt.getTime() > clockNow().getTime()) {
+      throw new ServiceError(400, "The bingo has already started, so its start date can't be in the future. Move it back to Board revealed first.");
     }
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");

@@ -43,8 +43,12 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
 
   // Live always means started (CONTEXT.md "Stage"): with the start date still ahead, the Bingo goes Live by itself
   // then, and going Live sooner is starting now, which moves the start date to that moment.
+  // Only before Live: a Finished Bingo has started already. This browser's clock can disagree with the server's by a
+  // few seconds around the start date; the server's word (start_date_ahead, in go()) settles it.
+  const [serverSaysAhead, setServerSaysAhead] = useState(false);
   const startsAt = bingo.startsAt ? new Date(bingo.startsAt).getTime() : null;
-  const startAhead = startsAt !== null && startsAt > Date.now();
+  const beforeLive = STAGE_ORDER.indexOf(bingo.stage) < STAGE_ORDER.indexOf("live");
+  const startAhead = beforeLive && startsAt !== null && (startsAt > Date.now() || serverSaysAhead);
   const startingEarly = confirming === "live" && startAhead;
 
   const idx = STAGE_ORDER.indexOf(bingo.stage);
@@ -86,7 +90,13 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
     try {
       await advanceStage.mutateAsync({ toStage, startNow: toStage === "live" && startAhead });
       setConfirming(null);
+      setServerSaysAhead(false);
     } catch (e: unknown) {
+      // Started early after all, on the server's clock: the confirmation turns into Start now's, to confirm again.
+      if (e instanceof ApiError && e.code === "start_date_ahead") {
+        setServerSaysAhead(true);
+        return;
+      }
       // The roster changed since the last review (or none was applied): review the cuts, then confirm again.
       if (e instanceof ApiError && e.code === "cut_review_required") {
         setConfirming(null);
@@ -127,7 +137,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
 
       {bingo.stage === "reveal" && startAhead && (
         <p className="text-sm text-on-surface-muted">
-          It goes Live by itself at the start date. Start now to begin sooner.
+          It goes Live by itself at the start date.{canChange && " Start now to begin sooner."}
         </p>
       )}
 
@@ -197,7 +207,8 @@ function StartEarlyEffects({ startsAt, endsAt, fromReveal }: { startsAt: number;
   return (
     <div className="space-y-2 text-on-surface-muted">
       <p>
-        The bingo is set to start <span className="text-on-surface">{formatLocalDateTime(startsAt)}</span> (in {formatDuration(startsAt - Date.now())}), your local time.
+        The bingo is set to start <span className="text-on-surface">{formatLocalDateTime(startsAt)}</span> (
+        {startsAt > Date.now() ? `in ${formatDuration(startsAt - Date.now())}` : "any moment now"}), your local time.
         {fromReveal ? " It goes Live by itself then, so there's nothing you need to do." : " From Board revealed, it goes Live by itself then."}
       </p>
       <p>Starting it now instead:</p>

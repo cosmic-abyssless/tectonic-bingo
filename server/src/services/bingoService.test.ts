@@ -78,6 +78,15 @@ describe("advanceStage", () => {
       expect(JSON.parse(entry.details)).toEqual({ from: "reveal", to: "live", startedEarly: true, scheduledStart: scheduled.toISOString() });
     });
 
+    // A Finished Bingo has started already: it never had a start date set ahead (updateBingoSettings refuses one), and
+    // one left ahead from before that guard isn't rewritten by moving it back to Live, Start now or not.
+    it("never rewrites a Finished Bingo's start date going back to Live", () => {
+      const bingo = seedBingo({ startsAt: scheduled, stage: "complete" });
+      const live = advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId, startNow: true, now });
+      expect(live.stage).toBe("live");
+      expect(live.startsAt).toEqual(scheduled);
+    });
+
     it("lets other stages move as before, a start date ahead or not", () => {
       const bingo = seedBingo({ startsAt: scheduled, stage: "draft" });
       expect(advanceStage(db, { bingoId: bingo.id, toStage: "reveal", changedByUserId: bingo.createdByUserId, now }).stage).toBe("reveal");
@@ -454,10 +463,10 @@ describe("updateBingoSettings — WOM fields", () => {
   });
 });
 
-describe("updateBingoSettings — start date while Live", () => {
-  // A Live Bingo has started: moving its start date into the future would make it Live but not started.
-  it("refuses a future start date while the bingo is Live, and allows a past one", () => {
-    const bingo = seedBingo({ stage: "live", startsAt: new Date("2026-01-01T00:00:00Z") });
+describe("updateBingoSettings — start date once started", () => {
+  // A Live or Finished Bingo has started: moving its start date into the future would make it Live but not started.
+  it.each(["live", "complete"] as const)("refuses a future start date while the bingo is %s, and allows a past one", (stage) => {
+    const bingo = seedBingo({ stage, startsAt: new Date("2026-01-01T00:00:00Z") });
     expect(() => updateBingoSettings(db, bingo.id, { startsAt: new Date(Date.now() + 3_600_000) })).toThrow(/can't be in the future/);
     const past = new Date(Date.now() - 3_600_000);
     expect(updateBingoSettings(db, bingo.id, { startsAt: past }).startsAt?.getTime()).toBe(Math.floor(past.getTime() / 1000) * 1000);

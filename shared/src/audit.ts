@@ -826,7 +826,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       i.details.automatic
         ? "The bingo went live at its start date"
         : i.details.startedEarly
-          ? `${actor(i)} started the bingo early, moving its start date to now`
+          ? `${actor(i)} started the bingo early from ${i.details.from}, moving its start date to now`
           : `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
   },
   "wrapped.published": {

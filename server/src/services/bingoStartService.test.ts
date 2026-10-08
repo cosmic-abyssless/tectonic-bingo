@@ -7,7 +7,8 @@ import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { advanceStage } from "./bingoService";
 import { effectiveStartsAt } from "./bingoStart";
-import { startDueBingos } from "./bingoStartService";
+import { holdFromStartRound, startDueBingos } from "./bingoStartService";
+import { log } from "../log";
 import { afterStageChange } from "./stageChangeEffects";
 
 // The follow-ups (broadcast, Wise Old Man, Discord) are stageChangeEffects' own business: here, only that they're asked for.
@@ -82,6 +83,38 @@ describe("startDueBingos", () => {
     expect(stageOf(bingo.id)).toBe("reveal");
     startDueBingos(db, at(60));
     expect(stageOf(bingo.id)).toBe("live");
+  });
+
+  // The test data generator plays its Bingo on a spoofed clock: the real round leaves it alone while the run builds it,
+  // and the run's own round (asked for by name, at the run's clock) starts it.
+  it("leaves a Bingo held for the generator until it's released, unless asked for by name", () => {
+    const bingo = seedBingo();
+    const release = holdFromStartRound(bingo.slug);
+    expect(startDueBingos(db, at(5))).toEqual([]);
+    expect(startDueBingos(db, at(5), { slug: bingo.slug }).map((b) => b.id)).toEqual([bingo.id]);
+    release();
+
+    const other = seedBingo();
+    const releaseOther = holdFromStartRound(other.slug);
+    releaseOther();
+    expect(startDueBingos(db, at(5)).map((b) => b.id)).toEqual([other.id]);
+  });
+
+  it("starts only the Bingo asked for by name", () => {
+    const asked = seedBingo();
+    const other = seedBingo();
+    expect(startDueBingos(db, at(5), { slug: asked.slug }).map((b) => b.id)).toEqual([asked.id]);
+    expect(stageOf(other.id)).toBe("reveal");
+  });
+
+  // A refusal that would come back every round (unlike another server or an Admin getting there first) is logged.
+  it("logs a due Bingo it can't start, but not one another server already started", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+    const historical = seedBingo({ historical: true });
+    startDueBingos(db, at(5));
+    expect(stageOf(historical.id)).toBe("reveal");
+    expect(warn).toHaveBeenCalledWith("a bingo due to start was refused", expect.objectContaining({ slug: historical.slug }));
+    warn.mockRestore();
   });
 
   it("only starts Bingos at Board revealed with a start date", () => {

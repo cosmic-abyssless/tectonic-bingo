@@ -7,6 +7,7 @@ import type { TestDataJob } from "@bingo/shared";
 import { Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { runGenerate, type BoardSource } from "./run";
+import { holdFromStartRound } from "../../services/bingoStartService";
 
 export type GenerateJob = TestDataJob;
 
@@ -66,7 +67,10 @@ export function startGenerateJob(params: StartParams): GenerateJob {
   // X-Forwarded-Proto: the loopback request is plain HTTP, and on staging the session cookie is Secure, so without it
   // the server would never hand the run a session (index.ts trusts one proxy hop, which is this).
   const api = new Api(loopbackBase(), { "X-Forwarded-Proto": "https" });
+  // The run plays the Bingo on its own clock, so the real one's start round mustn't start it partway (bingoStartService.ts).
+  const release = holdFromStartRound(job.slug);
   void runGenerate({ api, adminDiscordId: params.adminDiscordId, options: params.options, board: params.board, log })
+    .finally(release)
     .then((result) => {
       job.problems = result.problems;
       log(`done: /b/${job.slug}`);
