@@ -31,9 +31,18 @@ docker build --build-arg SENTRY_RELEASE=$(git rev-parse HEAD) \
   --secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN -t tectonic-bingo:$(git rev-parse --short HEAD) .
 ```
 
-## Screenshot analysis (the `ocr` service)
+## Screenshot analysis (Cloud Vision, and the `ocr` service)
 
-Reading the text in a screenshot is CPU-heavy, so it runs in its own container instead of inside the site's process.
+**Production reads screenshots with Google Cloud Vision** (`GOOGLE_VISION_API_KEY`, set by `infra/app-env.tf`;
+`server/src/ocrGoogle.ts`). It answers in under a second, about five times faster than the local engine, and misreads
+less (issue #485). The local engine below is its fallback: when Cloud Vision is down, slow (`GOOGLE_VISION_TIMEOUT_MS`,
+default 8 s), over quota, refuses the key, or won't take an image, the api reads that screenshot with the `ocr` service
+instead, and logs a warning. A refused key (400/403: the key was deleted, billing stopped, the API was switched off in the
+Google Cloud project) is logged as an error so Sentry says so, while every screenshot still gets read by the fallback.
+Staging has no key, so it reads with the `ocr` service alone and keeps that path exercised. Without a key anywhere,
+everything below is the whole story.
+
+Reading the text in a screenshot locally is CPU-heavy, so it runs in its own container instead of inside the site's process.
 The api sends each image to it (`OCR_URL=http://ocr:8080`) and the service answers with the lines it read. The contract
 is in `server/src/ocrProtocol.ts`; the service is `server/src/ocrServer.ts`.
 

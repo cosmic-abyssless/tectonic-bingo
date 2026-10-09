@@ -38,6 +38,7 @@ async function stopService(): Promise<void> {
 
 beforeEach(() => {
   vi.stubEnv("OCR_URL", "");
+  vi.stubEnv("GOOGLE_VISION_API_KEY", "");
   engine.recognizeLocally.mockReset().mockResolvedValue(["local pikachu"]);
   engine.warmOcrEngine.mockReset().mockResolvedValue(undefined);
   remoteReads.mockReset();
@@ -124,6 +125,92 @@ describe("analysing a screenshot", () => {
     await serve(Number(new URL(url).port));
     const result = await analyzeSubmissionScreenshot(db, bingo, team, file);
     expect(result.codewordFound).toBe(true);
+  });
+});
+
+// With GOOGLE_VISION_API_KEY set, Cloud Vision reads first and the local engine (in-process or the OCR service) is the
+// fallback. Calls to Cloud Vision are answered here; any other request (the OCR service) goes out as usual.
+describe("analysing a screenshot with Cloud Vision", () => {
+  const realFetch = globalThis.fetch;
+  const googleCalls = vi.fn();
+  function googleAnswers(status: number, body: unknown) {
+    vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+      if (!String(url).startsWith("https://vision.googleapis.com/")) return realFetch(url, init);
+      googleCalls(url, init);
+      return new Response(JSON.stringify(body), { status });
+    });
+  }
+  const levels = () => (process.stdout.write as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => (JSON.parse(String(call[0])) as { level: string }).level);
+
+  beforeEach(() => {
+    vi.stubEnv("GOOGLE_VISION_API_KEY", "test-key");
+    googleCalls.mockReset();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reads it with Cloud Vision, and never touches the local engine", async () => {
+    googleAnswers(200, { responses: [{ fullTextAnnotation: { text: "google pikachu" } }] });
+    const { db } = createTestDb();
+
+    const result = await analyzeSubmissionScreenshot(db, bingo, team, shot("google"));
+
+    expect(result.extractedText).toEqual(["google pikachu"]);
+    expect(result.codewordFound).toBe(true);
+    expect(googleCalls).toHaveBeenCalledTimes(1);
+    expect(engine.recognizeLocally).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the local engine in-process when Cloud Vision is down, as a warning", async () => {
+    googleAnswers(503, { error: { message: "unavailable" } });
+    const { db } = createTestDb();
+
+    const result = await analyzeSubmissionScreenshot(db, bingo, team, shot("google down"));
+
+    expect(result.extractedText).toEqual(["local pikachu"]);
+    expect(engine.recognizeLocally).toHaveBeenCalledTimes(1);
+    expect(levels()).not.toContain("error");
+  });
+
+  it("falls back to the OCR service when there is one", async () => {
+    googleAnswers(503, { error: { message: "unavailable" } });
+    vi.stubEnv("OCR_URL", await serve());
+    const { db } = createTestDb();
+
+    const result = await analyzeSubmissionScreenshot(db, bingo, team, shot("google down, service up"), { priority: "background" });
+
+    expect(result.extractedText).toEqual(["remote pikachu"]);
+    expect(remoteReads).toHaveBeenCalledWith(expect.any(Buffer), "background");
+    expect(engine.recognizeLocally).not.toHaveBeenCalled();
+  });
+
+  it("still reads the screenshot when the key is refused, and reports the key to Sentry", async () => {
+    googleAnswers(403, { error: { status: "PERMISSION_DENIED" } });
+    const { db } = createTestDb();
+
+    const result = await analyzeSubmissionScreenshot(db, bingo, team, shot("bad key"));
+
+    expect(result.extractedText).toEqual(["local pikachu"]);
+    expect(levels()).toContain("error");
+  });
+
+  it("falls back for an image Cloud Vision won't take, which the local engine may still read", async () => {
+    googleAnswers(200, { responses: [{ error: { code: 3, message: "Bad image data." } }] });
+    const { db } = createTestDb();
+
+    expect((await analyzeSubmissionScreenshot(db, bingo, team, shot("refused image"))).extractedText).toEqual(["local pikachu"]);
+  });
+
+  it("reads a screenshot once even though the modal and the submission both analyse it", async () => {
+    googleAnswers(200, { responses: [{ fullTextAnnotation: { text: "google pikachu" } }] });
+    const { db } = createTestDb();
+    const file = shot("google cached");
+
+    await analyzeSubmissionScreenshot(db, bingo, team, file);
+    await analyzeSubmissionScreenshot(db, bingo, team, file, { priority: "background" });
+
+    expect(googleCalls).toHaveBeenCalledTimes(1);
   });
 });
 

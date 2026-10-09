@@ -7,9 +7,10 @@ import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableIte
 import { log } from "./log";
 import { createRemoteRecognizer } from "./ocrClient";
 import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
-import { ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
+import { googleVisionApiKey, googleVisionTimeoutMs, ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
+import { createGoogleVisionRecognizer } from "./ocrGoogle";
 import type { OcrPriority } from "./ocrScheduler";
-import { createTextReader, type TextRecognizer } from "./ocrText";
+import { createTextReader, withFallback, type TextRecognizer } from "./ocrText";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -45,9 +46,19 @@ async function recognizeInProcess(buffer: Buffer, priority: OcrPriority): Promis
   return recognizeLocally(buffer, priority);
 }
 
-const recognizeText: TextRecognizer = createTextReader((buffer, priority) => {
+const recognizeWithLocalEngine: TextRecognizer = (buffer, priority) => {
   const url = ocrServiceUrl();
   return url ? createRemoteRecognizer({ url, timeoutMs: ocrRequestTimeoutMs() })(buffer, priority) : recognizeInProcess(buffer, priority);
+};
+
+// With GOOGLE_VISION_API_KEY set, Google Cloud Vision reads each screenshot first (ocrGoogle.ts) and the local engine
+// above is its fallback: an outage, a refused key or an image Cloud Vision won't take still gets read. Without it, the
+// local engine reads everything, as before. Both settings are looked up per reading, like OCR_URL.
+const recognizeText: TextRecognizer = createTextReader((buffer, priority) => {
+  const apiKey = googleVisionApiKey();
+  if (!apiKey) return recognizeWithLocalEngine(buffer, priority);
+  const google = createGoogleVisionRecognizer({ apiKey, timeoutMs: googleVisionTimeoutMs() });
+  return withFallback(google, recognizeWithLocalEngine, { primary: "Cloud Vision", fallback: "the local engine" })(buffer, priority);
 });
 
 /**
@@ -61,7 +72,7 @@ export async function warmOcr(): Promise<void> {
   await warmOcrEngine();
 }
 
-// Runs local OCR on the screenshot, then matches the extracted text against
+// Reads the screenshot (Cloud Vision or the local engine, see recognizeText), then matches the extracted text against
 // the team's codeword and every item on this bingo's board. All matching
 // (including fuzzy tolerance for OCR slips) lives in textMatchService — this
 // function is I/O only: OCR the image, load the board's items, hand both to

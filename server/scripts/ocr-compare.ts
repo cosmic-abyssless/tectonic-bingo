@@ -26,6 +26,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { createGoogleVisionRecognizer } from "../src/ocrGoogle";
 import { fuzzyIncludes } from "../src/services/textMatchService";
 
 interface SetImage {
@@ -59,13 +60,6 @@ function mimetypeOf(file: string): string {
   return ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" : ext === ".webp" ? "image/webp" : "image/png";
 }
 
-function splitLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 // ---- engines --------------------------------------------------------------------------------------------------------
 
 function localEngine(): Engine {
@@ -84,27 +78,9 @@ function localEngine(): Engine {
 }
 
 function googleEngine(apiKey: string): Engine {
-  return {
-    name: "google",
-    read: async (image) => {
-      const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(apiKey)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requests: [{ image: { content: image.toString("base64") }, features: [{ type: "TEXT_DETECTION" }] }],
-        }),
-      });
-      if (!res.ok) throw new Error(`Cloud Vision ${res.status}: ${(await res.text()).slice(0, 300)}`);
-      const body = (await res.json()) as {
-        responses?: { fullTextAnnotation?: { text?: string }; textAnnotations?: { description?: string }[]; error?: { message?: string } }[];
-      };
-      const first = body.responses?.[0];
-      if (first?.error) throw new Error(`Cloud Vision: ${first.error.message}`);
-      // fullTextAnnotation.text is the page's text with one line per detected line; the first textAnnotation is the
-      // same text in one block and only a fallback.
-      return splitLines(first?.fullTextAnnotation?.text ?? first?.textAnnotations?.[0]?.description ?? "");
-    },
-  };
+  // Production's own reader (src/ocrGoogle.ts), so the comparison measures what the site runs.
+  const read = createGoogleVisionRecognizer({ apiKey, timeoutMs: 30_000 });
+  return { name: "google", read: (image) => read(image) };
 }
 
 function azureEngine(endpoint: string, key: string): Engine {
