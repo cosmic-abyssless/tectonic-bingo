@@ -83,10 +83,19 @@ class FakeGuild implements DiscordGuildApi {
     this.channels.set(id, body);
     return id;
   }
-  async editChannel(channelId: string, body: ChannelBody) {
-    this.maybeFail(`editChannel ${body.name}`);
-    if (!this.channels.has(channelId)) throw new DiscordSyncApiError("Unknown Channel", 404, 10003);
-    this.channels.set(channelId, body);
+  // Like Discord's PATCH: only the fields sent change, and a permission list sent replaces the whole list.
+  edits: { channelId: string; body: Partial<ChannelBody> }[] = [];
+  async editChannel(channelId: string, body: Partial<ChannelBody>) {
+    const current = this.channels.get(channelId);
+    this.maybeFail(`editChannel ${body.name ?? current?.name}`);
+    if (!current) throw new DiscordSyncApiError("Unknown Channel", 404, 10003);
+    this.edits.push({ channelId, body });
+    this.channels.set(channelId, { ...current, ...body });
+  }
+  async getChannelOverwrites(channelId: string) {
+    const current = this.channels.get(channelId);
+    if (!current) throw new DiscordSyncApiError("Unknown Channel", 404, 10003);
+    return current.permission_overwrites;
   }
   async deleteChannel(channelId: string) {
     this.maybeFail(`deleteChannel ${this.channels.get(channelId)?.name}`);
@@ -469,6 +478,63 @@ describe("syncDiscordTeams", () => {
   });
 });
 
+// A Discord admin lets a friend into a Team's voice channel by hand. Discord replaces a channel's whole permission list
+// when one is sent, so the sync must never send one that drops the friend.
+describe("permissions added by hand in Discord", () => {
+  const FRIEND = "400000000000000000";
+  const friend = { id: FRIEND, type: OverwriteType.Member, allow: "1049600", deny: "0" };
+
+  function letFriendIn() {
+    const [voiceId, voice] = guild.channelNamed("Red Dragons", ChannelType.GuildVoice)!;
+    guild.channels.set(voiceId, { ...voice, permission_overwrites: [...voice.permission_overwrites, friend] });
+    return voiceId;
+  }
+  const overwritesOf = (channelId: string) => guild.channels.get(channelId)!.permission_overwrites;
+
+  it("survive a Team rename, which sends only the new name", async () => {
+    const { bingo, team } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const voiceId = letFriendIn();
+    guild.edits = [];
+
+    db.update(schema.teams).set({ name: "Blue Whales" }).where(eq(schema.teams.id, team.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+
+    expect(guild.channels.get(voiceId)!.name).toBe("Blue Whales");
+    expect(overwritesOf(voiceId)).toContainEqual(friend);
+    expect(guild.edits.filter((e) => e.channelId === voiceId).map((e) => Object.keys(e.body))).toEqual([["name"]]);
+  });
+
+  it("survive Sync now, which still puts back the permissions the sync owns", async () => {
+    const { bingo } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const voiceId = letFriendIn();
+    // Someone also opened the channel to @everyone by hand: the sync owns that one, so it's put back.
+    guild.channels.set(voiceId, { ...guild.channels.get(voiceId)!, permission_overwrites: overwritesOf(voiceId).map((o) => (o.id === GUILD ? { ...o, deny: "0" } : o)) });
+
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+
+    expect(overwritesOf(voiceId)).toContainEqual(friend);
+    expect(overwritesOf(voiceId).find((o) => o.id === GUILD)!.deny).not.toBe("0");
+  });
+
+  it("survive the Team's role being made again, whose old entry goes", async () => {
+    const { bingo } = seed();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const voiceId = letFriendIn();
+    const [oldRoleId] = guild.roleNamed("Red Dragons")!;
+    guild.roles.delete(oldRoleId);
+
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+
+    const [newRoleId] = guild.roleNamed("Red Dragons")!;
+    const ids = overwritesOf(voiceId).map((o) => o.id);
+    expect(ids).toContain(newRoleId);
+    expect(ids).not.toContain(oldRoleId);
+    expect(overwritesOf(voiceId)).toContainEqual(friend);
+  });
+});
+
 // As the Bingo goes Live, each Team's first text channel gets its Codeword, pinned (CONTEXT.md "Codeword").
 describe("the Codeword message", () => {
   beforeEach(() => {
@@ -749,6 +815,7 @@ describe("RestDiscordGuildApi", () => {
       expect(await api.createRole({ name: "Red", color: 1, mentionable: true }, "Tectonic Bingo: Spring")).toBe("new-id");
       await api.addMemberRole("u1", "r1", "why");
       await api.editChannel("c1", { name: "red", type: ChannelType.GuildText, parent_id: "cat", permission_overwrites: [] }, "why");
+      expect(await api.getChannelOverwrites("c1")).toEqual([]);
       expect(await api.sendMessage("c1", { content: "hi", allowed_mentions: { parse: [], roles: ["r1"] } })).toBe("new-id");
       await api.pinMessage("c1", "m1", "why");
       const err = await api.editRole("404", { name: "x", color: 0, mentionable: true }, "why").catch((e: unknown) => e);
@@ -760,11 +827,12 @@ describe("RestDiscordGuildApi", () => {
         `POST /api/v10/guilds/${GUILD}/roles`,
         `PUT /api/v10/guilds/${GUILD}/members/u1/roles/r1`,
         "PATCH /api/v10/channels/c1",
+        "GET /api/v10/channels/c1",
         "POST /api/v10/channels/c1/messages",
         "PUT /api/v10/channels/c1/messages/pins/m1",
         `PATCH /api/v10/guilds/${GUILD}/roles/404`,
       ]);
-      expect(seen[4]!.body).toEqual({ content: "hi", allowed_mentions: { parse: [], roles: ["r1"] } });
+      expect(seen[5]!.body).toEqual({ content: "hi", allowed_mentions: { parse: [], roles: ["r1"] } });
       expect(seen[1]!.auth).toBe("Bot token");
       expect(decodeURIComponent(seen[1]!.reason!)).toBe("Tectonic Bingo: Spring");
       // A channel's type isn't sent on an edit.

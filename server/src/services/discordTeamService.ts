@@ -131,7 +131,10 @@ export interface DiscordGuildApi {
   addMemberRole(discordUserId: string, roleId: string, reason: string): Promise<void>;
   removeMemberRole(discordUserId: string, roleId: string, reason: string): Promise<void>;
   createChannel(body: ChannelBody, reason: string): Promise<string>;
-  editChannel(channelId: string, body: ChannelBody, reason: string): Promise<void>;
+  /** Changes only the fields given. Discord replaces a channel's whole permission list when one is sent. */
+  editChannel(channelId: string, body: Partial<ChannelBody>, reason: string): Promise<void>;
+  /** A channel's permission overwrites as Discord has them now, hand-made ones included. */
+  getChannelOverwrites(channelId: string): Promise<PermissionOverwrite[]>;
   deleteChannel(channelId: string, reason: string): Promise<void>;
   /** Every channel in the server: to check an existing category and place the Teams' channels after what's in it. */
   listChannels(): Promise<GuildChannelInfo[]>;
@@ -188,10 +191,15 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
     return ((await this.call(() => this.rest.post(Routes.guildChannels(this.guildId), { body, reason }))) as { id: string }).id;
   }
 
-  async editChannel(channelId: string, body: ChannelBody, reason: string): Promise<void> {
+  async editChannel(channelId: string, body: Partial<ChannelBody>, reason: string): Promise<void> {
     // A channel's type can't be changed; Discord rejects the field on an edit.
     const { type: _type, ...edit } = body;
     await this.call(() => this.rest.patch(Routes.channel(channelId), { body: edit, reason }));
+  }
+
+  async getChannelOverwrites(channelId: string): Promise<PermissionOverwrite[]> {
+    const channel = (await this.call(() => this.rest.get(Routes.channel(channelId)))) as { permission_overwrites?: PermissionOverwrite[] };
+    return channel.permission_overwrites ?? [];
   }
 
   async listChannels(): Promise<GuildChannelInfo[]> {
@@ -476,15 +484,18 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
     where: { teamId: string | null; kind: ResourceKind; channelKey?: string },
     label: string,
     wanted: T,
-    ops: { create: () => Promise<string>; edit: (id: string) => Promise<void> },
+    // `changed`: the fields that differ from what was last sent (`previous`), or all of them when forced.
+    ops: { create: () => Promise<string>; edit: (id: string, changed: Partial<T>, previous: Partial<T>) => Promise<void> },
     applied: (row: ResourceRow | undefined) => object = () => wanted,
   ): Promise<{ id: string; recreated: boolean }> {
     const row = rowFor(where.teamId, where.kind, where.channelKey ?? null);
     if (row) {
-      const differs = !sameJson(pick(parseApplied<T>(row), wanted), wanted);
+      const previous = pick(parseApplied<T>(row), wanted);
+      const differs = !sameJson(previous, wanted);
       if (!differs && !options.force) return { id: row.discordId, recreated: false };
+      const changed = options.force ? wanted : (Object.fromEntries(Object.entries(wanted).filter(([k, v]) => !sameJson(previous[k as keyof T], v))) as Partial<T>);
       try {
-        await ops.edit(row.discordId);
+        await ops.edit(row.discordId, changed, previous);
         saveApplied(db, row, { ...parseApplied(row), ...applied(row) });
         if (differs) changes.updated.push(label);
         return { id: row.discordId, recreated: false };
@@ -510,7 +521,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
     };
     const { id } = await ensure({ teamId: null, kind: "category" }, `category "${body.name}"`, body, {
       create: () => api.createChannel(body, reason),
-      edit: (id) => api.editChannel(id, body, reason),
+      edit: async (id, changed, previous) => api.editChannel(id, await channelEdit(api, id, body, changed, previous), reason),
     });
     return { id, firstPosition: 0 };
   }
@@ -552,7 +563,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
       const body = channelBody(template, team.name, category.id, category.firstPosition + teamIndex * templates.length + templateIndex, overwrites(api.guildId, botId, [{ id: role.id, allow: template.type === "text" ? TEXT_ACCESS : VOICE_ACCESS }]));
       await ensure({ teamId: team.id, kind: channelKind(template), channelKey: template.key }, `${template.type} channel "${body.name}"`, body, {
         create: () => api.createChannel(body, reason),
-        edit: (id) => api.editChannel(id, body, reason),
+        edit: async (id, changed, previous) => api.editChannel(id, await channelEdit(api, id, body, changed, previous), reason),
       });
     }
   }
@@ -734,6 +745,20 @@ function channelBody(template: DiscordChannelTemplate, teamName: string, categor
     position,
     permission_overwrites: permissionOverwrites,
   };
+}
+
+/**
+ * What to send to edit a channel: only the fields that changed, so a rename leaves its permissions alone. When its
+ * permissions changed (a Team's role made again, Sync now), Discord would replace the whole list with what's sent, so
+ * it's merged into what the channel has now: the overwrites the sync owns (@everyone, the bot, the Team's role, and any
+ * it sent last time) are set, and every other one (a friend or a role a Discord admin let in by hand) is kept.
+ */
+async function channelEdit(api: DiscordGuildApi, channelId: string, wanted: ChannelBody, changed: Partial<ChannelBody>, previous: Partial<ChannelBody>): Promise<Partial<ChannelBody>> {
+  const { permission_overwrites: overwritesChanged, ...rest } = changed;
+  if (!overwritesChanged) return rest;
+  const owned = new Set([...wanted.permission_overwrites, ...(previous.permission_overwrites ?? [])].map((o) => o.id));
+  const handMade = (await api.getChannelOverwrites(channelId)).filter((o) => !owned.has(o.id));
+  return { ...rest, permission_overwrites: [...wanted.permission_overwrites, ...handMade] };
 }
 
 /** Only the keys `wanted` has, so a stored role's member list doesn't count as a difference in its name or color. */
