@@ -90,6 +90,17 @@ variable "runeprofile_api_key" {
   }
 }
 
+variable "google_vision_api_key" {
+  description = "Google Cloud Vision's API key, restricted to the Cloud Vision API: screenshots are read by Cloud Vision first, with the local OCR service as the fallback (server/src/ocrGoogle.ts). Both environments, so staging tries Cloud Vision before production does; the fallback is covered by tests."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.google_vision_api_key)) > 0
+    error_message = "google_vision_api_key is empty: fill it in (terraform.tfvars, or its Bitwarden item) rather than push a blank over the box's value."
+  }
+}
+
 variable "discord_bot_token" {
   description = "The Discord application's bot token, for the Discord team sync (docs/discord-team-sync.md). Production only: staging has the clan's DISCORD_GUILD_ID too, so a token there could sync a staging bingo into the clan's server."
   type        = string
@@ -187,6 +198,7 @@ locals {
     # which needs NODE_ENV to be something other than production, so the Secure cookie flag is put back by hand. It talks
     # to the live clan API with production's key, and fetches player stats and Wise Old Man snapshots, so the clan
     # integration can be tried there; Wise Old Man's competition sync, RuneProfile and the Discord team sync stay off (no keys).
+    # Screenshots are read by Cloud Vision with production's key, so a change there is tried on staging first.
     staging = merge(local.app_common, {
       NODE_ENV                      = "staging"
       DEV_LOGIN_ENABLED             = "true"
@@ -201,6 +213,7 @@ locals {
       USER_AGENT_CONTACT            = var.user_agent_contact
       WOM_API_KEY                   = ""
       RUNEPROFILE_API_KEY           = ""
+      GOOGLE_VISION_API_KEY         = var.google_vision_api_key
       DISCORD_BOT_TOKEN             = ""
       PLAYER_STATS_FETCH_DISABLED   = "false"
       WOM_COMPETITION_SYNC_DISABLED = "true"
@@ -211,18 +224,19 @@ locals {
     # For a deploy that fixes a harmful bug, FORCE_CLIENT_RELOAD = "true" here makes every open page from an older build
     # reload itself (see .env.example); it's off by default, and best taken out again afterwards.
     production = merge(local.app_common, {
-      CLIENT_URL           = "https://tectonic.bingo"
-      DISCORD_CALLBACK_URL = "https://tectonic.bingo/auth/discord/callback"
-      SESSION_SECRET       = var.production_session_secret
-      FEEDBACK_SECRET      = var.production_feedback_secret
-      TECTONIC_API_URL     = var.tectonic_api_url
-      TECTONIC_API_KEY     = var.tectonic_api_key
-      TECTONIC_GUILD_ID    = var.tectonic_guild_id
-      WOM_API_KEY          = var.wom_api_key
-      RUNEPROFILE_API_KEY  = var.runeprofile_api_key
-      DISCORD_BOT_TOKEN    = var.discord_bot_token
-      USER_AGENT_CONTACT   = var.user_agent_contact
-      SENTRY_ENVIRONMENT   = "production"
+      CLIENT_URL            = "https://tectonic.bingo"
+      DISCORD_CALLBACK_URL  = "https://tectonic.bingo/auth/discord/callback"
+      SESSION_SECRET        = var.production_session_secret
+      FEEDBACK_SECRET       = var.production_feedback_secret
+      TECTONIC_API_URL      = var.tectonic_api_url
+      TECTONIC_API_KEY      = var.tectonic_api_key
+      TECTONIC_GUILD_ID     = var.tectonic_guild_id
+      WOM_API_KEY           = var.wom_api_key
+      RUNEPROFILE_API_KEY   = var.runeprofile_api_key
+      GOOGLE_VISION_API_KEY = var.google_vision_api_key
+      DISCORD_BOT_TOKEN     = var.discord_bot_token
+      USER_AGENT_CONTACT    = var.user_agent_contact
+      SENTRY_ENVIRONMENT    = "production"
     })
   }
 

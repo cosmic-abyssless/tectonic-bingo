@@ -7,9 +7,10 @@ import { findBestMatch, fuzzyIncludes, type DetectedItemMatch, type MatchableIte
 import { log } from "./log";
 import { createRemoteRecognizer } from "./ocrClient";
 import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
-import { ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
-import type { OcrPriority } from "./ocrScheduler";
-import { createTextReader, type TextRecognizer } from "./ocrText";
+import { googleVisionApiKey, googleVisionTimeoutMs, ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
+import { createGoogleVisionRecognizer } from "./ocrGoogle";
+import { createLimiter, type OcrPriority } from "./ocrScheduler";
+import { createTextReader, SkippedForCooldown, withFallback, type FallbackPrimary, type TextRecognizer } from "./ocrText";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -45,10 +46,39 @@ async function recognizeInProcess(buffer: Buffer, priority: OcrPriority): Promis
   return recognizeLocally(buffer, priority);
 }
 
-const recognizeText: TextRecognizer = createTextReader((buffer, priority) => {
+const recognizeWithLocalEngine: TextRecognizer = (buffer, priority) => {
   const url = ocrServiceUrl();
   return url ? createRemoteRecognizer({ url, timeoutMs: ocrRequestTimeoutMs() })(buffer, priority) : recognizeInProcess(buffer, priority);
+};
+
+// At most this many Cloud Vision readings at once; the rest wait, people on the submission modal first ("interactive"
+// before "background", as for the local engine). Each is under a second, so the queue only forms in a burst, and it
+// keeps a burst from becoming a wave of 429s that all land on the fallback together.
+const CLOUD_VISION_CONCURRENCY = 8;
+const cloudVisionLimiter = createLimiter(CLOUD_VISION_CONCURRENCY, ({ waitedMs, priority, running, queued }) => {
+  log.info("cloud vision waited for a free slot", { waitedMs, priority, running, queued });
 });
+
+// A reading that waited its turn checks again as it starts: if Cloud Vision failed meanwhile, it goes to the local
+// engine at once rather than paying the same timeout behind the others (withFallback).
+const recognizeWithCloudVision: FallbackPrimary = (buffer, priority, skipping) => {
+  const read = createGoogleVisionRecognizer({ apiKey: googleVisionApiKey()!, timeoutMs: googleVisionTimeoutMs() });
+  return cloudVisionLimiter.run(() => {
+    if (skipping()) throw new SkippedForCooldown();
+    return read(buffer);
+  }, priority);
+};
+
+// With GOOGLE_VISION_API_KEY set, Google Cloud Vision reads each screenshot first (ocrGoogle.ts) and the local engine
+// above is its fallback: an outage, a refused key or an image Cloud Vision won't take still gets read, and during an
+// outage the local engine reads everything for a minute at a time rather than each screenshot waiting out Cloud
+// Vision's timeout first (withFallback). Without the key, the local engine reads everything, as before. The settings
+// are looked up per reading, like OCR_URL.
+const cloudVisionFirst = withFallback(recognizeWithCloudVision, recognizeWithLocalEngine, { primary: "Cloud Vision", fallback: "the local engine" });
+
+const recognizeText: TextRecognizer = createTextReader((buffer, priority) =>
+  googleVisionApiKey() ? cloudVisionFirst(buffer, priority) : recognizeWithLocalEngine(buffer, priority),
+);
 
 /**
  * Loads the model ahead of the first screenshot so nobody's submission pays for it. Only meaningful when reading
@@ -61,7 +91,7 @@ export async function warmOcr(): Promise<void> {
   await warmOcrEngine();
 }
 
-// Runs local OCR on the screenshot, then matches the extracted text against
+// Reads the screenshot (Cloud Vision or the local engine, see recognizeText), then matches the extracted text against
 // the team's codeword and every item on this bingo's board. All matching
 // (including fuzzy tolerance for OCR slips) lives in textMatchService — this
 // function is I/O only: OCR the image, load the board's items, hand both to
