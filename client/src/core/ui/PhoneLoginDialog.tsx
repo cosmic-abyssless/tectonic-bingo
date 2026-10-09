@@ -4,11 +4,12 @@ import { Button } from "./Button";
 import { Notice } from "./Card";
 import { CheckIcon } from "./icons";
 import { useDialogParts } from "./useDialogParts";
+import { awaitModule } from "../chunkReload";
 
 type Link = { id: string; url: string; expiresAt: number };
 
 // The QR code's drawing code loads the first time the dialog shows one, not with the page (the dialog lives in the header).
-const QRCodeSVG = lazy(() => import("qrcode.react").then((m) => ({ default: m.QRCodeSVG })));
+const QRCodeSVG = lazy(() => awaitModule(import("qrcode.react")).then((m) => ({ default: m.QRCodeSVG })));
 
 /**
  * Log in on your phone from here: a QR code of a one-time link to this account, which the phone's camera opens in
