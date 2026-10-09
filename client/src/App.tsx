@@ -16,6 +16,7 @@ import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PageLoading } from "./themes/default/page/PageStates";
 import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
 import { useAccessWatch } from "./headless/permissions";
+import { usePendingTabTitle } from "./headless/usePendingTabTitle";
 import { awaitModule } from "./core/chunkReload";
 
 // The board page and the way to it load up front; every other page is its own
@@ -52,6 +53,11 @@ function BingoGoneRedirect() {
 
 function AccessWatch() {
   useAccessWatch();
+  return null;
+}
+
+function PendingTabTitle() {
+  usePendingTabTitle();
   return null;
 }
 
@@ -172,6 +178,7 @@ export default function App() {
           </Routes>
           </Suspense>
           <BingoGoneRedirect />
+          <PendingTabTitle />
           <AccessWatch />
           <SlowDownNotice />
           <NewVersionNotice />

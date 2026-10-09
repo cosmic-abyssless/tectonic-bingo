@@ -417,7 +417,7 @@ describe("gainsOf", () => {
 
 describe("WomReadQueue", () => {
   // A queue whose clock only moves when it sleeps, recording each wait.
-  function pacedQueue(client: WomClient, perMinute: number) {
+  function pacedQueue(client: WomClient, perMinute?: number) {
     let clock = at(5).getTime();
     const waits: number[] = [];
     const queue = new WomReadQueue(db, client, {
@@ -441,6 +441,25 @@ describe("WomReadQueue", () => {
     expect(wom.fetchImpl).toHaveBeenCalledTimes(4);
     // The first request goes at once; each after it waits 3 s (20 a minute).
     expect(waits).toEqual([3000, 3000, 3000]);
+  });
+
+  it("paces under WOM's limit by default, leaving room for jitter and other requests on the same key", async () => {
+    const { bingoId, userIds } = seed({ players: 2 });
+    const { queue, waits } = pacedQueue(fakeWom([raw(at(1), 1)]).client);
+    for (const userId of userIds) queue.add({ bingoId, userId });
+    await queue.whenIdle();
+    // 16 a minute of WOM's 20.
+    expect(waits).toEqual([3750]);
+  });
+
+  it("paces under the higher limit an API key gets", async () => {
+    const { bingoId, userIds } = seed({ players: 2 });
+    const wom = fakeWom([raw(at(1), 1)]);
+    const { queue, waits } = pacedQueue(new WomClient(wom.fetchImpl as unknown as typeof fetch, "key"));
+    for (const userId of userIds) queue.add({ bingoId, userId });
+    await queue.whenIdle();
+    // 80 a minute of its 100.
+    expect(waits).toEqual([750]);
   });
 
   it("drops a Player who is already queued", async () => {
