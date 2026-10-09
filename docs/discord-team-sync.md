@@ -71,6 +71,9 @@ channels above its voice channels.
 
 - A role the sync didn't give: it only takes a Team's role from Players it gave it to, so someone an Admin gave the
   role to by hand keeps it.
+- Permissions added to a Team's channel by hand (a friend let into a voice channel, another role): a rename or recolor
+  sends only what changed, and when the channel's permissions do need changing (the Team's role made again, **Sync
+  now**) only the sync's own entries (`@everyone`, the bot, the Team's role) are set, and every other one is kept.
 - Players who aren't in the server (`users.in_guild` false at their last login, or unknown to Discord): skipped, and
   given the role on a later sync once they've joined.
 - Everything, when the Bingo is Finished. **Remove from Discord** in the settings turns the sync off and deletes every
