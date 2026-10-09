@@ -18,8 +18,16 @@ export function awaitModule<T>(load: Promise<T>): Promise<T> {
   return load.then((module) => (module === undefined ? new Promise<T>(() => {}) : module));
 }
 
-export function installChunkReload(): void {
+export function installChunkReload(reload: () => void = () => window.location.reload()): void {
+  // One missing chunk rarely comes alone: an import's JS and CSS, or the theme and the page beside it, fail together.
+  // Once this page is reloading, every later failure is suppressed too: by the minute's guard it would be thrown, and
+  // reach the ErrorBoundary or Sentry ("Importing a module script failed") in the moment before the reload.
+  let reloading = false;
   window.addEventListener("vite:preloadError", (event) => {
+    if (reloading) {
+      event.preventDefault();
+      return;
+    }
     let lastReloadAt: number | null = null;
     try {
       const stored = sessionStorage.getItem(RELOADED_AT_KEY);
@@ -35,7 +43,8 @@ export function installChunkReload(): void {
     } catch {
       // As above.
     }
+    reloading = true;
     event.preventDefault();
-    window.location.reload();
+    reload();
   });
 }

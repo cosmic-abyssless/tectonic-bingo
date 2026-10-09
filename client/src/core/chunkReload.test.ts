@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { awaitModule, shouldReloadForMissingChunk } from "./chunkReload";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { awaitModule, installChunkReload, shouldReloadForMissingChunk } from "./chunkReload";
 
 describe("shouldReloadForMissingChunk", () => {
   it("reloads when this tab hasn't reloaded for a missing chunk yet", () => {
@@ -32,5 +33,30 @@ describe("awaitModule", () => {
 
   it("still rejects when the import itself fails", async () => {
     await expect(awaitModule(Promise.reject(new Error("Failed to fetch dynamically imported module")))).rejects.toThrow(/Failed to fetch/);
+  });
+});
+
+// Sentry: a theme's chunk and the page's failed together after a deploy; the first reloaded the page, and the second,
+// held back by the minute's guard, was thrown ("Importing a module script failed") on the page's way out.
+describe("installChunkReload", () => {
+  const missingChunk = () => {
+    const event = new Event("vite:preloadError", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  it("lets a chunk missing again within a minute through, but suppresses every failure once the page is reloading", () => {
+    const reload = vi.fn();
+    installChunkReload(reload);
+
+    sessionStorage.setItem("chunk-reload-at", String(Date.now()));
+    expect(missingChunk()).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+
+    sessionStorage.clear();
+    expect(missingChunk()).toBe(true);
+    expect(missingChunk()).toBe(true);
+    expect(missingChunk()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
