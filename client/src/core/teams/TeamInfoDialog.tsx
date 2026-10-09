@@ -25,6 +25,8 @@ function TeamInfo({ slug, team, stage, onClose }: { slug: string; team: TeamMode
   const [name, setName] = useState(team.name);
   const trimmed = name.trim();
   const dirty = trimmed !== team.name;
+  // A Team named before the cap can be over it; it can't be saved until it's back under.
+  const tooLong = trimmed.length > TEAM_NAME_MAX;
   const { entries: activity } = useTeamActivityModel(slug, team.id);
 
   return (
@@ -36,13 +38,23 @@ function TeamInfo({ slug, team, stage, onClose }: { slug: string; team: TeamMode
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (team.rename?.allowed && dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
+              if (team.rename?.allowed && dirty && trimmed && !tooLong) rename.mutate({ teamId: team.id, name: trimmed });
             }}
           >
-            <Field label="Team name" className="flex-1">
+            <Field
+              label={
+                <span className="flex justify-between">
+                  Team name
+                  <span className={`num ${tooLong ? "text-danger" : "text-on-surface-subtle"}`}>
+                    {trimmed.length}/{TEAM_NAME_MAX}
+                  </span>
+                </span>
+              }
+              className="flex-1"
+            >
               <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={TEAM_NAME_MAX} disabled={!team.rename.allowed} />
             </Field>
-            <Button type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || rename.isPending}>
+            <Button type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || tooLong || rename.isPending}>
               {rename.isPending ? "Saving…" : "Rename"}
             </Button>
           </form>
