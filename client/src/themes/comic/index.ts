@@ -59,6 +59,7 @@ import { WrappedCaptain } from "./wrapped/sections/WrappedCaptain";
 import { WrappedModerator } from "./wrapped/sections/WrappedModerator";
 import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
+import { awaitModule } from "../../core/chunkReload";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -140,10 +141,10 @@ const comicChromeLight = {
 
 // As in the default theme, the pages beside the board are their own chunks: this theme loads with the board page,
 // which must not download the Draft room's or Stats' ag-grid tables.
-const DraftPageLayout = lazy(() => import("./page/DraftPageLayout").then((m) => ({ default: m.DraftPageLayout })));
-const StatsPageLayout = lazy(() => import("./page/StatsPageLayout").then((m) => ({ default: m.StatsPageLayout })));
-const FeedbackPageLayout = lazy(() => import("./page/FeedbackPageLayout").then((m) => ({ default: m.FeedbackPageLayout })));
-const WrappedPage = lazy(() => import("./wrapped/WrappedPage").then((m) => ({ default: m.WrappedPage })));
+const DraftPageLayout = lazy(() => awaitModule(import("./page/DraftPageLayout")).then((m) => ({ default: m.DraftPageLayout })));
+const StatsPageLayout = lazy(() => awaitModule(import("./page/StatsPageLayout")).then((m) => ({ default: m.StatsPageLayout })));
+const FeedbackPageLayout = lazy(() => awaitModule(import("./page/FeedbackPageLayout")).then((m) => ({ default: m.FeedbackPageLayout })));
+const WrappedPage = lazy(() => awaitModule(import("./wrapped/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
 
 const comicTheme: ThemeDefinition = {
   key: "comic",

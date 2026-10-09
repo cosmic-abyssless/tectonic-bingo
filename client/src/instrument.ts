@@ -3,6 +3,7 @@
 // see core/logging/sentryConfig.ts. With no DSN anywhere (local development) Sentry stays off and sends nothing.
 import * as Sentry from "@sentry/react";
 import { isFromHeadlessScraper, resolveSentryOptions } from "./core/logging/sentryConfig";
+import { awaitModule } from "./core/chunkReload";
 
 const options = resolveSentryOptions(window.__APP_CONFIG__, {
   dsn: import.meta.env.VITE_SENTRY_DSN,
@@ -25,4 +26,4 @@ Sentry.init({
 // Tracing is its own chunk (sentryTracing.ts), fetched now and added when it arrives rather than downloaded with the
 // board. Its page-load span still starts at navigation start, with the page's timings and web vitals; only a request
 // sent before it arrives (usually /api/me, the first) goes without a span or a trace header to the server.
-if (options.dsn) void import("./sentryTracing").then((m) => Sentry.addIntegration(m.browserTracingIntegration()));
+if (options.dsn) void awaitModule(import("./sentryTracing")).then((m) => Sentry.addIntegration(m.browserTracingIntegration()));

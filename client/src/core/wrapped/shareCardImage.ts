@@ -5,6 +5,8 @@
 // reads them from the page's stylesheets, and a card in the system font stack embeds none. html-to-image itself loads
 // the first time a card is drawn, not with the page.
 
+import { awaitModule } from "../chunkReload";
+
 /** A card is laid out at this size in CSS pixels and drawn at twice that: a 1080×1350 (4:5) PNG. */
 export const SHARE_CARD_WIDTH = 540;
 export const SHARE_CARD_HEIGHT = 675;
@@ -30,7 +32,7 @@ async function settleImages(node: HTMLElement): Promise<void> {
 
 /** The card's DOM (laid out at SHARE_CARD_WIDTH × SHARE_CARD_HEIGHT) as a PNG. */
 export async function renderShareCard(node: HTMLElement): Promise<Blob> {
-  const [{ toBlob }] = await Promise.all([import("html-to-image"), settleImages(node)]);
+  const [{ toBlob }] = await Promise.all([awaitModule(import("html-to-image")), settleImages(node)]);
   const blob = await toBlob(node, {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,

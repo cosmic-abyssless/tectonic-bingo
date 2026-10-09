@@ -118,7 +118,8 @@ export class OsrsWikiClient {
         headers: { "User-Agent": WIKI_USER_AGENT },
       });
       if (!res.ok) {
-        log.warn("osrs-wiki search failed", { status: res.status });
+        // Goes to Sentry (log.error with an error): the editor just sees no results.
+        log.error("osrs-wiki search failed", { status: res.status, err: new Error(`item search: HTTP ${res.status}`) });
         return [];
       }
       const body = (await res.json()) as WikiSearchResponse;
@@ -215,8 +216,9 @@ export class OsrsWikiClient {
       throw new WikiUnavailableError();
     }
     if (!res.ok) {
-      log.warn("osrs-wiki query failed", { status: res.status });
-      throw new WikiUnavailableError();
+      const error = new WikiUnavailableError(`The OSRS Wiki answered HTTP ${res.status}`);
+      log.error("osrs-wiki query failed", { status: res.status, err: error });
+      throw error;
     }
     const body = (await res.json().catch(() => null)) as (T & { error?: unknown }) | null;
     if (!body || body.error) {

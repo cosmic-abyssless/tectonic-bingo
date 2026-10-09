@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import type { Request, RequestHandler } from "express";
 import { USER_AGENT } from "../config";
+import { log } from "../log";
 
 // A disk cache in front of the OSRS wiki's item icons, so players' browsers never
 // contact the wiki: each icon is fetched once, stored under `dir`, and served
@@ -116,11 +117,19 @@ export function createWikiIconCache(opts: WikiIconCacheOptions): WikiIconCache {
   const missPath = (name: string) => path.join(dir, missFileName(name));
   const headers = { "User-Agent": `${USER_AGENT} icon cache` };
 
+  /** The wiki answering with an error: reported to Sentry (log.error with the error), then thrown like any other failure. */
+  function unexpectedAnswer(url: string, status: number): Error {
+    const err = new Error(`unexpected response ${status}`);
+    log.error("wiki icon fetch failed", { url, status, err });
+    return err;
+  }
+
   /** The PNG at `url`, or null when the wiki has no such file. Throws on anything else (a network error, a 5xx, not a small PNG). */
   async function downloadPng(url: string): Promise<Buffer | null> {
     const res = await fetchImpl(url, { headers, signal: AbortSignal.timeout(ICON_FETCH_TIMEOUT_MS) });
     if (res.status === 404) return null;
-    if (!res.ok || !(res.headers.get("content-type") ?? "").startsWith("image/png")) throw new Error(`unexpected response ${res.status}`);
+    if (!res.ok) throw unexpectedAnswer(url, res.status);
+    if (!(res.headers.get("content-type") ?? "").startsWith("image/png")) throw new Error(`unexpected response ${res.status}`);
     const body = Buffer.from(await res.arrayBuffer());
     if (body.length === 0 || body.length > ICON_MAX_BYTES || !body.subarray(0, 4).equals(PNG_SIGNATURE)) throw new Error("not a small PNG");
     return body;
@@ -130,7 +139,7 @@ export function createWikiIconCache(opts: WikiIconCacheOptions): WikiIconCache {
   async function variantIconFile(name: string): Promise<string | null> {
     const params = new URLSearchParams({ action: "query", titles: name, prop: "images|pageimages", imlimit: "500", piprop: "name", redirects: "1", format: "json" });
     const res = await fetchImpl(`${WIKI_API_URL}?${params}`, { headers, signal: AbortSignal.timeout(ICON_FETCH_TIMEOUT_MS) });
-    if (!res.ok) throw new Error(`unexpected response ${res.status}`);
+    if (!res.ok) throw unexpectedAnswer(WIKI_API_URL, res.status);
     const body = (await res.json()) as { query?: { pages?: Record<string, { title?: string; pageimage?: string; images?: { title: string }[] }> } };
     const page = Object.values(body.query?.pages ?? {})[0];
     if (!page?.images) return null;

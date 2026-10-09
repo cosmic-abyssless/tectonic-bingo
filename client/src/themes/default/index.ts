@@ -74,14 +74,15 @@ import { WrappedTeam } from "./wrapped/WrappedTeam";
 import { WrappedBingo } from "./wrapped/WrappedBingo";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
+import { awaitModule } from "../../core/chunkReload";
 
 // The pages beside the board load with their own route, not with this theme: the Draft room's pool grid and the
 // Stats tables bring ag-grid, which the board page must not download. (A lazy slot suspends to App's route fallback.)
-const DraftPageLayout = lazy(() => import("./page/DraftPageLayout").then((m) => ({ default: m.DraftPageLayout })));
-const StatsPageLayout = lazy(() => import("./page/StatsPageLayout").then((m) => ({ default: m.StatsPageLayout })));
-const FeedbackPageLayout = lazy(() => import("./page/FeedbackPageLayout").then((m) => ({ default: m.FeedbackPageLayout })));
-const RewindPageLayout = lazy(() => import("./rewind/RewindPageLayout").then((m) => ({ default: m.RewindPageLayout })));
-const WrappedPageLayout = lazy(() => import("./wrapped/WrappedPageLayout").then((m) => ({ default: m.WrappedPageLayout })));
+const DraftPageLayout = lazy(() => awaitModule(import("./page/DraftPageLayout")).then((m) => ({ default: m.DraftPageLayout })));
+const StatsPageLayout = lazy(() => awaitModule(import("./page/StatsPageLayout")).then((m) => ({ default: m.StatsPageLayout })));
+const FeedbackPageLayout = lazy(() => awaitModule(import("./page/FeedbackPageLayout")).then((m) => ({ default: m.FeedbackPageLayout })));
+const RewindPageLayout = lazy(() => awaitModule(import("./rewind/RewindPageLayout")).then((m) => ({ default: m.RewindPageLayout })));
+const WrappedPageLayout = lazy(() => awaitModule(import("./wrapped/WrappedPageLayout")).then((m) => ({ default: m.WrappedPageLayout })));
 
 // The neutral/fallback theme: eager (it's what every unknown or loading
 // theme key falls back to), and the only theme that must define every slot.

@@ -118,9 +118,11 @@ export class WomClient {
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
-        log.warn("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
+        // Logged as an error, so Sentry sees it: requests are paced to stay under WOM's limit, so a 429 means they aren't.
+        log.error("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString(), err: new Error(`GET ${path}: HTTP 429`) });
       } else {
-        log.warn("wom request failed", { status: res.status, ...context });
+        // Any other non-2xx goes to Sentry (log.error with an Error): the lookup came back empty, and nothing else says why.
+        log.error("wom request failed", { status: res.status, ...context, err: new Error(`GET ${path}: HTTP ${res.status}`) });
       }
     } catch (err) {
       log.warn("wom request failed", { ...context, err });

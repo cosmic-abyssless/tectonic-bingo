@@ -2,6 +2,7 @@ import { defaultTheme } from "./default";
 import { defaultTokens, type ThemeTokens } from "./tokens";
 import type { ThemeSlots } from "./slots";
 import { reportClientError } from "../core/logging/reportClientError";
+import { awaitModule } from "../core/chunkReload";
 
 export interface ThemeDefinition {
   key: string;
@@ -24,7 +25,7 @@ export interface ResolvedTheme {
 
 // Follow-up themes register here as one line each.
 const loaders: Record<string, () => Promise<{ default: ThemeDefinition }>> = {
-  comic: () => import("./comic"),
+  comic: () => awaitModule(import("./comic")),
 };
 
 const DEFAULT_RESOLVED: ResolvedTheme = { key: defaultTheme.key, tokens: defaultTokens, slots: defaultTheme.slots as ThemeSlots, palettes: { light: "Light", dark: "Dark" } };
