@@ -148,6 +148,13 @@ describe("an Admin write", () => {
     expect(sent()).toEqual([bingoEvent("questions_changed"), bingoEvent("superlative_categories_changed")]);
   });
 
+  // The Team's pinned Discord message says its Codeword (discordTeamService.postCodewords).
+  it("to a Team's Codeword alone starts a Discord sync, and no Wise Old Man one", async () => {
+    expect(await call(admin, "PATCH", `/admin/teams/${team.id}`, { codeword: "bravo" })).toBe(200);
+    expect(syncDiscordTeams).toHaveBeenCalledTimes(1);
+    expect(syncWomCompetition).not.toHaveBeenCalled();
+  });
+
   it("that changes nothing writes no audit entry, tells nobody and starts no sync (#456)", async () => {
     expect(await call(admin, "PATCH", `/admin/teams/${team.id}`, { color: "#123456" })).toBe(200);
     broadcast.mockClear();

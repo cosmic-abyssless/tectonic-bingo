@@ -924,8 +924,8 @@ router.patch(
     // from the admin panel too, not just the captain self-service route.
     const renamed = team.name !== before?.name;
     if (renamed) void syncWomCompetition(db, req.bingo!.id);
-    // The Team's Discord role carries its name and color, its channels its name.
-    if (renamed || team.color !== before?.color) void syncDiscordTeams(db, req.bingo!.id);
+    // The Team's Discord role carries its name and color, its channels its name, and its pinned message its Codeword.
+    if (renamed || team.color !== before?.color || team.codeword !== before?.codeword) void syncDiscordTeams(db, req.bingo!.id);
     broadcastInstead(res, teamUpdated(req, team.id));
     res.json({ team });
   }),

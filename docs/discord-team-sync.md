@@ -16,8 +16,10 @@ settings), or an existing one (see [Where new channels go](#where-new-channels-g
 
 Once the Bingo is **Live**, each Team's first text channel also gets its **Codeword**, posted and pinned by the bot:
 the Codeword, how to show it in a screenshot (the Clan Events plugin, or the chatbox on mobile), a link to the Bingo's
-page, and a ping for the Team's role. Posted once per Team (not again when the Bingo goes back to Board revealed and Live
-again); a Team whose channel is made later gets it then, and so does a channel made anew after it was deleted by hand.
+page, and a ping for the Team's role. Posted once per Team: not again when the Bingo goes back to Board revealed and Live
+again, nor when the channel list is reordered (it stays in the channel it's in). A changed Codeword is edited into it,
+still pinned and without a second ping. It's posted again only when its channel or the message itself is gone, and
+**Sync now** pins it again if someone unpinned it. A Team whose channel is made later gets it then.
 
 The channel list starts as a text and a voice channel, both just `{team}`. `@everyone` is denied View Channel on all of
 it, so a Team's channels are private to it. No moderator role: Moderators see a Team's channels only if they are on it

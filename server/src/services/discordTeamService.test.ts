@@ -103,6 +103,12 @@ class FakeGuild implements DiscordGuildApi {
     this.messages.set(id, { channelId, body, pinned: false });
     return id;
   }
+  async editMessage(channelId: string, messageId: string, body: MessageBody) {
+    this.maybeFail(`editMessage ${this.channels.get(channelId)?.name}`);
+    const message = this.messages.get(messageId);
+    if (!message || message.channelId !== channelId) throw new DiscordSyncApiError("Unknown Message", 404, 10008);
+    message.body = body;
+  }
   async pinMessage(channelId: string, messageId: string) {
     this.maybeFail(`pinMessage ${this.channels.get(channelId)?.name}`);
     const message = this.messages.get(messageId);
@@ -573,6 +579,95 @@ describe("the Codeword message", () => {
     expect(result).toEqual({ ok: true, deleted: 4 });
     expect(guild.calls.some((c) => c.startsWith("deleteMessage"))).toBe(false);
     expect(db.select().from(schema.discordResources).all()).toEqual([]);
+  });
+
+  // An Admin regenerates a Codeword that leaked: the pinned message must say the new one, or every screenshot fails.
+  it("says a changed Codeword, edited in place: still pinned, and nobody pinged again", async () => {
+    const { bingo, team } = seed({ stage: "live" });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    db.update(schema.teams).set({ codeword: "crimson-fox" }).where(eq(schema.teams.id, team.id)).run();
+    guild.calls = [];
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+
+    const messages = guild.messagesIn("red-dragons");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.body.content).toContain("`crimson-fox`");
+    expect(messages[0]!.pinned).toBe(true);
+    expect(guild.calls).toContain("editMessage red-dragons");
+    expect(guild.calls.some((c) => c.startsWith("sendMessage"))).toBe(false);
+  });
+
+  it("stays in its channel when the channel list is reordered, rather than being posted again in the new first one", async () => {
+    const list = (...names: string[]) => JSON.stringify(names.map((name) => ({ key: name, type: "text", name: `{team}-${name}` })));
+    const { bingo } = seed({ stage: "live", discordChannelsJson: list("general", "loot") });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    db.update(schema.bingos).set({ discordChannelsJson: list("announcements", "general", "loot") }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+
+    expect(guild.messages.size).toBe(1);
+    expect(guild.messagesIn("red-dragons-general")).toHaveLength(1);
+    expect(guild.messagesIn("red-dragons-announcements")).toHaveLength(0);
+  });
+
+  it("is posted again when its channel is taken off the list, in the first text channel there is", async () => {
+    const list = (...names: string[]) => JSON.stringify(names.map((name) => ({ key: name, type: "text", name: `{team}-${name}` })));
+    const { bingo } = seed({ stage: "live", discordChannelsJson: list("general", "loot") });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    db.update(schema.bingos).set({ discordChannelsJson: list("loot") }).where(eq(schema.bingos.id, bingo.id)).run();
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(guild.messagesIn("red-dragons-loot")).toHaveLength(1);
+    expect(guild.messagesIn("red-dragons-loot")[0]!.pinned).toBe(true);
+  });
+
+  // The pin was refused, then someone deleted the unpinned message: the next sync must not fail on it for good.
+  it("is posted again when the message was deleted by hand before its pin took", async () => {
+    const { bingo } = seed({ stage: "live" });
+    const pin = guild.pinMessage.bind(guild);
+    guild.pinMessage = async () => {
+      throw new DiscordSyncApiError("Discord: Missing Permissions", 403, 50013);
+    };
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    guild.messages.clear();
+    guild.pinMessage = pin;
+
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    expect(guild.messagesIn("red-dragons")).toHaveLength(1);
+    expect(guild.messagesIn("red-dragons")[0]!.pinned).toBe(true);
+    expect(bingoRow(bingo.id).discordSyncError).toBeNull();
+  });
+
+  // Sync now puts back what was changed by hand.
+  it("is pinned again by Sync now after someone unpinned it, and posted again if it was deleted", async () => {
+    const { bingo } = seed({ stage: "live" });
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    const [message] = guild.messagesIn("red-dragons");
+    message!.pinned = false;
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    expect(guild.messagesIn("red-dragons")[0]!.pinned).toBe(true);
+
+    guild.messages.clear();
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    expect(guild.messagesIn("red-dragons")).toHaveLength(1);
+    expect(guild.messagesIn("red-dragons")[0]!.pinned).toBe(true);
+  });
+
+  it("reports the first Team's failure and logs every later one", async () => {
+    const { bingo } = seed({ stage: "live" });
+    db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: user("second captain").id, name: "Blue Whales", codeword: "lunar-otter" }).run();
+    guild.sendMessage = async () => {
+      throw new DiscordSyncApiError("Discord: Missing Permissions", 403, 50013);
+    };
+    const written: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk) => (written.push(String(chunk)), true));
+
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+
+    // Whichever Team came first is reported in the panel; the other is logged.
+    const reported = /^Posting the Codeword in #(red-dragons|blue-whales)/.exec(bingoRow(bingo.id).discordSyncError ?? "")?.[1];
+    const other = reported === "red-dragons" ? "blue-whales" : "red-dragons";
+    expect(reported).toBeDefined();
+    expect(written.some((l) => l.includes("discord codeword message failed too") && l.includes(other))).toBe(true);
+    vi.restoreAllMocks();
   });
 });
 
