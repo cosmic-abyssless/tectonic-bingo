@@ -136,6 +136,7 @@ The structured selection process during the `draft` stage where Captains take tu
 - **Pairs first:** In a duo Bingo, a Team can't draft a single while there's still a pair it may take: once every pair is drafted (or the Team has its share of pairs), singles open. Every Team gets one pick a round, so with pairs first they all reach their share together. It holds for Admins picking for a Team too.
 
 - **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
+- **Team rosters:** The Draft room once the Draft is over (from Board revealed on, and for a Historical Bingo that recorded its Draft): only the Teams and each one's picks, read-only, under "Team rosters" in the ☰ menu.
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
 
 ### Scouting
