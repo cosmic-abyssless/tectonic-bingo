@@ -538,6 +538,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   team: Pick<Team, "id" | "name" | "color">;
   /** A proof only: its Task's label, when the requirement is per-Task. */
   proofTaskLabel: string | null;
+  /** A drop only: the Parts of its Tile its claims fall under, in board order (more than one when a claimed Item is shared). */
+  partLabels: string[];
   /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
   proofChecks: ProofCheck[];
   /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */

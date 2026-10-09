@@ -4,7 +4,7 @@ import { useParams } from "react-router-dom";
 import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
 import { STAGE_ORDER, type Stage } from "@bingo/shared";
-import { useBingo } from "../api/queries";
+import { useBingo, usePendingCount } from "../api/queries";
 import { useBoardDraftStatus } from "../api/adminQueries";
 import { useCan, usePageAccess } from "../headless/permissions";
 import { useWebSocketEvent } from "../context/WebSocketContext";
@@ -95,6 +95,8 @@ export function ModPage() {
   // Losing moderate_bingo while here (removed as a Moderator) sends them back to the bingo, with a toast.
   const mayModerate = usePageAccess(slug, (can) => can("moderate_bingo").allowed, "moderate_bingo", shell?.bingo.name);
   const stage = shell?.bingo.stage;
+  // The Submissions tab's count: the same live one as the tab title and the board's Mod panel link.
+  const pendingCount = usePendingCount(slug, mayModerate).data?.count ?? 0;
   const [urlTab] = useUrlParam("tab");
   const setUrl = useSetUrlParams();
   const [outOfStageTabs, setOutOfStageTabs] = usePreference("outOfStageTabs");
@@ -201,6 +203,11 @@ export function ModPage() {
                   {visibleTabs.map((t) => (
                     <Tab key={t.key} id={t.key} dimmed={t.dimmed}>
                       {t.label}
+                      {t.key === "submissions" && pendingCount > 0 && (
+                        <Badge tone="warn" className="num ml-1.5">
+                          {pendingCount}
+                        </Badge>
+                      )}
                       {t.key === "board" && unpublished && (
                         <Badge tone="warn" className="ml-1.5">
                           Unpublished
