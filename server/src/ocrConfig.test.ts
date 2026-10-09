@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ocrConcurrency, ocrRequestTimeoutMs, ocrServiceUrl, ocrThreads, parseCgroupCpuLimit, shouldWarmOcr } from "./ocrConfig";
+import { googleVisionApiKey, googleVisionTimeoutMs, ocrConcurrency, ocrRequestTimeoutMs, ocrServiceUrl, ocrThreads, parseCgroupCpuLimit, shouldWarmOcr } from "./ocrConfig";
 
 describe("ocrConcurrency", () => {
   it("defaults to 5", () => {
@@ -14,6 +14,22 @@ describe("ocrConcurrency", () => {
 
   it("ignores anything that isn't a usable limit", () => {
     for (const bad of ["0", "-3", "many", "NaN"]) expect(ocrConcurrency(bad)).toBe(5);
+  });
+});
+
+describe("googleVisionApiKey", () => {
+  it("is the key when one is set, and nothing when it's unset or blank", () => {
+    expect(googleVisionApiKey({ GOOGLE_VISION_API_KEY: " abc123 " })).toBe("abc123");
+    expect(googleVisionApiKey({ GOOGLE_VISION_API_KEY: "" })).toBeUndefined();
+    expect(googleVisionApiKey({})).toBeUndefined();
+  });
+});
+
+describe("googleVisionTimeoutMs", () => {
+  it("defaults to 8 s, and takes a positive whole number from the environment", () => {
+    expect(googleVisionTimeoutMs({})).toBe(8000);
+    expect(googleVisionTimeoutMs({ GOOGLE_VISION_TIMEOUT_MS: "3000" })).toBe(3000);
+    for (const bad of ["0", "-1", "soon"]) expect(googleVisionTimeoutMs({ GOOGLE_VISION_TIMEOUT_MS: bad })).toBe(8000);
   });
 });
 

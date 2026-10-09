@@ -9,9 +9,22 @@ import { ServiceError } from "./services/errors";
  * outage itself is watched through the container's health.
  */
 export class OcrUnavailableError extends ServiceError {
-  constructor(reason: string) {
+  /**
+   * Won't fix itself: someone has to act (a refused Cloud Vision key, billing stopped). Logged as an error, so Sentry
+   * says so; any other outage is a warning.
+   */
+  readonly needsAttention: boolean;
+  /** Likely to last a while (a timeout, over quota, the provider down): worth not asking again for a moment. */
+  readonly transient: boolean;
+  /** What the other side said, for the logs. Never shown to the person who uploaded the screenshot. */
+  readonly detail?: string;
+
+  constructor(reason: string, opts: { needsAttention?: boolean; transient?: boolean; detail?: string } = {}) {
     super(503, `Screenshot analysis is temporarily unavailable (${reason})`);
     this.name = "OcrUnavailableError";
+    this.needsAttention = opts.needsAttention ?? false;
+    this.transient = opts.transient ?? false;
+    this.detail = opts.detail;
   }
 }
 
