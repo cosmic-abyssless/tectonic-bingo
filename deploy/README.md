@@ -42,7 +42,7 @@ instead. A failure that will last (a timeout, over quota, Google down, or a refu
 403, or a 400 naming the key: the key was deleted, billing stopped, the API was switched off in the Google Cloud project)
 is logged as an error so Sentry says so, and again hourly while it lasts, while every screenshot still gets read by the
 fallback.
-Staging has no key, so it reads with the `ocr` service alone and keeps that path exercised. Without a key anywhere,
+Staging has the same key, so Cloud Vision is tried there before production. Without a key,
 everything below is the whole story.
 
 Reading the text in a screenshot locally is CPU-heavy, so it runs in its own container instead of inside the site's process.

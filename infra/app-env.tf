@@ -91,7 +91,7 @@ variable "runeprofile_api_key" {
 }
 
 variable "google_vision_api_key" {
-  description = "Google Cloud Vision's API key, restricted to the Cloud Vision API: screenshots are read by Cloud Vision first, with the local OCR service as the fallback (server/src/ocrGoogle.ts). Production only: staging reads with the local engine alone, which keeps that path exercised."
+  description = "Google Cloud Vision's API key, restricted to the Cloud Vision API: screenshots are read by Cloud Vision first, with the local OCR service as the fallback (server/src/ocrGoogle.ts). Both environments, so staging tries Cloud Vision before production does; the fallback is covered by tests."
   type        = string
   sensitive   = true
 
@@ -198,6 +198,7 @@ locals {
     # which needs NODE_ENV to be something other than production, so the Secure cookie flag is put back by hand. It talks
     # to the live clan API with production's key, and fetches player stats and Wise Old Man snapshots, so the clan
     # integration can be tried there; Wise Old Man's competition sync, RuneProfile and the Discord team sync stay off (no keys).
+    # Screenshots are read by Cloud Vision with production's key, so a change there is tried on staging first.
     staging = merge(local.app_common, {
       NODE_ENV                      = "staging"
       DEV_LOGIN_ENABLED             = "true"
@@ -212,7 +213,7 @@ locals {
       USER_AGENT_CONTACT            = var.user_agent_contact
       WOM_API_KEY                   = ""
       RUNEPROFILE_API_KEY           = ""
-      GOOGLE_VISION_API_KEY         = ""
+      GOOGLE_VISION_API_KEY         = var.google_vision_api_key
       DISCORD_BOT_TOKEN             = ""
       PLAYER_STATS_FETCH_DISABLED   = "false"
       WOM_COMPETITION_SYNC_DISABLED = "true"
