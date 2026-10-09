@@ -18,7 +18,7 @@ export interface BoardMenuActions {
 /**
  * The "This Bingo" group of the header's ☰ menu (AppHeader's menuEntries), in order: the Board (the way back to it, the
  * ☰ having taken the back arrow's place), Submissions, the team, Rules,
- * Stats, Rewind, the Draft or Scouting room, Buy-ins (Staff), Wrapped, Achievements and the Tutorial. Each shows only when it applies, and the page
+ * Stats, Rewind, the Draft or Scouting room (Team rosters once the Draft is over), Buy-ins (Staff), Wrapped, Achievements and the Tutorial. Each shows only when it applies, and the page
  * you're on (stats, Rewind, the draft room, Wrapped) shows as current. Achievements come from the page's
  * AchievementsProvider, where there is one.
  *
@@ -51,7 +51,9 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   if (showRules && hasRules) entries.push({ id: "rules", text: "Rules", label: "Rules", wikiIcon: "Book of Knowledge", onAction: showRules, tutorial: "menu-rules" });
   if (header.canViewStats) entries.push({ id: "stats", text: "Stats", label: "Stats", wikiIcon: "Skills icon", current: page === "stats", onAction: goTo("stats"), tutorial: "menu-stats" });
   if (header.canRewind) entries.push({ id: "rewind", text: "Rewind", label: "Rewind", wikiIcon: "Agility icon", current: page === "rewind", onAction: goTo("rewind") });
-  if (header.draftRoom) {
+  if (header.draftRoom === "rosters") {
+    entries.push({ id: "draft", text: "Team rosters", label: "Team rosters", wikiIcon: "View another clan icon", current: page === "draft", onAction: goTo("draft") });
+  } else if (header.draftRoom) {
     const label = header.draftRoom === "draft" ? "Draft room" : "Scouting room";
     entries.push({ id: "draft", text: label, label, wikiIcon: "Spyglass", current: page === "draft", onAction: goTo("draft") });
   }
