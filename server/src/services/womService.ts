@@ -90,6 +90,14 @@ export class WomClient {
     }
   }
 
+  /**
+   * Asks WOM to update the player now: it reads their hiscores and takes a new snapshot, which a later getSnapshots
+   * picks up. One request against WOM's rate limit, like a page of snapshots.
+   */
+  async updatePlayer(rsn: string): Promise<WomLookup> {
+    return this.lookup(`/players/${encodeURIComponent(rsn)}`, { rsn }, "POST");
+  }
+
   /** Until when WOM's 429 holds new requests off (ms since epoch); in the past when it doesn't. */
   get rateLimitedUntilMs(): number {
     return this.rateLimitedUntil;
@@ -106,23 +114,23 @@ export class WomClient {
     return result.status === "found" ? result.player : null;
   }
 
-  private async lookup(path: string, context: Record<string, unknown>): Promise<WomLookup> {
+  private async lookup(path: string, context: Record<string, unknown>, method: "GET" | "POST" = "GET"): Promise<WomLookup> {
     if (Date.now() < this.rateLimitedUntil) return { status: "unavailable" };
 
     try {
       const headers: Record<string, string> = { "User-Agent": WOM_USER_AGENT };
       if (this.apiKey) headers["x-api-key"] = this.apiKey;
-      const res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, { headers });
+      const res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, { method, headers });
       if (res.ok) return { status: "found", player: await res.json() };
       if (res.status === 404) return { status: "not_found" };
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
         // Logged as an error, so Sentry sees it: requests are paced to stay under WOM's limit, so a 429 means they aren't.
-        log.error("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString(), err: new Error(`GET ${path}: HTTP 429`) });
+        log.error("wom rate limited", { until: new Date(this.rateLimitedUntil).toISOString(), err: new Error(`${method} ${path}: HTTP 429`) });
       } else {
         // Any other non-2xx goes to Sentry (log.error with an Error): the lookup came back empty, and nothing else says why.
-        log.error("wom request failed", { status: res.status, ...context, err: new Error(`GET ${path}: HTTP ${res.status}`) });
+        log.error("wom request failed", { status: res.status, ...context, err: new Error(`${method} ${path}: HTTP ${res.status}`) });
       }
     } catch (err) {
       log.warn("wom request failed", { ...context, err });

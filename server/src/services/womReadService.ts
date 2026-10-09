@@ -1,10 +1,10 @@
 // Reads each Player's Wise Old Man snapshots during a Bingo and stores them (#182). Titles take EHB, EHP and clue
 // gains from them; luck (#195) takes each boss's kill counts over time from the same rows.
 //
-// A good API citizen: only what WOM already has is read (never an update request), every page of snapshots is one
-// request paced under WOM's limit (16 a minute of its 20, 80 of its 100 with WOM_API_KEY), a 429 holds the queue
-// off, and each read starts from the last stored snapshot, so a Player costs about one request an hour however long
-// the Bingo runs.
+// A good API citizen: only what WOM already has is read, every page of snapshots is one request paced under WOM's
+// limit (16 a minute of its 20, 80 of its 100 with WOM_API_KEY), a 429 holds the queue off, and each read starts from
+// the last stored snapshot, so a Player costs about one request an hour however long the Bingo runs. The one update
+// request per Player, at start + 6h (queueDueWomUpdates), goes through the same queue and pacing.
 // Once a Bingo is Finished, one last read runs up to its end, and after that it's never read again.
 import { and, eq, inArray, max } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -12,12 +12,13 @@ import type { WomGains } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, teamMembers, teams, womReads, womSnapshots } from "../db/schema";
 import { log } from "../log";
+import { audit } from "../audit/record";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { TESTDATA_PREFIX } from "./devTestDataService";
 import { rsnsInBingo } from "./playerNames";
 import { getWomClient, parseSnapshots, type WomClient, type WomSnapshot } from "./womService";
 import * as achievementService from "./achievementService";
-import { sendDueWomBulkUpdates } from "./womCompetitionService";
+import { claimDueWomUpdates } from "./womCompetitionService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -25,6 +26,8 @@ const HOUR_MS = 60 * 60 * 1000;
 /** How far before the Bingo's start a read begins, for a baseline snapshot. Older would count pre-Bingo play as gains. */
 export const BASELINE_LOOKBACK_MS = 24 * HOUR_MS;
 export const READ_INTERVAL_MS = HOUR_MS;
+/** How often the update at start + 6h is checked for: often enough that it lands well before start + 7h. */
+export const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 /** A Bingo Finished longer ago than this isn't given its final read after a restart: it predates the reads, or had it. */
 const FINAL_READ_GRACE_MS = 7 * 24 * HOUR_MS;
 /**
@@ -41,9 +44,11 @@ function readsDisabled(): boolean {
 export interface ReadJob {
   bingoId: string;
   userId: string;
+  /** "update": ask WOM to update the Player (the update at start + 6h) instead of reading their snapshots. */
+  kind?: "update";
 }
 
-export type ReadResult = "read" | "skipped" | "rate_limited" | "failed";
+export type ReadResult = "read" | "updated" | "skipped" | "rate_limited" | "failed";
 
 /**
  * Reads one Player's new snapshots, from their last stored one (or shortly before the Bingo's start) up to now, or
@@ -102,6 +107,21 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
   return "read";
 }
 
+/**
+ * Asks WOM to update one Player of a Live Bingo now (the update at start + 6h): WOM takes a new snapshot of them, which
+ * their next read stores. `beforeRequest` is awaited first, for the queue's pacing.
+ */
+export async function updatePlayer(db: Db, client: WomClient, job: ReadJob, opts: { beforeRequest?: () => Promise<void> } = {}): Promise<ReadResult> {
+  const bingo = db.select().from(bingos).where(eq(bingos.id, job.bingoId)).get();
+  if (!bingo || bingo.stage !== "live" || bingo.slug.startsWith(TESTDATA_PREFIX)) return "skipped";
+  const rsn = rsnsInBingo(db, bingo.id, [job.userId]).get(job.userId);
+  if (!rsn) return "skipped";
+  await opts.beforeRequest?.();
+  const result = await client.updatePlayer(rsn);
+  if (result.status === "found") return "updated";
+  return client.rateLimitedUntilMs > Date.now() ? "rate_limited" : "failed";
+}
+
 /** Each Player's stored snapshots, oldest first. */
 export function loadTimelines(db: Db, bingoId: string): Map<string, WomSnapshot[]> {
   const rows = db.select().from(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).orderBy(womSnapshots.takenAt).all();
@@ -148,11 +168,12 @@ export function lastReadAt(db: Db, bingoId: string): Date | null {
   return db.select({ at: max(womReads.readAt) }).from(womReads).where(eq(womReads.bingoId, bingoId)).get()?.at ?? null;
 }
 
-const keyOf = (job: ReadJob) => `${job.bingoId}:${job.userId}`;
+const keyOf = (job: ReadJob) => `${job.bingoId}:${job.userId}${job.kind ? `:${job.kind}` : ""}`;
 
 /**
- * Reads Players one at a time, each page of snapshots paced to WOM's limit. A Player already waiting (or being
- * read) isn't added twice. During a 429 hold-off it waits, then retries the same Player.
+ * Reads Players one at a time, each page of snapshots (and each update request) paced to WOM's limit. A Player already
+ * waiting (or being read) isn't added twice, nor an update already waiting. During a 429 hold-off it waits, then
+ * retries the same job.
  */
 export class WomReadQueue {
   private pending = new Map<string, ReadJob>();
@@ -206,7 +227,10 @@ export class WomReadQueue {
       try {
         const holdOff = this.client.rateLimitedUntilMs - this.now().getTime();
         if (holdOff > 0) await this.sleep(holdOff);
-        const result = await readPlayer(this.db, this.client, job, { now: this.now(), beforeEachPage: this.pace });
+        const result =
+          job.kind === "update"
+            ? await updatePlayer(this.db, this.client, job, { beforeRequest: this.pace })
+            : await readPlayer(this.db, this.client, job, { now: this.now(), beforeEachPage: this.pace });
         // Back to the front, to retry once the hold-off passes.
         if (result === "rate_limited") this.pending = new Map([[key, job], ...this.pending]);
       } catch (err) {
@@ -229,6 +253,24 @@ function members(db: Db, bingoId: string): string[] {
 export function queueBingoReads(db: Db, queue: WomReadQueue, bingoId: string): void {
   if (readsDisabled()) return;
   for (const userId of members(db, bingoId)) queue.add({ bingoId, userId });
+}
+
+/**
+ * The update at start + 6h: for each Live Bingo it's due for (claimed once, womCompetitionService.claimDueWomUpdates),
+ * an update request for every Player of its Teams, recorded in the audit log.
+ */
+export function queueDueWomUpdates(db: Db, queue: WomReadQueue, now: Date): void {
+  for (const bingo of claimDueWomUpdates(db, now)) {
+    const userIds = members(db, bingo.id);
+    for (const userId of userIds) queue.add({ bingoId: bingo.id, userId, kind: "update" });
+    audit(db, {
+      action: "wom.participants_updated",
+      bingoId: bingo.id,
+      entity: { type: "bingo", id: bingo.id, label: bingo.name },
+      details: { players: userIds.length },
+      actor: "system",
+    });
+  }
 }
 
 /**
@@ -268,14 +310,21 @@ export function startWomReads(db: Db): void {
   const queue = getWomReadQueue(db);
   const round = () => {
     try {
-      const now = new Date();
-      queueDueReads(db, queue, now);
-      // The bulk update at start + 6h rides the same round: its snapshots are picked up by the next reads.
-      void sendDueWomBulkUpdates(db, now).catch((err: unknown) => log.warn("wom bulk update round failed", { err }));
+      queueDueReads(db, queue, new Date());
     } catch (err) {
       log.warn("wom snapshot round failed", { err });
     }
   };
+  // The update at start + 6h, checked more often than the reads: the next read of each Player stores its snapshot.
+  const updates = () => {
+    try {
+      queueDueWomUpdates(db, queue, new Date());
+    } catch (err) {
+      log.warn("wom update round failed", { err });
+    }
+  };
+  updates();
   round();
   setInterval(round, READ_INTERVAL_MS).unref();
+  setInterval(updates, UPDATE_CHECK_INTERVAL_MS).unref();
 }

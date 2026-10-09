@@ -533,8 +533,8 @@ interface WomPoint {
 /**
  * How long after the Bingo's start (or the Achievement's switch-on, if later) Leech and Skiller start counting play
  * (CONTEXT.md "Achievement"). The hiscores only update when a player logs out and no session lasts longer than 6 hours,
- * so until then a snapshot can still hold play from before the start; the extra hour lets the bulk update sent at
- * start + 6h (womCompetitionService.sendDueWomBulkUpdates) land. Long weekend and Diversification count from the start
+ * so until then a snapshot can still hold play from before the start; the extra hour lets the update of every Player at
+ * start + 6h (womReadService.queueDueWomUpdates) land. Long weekend and Diversification count from the start
  * instead, like the Wise Old Man competition (EHB) they'd otherwise be compared against, as do Titles and Luck.
  */
 export const WOM_ACHIEVEMENT_DELAY_MS = 7 * 60 * 60 * 1000;

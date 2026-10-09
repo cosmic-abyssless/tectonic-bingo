@@ -141,15 +141,6 @@ export class WomCompetitionClient {
     });
   }
 
-  /**
-   * Asks WOM to update every participant of the competition (its outdated ones, by WOM's own rule). One request: WOM
-   * queues the player updates itself. Like the edit, it takes the host group's code as `verificationCode`
-   * (https://docs.wiseoldman.net/api/competitions/competition-endpoints#update-all-outdated-participants).
-   */
-  async updateAllParticipants(competitionId: number, groupVerificationCode: string): Promise<void> {
-    await this.request(`/competitions/${competitionId}/update-all`, "POST", { verificationCode: groupVerificationCode });
-  }
-
   /** The competition's title, metric, dates and teams as WOM has them, to compare with the bingo's before an edit. */
   async getCompetitionState(competitionId: number): Promise<WomCompetitionState> {
     const raw = (await this.getCompetition(competitionId)) as {
@@ -409,47 +400,30 @@ export async function syncWomCompetition(db: Db, bingoId: string, client: WomCom
   }
 }
 
-/** When after the Bingo's start the bulk update is sent: by then every session running at the start has ended. */
+/** When after the Bingo's start its Players are updated: by then every session running at the start has ended. */
 export const WOM_BULK_UPDATE_DELAY_MS = 6 * 60 * 60 * 1000;
 
 /**
- * The bulk update (CONTEXT.md "Achievement"): at start + 6h, one request asks WOM to update every player in each Live
- * Bingo's competition, so the Wise Old Man Achievements (which count from start + 7h) have a fresh baseline for
- * everyone, not one still holding a session from before the start. Sent once per Bingo, marked before it's sent
- * (bingos.womBulkUpdateSentAt), so a restart neither repeats nor skips it. Never for a test data Bingo or one without a
- * competition. A failure is logged and recorded like any other WOM sync failure; never throws.
+ * The update at start + 6h (CONTEXT.md "Achievement"): the Live Bingos it's due for, each claimed as it's returned
+ * (bingos.womBulkUpdateSentAt), so a restart or an overlapping round neither repeats nor skips it. The caller asks WOM
+ * to update each of their Players (womReadService.queueDueWomUpdates), so the Wise Old Man Achievements (which count
+ * from start + 7h) have a fresh baseline for everyone, not one still holding a session from before the start.
+ *
+ * Player by player, not WOM's "update all outdated participants" of the competition: past 6 hours into a competition,
+ * WOM counts a participant as outdated only after 24 hours without an update, so at start + 6h it usually updated
+ * nobody. Never for a test data Bingo or one without a competition.
  */
-export async function sendDueWomBulkUpdates(db: Db, now: Date, client: WomCompetitionClient = getWomCompetitionClient()): Promise<void> {
-  if (syncDisabled()) return;
+export function claimDueWomUpdates(db: Db, now: Date): Bingo[] {
+  if (syncDisabled()) return [];
+  const claimed: Bingo[] = [];
   for (const bingo of db.select().from(bingos).where(and(eq(bingos.stage, "live"), isNull(bingos.womBulkUpdateSentAt))).all()) {
-    if (!bingo.womCompetitionId || isTestData(bingo)) continue;
-    const config = getWomIntegrationConfig(bingo);
+    if (!bingo.womCompetitionId || isTestData(bingo) || !getWomIntegrationConfig(bingo)) continue;
     const start = effectiveStartsAt(db, bingo);
-    if (!config || !start || now.getTime() < start.getTime() + WOM_BULK_UPDATE_DELAY_MS) continue;
-    // Claimed first: an overlapping round (or a crash mid-request) never sends it twice.
-    const claimed = db.update(bingos).set({ womBulkUpdateSentAt: now }).where(and(eq(bingos.id, bingo.id), isNull(bingos.womBulkUpdateSentAt))).run().changes;
-    if (claimed === 0) continue;
-    try {
-      await client.updateAllParticipants(bingo.womCompetitionId, config.groupVerificationCode);
-      audit(db, {
-        action: "wom.participants_updated",
-        bingoId: bingo.id,
-        entity: { type: "bingo", id: bingo.id, label: bingo.name },
-        details: { competitionId: bingo.womCompetitionId },
-        actor: "system",
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn("wom competition update-all failed", { bingoId: bingo.id, err: message });
-      audit(db, {
-        action: "wom.sync_failed",
-        bingoId: bingo.id,
-        entity: { type: "bingo", id: bingo.id, label: bingo.name },
-        details: { operation: "update", message },
-        actor: "system",
-      });
-    }
+    if (!start || now.getTime() < start.getTime() + WOM_BULK_UPDATE_DELAY_MS) continue;
+    const changes = db.update(bingos).set({ womBulkUpdateSentAt: now }).where(and(eq(bingos.id, bingo.id), isNull(bingos.womBulkUpdateSentAt))).run().changes;
+    if (changes > 0) claimed.push(bingo);
   }
+  return claimed;
 }
 
 /**
