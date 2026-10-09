@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";
 import { useAuth } from "../../context/AuthContext";
 import { useBingoCan, useCloseOnLoss } from "../../headless/permissions";
+import { isDraftOver } from "../../headless/useBingoHeader";
 import { queryKeys, useBingo, useDraftState, useMakePick, useSetDraftOrder, useSetPickRating, useShuffleDraftOrder, useSignupQuestions, useStartDraft, useUndoPick } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
 import { Notice } from "../ui/Card";
@@ -170,6 +171,33 @@ export function DraftRoom({ slug }: { slug: string }) {
     return <div className="py-24 text-center text-on-surface-muted">Loading…</div>;
   }
 
+  // Once the Draft is over the room is Team rosters: only the Teams panel, each Team's picks as the Draft left them.
+  if (isDraftOver(shell)) {
+    const finalPairRows = pairPickRows(state.teams.map((t) => state.picks.filter((p) => p.teamId === t.id)));
+    return (
+      <div className="mx-auto w-full max-w-5xl px-6 py-6">
+        <Panel title="Teams">
+          {/* As in the draft's Teams panel below: a row that scrolls sideways rather than squeezing many teams. */}
+          <div className="overflow-x-auto pb-1 pr-1">
+            <div className="grid auto-cols-[minmax(140px,1fr)] grid-flow-col gap-3">
+              {state.teams.map((team) => (
+                <TeamRoster
+                  key={team.id}
+                  team={team}
+                  picks={state.picks.filter((p) => p.teamId === team.id)}
+                  showOrder={state.orderReady}
+                  reserveCoCaptainRow={state.teams.some((t) => t.coCaptain)}
+                  pairRows={finalPairRows}
+                />
+              ))}
+            </div>
+          </div>
+          {state.teams.length === 0 && <p className="text-sm text-on-surface-subtle">No teams yet.</p>}
+        </Panel>
+      </div>
+    );
+  }
+
   const canModerate = can("moderate_bingo").allowed;
   // The team the viewer leads, whose turn it may be and whose ratings these are.
   const myTeam = state.teams.find((t) => t.captainUserId === user.id || t.coCaptain?.userId === user.id) ?? null;
@@ -183,9 +211,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   const canAct = !!state.currentPick && (can("run_draft").allowed || (isMyTurn && can("make_draft_pick").allowed));
   // Before the draft stage the room is a scouting view: leads (and mods)
   // browse and rate signups; nothing can start or be picked yet.
-  // A Historical Bingo's Draft is over and read-only: its recorded picks, and no pool.
-  const historical = shell.bingo.historical;
-  const scouting = shell.bingo.stage !== "draft" && !historical;
+  const scouting = shell.bingo.stage !== "draft";
   const poolCount = state.pool.reduce((n, u) => n + u.entries.length, 0);
   const lockMs = state.orderLockedUntil ? Math.max(0, new Date(state.orderLockedUntil).getTime() - Date.now()) : 0;
   const revealing = lockMs > 0;
@@ -301,17 +327,7 @@ export function DraftRoom({ slug }: { slug: string }) {
   ));
 
   // The state of the draft above everything else: scouting, the pre-draft setup, revealing, started, complete.
-  const status = historical ? (
-    <Notice tone="info">
-      The Draft as it was recorded: <span className="num">{state.picks.length}</span> pick{state.picks.length === 1 ? "" : "s"}, after the Captains and co-captains.
-      {state.cutCount > 0 && (
-        <>
-          {" "}
-          <span className="num">{state.cutCount}</span> signup{state.cutCount === 1 ? " was" : "s were"} cut.
-        </>
-      )}
-    </Notice>
-  ) :
+  const status =
     scouting ? (
       <Notice tone="info">
         Scouting. Signups are {shell.bingo.stage === "signup" ? "still open" : "closed"} — the draft starts once the mods move the bingo to the draft stage.
@@ -455,7 +471,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         poolCount={poolCount}
         poolGlow={poolGlow}
         isMyTurn={isMyTurn}
-        lead={(canRate || canModerate) && !historical}
+        lead={canRate || canModerate}
         pool={
           <DraftPoolList
             pool={state.pool}
@@ -564,7 +580,7 @@ export function DraftRoom({ slug }: { slug: string }) {
 
       {/* The one thing that actually breaks out of max-w-5xl above (while "Full width" is on) — everything else in
           this component (the status cards, the teams row, the pick/clan-API notices) stays reading-width. */}
-      {!historical && <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>{poolPanel(null)}</div>}
+      <div className={`mt-6 w-full px-6 pb-6 ${poolWidth === "narrow" ? "mx-auto max-w-5xl" : ""}`}>{poolPanel(null)}</div>
     </div>
   );
 }

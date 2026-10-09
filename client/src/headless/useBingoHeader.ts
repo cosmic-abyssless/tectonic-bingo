@@ -30,10 +30,10 @@ export interface BingoHeaderModel {
   canSeeAllBingos: boolean;
   /**
    * The draft room, when there's a way into it: "draft" in the Draft stage once the room lets this viewer in (the
-   * board's banners), or for a Historical Bingo that recorded its Draft (read-only); "scouting" while they may scout
-   * (canScout).
+   * board's banners); "scouting" while they may scout (canScout); "rosters" once the Draft is over (isDraftOver), where
+   * the room is only the Teams and what each drafted, for a Historical Bingo that recorded its Draft too.
    */
-  draftRoom: "draft" | "scouting" | null;
+  draftRoom: "draft" | "scouting" | "rosters" | null;
   /**
    * Wrapped (CONTEXT.md) can be opened: published, or a Moderator's preview; never for a Historical Bingo. Same as the
    * board's wrapped.canOpen.
@@ -70,6 +70,15 @@ export function canScout(shell: Pick<BingoShellResponse, "bingo">, can: CanCheck
   return (stage === "signup" || stage === "captains") && can("view_draft_room").allowed;
 }
 
+/**
+ * The Draft is over: from Board revealed on, and for a Historical Bingo (which recorded it). The draft room is then
+ * Team rosters: the Teams and their picks, read-only.
+ */
+export function isDraftOver(shell: Pick<BingoShellResponse, "bingo">): boolean {
+  const { stage, historical } = shell.bingo;
+  return historical || stage === "reveal" || stage === "live" || stage === "complete";
+}
+
 /** Rewind (CONTEXT.md) exists only once the bingo is Finished, and for a Historical Bingo only when it recorded Submissions. */
 export function canRewind(shell: Pick<BingoShellResponse, "bingo" | "historical">): boolean {
   return shell.bingo.stage === "complete" && (!shell.historical || shell.historical.submissions);
@@ -99,7 +108,11 @@ export function useBingoHeader(slug: string): BingoHeaderModel | null {
     rulesMarkdown: shell.bingo.rulesMarkdown ?? "",
     rulesComeLater: !can("view_hidden_board").allowed && areRulesHidden(shell.bingo),
     canSeeAllBingos: siteAdmin || devMode,
-    draftRoom: shell.historical?.draft ? "draft" : shell.bingo.stage === "draft" ? (draftState ? "draft" : null) : canScout(shell, can) ? "scouting" : null,
+    draftRoom: shell.historical
+      ? shell.historical.draft ? "rosters" : null
+      : isDraftOver(shell)
+        ? can("view_draft_room").allowed ? "rosters" : null
+        : shell.bingo.stage === "draft" ? (draftState ? "draft" : null) : canScout(shell, can) ? "scouting" : null,
     canOpenWrapped: shell.bingo.stage === "complete" && !shell.bingo.historical && (shell.wrappedPublished || can("view_wrapped_preview").allowed),
     hasTeam: !!shell.myTeam,
     hasTeamBoards: !shell.historical || shell.historical.tasks,

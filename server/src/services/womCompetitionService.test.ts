@@ -73,6 +73,8 @@ describe("WomCompetitionClient", () => {
     expect(call[1].method).toBe("POST");
     const body = JSON.parse(call[1].body);
     expect(body.groupId).toBe(123);
+    // Efficient Hours Bossed, not overall XP (CONTEXT.md "Achievement": hours bossed count like the competition).
+    expect(body.metric).toBe("ehb");
     expect(body.groupVerificationCode).toBe("secret");
     expect(body.teams).toEqual([{ name: "Team One", participants: ["Rsn"] }]);
     expect((call[1].headers as Record<string, string>)["x-api-key"]).toBeUndefined();
@@ -257,10 +259,11 @@ describe("audit trail", () => {
 
 // What WOM's GET /competitions/:id returns, by default matching seedBingoWithTeam's bingo exactly (it has no dates, so
 // WOM's own are kept).
-function womState(overrides: { title?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { id?: number; username: string; displayName?: string } }[] } = {}) {
+function womState(overrides: { title?: string; metric?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { id?: number; username: string; displayName?: string } }[] } = {}) {
   return {
     id: 42,
     title: "Test Bingo",
+    metric: "ehb",
     startsAt: "2026-03-01T18:00:00.000Z",
     endsAt: "2026-03-15T18:00:00.000Z",
     participations: [{ teamName: "Team One", player: { username: "captainrsn" } }],
@@ -298,12 +301,34 @@ describe("syncWomCompetition", () => {
     expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", title: "New Name" });
   });
 
+  // Competitions were created on overall XP before EHB: the next sync puts one back on EHB.
+  it("puts a competition measuring anything else back on EHB, and says so in the audit log", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
+    const fetchImpl = mockFetch([{ body: womState({ metric: "overall" }) }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", metric: "ehb" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.roster_synced")).get()!;
+    expect(JSON.parse(row.details)).toEqual({ changed: ["metric"] });
+  });
+
   it("sends the teams after a team rename", async () => {
     const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
     db.update(schema.teams).set({ name: "Renamed Team" }).where(eq(schema.teams.id, team.id)).run();
     const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
     await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
     expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Renamed Team", participants: ["CaptainRsn"] }] });
+  });
+
+  it("cuts a Team name past WOM's 30 characters to fit, and then sees it as unchanged", async () => {
+    const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
+    db.update(schema.teams).set({ name: "Monster whites & Finnish nights" }).where(eq(schema.teams.id, team.id)).run();
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Monster whites & Finnish night", participants: ["CaptainRsn"] }] });
+
+    const again = mockFetch([{ body: womState({ participations: [{ teamName: "Monster whites & Finnish night", player: { username: "captainrsn" } }] }) }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(again));
+    expect(calls(again)).toHaveLength(1);
   });
 
   it("sends the teams after a member joins", async () => {
