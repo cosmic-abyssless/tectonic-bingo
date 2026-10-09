@@ -286,6 +286,27 @@ function BingosPanel() {
   );
 }
 
+// Item groups and Piece values: the two site-wide lists about items, as sub-tabs of one Items tab.
+const ITEMS_SECTIONS = ["item-groups", "piece-values"] as const;
+
+function ItemsPanel() {
+  const [tab, setTab] = useUrlTab("section", ITEMS_SECTIONS, "item-groups");
+  return (
+    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as (typeof ITEMS_SECTIONS)[number])}>
+      <TabList>
+        <Tab id="item-groups">Item groups</Tab>
+        <Tab id="piece-values">Piece values</Tab>
+      </TabList>
+      <TabPanel id="item-groups">
+        <ItemGroupsPanel />
+      </TabPanel>
+      <TabPanel id="piece-values">
+        <PieceValuesPanel />
+      </TabPanel>
+    </Tabs>
+  );
+}
+
 const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
@@ -293,8 +314,8 @@ export function SiteAdminPage() {
   const mayAdminister = useSitePageAccess("administer_site");
   const seesAllConnections = useSiteCan("manage_claude_connections").allowed;
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
-  const [tab, setTab] = useUrlTab("tab", tabs, "bugs", SITE_AUDIT_FILTER_PARAMS);
+  const tabs = ["bugs", "bingos", "audit", "items", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
+  const [tab, setTab] = useUrlTab("tab", tabs, "bugs", [...SITE_AUDIT_FILTER_PARAMS, "section"]);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
   const { data: bugReportsData } = useBugReports();
@@ -326,8 +347,7 @@ export function SiteAdminPage() {
               </Tab>
               <Tab id="bingos">Bingos</Tab>
               <Tab id="audit">Site-wide audit log</Tab>
-              <Tab id="item-groups">Item groups</Tab>
-              <Tab id="piece-values">Piece values</Tab>
+              <Tab id="items">Items</Tab>
               <Tab id="titles">Titles</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               <Tab id="site-admins">Site admins</Tab>
@@ -350,14 +370,9 @@ export function SiteAdminPage() {
               <SiteAuditLog />
             </div>
           </TabPanel>
-          <TabPanel id="item-groups">
+          <TabPanel id="items">
             <div className={NARROW}>
-              <ItemGroupsPanel />
-            </div>
-          </TabPanel>
-          <TabPanel id="piece-values">
-            <div className={NARROW}>
-              <PieceValuesPanel />
+              <ItemsPanel />
             </div>
           </TabPanel>
           <TabPanel id="titles">

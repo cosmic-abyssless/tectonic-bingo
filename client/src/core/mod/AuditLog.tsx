@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AuditCategory, AuditDetailsMap, AuditEntry, BoardDiff } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
 import { actorFilter, useAuditFilters } from "./auditFilters";
@@ -168,6 +168,46 @@ export function EntryDetails({ entry }: { entry: AuditEntry }) {
   );
 }
 
+/** The entries of an audit log, one ruled list. */
+export function AuditEntryList({ children }: { children: ReactNode }) {
+  return <Card className="divide-y divide-outline overflow-hidden">{children}</Card>;
+}
+
+/**
+ * One entry of an audit log, on one line: what happened, where (its Team, or its Bingo in the site-wide log), who
+ * and when. Clicking it opens its details; the label wraps then, instead of being cut short.
+ */
+export function AuditEntryRow({ entry, context, actor, expanded, onToggle }: { entry: AuditEntry; context?: string | null; actor: ReactNode; expanded: boolean; onToggle: () => void }) {
+  return (
+    <div>
+      <div className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 transition-colors hover:bg-surface-hover sm:flex-nowrap" onClick={onToggle}>
+        <span className="shrink-0 sm:w-40">
+          <AuditActionBadge action={entry.action} />
+        </span>
+        <p className={`min-w-0 flex-1 text-sm text-on-surface ${expanded ? "" : "sm:truncate"}`} title={entry.label}>
+          {entry.label}
+        </p>
+        <span className="flex shrink-0 items-center gap-2 text-xs text-on-surface-subtle">
+          {context && <span>{context}</span>}
+          {context && <span aria-hidden>·</span>}
+          <span>
+            {actor} · {entry.actorRole}
+          </span>
+          <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="w-16 text-right">
+            {timeAgo(entry.at)}
+          </TooltipSpan>
+          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        </span>
+      </div>
+      {expanded && (
+        <div className="border-t border-outline bg-background px-4 py-3">
+          <EntryDetails entry={entry} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AuditLog({ slug }: { slug: string }) {
   // The filters are in the URL, so a link opens the log filtered the same way.
   const { filters, update, search, setSearch } = useAuditFilters();
@@ -257,36 +297,18 @@ export function AuditLog({ slug }: { slug: string }) {
         </EmptyState>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => {
-            const isExpanded = expandedId === entry.id;
-            return (
-              <Card key={entry.id} className="overflow-hidden">
-                <div className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <AuditActionBadge action={entry.action} />
-                      {entry.team && <span className="text-xs text-on-surface-subtle">{entry.team.name}</span>}
-                    </div>
-                    <p className="text-sm text-on-surface">{entry.label}</p>
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">
-                      {entry.actor ? <PlayerName userId={entry.actor.id}>{displayName(entry.actor)}</PlayerName> : entry.actorType} · {entry.actorRole}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="text-xs text-on-surface-subtle">
-                      {timeAgo(entry.at)}
-                    </TooltipSpan>
-                    <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div className="border-t border-outline bg-background px-4 py-3">
-                    <EntryDetails entry={entry} />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+          <AuditEntryList>
+            {entries.map((entry) => (
+              <AuditEntryRow
+                key={entry.id}
+                entry={entry}
+                context={entry.team?.name}
+                actor={entry.actor ? <PlayerName userId={entry.actor.id}>{displayName(entry.actor)}</PlayerName> : entry.actorType}
+                expanded={expandedId === entry.id}
+                onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+              />
+            ))}
+          </AuditEntryList>
 
           {hasNextPage && (
             <div className="flex justify-center pt-2">

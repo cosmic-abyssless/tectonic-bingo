@@ -4,20 +4,17 @@ import { useSiteAuditLog } from "../../api/adminQueries";
 import { useBingos } from "../../api/queries";
 import { AUDIT_FILTER_PARAMS, actorFilter, useAuditFilters } from "../mod/auditFilters";
 import { useUrlParam } from "../ui/useUrlParam";
-import { CATEGORIES, EntryDetails, actorOptionsFrom, buildCsv, useActorCatalog } from "../mod/AuditLog";
+import { AuditEntryList, AuditEntryRow, CATEGORIES, actorOptionsFrom, buildCsv, useActorCatalog } from "../mod/AuditLog";
 import { inclusionFilter } from "../ui/inclusionFilter";
 import { displayName } from "../ui/user";
-import { timeAgo } from "../ui/time";
-import { AuditActionBadge } from "../ui/AuditActionBadge";
 import { Button } from "../ui/Button";
-import { Card, EmptyState, Notice } from "../ui/Card";
-import { ChevronDownIcon, ChevronRightIcon, ListIcon } from "../ui/icons";
+import { EmptyState, Notice } from "../ui/Card";
+import { ListIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
 import { SingleSelect } from "../ui/SingleSelect";
 import { DateTimeRangeFilter } from "../ui/DateTimeRangeFilter";
 import { isRangeSet } from "../ui/timeRange";
 import { TableSearchInput } from "../ui/tableSearch";
-import { TooltipSpan } from "../ui/Tooltip";
 
 type BingoScope = string | null | "all";
 
@@ -115,37 +112,18 @@ export function SiteAuditLog() {
         </EmptyState>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => {
-            const isExpanded = expandedId === entry.id;
-            const bingoName = entry.bingoId ? (bingoById.get(entry.bingoId)?.name ?? null) : null;
-            return (
-              <Card key={entry.id} className="overflow-hidden">
-                <div className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <AuditActionBadge action={entry.action} />
-                      {entry.team ? <span className="text-xs text-on-surface-subtle">{entry.team.name}</span> : bingoName ? <span className="text-xs text-on-surface-subtle">{bingoName}</span> : null}
-                    </div>
-                    <p className="text-sm text-on-surface">{entry.label}</p>
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">
-                      {entry.actor ? displayName(entry.actor) : entry.actorType} · {entry.actorRole}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="text-xs text-on-surface-subtle">
-                      {timeAgo(entry.at)}
-                    </TooltipSpan>
-                    <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div className="border-t border-outline bg-background px-4 py-3">
-                    <EntryDetails entry={entry} />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+          <AuditEntryList>
+            {entries.map((entry) => (
+              <AuditEntryRow
+                key={entry.id}
+                entry={entry}
+                context={entry.team?.name ?? (entry.bingoId ? bingoById.get(entry.bingoId)?.name : null)}
+                actor={entry.actor ? displayName(entry.actor) : entry.actorType}
+                expanded={expandedId === entry.id}
+                onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+              />
+            ))}
+          </AuditEntryList>
 
           {hasNextPage && (
             <div className="flex justify-center pt-2">
