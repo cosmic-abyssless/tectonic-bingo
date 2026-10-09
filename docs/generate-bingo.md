@@ -21,7 +21,7 @@ server works as it is, integrations and all.
 
 ## From the browser (local or staging)
 
-**Site admin > Test data** (the tab only appears on a dev-mode server). Pick the bingo whose board to copy (its
+**Site admin > Bingos > Test data** (the tab only appears on a dev-mode server). Pick the bingo whose board to copy (its
 tiles, lines, rules and signup questions; nothing else), where to leave the new bingo, the theme to draw it in, and
 whether to put yourself on a team, then **Generate**. The log streams in underneath; a full live run takes about half a minute locally and a
 minute or two on staging. Generated bingos are listed below it with a **Tear down** button. **Do tear down**: a full

@@ -247,18 +247,23 @@ function BingosList() {
 
 // Bingos (the list) plus the ways to add a new one — Create and Import
 // both land on the same list, so they live as sub-tabs here rather than
-// their own top-level sections.
-const BINGOS_SECTIONS = ["bingos", "create", "import", "import-historical"] as const;
+// their own top-level sections. So does Test data, which generates one.
+const BINGOS_SECTIONS = ["bingos", "create", "import", "import-historical", "test-data"] as const;
+type BingosSection = (typeof BINGOS_SECTIONS)[number];
 
 function BingosPanel() {
-  const [tab, setTab] = useUrlTab("section", BINGOS_SECTIONS, "bingos");
+  const { devMode } = useAuth();
+  const sections = devMode ? BINGOS_SECTIONS : BINGOS_SECTIONS.filter((s) => s !== "test-data");
+  const [tab, setTab] = useUrlTab<BingosSection>("section", sections, "bingos");
   return (
-    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as (typeof BINGOS_SECTIONS)[number])}>
+    <Tabs selectedKey={tab} onSelectionChange={(key: Key) => setTab(String(key) as BingosSection)}>
       <TabList>
         <Tab id="bingos">Bingos</Tab>
         <Tab id="create">Create</Tab>
         <Tab id="import">Import</Tab>
         <Tab id="import-historical">Import historical</Tab>
+        {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
+        {devMode && <Tab id="test-data">Test data</Tab>}
       </TabList>
       <TabPanel id="bingos">
         <BingosList />
@@ -272,6 +277,11 @@ function BingosPanel() {
       <TabPanel id="import-historical">
         <ImportHistoricalBingoPanel />
       </TabPanel>
+      {devMode && (
+        <TabPanel id="test-data">
+          <TestDataPanel />
+        </TabPanel>
+      )}
     </Tabs>
   );
 }
@@ -279,12 +289,11 @@ function BingosPanel() {
 const NARROW = "mx-auto w-full max-w-6xl px-6";
 
 export function SiteAdminPage() {
-  const { devMode } = useAuth();
   // Losing Admin while here sends them back to the list of Bingos.
   const mayAdminister = useSitePageAccess("administer_site");
   const seesAllConnections = useSiteCan("manage_claude_connections").allowed;
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : []), ...(devMode ? ["test-data"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "item-groups", "piece-values", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs", SITE_AUDIT_FILTER_PARAMS);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -323,8 +332,6 @@ export function SiteAdminPage() {
               <Tab id="past-wom">Past WOM competitions</Tab>
               <Tab id="site-admins">Site admins</Tab>
               {seesAllConnections && <Tab id="claude">Claude connections</Tab>}
-              {/* Dev mode only (local servers and staging): the server has no test data routes otherwise. */}
-              {devMode && <Tab id="test-data">Test data</Tab>}
             </TabList>
           </div>
           <TabPanel id="bugs">
@@ -375,13 +382,6 @@ export function SiteAdminPage() {
                   <p className="text-sm text-on-surface-muted">Every admin's Claude connections to the admin MCP server. Revoking one cuts it off straight away. Removing someone's site admin revokes all of theirs.</p>
                   <McpConnectionsList scope="all" />
                 </div>
-              </div>
-            </TabPanel>
-          )}
-          {devMode && (
-            <TabPanel id="test-data">
-              <div className={NARROW}>
-                <TestDataPanel />
               </div>
             </TabPanel>
           )}
