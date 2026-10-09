@@ -31,6 +31,9 @@ export interface AuditInput<A extends AuditAction> {
 }
 
 const DETAILS_MAX_BYTES = 8000;
+// Actions whose details are worth more room. A Publish keeps the whole diff the Admin looked over, and a Bingo's first
+// Publish lists its every Tile, Part and Line; it's one entry per Publish, so a big one is rare and stays readable.
+const DETAILS_MAX_BYTES_FOR: Partial<Record<AuditAction, number>> = { "board.published": 256_000 };
 const SECRET_KEY_PATTERN = /code|secret|token|password|verification/i;
 
 function resolveActor(
@@ -45,7 +48,7 @@ function resolveActor(
   return { userId: null, type: "system", role: "system" };
 }
 
-const CAP_NOTE = "details exceeded the 8KB cap";
+const capNote = (maxBytes: number) => `details exceeded the ${Math.round(maxBytes / 1000)}KB cap`;
 
 /**
  * The details as stored: over the cap, the biggest fields go first (e.g. a big task's before/after trees) until the
@@ -60,10 +63,10 @@ export function capDetails(details: object | null | undefined, maxBytes = DETAIL
   for (const key of Object.keys(kept).sort((a, b) => size(b) - size(a))) {
     delete kept[key];
     dropped.push(key);
-    const capped = JSON.stringify({ ...kept, truncated: true, dropped, note: CAP_NOTE });
+    const capped = JSON.stringify({ ...kept, truncated: true, dropped, note: capNote(maxBytes) });
     if (capped.length <= maxBytes) return capped;
   }
-  return JSON.stringify({ truncated: true, dropped, note: CAP_NOTE });
+  return JSON.stringify({ truncated: true, dropped, note: capNote(maxBytes) });
 }
 
 /** Inserts one row, bumps the request's recorded count, and broadcasts to connected clients. Returns the new row's id. */
@@ -72,7 +75,7 @@ export function audit<A extends AuditAction>(db: Queryable, input: AuditInput<A>
   const actor = resolveActor(input.actor, ctx);
   const visibility = input.visibility ?? AUDIT_ACTIONS[input.action].visibility;
 
-  const detailsJson = capDetails(input.details);
+  const detailsJson = capDetails(input.details, DETAILS_MAX_BYTES_FOR[input.action]);
 
   const row = db
     .insert(auditLog)
@@ -111,6 +114,25 @@ export function audit<A extends AuditAction>(db: Queryable, input: AuditInput<A>
 export function markAuditedNoop(): void {
   const ctx = getAuditContext();
   if (ctx) ctx.recorded++;
+}
+
+/**
+ * Records that an update found nothing to change, so it wrote nothing (#456). Stronger than markAuditedNoop, which a
+ * write that changes something it doesn't audit (a secret vote) also calls: this one promises nothing changed.
+ */
+export function markUnchanged(): void {
+  const ctx = getAuditContext();
+  if (!ctx) return;
+  ctx.recorded++;
+  ctx.unchanged = (ctx.unchanged ?? 0) + 1;
+}
+
+/**
+ * Whether this request changed nothing: everything it recorded was markUnchanged(). Such a request broadcasts nothing
+ * and starts no syncs (docs/postmortems/2026-10-03-colour-picker.md). False outside a request.
+ */
+export function changedNothing(ctx: AuditContext | undefined = getAuditContext()): boolean {
+  return !!ctx?.unchanged && ctx.unchanged === ctx.recorded;
 }
 
 /**

@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPhoneLoginLink, getPhoneLoginLinkStatus, phoneLoginUrl, type PhoneLoginLinkStatus } from "../../api/phoneLoginApi";
 import { Button } from "./Button";
 import { Notice } from "./Card";
 import { CheckIcon } from "./icons";
 import { useDialogParts } from "./useDialogParts";
+import { awaitModule } from "../chunkReload";
 
 type Link = { id: string; url: string; expiresAt: number };
+
+// The QR code's drawing code loads the first time the dialog shows one, not with the page (the dialog lives in the header).
+const QRCodeSVG = lazy(() => awaitModule(import("qrcode.react")).then((m) => ({ default: m.QRCodeSVG })));
 
 /**
  * Log in on your phone from here: a QR code of a one-time link to this account, which the phone's camera opens in
@@ -90,7 +93,9 @@ function PhoneLoginBody() {
       ) : (
         <div className={`rounded-md bg-qr-backdrop p-3 text-qr ${expired ? "opacity-15" : ""}`}>
           {link ? (
-            <QRCodeSVG value={link.url} size={200} fgColor="currentColor" bgColor="transparent" title="Login QR code" />
+            <Suspense fallback={<div className="size-[200px]" aria-label="Making a login code" />}>
+              <QRCodeSVG value={link.url} size={200} fgColor="currentColor" bgColor="transparent" title="Login QR code" />
+            </Suspense>
           ) : (
             <div className="size-[200px]" aria-label="Making a login code" />
           )}

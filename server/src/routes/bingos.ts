@@ -41,12 +41,14 @@ import { applyRosterNames, partiesInPairingState } from "../services/pairingName
 import { fetchAndPersistPlayerStats, getAccountTypes, getSignupStats, parseStoredPlayerStats } from "../services/playerStatsService";
 import { parseStoredCaStats } from "../services/combatAchievements";
 import { syncWomCompetition } from "../services/womCompetitionService";
+import { syncDiscordTeams } from "../services/discordTeamService";
 import { getPastParticipationsForUser } from "../services/pastWomCompetitionService";
 import { ServiceError } from "../services/errors";
 import { refreshPricesAndFill } from "../services/gpValueService";
-import { broadcast } from "../ws";
+import { broadcastChange } from "../broadcastChange";
 import { anonymous, auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
+import { changedNothing } from "../audit/record";
 
 const upload = imageUpload(UPLOADS_DIR, { variants: true });
 // Separate instance for analysis — memory only, nothing saved to disk.
@@ -240,7 +242,7 @@ router.put(
     const { nomineeUserId } = req.body as { nomineeUserId?: string };
     if (!nomineeUserId) throw new ServiceError(400, "nomineeUserId is required");
     superlativeService.setVote(db, req.bingo!, { categoryId: req.params.categoryId as string, teamId: team.id, voterUserId: req.user!.id, nomineeUserId });
-    broadcast({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
     res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );
@@ -254,7 +256,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     const team = myTeamOrThrow(req);
     superlativeService.clearVote(db, req.bingo!, { categoryId: req.params.categoryId as string, voterUserId: req.user!.id });
-    broadcast({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "superlative_votes_changed", bingoId: req.bingo!.id, payload: {} });
     res.json(superlativeService.getBallot(db, req.bingo!, team.id, req.user!.id));
   }),
 );
@@ -424,7 +426,7 @@ router.post(
       fs.unlinkSync(req.file.path);
       throw err;
     }
-    broadcast({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
+    broadcastChange({ type: "submission_created", bingoId: bingo.id, payload: { teamId: team.id } });
     res.status(201).json({ submission });
 
     // After responding: refreshes the GE price table if it's due and prices any claims that came in without a Drop value.
@@ -559,7 +561,7 @@ router.post(
       discordId: req.user!.discordId,
       linkedRsns: (member?.rsns ?? []).map((r) => r.rsn),
     });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ signup });
   }),
 );
@@ -577,12 +579,15 @@ router.patch(
     const verification = rsn !== undefined ? matchRsn(membership.member, rsn) : {};
     const signup = signupService.updateSignup(db, req.bingo!, existing.signup.id, { rsn, timezone, answers, ...verification });
     // Re-fetch on any update, not just an RSN change — cheap, and keeps the
-    // stored snapshot from going stale if someone edits other fields.
-    void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, {
-      discordId: req.user!.discordId,
-      linkedRsns: (membership.member?.rsns ?? []).map((r) => r.rsn),
-    });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    // stored snapshot from going stale if someone edits other fields. A save
+    // that changed nothing fetches nothing (#456): the fetch broadcasts too.
+    if (!changedNothing()) {
+      void fetchAndPersistPlayerStats(db, signup.id, signup.rsn, {
+        discordId: req.user!.discordId,
+        linkedRsns: (membership.member?.rsns ?? []).map((r) => r.rsn),
+      });
+    }
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -595,7 +600,7 @@ router.delete(
     const existing = signupService.getSignupForUser(db, req.bingo!.id, req.user!.id);
     if (!existing) throw new ServiceError(404, "You haven't signed up for this bingo");
     const signup = signupService.withdrawSignup(db, req.bingo!, existing.signup.id);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ signup });
   }),
 );
@@ -689,7 +694,7 @@ router.post(
     const { targetDiscordId } = req.body as { targetDiscordId?: string };
     if (!targetDiscordId) throw new ServiceError(400, "targetDiscordId is required");
     const pairing = pairingService.requestPairing(db, req.bingo!, { requester: me(req), targetDiscordId });
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(201).json({ pairing });
   }),
 );
@@ -702,7 +707,7 @@ router.delete(
   requireBingo,
   asyncHandler(async (req, res) => {
     pairingService.removePairing(db, req.bingo!, me(req), req.params.pairingId as string);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.status(204).end();
   }),
 );
@@ -715,7 +720,7 @@ router.post(
     const { accept } = req.body as { accept?: boolean };
     if (typeof accept !== "boolean") throw new ServiceError(400, "accept must be a boolean");
     const pairing = pairingService.respondToRequest(db, req.bingo!, me(req), req.params.pairingId as string, accept);
-    broadcast({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
+    broadcastChange({ type: "signup_changed", bingoId: req.bingo!.id, payload: {} });
     res.json({ pairing });
   }),
 );
@@ -814,6 +819,8 @@ router.get(
     const player: PlayerProfile = {
       user,
       rsn: signup?.rsn ?? null,
+      signupId: signup?.signupId ?? null,
+      accountBorrowed: signup?.accountBorrowed ?? false,
       womStats: signup?.womStats ?? null,
       accountType: signup?.accountType ?? null,
       caCurrent: signup?.caCurrent ?? null,
@@ -847,7 +854,8 @@ router.put(
 
     const { stars, note } = req.body as { stars?: number; note?: string };
     draftService.setPickRating(db, myTeam.id, req.params.signupId as string, { stars: stars ?? 0, note: note ?? "" });
-    broadcast({ type: "draft_rating_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } });
+    // Only the Team's leads see its ratings: nobody else has anything to refetch.
+    broadcastChange({ type: "draft_rating_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } }, { to: draftService.ratingViewerIds(db, myTeam.id) });
     res.json({ ratings: draftService.getTeamRatings(db, myTeam.id) });
   }),
 );
@@ -867,7 +875,7 @@ router.put(
     // Refuses for a Restriction; who is on the submission's team is the service's to say.
     assertUserCan(db, req.bingo!, req.user!, "react", { role: new ServiceError(403, "Only the submission's team can react to it") });
     const { teamId } = submissionService.setSubmissionReaction(db, submissionId, req.user!.id, emoji, reacted === true);
-    broadcast({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, submissionId } });
+    broadcastChange({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, submissionId } });
     res.json({ reactions: submissionService.getSubmissionDetails(db, submissionId)?.reactions ?? [] });
   }),
 );
@@ -885,7 +893,7 @@ router.put(
 
     const { interested } = req.body as { interested?: boolean };
     teamService.setTileInterest(db, myTeam.id, req.user!.id, req.params.tileId as string, req.params.taskId as string, interested === true);
-    broadcast({ type: "tile_interest_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } });
+    broadcastChange({ type: "tile_interest_changed", bingoId: bingo.id, payload: { teamId: myTeam.id } });
     res.json(teamService.getTeamProgress(db, myTeam.id));
   }),
 );
@@ -901,7 +909,7 @@ router.post(
 
     const picks = draftService.makePick(db, { bingo, pickedUserId: userId, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
     const [first] = picks;
-    broadcast({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
+    broadcastChange({ type: "draft_pick", bingoId: bingo.id, payload: { pickNumber: first!.pickNumber, teamId: first!.teamId, userIds: picks.map((p) => p.userId) } });
     res.status(201).json({ picks });
   }),
 );
@@ -914,7 +922,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const bingo = req.bingo!;
     const undone = draftService.undoLastPick(db, { bingo, actingUserId: req.user!.id, actingIsAdmin: req.user!.isAdmin });
-    broadcast({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
+    broadcastChange({ type: "draft_pick_undone", bingoId: bingo.id, payload: undone });
     res.json({ undone });
   }),
 );
@@ -939,8 +947,12 @@ router.patch(
     const { name } = req.body as { name?: string };
     if (!name || !name.trim()) throw new ServiceError(400, "name is required");
     const updated = teamService.updateTeam(db, team.id, { name: name.trim() });
-    broadcast({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
-    void syncWomCompetition(db, req.bingo!.id);
+    // The same name again changes nothing, so it tells nobody and syncs nothing (#456).
+    if (updated.name !== team.name) {
+      broadcastChange({ type: "team_updated", bingoId: req.bingo!.id, payload: { teamId: team.id } });
+      void syncWomCompetition(db, req.bingo!.id);
+      void syncDiscordTeams(db, req.bingo!.id);
+    }
     res.json({ team: updated });
   }),
 );
@@ -975,7 +987,8 @@ router.post(
 );
 
 // A Tile's details, the Rules, or the Stats page were opened. Fire-and-forget: always 204, even for a viewer not on
-// a team (achievementService itself no-ops outside Live too) — the client never needs to handle a failure here.
+// a team (achievementService itself no-ops when the open can't earn: outside Board revealed and Live, sealed Tiles,
+// hidden rules, Stats before Live) — the client never needs to handle a failure here.
 router.post(
   "/:slug/achievements/opened",
   requireAuth,

@@ -1,14 +1,14 @@
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { FieldChanges } from "@bingo/shared";
+import { fitTeamName, TEAM_NAME_MAX, type FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, superlativeVotes, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
 import { dissolveForUser, getAcceptedPairs } from "./pairingService";
 import { PUBLIC_SIGNUP_COLS } from "./signupService";
 import { MINIMAL_USER_COLS, PUBLIC_USER_COLS } from "./userService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import * as achievementService from "./achievementService";
@@ -132,14 +132,15 @@ export interface TeamProgressSummary {
   nodeStates: (typeof teamNodeState.$inferSelect)[];
   adjustments: (typeof teamPointAdjustments.$inferSelect)[];
   totalPoints: number;
-  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn: string | null }; createdAt: Date }[];
+  interests: { tileId: string; taskId: string; user: Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordId" | "discordAvatar"> & { rsn: string | null }; createdAt: Date }[];
 }
 
 export function getTeamProgress(db: Db, teamId: string): TeamProgressSummary {
   const nodeStates = db.select().from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all();
   const adjustments = db.select().from(teamPointAdjustments).where(eq(teamPointAdjustments.teamId, teamId)).all();
   const interestRows = db
-    .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: MINIMAL_USER_COLS, createdAt: tileInterests.createdAt })
+    // With the avatar: the Tile dialog shows who's on a part as a stack of their pictures.
+    .select({ tileId: tileInterests.tileId, taskId: tileInterests.taskId, user: { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar }, createdAt: tileInterests.createdAt })
     .from(tileInterests)
     .innerJoin(users, eq(tileInterests.userId, users.id))
     .where(eq(tileInterests.teamId, teamId))
@@ -332,7 +333,7 @@ export function createTeam(db: Db, params: CreateTeamParams) {
 
     const team = tx
       .insert(teams)
-      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId), createdAt: clockNow(), updatedAt: clockNow() })
+      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: fitTeamName(params.name ?? "") || "New Team", codeword, color: nextTeamColor(tx, params.bingoId), createdAt: clockNow(), updatedAt: clockNow() })
       .returning()
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true, joinedAt: clockNow() }).run();
@@ -365,24 +366,27 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
     const existing = tx.select().from(teams).where(eq(teams.id, teamId)).get();
     if (!existing) throw new ServiceError(404, "Team not found");
 
+    // Only what differs is written: an update that changes nothing writes and records nothing (#456).
     const patch: UpdateTeamParams = {};
     if (params.name !== undefined) {
       if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
-      patch.name = params.name.trim();
+      // WOM rejects a longer one, and with it every later change to the competition.
+      if (params.name.trim().length > TEAM_NAME_MAX) throw new ServiceError(400, `Team names are at most ${TEAM_NAME_MAX} characters`);
+      if (params.name.trim() !== existing.name) patch.name = params.name.trim();
     }
     if (params.color !== undefined) {
       if (params.color !== null && typeof params.color !== "string") throw new ServiceError(400, "color must be a string or null");
-      patch.color = params.color;
+      if (params.color !== existing.color) patch.color = params.color;
     }
     if (params.codeword !== undefined) {
       if (typeof params.codeword !== "string" || !params.codeword.trim()) throw new ServiceError(400, "codeword must be a non-empty string");
       const codeword = params.codeword.trim();
       const clash = tx.select({ id: teams.id }).from(teams).where(and(eq(teams.bingoId, existing.bingoId), eq(teams.codeword, codeword))).get();
       if (clash && clash.id !== teamId) throw new ServiceError(409, "Another team in this bingo already uses that password");
-      patch.codeword = codeword;
+      if (codeword !== existing.codeword) patch.codeword = codeword;
     }
     if (Object.keys(patch).length === 0) {
-      markAuditedNoop();
+      markUnchanged();
       return existing;
     }
     const updated = tx.update(teams).set(patch).where(eq(teams.id, teamId)).returning().get();
@@ -395,7 +399,7 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
       teamId,
       details: {
         changes: (changes ?? { before: {}, after: {} }) as FieldChanges<{ name: string; color: string | null }>,
-        ...(params.codeword !== undefined ? { codeword: { changed: true as const } } : {}),
+        ...(patch.codeword !== undefined ? { codeword: { changed: true as const } } : {}),
       },
     });
     return updated;

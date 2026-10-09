@@ -40,6 +40,26 @@ export function ocrRequestTimeoutMs(env: Record<string, string | undefined> = pr
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : DEFAULT_OCR_TIMEOUT_MS;
 }
 
+/**
+ * The Google Cloud Vision API key (GOOGLE_VISION_API_KEY). Set, every screenshot is read by Cloud Vision first, with the
+ * local engine as the fallback (ocr.ts); unset, the local engine reads them all, as before.
+ */
+export function googleVisionApiKey(env: Record<string, string | undefined> = process.env): string | undefined {
+  const key = env.GOOGLE_VISION_API_KEY?.trim();
+  return key ? key : undefined;
+}
+
+const DEFAULT_GOOGLE_VISION_TIMEOUT_MS = 8_000;
+
+/**
+ * How long to wait for Cloud Vision (GOOGLE_VISION_TIMEOUT_MS) before reading the screenshot with the local engine
+ * instead. It answers in under a second; past this, someone on the submission modal is better served by the fallback.
+ */
+export function googleVisionTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const parsed = Number.parseInt(env.GOOGLE_VISION_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : DEFAULT_GOOGLE_VISION_TIMEOUT_MS;
+}
+
 /** The largest image the OCR service accepts. Uploads are capped at 5 MB (MAX_UPLOAD_BYTES); this leaves headroom. */
 export const OCR_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 

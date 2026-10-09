@@ -73,6 +73,8 @@ export interface TeardownResult {
   urls: string[];
   /** Test users removed because nothing else uses them. */
   usersDeleted: number;
+  /** The deleted bingo's id, for cleaning up what it left in Discord (its discord_resources rows outlive it). */
+  bingoId: string;
 }
 
 /**
@@ -119,5 +121,5 @@ export function teardownTestBingo(db: Db, slug: string): TeardownResult {
       // Something we didn't think of still points at this user; leaving one throwaway row is harmless.
     }
   }
-  return { urls: files, usersDeleted };
+  return { urls: files, usersDeleted, bingoId: bingo.id };
 }

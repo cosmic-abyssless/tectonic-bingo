@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { ComicDialog, ComicDialogHeader } from "../ui/ComicDialog";
 import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /** Where the team's points come from, in caption boxes: each tile (parts and bonus), the line bonuses, mod adjustments. */
 export function PointBreakdownDialog({ team, onClose }: { team: TeamModel | null; onClose: () => void }) {
@@ -19,7 +20,7 @@ export function PointBreakdownDialog({ team, onClose }: { team: TeamModel | null
 function Score({ points, large }: { points: number; large?: boolean }) {
   const { colors } = useComic();
   return (
-    <span className={`num shrink-0 tabular-nums ${large ? "text-lg leading-tight" : ""}`} style={{ color: points < 0 ? colors.RED : colors.INK, fontFamily: COMIC_FONT }}>
+    <span className={`${LETTERED} num shrink-0 tabular-nums ${large ? "text-lg leading-tight" : ""}`} style={{ color: points < 0 ? colors.RED : colors.INK, fontFamily: COMIC_FONT }}>
       {formatSigned(points)}
     </span>
   );
@@ -64,7 +65,7 @@ function PointBreakdown({ team, onClose }: { team: TeamModel; onClose: () => voi
               {b.tiles.items.map((tile) => (
                 <li key={tile.tileId}>
                   <div className={row} style={{ color: colors.INK }}>
-                    <span className={heading} style={{ fontFamily: COMIC_FONT }}>
+                    <span className={`${LETTERED} ${heading}`} style={{ fontFamily: COMIC_FONT }}>
                       {tile.name}
                     </span>
                     <Score points={tile.points} large />
@@ -95,7 +96,7 @@ function PointBreakdown({ team, onClose }: { team: TeamModel; onClose: () => voi
               {b.lines.items.map((line) => (
                 <li key={line.id}>
                   <div className={row} style={{ color: colors.INK }}>
-                    <span className={heading} style={{ fontFamily: COMIC_FONT }}>
+                    <span className={`${LETTERED} ${heading}`} style={{ fontFamily: COMIC_FONT }}>
                       {line.label}
                     </span>
                     <Score points={line.points} large />

@@ -110,6 +110,23 @@ describe("readPlayer", () => {
     expect(await readPlayer(db, wom.client, { bingoId, userId: userIds[0]! }, { now: at(5) })).toBe("failed");
     expect(db.select().from(schema.womReads).get()?.lastError).toMatch(/no snapshots/);
   });
+
+  it("on a different account (a Borrowed account set mid-Bingo) drops what it had and reads the new one from the start", async () => {
+    const { bingoId, userIds } = seed();
+    const userId = userIds[0]!;
+    const own = fakeWom([raw(at(-2), 1), raw(at(10), 3)]);
+    await readPlayer(db, own.client, { bingoId, userId }, { now: at(12) });
+    expect(stored(bingoId).map((s) => s.ehb)).toEqual([1, 3]);
+
+    db.update(schema.signups).set({ rsn: "Bob", accountBorrowed: true }).where(eq(schema.signups.userId, userId)).run();
+    const borrowed = fakeWom([raw(at(-5), 40), raw(at(6), 44)]);
+    expect(await readPlayer(db, borrowed.client, { bingoId, userId }, { now: at(13) })).toBe("read");
+    // Asked for by the borrowed account's name, from shortly before the start again, not from the last stored snapshot.
+    expect(borrowed.urls()[0]!.pathname).toContain("/players/Bob/snapshots");
+    expect(borrowed.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(stored(bingoId).map((s) => s.ehb)).toEqual([40, 44]);
+    expect(db.select().from(schema.womReads).get()).toMatchObject({ rsn: "Bob" });
+  });
 });
 
 describe("Leech (an Achievement read from the clue counts)", () => {
@@ -179,7 +196,7 @@ describe("Leech (an Achievement read from the clue counts)", () => {
   });
 });
 
-describe("Wise Old Man Achievements count play from 7 hours after the start", () => {
+describe("Leech and Skiller count play from 7 hours after the start", () => {
   const leechEarned = (bingoId: string, userId: string) =>
     db
       .select()
@@ -220,6 +237,21 @@ describe("Wise Old Man Achievements count play from 7 hours after the start", ()
     expect(leechEarned(bingoId, userIds[0]!)).toBe(true);
   });
 
+  it("Skiller doesn't count EHP from a session running across the start either", async () => {
+    const { bingoId, userIds } = seed();
+    switchOn(bingoId, START);
+    const withEhp = (createdAt: Date, ehp: number) => ({
+      createdAt: createdAt.toISOString(),
+      data: { bosses: {}, activities: { clue_scrolls_all: { score: 0 } }, computed: { ehb: { value: 0 }, ehp: { value: ehp } } },
+    });
+    const skillerEarned = () => db.select().from(schema.achievementEarned).all().some((e) => e.userId === userIds[0] && e.achievementKey === "skiller");
+    // 3 EHP in a session logged out at 4 h: within the 7 hours, so it may be from before the start.
+    await readPlayer(db, fakeWom([withEhp(at(-3), 10), withEhp(at(4), 13), withEhp(at(12), 13)]).client, { bingoId, userId: userIds[0]! }, { now: at(13) });
+    expect(skillerEarned()).toBe(false);
+    await readPlayer(db, fakeWom([withEhp(at(12), 13), withEhp(at(20), 16)]).client, { bingoId, userId: userIds[0]! }, { now: at(21) });
+    expect(skillerEarned()).toBe(true);
+  });
+
   it("leaves Titles' gains measured from the start", () => {
     const snap = (hours: number, clues: number): WomSnapshot => ({ at: at(hours), bossKills: {}, ehb: 0, ehp: 0, clues });
     expect(gainsOf([snap(-3, 40), snap(4, 41), snap(12, 41)], START, null)?.clues).toBe(1);
@@ -248,6 +280,14 @@ describe("Long weekend (an Achievement read from EHB)", () => {
     await readPlayer(db, fakeWom([raw(at(10), 112.7), raw(at(30), 120)]).client, { bingoId, userId: userIds[0]! }, { now: at(31) });
     expect(earned(bingoId, userIds[0]!)).toBe(true);
     expect(progress(bingoId, userIds[0]!)).toEqual({ current: 20, target: 20 });
+  });
+
+  it("counts EHB from the start, like the Wise Old Man competition: a session running across the start counts", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    // 5 EHB in a session logged out at 4 h, then 7.7 more: all 12.7 since the start count, as in the competition.
+    await readPlayer(db, fakeWom([raw(at(-2), 100), raw(at(4), 105), raw(at(10), 112.7)]).client, { bingoId, userId: userIds[0]! }, { now: at(12) });
+    expect(progress(bingoId, userIds[0]!)).toEqual({ current: 12, target: 20 });
   });
 
   it("doesn't count EHB from before the Bingo started", async () => {
@@ -285,6 +325,14 @@ describe("Diversification (an Achievement read from boss kill counts)", () => {
     expect(earned(bingoId, userIds[0]!)).toBe(false);
 
     await readPlayer(db, fakeWom([withKills(at(12), plusOneAt(9)), withKills(at(16), plusOneAt(10))]).client, { bingoId, userId: userIds[0]! }, { now: at(17) });
+    expect(earned(bingoId, userIds[0]!)).toBe(true);
+  });
+
+  it("counts kills from the start: a session running across the start counts", async () => {
+    const { bingoId, userIds } = seed();
+    db.transaction((tx) => achievementService.initializeAchievementSettings(tx, bingoId, START));
+    // Five bosses in a session logged out at 4 h, five more by 12 h.
+    await readPlayer(db, fakeWom([withKills(at(-2), {}), withKills(at(4), plusOneAt(5)), withKills(at(12), plusOneAt(10))]).client, { bingoId, userId: userIds[0]! }, { now: at(13) });
     expect(earned(bingoId, userIds[0]!)).toBe(true);
   });
 

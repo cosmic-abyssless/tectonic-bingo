@@ -3,6 +3,7 @@ import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * The Board's feedback card in the comic's panel frame (3px ink border, hard shadow), the kicker as a caption tag like
@@ -20,12 +21,12 @@ export function FeedbackBanner({ responded, onOpen }: { responded: boolean; onOp
       <div className="relative flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p
-            className="inline-block rotate-1 border-2 px-2 py-0.5 text-sm uppercase leading-none"
+            className={`${LETTERED} inline-block rotate-1 border-2 px-2 py-0.5 text-sm uppercase leading-none`}
             style={{ fontFamily: COMIC_FONT, letterSpacing: "0.06em", background: colors.BLUE, color: colors.ON_LOUD, borderColor: colors.LINE }}
           >
             {responded ? "Thanks!" : "How was it?"}
           </p>
-          <h2 className="mt-2 text-3xl uppercase leading-none sm:text-4xl" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
+          <h2 className={`${LETTERED} mt-2 text-3xl uppercase leading-none sm:text-4xl`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em" }}>
             {responded ? "Your feedback is in" : "Tell us how the Bingo went"}
           </h2>
           <p className="mt-1.5 text-sm" style={{ color: colors.INK_SUBTLE }}>

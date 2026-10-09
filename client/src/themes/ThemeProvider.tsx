@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { rememberThemeBackground, rememberedThemeBackground } from "./rememberedTheme";
 import { tokensToCssVars } from "./tokens";
+import { letteringClasses } from "./lettering";
 import { onThemeHmrUpdate, peekTheme, resolveTheme, type ResolvedTheme } from "./registry";
 import { ThemeContext } from "./context";
 import { useResolvedColorScheme } from "../core/ui/colorScheme";
@@ -54,16 +55,27 @@ export function ThemeProvider({ themeKey, children, fallback = null }: { themeKe
     if (resolved && pageColor) rememberThemeBackground(resolved.key, scheme, pageColor);
   }, [resolved, scheme, pageColor]);
 
+  // The same object for as long as the theme and scheme are: nearly every component reads this context (useSlot,
+  // useThemeTokens), so a new one on each render of the page above re-rendered the whole board, every memoised Tile
+  // included, e.g. three times over as a Tile opened (#470).
+  const value = useMemo(
+    () => (resolved && activeTokens ? { key: resolved.key, tokens: activeTokens, slots: resolved.slots, palette: resolved.palettes[scheme] } : null),
+    [resolved, activeTokens, scheme],
+  );
+  const cssVars = useMemo(() => (activeTokens ? tokensToCssVars(activeTokens) : undefined), [activeTokens]);
+  // A theme that sets a heading font names it in these variables, which letters the page (lettering.ts).
+  const lettering = useMemo(() => letteringClasses(cssVars) || undefined, [cssVars]);
+
   // Still loading: paint the wait in the colour this theme's page had last time, so a
   // reload goes straight from that colour to the finished page rather than default
   // colour -> themed colour.
-  if (!resolved || !activeTokens) {
+  if (!resolved || !value) {
     const waitingColor = rememberedThemeBackground(themeKey, scheme);
     return <div style={{ minHeight: "100dvh", backgroundColor: waitingColor ?? undefined }}>{fallback}</div>;
   }
   return (
-    <ThemeContext.Provider value={{ key: resolved.key, tokens: activeTokens, slots: resolved.slots, palette: resolved.palettes[scheme] }}>
-      <div data-theme={resolved.key} style={tokensToCssVars(activeTokens)}>
+    <ThemeContext.Provider value={value}>
+      <div data-theme={resolved.key} className={lettering} style={cssVars}>
         {children}
       </div>
     </ThemeContext.Provider>

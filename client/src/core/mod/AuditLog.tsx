@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AuditCategory, AuditEntry } from "@bingo/shared";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { AuditCategory, AuditDetailsMap, AuditEntry, BoardDiff } from "@bingo/shared";
 import { useAuditLog, useBingo } from "../../api/queries";
 import { actorFilter, useAuditFilters } from "./auditFilters";
 import { displayName } from "../ui/user";
@@ -16,6 +16,7 @@ import { isRangeSet } from "../ui/timeRange";
 import { toCsv } from "../ui/csv";
 import { TableSearchInput } from "../ui/tableSearch";
 import { TooltipSpan } from "../ui/Tooltip";
+import { BoardDiffView } from "../admin/BoardDiffView";
 
 // Shared with SiteAuditLog.tsx — bug_report entries are bingo-scoped when
 // reported from a bingo's own pages, so this filter is meaningful in both.
@@ -82,6 +83,10 @@ const isFieldDiff = (v: unknown): v is FieldDiff => {
 // as a plain key/value line, or a list when it's a list of text. A `changes`
 // that isn't a before/after pair (an older Cut review entry's list) is just
 // another key.
+function isPointsBeforeAfter(v: unknown): v is { teamName: string; before: number; after: number }[] {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => !!x && typeof x === "object" && typeof x.teamName === "string" && typeof x.before === "number" && typeof x.after === "number");
+}
+
 export function DetailsView({ details }: { details: unknown }) {
   if (!details || typeof details !== "object") return null;
   const { changes: rawChanges, ...others } = details as { changes?: unknown };
@@ -111,7 +116,19 @@ export function DetailsView({ details }: { details: unknown }) {
         </div>
       )}
       {Object.entries(rest).map(([k, v]) =>
-        Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") ? (
+        isPointsBeforeAfter(v) ? (
+          // A Publish's (board.published) Teams: each one's points before and after.
+          <div key={k} className="text-on-surface-muted">
+            <span className="text-on-surface-subtle">{k}:</span>
+            <ul className="ml-4 list-disc">
+              {v.map((t, i) => (
+                <li key={i}>
+                  {t.teamName}: <span className="num">{t.before}</span> → <span className="num">{t.after}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string") ? (
           <div key={k} className="text-on-surface-muted">
             <span className="text-on-surface-subtle">{k}:</span>
             <ul className="ml-4 list-disc">
@@ -125,6 +142,67 @@ export function DetailsView({ details }: { details: unknown }) {
             <span className="text-on-surface-subtle">{k}:</span> {typeof v === "object" ? JSON.stringify(v) : String(v)}
           </div>
         ),
+      )}
+    </div>
+  );
+}
+
+// A Board published entry from before it kept the diff, or one too big to keep, has none: its summary stands alone.
+function hasBoardDiff(details: unknown): details is AuditDetailsMap["board.published"] & { diff: BoardDiff } {
+  const diff = (details as { diff?: Partial<BoardDiff> } | null)?.diff;
+  return !!diff && Array.isArray(diff.tiles) && Array.isArray(diff.lines) && Array.isArray(diff.categories);
+}
+
+/** An entry's details, expanded. A Board published entry also shows everything that Publish changed, as its Publish screen did. */
+export function EntryDetails({ entry }: { entry: AuditEntry }) {
+  if (entry.action !== "board.published" || !hasBoardDiff(entry.details)) return <DetailsView details={entry.details} />;
+  const { diff, ...rest } = entry.details;
+  return (
+    <div className="space-y-3">
+      <DetailsView details={rest} />
+      <div className="text-xs">
+        <div className="mb-1 font-medium text-on-surface-subtle">What changed</div>
+        <BoardDiffView diff={diff} />
+      </div>
+    </div>
+  );
+}
+
+/** The entries of an audit log, one ruled list. */
+export function AuditEntryList({ children }: { children: ReactNode }) {
+  return <Card className="divide-y divide-outline overflow-hidden">{children}</Card>;
+}
+
+/**
+ * One entry of an audit log, on one line: what happened, where (its Team, or its Bingo in the site-wide log), who
+ * and when. Clicking it opens its details; the label wraps then, instead of being cut short.
+ */
+export function AuditEntryRow({ entry, context, actor, expanded, onToggle }: { entry: AuditEntry; context?: string | null; actor: ReactNode; expanded: boolean; onToggle: () => void }) {
+  return (
+    <div>
+      <div className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 transition-colors hover:bg-surface-hover sm:flex-nowrap" onClick={onToggle}>
+        <span className="shrink-0 sm:w-40">
+          <AuditActionBadge action={entry.action} />
+        </span>
+        <p className={`min-w-0 flex-1 text-sm text-on-surface ${expanded ? "" : "sm:truncate"}`} title={entry.label}>
+          {entry.label}
+        </p>
+        <span className="flex shrink-0 items-center gap-2 text-xs text-on-surface-subtle">
+          {context && <span>{context}</span>}
+          {context && <span aria-hidden>·</span>}
+          <span>
+            {actor} · {entry.actorRole}
+          </span>
+          <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="w-16 text-right">
+            {timeAgo(entry.at)}
+          </TooltipSpan>
+          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+        </span>
+      </div>
+      {expanded && (
+        <div className="border-t border-outline bg-background px-4 py-3">
+          <EntryDetails entry={entry} />
+        </div>
       )}
     </div>
   );
@@ -219,36 +297,18 @@ export function AuditLog({ slug }: { slug: string }) {
         </EmptyState>
       ) : (
         <div className="space-y-2">
-          {entries.map((entry) => {
-            const isExpanded = expandedId === entry.id;
-            return (
-              <Card key={entry.id} className="overflow-hidden">
-                <div className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-hover" onClick={() => setExpandedId(isExpanded ? null : entry.id)}>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                      <AuditActionBadge action={entry.action} />
-                      {entry.team && <span className="text-xs text-on-surface-subtle">{entry.team.name}</span>}
-                    </div>
-                    <p className="text-sm text-on-surface">{entry.label}</p>
-                    <p className="mt-0.5 text-xs text-on-surface-subtle">
-                      {entry.actor ? <PlayerName userId={entry.actor.id}>{displayName(entry.actor)}</PlayerName> : entry.actorType} · {entry.actorRole}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <TooltipSpan text={new Date(entry.at).toLocaleString()} label={timeAgo(entry.at)} className="text-xs text-on-surface-subtle">
-                      {timeAgo(entry.at)}
-                    </TooltipSpan>
-                    <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div className="border-t border-outline bg-background px-4 py-3">
-                    <DetailsView details={entry.details} />
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+          <AuditEntryList>
+            {entries.map((entry) => (
+              <AuditEntryRow
+                key={entry.id}
+                entry={entry}
+                context={entry.team?.name}
+                actor={entry.actor ? <PlayerName userId={entry.actor.id}>{displayName(entry.actor)}</PlayerName> : entry.actorType}
+                expanded={expandedId === entry.id}
+                onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+              />
+            ))}
+          </AuditEntryList>
 
           {hasNextPage && (
             <div className="flex justify-center pt-2">

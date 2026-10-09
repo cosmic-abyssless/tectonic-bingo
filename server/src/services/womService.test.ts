@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { WomClient, parseSnapshots, parseWomSummary } from "./womService";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { log } from "../log";
+import { WomClient, parseSnapshots, parseWomAccount, parseWomSummary } from "./womService";
 
 function mockFetch(responses: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>) {
   return vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -13,6 +14,8 @@ function mockFetch(responses: Record<string, { status?: number; body?: unknown; 
 }
 
 const playerBody = (ehb: number, type: string) => ({ ehb, type });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("WomClient.getPlayerByUsername", () => {
   it("sends a User-Agent header and returns the raw player object", async () => {
@@ -51,6 +54,18 @@ describe("WomClient.getPlayerByUsername", () => {
     expect(await client.getPlayerByUsername("Nobody")).toBeNull();
   });
 
+  it("reports a non-2xx other than a 404 to Sentry (log.error with an error), and never the 404", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    expect(await new WomClient(mockFetch({ "/players/Nobody": { status: 404 } })).getPlayerByUsername("Nobody")).toBeNull();
+    expect(error).not.toHaveBeenCalled();
+
+    expect(await new WomClient(mockFetch({ "/players/Zezima": { status: 500 } })).getPlayerByUsername("Zezima")).toBeNull();
+    expect(error).toHaveBeenCalledWith("wom request failed", expect.objectContaining({ status: 500, err: expect.any(Error) }));
+
+    expect(await new WomClient(mockFetch({ "/players/Zezima": { status: 429, headers: { "retry-after": "30" } } })).getPlayerByUsername("Zezima")).toBeNull();
+    expect(error).toHaveBeenCalledWith("wom rate limited", expect.objectContaining({ err: expect.any(Error) }));
+  });
+
   it("returns null on a network failure instead of throwing", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
@@ -84,6 +99,35 @@ describe("WomClient.getPlayerByUsername", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("WomClient.lookupPlayer / lookupPlayerById", () => {
+  it("tells an account WOM doesn't track (404) apart from WOM being unreachable or rate-limited", async () => {
+    const found = new WomClient(mockFetch({ "/players/Bob": { body: { id: 200, username: "bob", displayName: "Bob" } } }));
+    expect(await found.lookupPlayer("Bob")).toEqual({ status: "found", player: { id: 200, username: "bob", displayName: "Bob" } });
+    expect(await new WomClient(mockFetch({ "/players/Nobody": { status: 404 } })).lookupPlayer("Nobody")).toEqual({ status: "not_found" });
+    expect(await new WomClient(mockFetch({ "/players/Bob": { status: 502 } })).lookupPlayer("Bob")).toEqual({ status: "unavailable" });
+    const down = new WomClient(vi.fn(async () => { throw new Error("ECONNREFUSED"); }) as unknown as typeof fetch);
+    expect(await down.lookupPlayer("Bob")).toEqual({ status: "unavailable" });
+    const limited = new WomClient(mockFetch({ "/players/Bob": { status: 429, headers: { "retry-after": "30" } } }));
+    expect(await limited.lookupPlayer("Bob")).toEqual({ status: "unavailable" });
+    expect(await limited.lookupPlayer("Bob")).toEqual({ status: "unavailable" });
+  });
+
+  it("looks an account up by its WOM id", async () => {
+    const fetchImpl = mockFetch({ "/players/id/200": { body: { id: 200, username: "bob renamed", displayName: "Bob Renamed" } } });
+    const result = await new WomClient(fetchImpl).lookupPlayerById("200");
+    expect(String((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0])).toBe("https://api.wiseoldman.net/v2/players/id/200");
+    expect(result.status === "found" && parseWomAccount(result.player)).toEqual({ womId: "200", displayName: "Bob Renamed" });
+  });
+});
+
+describe("parseWomAccount", () => {
+  it("reads the WOM id and display name, falling back to the username, and rejects anything else", () => {
+    expect(parseWomAccount({ id: 5, username: "bob" })).toEqual({ womId: "5", displayName: "bob" });
+    expect(parseWomAccount({ username: "bob" })).toBeNull();
+    expect(parseWomAccount(null)).toBeNull();
   });
 });
 

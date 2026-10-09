@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LUCK_WEIGHTS, TITLES, titleMinimum, type LuckWeights, type TitleDefinition, type TitleId, type TitleSettings } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { adminQueryKeys, useTitleSettings } from "../../api/adminQueries";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
-import { Field, Input } from "../ui/Field";
+import { Input } from "../ui/Field";
 import { Switch } from "../ui/Switch";
 
 // The luck Titles' floor lives in the luck weights: shown on their own row, as "1 in N".
@@ -51,61 +51,72 @@ function settingsOf(draft: Draft): TitleSettings | string {
   return { minimums, disabled: TITLES.filter((t) => !draft.enabled[t.id]).map((t) => t.id), luck };
 }
 
+// One number of a Title's row, its label beside it and its default after it, so a row stays one line tall.
+function NumberSetting({ label, fallback, unit, ...input }: { label: string; fallback: string; unit?: string } & Omit<ComponentProps<typeof Input>, "type" | "size">) {
+  return (
+    <label className="flex items-center gap-2 text-xs whitespace-nowrap">
+      <span className="text-on-surface-muted">{label}</span>
+      <span className="w-20">
+        <Input type="number" inputMode="decimal" size="sm" {...input} />
+      </span>
+      <span className="text-on-surface-subtle">
+        {unit && `${unit} · `}Default {fallback}
+      </span>
+    </label>
+  );
+}
+
 function TitleRow({ title, draft, setDraft }: { title: TitleDefinition; draft: Draft; setDraft: (update: (d: Draft) => Draft) => void }) {
   const floor = FLOOR_OF[title.id];
   const enabled = draft.enabled[title.id]!;
   return (
-    <li className="flex flex-wrap items-end gap-x-6 gap-y-3 px-4 py-3">
-      <div className="min-w-48 flex-1 space-y-1">
+    <li className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2">
+      <div className="flex min-w-60 flex-1 items-baseline gap-3">
         <Switch isSelected={enabled} onChange={(on) => setDraft((d) => ({ ...d, enabled: { ...d.enabled, [title.id]: on } }))}>
           <span className="font-semibold text-on-surface">{title.name}</span>
           {title.hidden && <span className="text-xs text-on-surface-subtle">hidden</span>}
         </Switch>
-        <p className="text-xs text-on-surface-muted italic">{title.flavour}</p>
+        <span className="min-w-0 truncate text-xs text-on-surface-muted italic" title={title.flavour}>
+          {title.flavour}
+        </span>
       </div>
-      {title.minimum && (
-        <Field label={title.minimum.label} hint={`Default ${title.minimum.default}`} className="w-44">
-          <Input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step={title.minimum.whole ? 1 : "any"}
-            size="sm"
-            disabled={!enabled}
-            value={draft.minimums[title.id]}
-            onChange={(e) => setDraft((d) => ({ ...d, minimums: { ...d.minimums, [title.id]: e.target.value } }))}
-          />
-        </Field>
-      )}
-      {floor && (
-        <Field label={title.id === "clutch" ? "Drop's luck, at least 1 in" : "Luck, at least 1 in"} hint={`Default 1 in ${oneInN(DEFAULT_LUCK_WEIGHTS[floor])}`} className="w-44">
-          <Input
-            type="number"
-            inputMode="decimal"
+      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
+        {floor && (
+          <NumberSetting
+            label={title.id === "clutch" ? "Drop's luck, at least 1 in" : "Luck, at least 1 in"}
+            fallback={`1 in ${oneInN(DEFAULT_LUCK_WEIGHTS[floor])}`}
             min={1}
             step="any"
-            size="sm"
             disabled={!enabled}
             value={draft.floors[floor]}
             onChange={(e) => setDraft((d) => ({ ...d, floors: { ...d.floors, [floor]: e.target.value } }))}
           />
-        </Field>
-      )}
-      {title.id === "spoon" && (
-        <Field label="Each further drop counts" hint={`Of the one before. Default ${DEFAULT_LUCK_WEIGHTS.spoonDecay}`} className="w-44">
-          <Input
-            type="number"
-            inputMode="decimal"
+        )}
+        {title.id === "spoon" && (
+          <NumberSetting
+            label="Each further drop counts"
+            unit="of the one before"
+            fallback={String(DEFAULT_LUCK_WEIGHTS.spoonDecay)}
             min={0}
             max={0.95}
             step={0.05}
-            size="sm"
             disabled={!enabled}
             value={draft.spoonDecay}
             onChange={(e) => setDraft((d) => ({ ...d, spoonDecay: e.target.value }))}
           />
-        </Field>
-      )}
+        )}
+        {title.minimum && (
+          <NumberSetting
+            label={title.minimum.label}
+            fallback={String(title.minimum.default)}
+            min={0}
+            step={title.minimum.whole ? 1 : "any"}
+            disabled={!enabled}
+            value={draft.minimums[title.id]}
+            onChange={(e) => setDraft((d) => ({ ...d, minimums: { ...d.minimums, [title.id]: e.target.value } }))}
+          />
+        )}
+      </div>
     </li>
   );
 }

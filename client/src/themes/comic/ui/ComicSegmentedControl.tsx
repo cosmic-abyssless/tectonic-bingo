@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { COMIC_FONT } from "../font";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 export type ComicSegment<K extends string> = { id: K; label: ReactNode | ((picked: boolean) => ReactNode) };
 
@@ -30,7 +31,7 @@ export function ComicSegmentedControl<K extends string>({
             type="button"
             onClick={() => onChange(option.id)}
             aria-pressed={picked}
-            className="comic-press flex min-w-24 flex-1 items-center justify-center gap-2 border-[3px] px-3 py-1.5 text-lg uppercase leading-none tracking-wide"
+            className={`${LETTERED} comic-press flex min-w-24 flex-1 items-center justify-center gap-2 border-[3px] px-3 py-1.5 text-lg uppercase leading-none tracking-wide`}
             style={{
               fontFamily: COMIC_FONT,
               borderColor: colors.LINE,

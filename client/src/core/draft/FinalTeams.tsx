@@ -2,14 +2,14 @@ import type { CSSProperties } from "react";
 import type { DraftPick, DraftTeam } from "@bingo/shared";
 import { CaptainEmblem } from "../ui/CaptainEmblem";
 import { LinkIcon } from "../ui/icons";
-import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { inkOn } from "./teamColor";
-import { groupByPick } from "./TeamRoster";
+import { RosterName, currentRosterPicks, groupByPick, type RosterPick } from "./TeamRoster";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
-function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPick[]; mine: boolean }) {
+function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: RosterPick[]; mine: boolean }) {
   const color = team.color ?? "var(--color-accent)";
   const ink = team.color ? inkOn(team.color) : "var(--color-on-accent)";
   const captains = [
@@ -24,7 +24,7 @@ function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPic
     >
       <header className="px-3 py-2.5" style={{ backgroundColor: color, color: ink }}>
         <div className="flex items-center justify-between gap-2">
-          <h4 className="truncate text-lg font-bold leading-tight" style={HEADING_FONT}>
+          <h4 className={`${HEADING_LETTERED} truncate text-lg font-bold leading-tight`} style={HEADING_FONT}>
             {team.name}
           </h4>
           {mine && <span className="shrink-0 rounded-full bg-black/25 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">Your team</span>}
@@ -48,25 +48,28 @@ function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPic
               <div className="relative rounded-md border-2 px-2.5 py-1 text-sm text-on-surface" style={{ borderColor: color }}>
                 {group.map((p, i) => (
                   <div key={p.id} className="truncate">
-                    <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
+                    <RosterName pick={p} />
                     {i < group.length - 1 && <LinkIcon size={12} className="ml-1.5 inline text-on-surface-subtle" aria-label="paired with" />}
                   </div>
                 ))}
               </div>
             ) : (
               <div className="truncate rounded-md border border-outline px-2.5 py-1 text-sm text-on-surface">
-                <PlayerName userId={group[0].userId}>{group[0].rsn || displayName(group[0].user)}</PlayerName>
+                <RosterName pick={group[0]} />
               </div>
             )}
           </li>
         ))}
-        {picks.length === 0 && <li className="text-sm text-on-surface-subtle">No players drafted.</li>}
+        {picks.length === 0 && <li className="text-sm text-on-surface-subtle">No players yet.</li>}
       </ul>
     </article>
   );
 }
 
-/** The finished draft: one card per team — captains up top, Duo pairs linked, the viewer's own team framed. */
+/**
+ * The finished draft: one card per team — captains up top, Duo pairs linked, the viewer's own team framed. Each Team as
+ * it is now: a Late signup added since shows, a Player removed is struck through (currentRosterPicks).
+ */
 export function FinalTeams({ teams, picks, myUserId }: { teams: DraftTeam[]; picks: DraftPick[]; myUserId: string | null }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -74,8 +77,8 @@ export function FinalTeams({ teams, picks, myUserId }: { teams: DraftTeam[]; pic
         <FinalTeamCard
           key={team.id}
           team={team}
-          picks={picks.filter((p) => p.teamId === team.id)}
-          mine={!!myUserId && (team.captainUserId === myUserId || team.coCaptain?.userId === myUserId || picks.some((p) => p.teamId === team.id && p.userId === myUserId))}
+          picks={currentRosterPicks(team, picks)}
+          mine={!!myUserId && (team.captainUserId === myUserId || team.coCaptain?.userId === myUserId || team.members.some((m) => m.userId === myUserId))}
         />
       ))}
     </div>

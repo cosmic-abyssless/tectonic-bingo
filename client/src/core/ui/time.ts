@@ -42,6 +42,20 @@ export function formatCountdown(ms: number): string {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** "9:05" style minutes and seconds, for the last minutes of a countdown (the Bingo's start). */
+export function formatMinutesSeconds(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * "Thu, Oct 8, 8:02 PM EDT": a moment in the viewer's own time zone, named, so it reads as their local time. `timeZone`
+ * is for tests; the page always uses the browser's.
+ */
+export function formatLocalDateTime(ms: number, locale?: string, timeZone?: string): string {
+  return new Date(ms).toLocaleString(locale, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone });
+}
+
 /** "3m ago" / "2h ago" / "5d ago" — the one copy (v1 had this in three files). */
 export function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();

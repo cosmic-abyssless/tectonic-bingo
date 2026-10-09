@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { COMIC_FONT } from "../font";
 import { useComic } from "./useComic";
+import { LETTERED } from "../../lettering";
 
 /** Jagged starburst polygon (viewBox 0 0 100 100). Deterministic so it renders identically everywhere. */
 export function burstPoints(spikes = 14, inner = 34, outer = 50, seed = 3): string {
@@ -58,7 +59,7 @@ export function Burst({
         <polygon points={burstPoints(spikes, 34, 50, 5)} fill={fill ?? colors.YELLOW} stroke={colors.LINE} strokeWidth={3} strokeLinejoin="round" />
       </svg>
       <div
-        className={`absolute inset-0 flex items-center justify-center text-center uppercase leading-none ${textClassName ?? ""}`}
+        className={`${LETTERED} absolute inset-0 flex items-center justify-center text-center uppercase leading-none ${textClassName ?? ""}`}
         style={{ fontFamily: COMIC_FONT, color: color ?? colors.INK, fontSize: "24cqw", letterSpacing: "0.02em", WebkitTextStroke: color === colors.ON_LOUD ? `0.6px ${colors.LINE}` : undefined }}
       >
         {children}

@@ -5,6 +5,7 @@ import type { ComicColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { CaptionBox } from "../ui/CaptionBox";
 import { comicVars, useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 // The pieces the comic signup stage is drawn with: sheets on the palette's own paper (charcoal in the dark palettes),
 // like the draft room's panels, with the fields, stats and lists right on them in the same palette.
@@ -45,7 +46,7 @@ function StepRoundel({ step }: { step: number }) {
   return (
     <span
       aria-hidden
-      className="flex size-10 shrink-0 items-center justify-center rounded-full border-[3px] text-2xl leading-none"
+      className={`${LETTERED} flex size-10 shrink-0 items-center justify-center rounded-full border-[3px] text-2xl leading-none`}
       style={{ fontFamily: COMIC_FONT, background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}`, transform: "rotate(-8deg)" }}
     >
       {step}
@@ -59,7 +60,7 @@ function SheetTitle({ step, title, description }: { step?: number; title: ReactN
     <>
       {step !== undefined && <StepRoundel step={step} />}
       <div className="min-w-0 flex-1">
-        <span className="block text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+        <span className={`${LETTERED} block text-2xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
           {title}
         </span>
         {description && (
@@ -181,7 +182,7 @@ export function TabLegend({ children }: { children: ReactNode }) {
   const { colors } = useComic();
   return (
     <legend
-      className="mb-2 inline-block rounded-sm border-[3px] px-2 pb-0.5 pt-px text-base uppercase leading-none tracking-wide"
+      className={`${LETTERED} mb-2 inline-block rounded-sm border-[3px] px-2 pb-0.5 pt-px text-base uppercase leading-none tracking-wide`}
       style={{ fontFamily: COMIC_FONT, borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}
     >
       {children}
@@ -194,10 +195,10 @@ export function StatBox({ label, value, note, loading }: { label: string; value:
   const { colors } = useComic();
   return (
     <div className="min-w-0 border-[3px] px-3 py-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
-      <div className="text-sm uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+      <div className={`${LETTERED} text-sm uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
         {label}
       </div>
-      <div className="mt-1 flex items-center gap-2 text-2xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+      <div className={`${LETTERED} mt-1 flex items-center gap-2 text-2xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
         {loading ? (
           <>
             <SpinnerIcon size={16} /> <span className="text-lg">Looking up…</span>
@@ -219,7 +220,7 @@ export function StatBox({ label, value, note, loading }: { label: string; value:
 export function SubHead({ children }: { children: ReactNode }) {
   const { colors } = useComic();
   return (
-    <p className="text-lg uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+    <p className={`${LETTERED} text-lg uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
       {children}
     </p>
   );

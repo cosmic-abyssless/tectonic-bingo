@@ -38,6 +38,7 @@ import { useOpenProfile } from "../tectonic/PlayerName";
 import { SignupRosterGrid, type GridContext, type RosterRow } from "./SignupRosterGrid";
 import { CutReviewModal } from "./CutReviewModal";
 import { LateSignupDialog } from "./LateSignupDialog";
+import { BORROWED_ACCOUNT_STAGES, BorrowedAccountDialog, type AccountTarget } from "./BorrowedAccountDialog";
 
 // GP totals here are buy-in multiples, always in the millions for this event — "30M GP" reads faster than
 // "30,000,000 GP". Decimals only show up if the amount isn't a clean multiple of a million.
@@ -210,6 +211,13 @@ export function SignupRoster({ slug }: { slug: string }) {
   // A Late signup (CONTEXT.md "Signup"): Admins, from Signups closed until Finished.
   const canAddLateSignup = canAdminister && (stage === "captains" || stage === "draft" || stage === "reveal" || stage === "live");
   const [addingLateSignup, setAddingLateSignup] = useState(false);
+  // Set borrowed account (CONTEXT.md "Borrowed account"): Admins, the same stages, from the Account column.
+  const canSetAccount = canAdminister && !!stage && BORROWED_ACCOUNT_STAGES.includes(stage) && !bingoData?.bingo.historical;
+  const [accountTarget, setAccountTarget] = useState<AccountTarget | null>(null);
+  const setAccount = useCallback(
+    (row: RosterRow) => setAccountTarget({ signupId: row.signup.id, userId: row.user.id, rsn: row.signup.rsn, accountBorrowed: row.signup.accountBorrowed, ownName: discordName(row.user) }),
+    [],
+  );
   // Clan standing column only when tectonic-api knows at least one player.
   const showTier = roster.some((r) => r.tectonicProfile);
   const [copied, setCopied] = useState(false);
@@ -259,6 +267,7 @@ export function SignupRoster({ slug }: { slug: string }) {
   // Losing administer_bingo while one of its dialogs is open closes it, saying why.
   useCloseOnLoss("administer_bingo", reviewingCuts, () => setReviewingCuts(false), slug);
   useCloseOnLoss("administer_bingo", addingLateSignup, () => setAddingLateSignup(false), slug);
+  useCloseOnLoss("administer_bingo", accountTarget !== null, () => setAccountTarget(null), slug);
   const pendingPairIds = useMemo(
     () => new Set(roster.flatMap((r) => (r.outgoingPairingRequest ? [r.user.discordId, r.outgoingPairingRequest.target.discordId] : []))),
     [roster],
@@ -334,8 +343,8 @@ export function SignupRoster({ slug }: { slug: string }) {
   const applyRestriction = useApplyRestriction(slug);
   const liftRestriction = useLiftRestriction(slug);
   const gridContext = useMemo<GridContext>(
-    () => ({ search, partnerRsnMap, canWithdraw, onTeam, historical, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile }),
-    [search, partnerRsnMap, canWithdraw, onTeam, historical, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile],
+    () => ({ search, partnerRsnMap, canWithdraw, onTeam, historical, canPair: stage === "planning" || stage === "signup" || stage === "captains", statsRefreshing, statsResults, currentUserId: me?.id ?? null, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile, setAccount }),
+    [search, partnerRsnMap, canWithdraw, onTeam, historical, stage, statsRefreshing, statsResults, me, markBuyin, modPair, modUnpair, withdrawSignup, refreshStats, setTimezone, applyRestriction, liftRestriction, openProfile, setAccount],
   );
 
   // ColumnPicker's own option list — every colId the grid can show except # and RSN, neither of which is
@@ -349,6 +358,7 @@ export function SignupRoster({ slug }: { slug: string }) {
       ...(showTier ? [{ id: "tier", label: "Tier" }] : []),
       { id: "signedUp", label: "Signed up" },
       { id: "status", label: "Status" },
+      ...(canSetAccount ? [{ id: "account", label: "Account" }] : []),
       { id: "caCurrent", label: "Current CA" },
       { id: "caPeak", label: "Peak CA" },
       { id: "ehb", label: "EHB" },
@@ -358,7 +368,7 @@ export function SignupRoster({ slug }: { slug: string }) {
       ...(isDuo ? [{ id: "partner", label: "Partner" }] : []),
       ...questions.map((q) => ({ id: q.id, label: q.prompt })),
     ],
-    [showTier, isDuo, questions],
+    [showTier, isDuo, questions, canSetAccount],
   );
   function handleHiddenChange(next: Set<string>) {
     if (!gridApi) return;
@@ -445,6 +455,7 @@ export function SignupRoster({ slug }: { slug: string }) {
           )}
         </div>
         {canAddLateSignup && <LateSignupDialog slug={slug} isOpen={addingLateSignup} onClose={() => setAddingLateSignup(false)} />}
+        {canSetAccount && <BorrowedAccountDialog slug={slug} target={accountTarget} onClose={() => setAccountTarget(null)} />}
 
         {roster.length === 0 ? (
           <EmptyState icon={<UsersIcon />} title="No signups yet">
@@ -487,6 +498,7 @@ export function SignupRoster({ slug }: { slug: string }) {
             questions={questions}
             isDuo={isDuo}
             showTier={showTier}
+            showAccount={canSetAccount}
             readOnly={historical}
             collectedByOptions={collectedByOptions}
             doesRowPassFilters={doesRowPassFilters}

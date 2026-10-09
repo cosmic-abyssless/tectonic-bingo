@@ -110,6 +110,15 @@ interface CacheEntry {
 
 const CACHE_TTL_MS = 60_000;
 
+// One try at tectonic-api gets this long, answer included, and a lookup gets two tries. A connection that has quietly
+// gone dead otherwise waits for ever: on 2026-10-05 tectonic-api answered a Player card's lookups in under 50 ms, the
+// answer never arrived, and the card waited until the viewer gave up a minute later (TECTONIC-SERVER-7); opened again,
+// it loaded in a second. The second try goes out on another connection.
+const TIMEOUT_MS = 5_000;
+const ATTEMPTS = 2;
+// A try slower than this is logged, so a slow tectonic-api shows in the logs before it times out.
+const SLOW_MS = 2_000;
+
 /**
  * tectonic-api couldn't be reached or returned a non-2xx. Distinct from "the
  * API answered and this user isn't in it" — callers must not treat an outage
@@ -124,10 +133,13 @@ export class TectonicUnavailableError extends Error {
 
 export class TectonicClient {
   private cache = new Map<string, CacheEntry>();
+  /** When the next insert drops expired entries: at most once per TTL, so URLs asked for once don't pile up. */
+  private nextSweepAt = 0;
 
   constructor(
     private cfg: TectonicConfig,
     private fetchImpl: FetchLike = fetch,
+    private timing: { timeoutMs: number; attempts: number } = { timeoutMs: TIMEOUT_MS, attempts: ATTEMPTS },
   ) {}
 
   // Cache is keyed by URL. 60s keeps us far under tectonic-api's global
@@ -138,21 +150,46 @@ export class TectonicClient {
     const cached = this.cache.get(url);
     if (cached && cached.expiresAt > Date.now()) return cached.value as T;
 
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey, "User-Agent": `${USER_AGENT} clan roster` } });
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      log.warn("tectonic request failed", { path, err: reason });
-      throw new TectonicUnavailableError(`GET ${path}: ${reason}`);
+    const value = await this.fetchJson<T>(url, path);
+    const now = Date.now();
+    if (now >= this.nextSweepAt) {
+      for (const [key, entry] of this.cache) if (entry.expiresAt <= now) this.cache.delete(key);
+      this.nextSweepAt = now + CACHE_TTL_MS;
     }
-    if (!res.ok) {
-      log.warn("tectonic request failed", { path, status: res.status });
-      throw new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
-    }
-    const value = (await res.json()) as T;
-    this.cache.set(url, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    this.cache.set(url, { value, expiresAt: now + CACHE_TTL_MS });
     return value;
+  }
+
+  /**
+   * One GET, answer and all, within the timeout, tried again once if it times out or the connection fails. An HTTP
+   * error is tectonic-api's answer and isn't tried again. Throws TectonicUnavailableError when no try gets an answer.
+   */
+  private async fetchJson<T>(url: string, path: string): Promise<T> {
+    const { timeoutMs, attempts } = this.timing;
+    for (let attempt = 1; ; attempt++) {
+      const started = Date.now();
+      let res: Response;
+      let value: T;
+      try {
+        res = await this.fetchImpl(url, { headers: { Authorization: this.cfg.apiKey, "User-Agent": `${USER_AGENT} clan roster` }, signal: AbortSignal.timeout(timeoutMs) });
+        if (res.ok) value = (await res.json()) as T;
+      } catch (err) {
+        const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+        const reason = timedOut ? `no answer in ${timeoutMs} ms` : err instanceof Error ? err.message : String(err);
+        log.warn("tectonic request failed", { path, err: reason, attempt, ms: Date.now() - started });
+        if (attempt < attempts) continue;
+        throw new TectonicUnavailableError(`GET ${path}: ${reason}`);
+      }
+      const ms = Date.now() - started;
+      if (!res.ok) {
+        // An answer that's an error goes to Sentry (log.error with the error): most callers carry on without the data.
+        const error = new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
+        log.error("tectonic request failed", { path, status: res.status, attempt, ms, err: error });
+        throw error;
+      }
+      if (ms > SLOW_MS) log.warn("tectonic request slow", { path, ms, attempt });
+      return value!;
+    }
   }
 
   /** Full guild roster (leaderboard ordering) with RSNs and points. */

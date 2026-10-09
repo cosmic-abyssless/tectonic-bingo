@@ -1,0 +1,1 @@
+ALTER TABLE `signups` ADD `account_borrowed` integer DEFAULT false NOT NULL;

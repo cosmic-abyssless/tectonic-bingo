@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, type CSSProperties } from "react";
 import { animate, motion, useReducedMotion, type Variants } from "motion/react";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
+import { useTileSearchHighlighted } from "../../../headless/TileSearchProvider";
 import { ClockIcon, HandIcon } from "../../../core/ui/icons";
 import { useThemeTokens } from "../../context";
 import { COMIC_FONT } from "../font";
@@ -11,6 +12,7 @@ import { sfxAt } from "../fx/SfxLayer";
 import { BACK_VIEW, bw, CLOSED_BOOK, ClosedBook, FIRST_LEAF_STAGGER } from "./ClosedBook";
 import { registerBook, useIsBookAway } from "./bookFlight";
 import { warmFullUrl } from "../../../api/imageVariants";
+import { LETTERED } from "../../lettering";
 
 /*
  * A little comic book sitting on the tile, cracked open just enough to show
@@ -93,6 +95,8 @@ export const TileCell = memo(function TileCell({
   // after clicking it, or after closing its modal with the pointer — a
   // tile you've just clicked away from shouldn't sit there lit up.
   const { isFocusVisible, focusProps } = useFocusRing();
+  // The board's search list on this Tile (TileSearchProvider); its slot (TileSearchSlot) fades it when it isn't found.
+  const searchHighlighted = useTileSearchHighlighted(tile.id) || !!isSearchHighlighted;
   const { colors } = useComic();
   const tokens = useThemeTokens();
   // While this tile's book is off in the modal, the cell's own copy hides —
@@ -126,7 +130,7 @@ export const TileCell = memo(function TileCell({
       ? `inset 0 0 0 1.5px ${stateColor}, 4px 4px 0 ${stateColor}`
       : `inset 0 0 0 1.5px ${stateColor}`
     : "none";
-  const isLifted = isFocusVisible || !!isSearchHighlighted;
+  const isLifted = isFocusVisible || searchHighlighted;
   const frozenIdx = tile.freeze.isFrozen ? 1 : 0;
   // The modal draws the cover from the full-size artwork. Start fetching it the
   // moment the tile looks about to be opened — hover, focus, press, or the
@@ -135,8 +139,8 @@ export const TileCell = memo(function TileCell({
   // however often these fire; never for the whole board up front.
   const warmCover = () => warmFullUrl(tile.imageUrl);
   useEffect(() => {
-    if (isSearchHighlighted) warmFullUrl(tile.imageUrl);
-  }, [isSearchHighlighted, tile.imageUrl]);
+    if (searchHighlighted) warmFullUrl(tile.imageUrl);
+  }, [searchHighlighted, tile.imageUrl]);
 
   return (
     <motion.button
@@ -173,9 +177,7 @@ export const TileCell = memo(function TileCell({
           "linear-gradient(to top, color-mix(in srgb, var(--tile-border) 16%, transparent), color-mix(in srgb, var(--tile-border) 5%, transparent) 55%, transparent)",
         boxShadow: outline,
       }}
-      className={`group relative aspect-square w-full cursor-pointer rounded-lg border-0 outline-none transition-[box-shadow] duration-150 [container-type:inline-size] ${
-        tile.dimmed ? "pointer-events-none opacity-20 saturate-0" : ""
-      }`}
+      className="group relative aspect-square w-full cursor-pointer rounded-lg border-0 outline-none transition-[box-shadow] duration-150 [container-type:inline-size]"
     >
       {/* The book's frame — a 2D box, sized bigger than the tile and anchored
           near the top, so the book's bottom third would naturally land past
@@ -266,7 +268,7 @@ export const TileCell = memo(function TileCell({
 
       {tile.interest.people.length > 0 && !tile.progress.allComplete && (
         <span
-          className="absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none"
+          className={`${LETTERED} absolute right-1 top-1 z-20 inline-flex items-center gap-0.5 rounded-full border-2 px-1 py-0.5 text-[9px] font-bold leading-none`}
           style={{
             background: tile.interest.mine ? colors.YELLOW : colors.PAPER_RAISED,
             color: tile.interest.mine ? colors.ON_YELLOW : colors.INK,

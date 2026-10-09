@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { GraphNode, Tile, TileCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
-import { queryKeys } from "../../api/queries";
+import { invalidateBoardDraft } from "../../api/adminQueries";
 import { Dialog, DialogHeader } from "../ui/Dialog";
 import { Button } from "../ui/Button";
 import { Notice } from "../ui/Card";
@@ -16,6 +16,7 @@ import { existingLeavesExcluding } from "./existingLeaves";
 import { collectLabeledConditions, collectSharedNodeIds } from "../board/requirementTree";
 import { thumbUrl } from "../../api/imageVariants";
 import { FileDropButton } from "../ui/FileDropButton";
+import { TagsField } from "./TagsField";
 
 // Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
 // root), labeled by which task it's under and a dot-notation index within it
@@ -72,7 +73,7 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
     setError(null);
     try {
       await action();
-      queryClient.invalidateQueries({ queryKey: queryKeys.board(slug) });
+      invalidateBoardDraft(queryClient, slug);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save");
     }
@@ -205,6 +206,9 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
                   <Input defaultValue={tile.proofNote ?? ""} maxLength={200} onBlur={(e) => patch({ proofNote: e.target.value || null })} />
                 </Field>
               )}
+              <div className="col-span-2">
+                <TagsField slug={slug} owner={{ tileId: tile.id }} locked={!!locked} hint="Words the board's search finds this tile by, e.g. kq or a common misspelling. Players never see them." />
+              </div>
             </div>
           </div>
         </fieldset>

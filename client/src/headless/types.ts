@@ -144,8 +144,15 @@ export interface TaskModel {
   interest: TaskInterestModel;
 }
 
+/** Someone with a hand up on a part: who they are and their Discord avatar. */
+export interface InterestedPerson {
+  id: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
 export interface TaskInterestModel {
-  people: { id: string; displayName: string }[];
+  people: InterestedPerson[];
   /** The viewer is one of them. */
   mine: boolean;
   /** Viewer is on the team whose board this is and the part isn't done — page.tileInterest.toggle() works. */
@@ -224,8 +231,6 @@ export interface TileModel {
   proof: ProofModel | null;
   /** groupSubmissionsByTile() output for this tile, newest first. */
   submissions: SubmissionModel[];
-  /** Search miss. */
-  dimmed: boolean;
   /** page.canSubmit && !allComplete && !isFrozen — TileModal's submitDisabled, inverted. */
   canSubmit: boolean;
   /**
@@ -234,7 +239,7 @@ export interface TileModel {
    * lives on each TaskModel.interest.
    */
   interest: {
-    people: { id: string; displayName: string }[];
+    people: InterestedPerson[];
     /** The viewer is on at least one part. */
     mine: boolean;
     /** Viewer is on the team whose board this is and the tile isn't done — some part can still be toggled. */
@@ -321,10 +326,12 @@ export interface TileSearchModel {
   results: { id: string; name: string }[];
   overflowCount: number;
   /** The result the open list is on, by keyboard or pointer (the comic board points it out); null with the list closed. */
-  highlightedId: string | null;
+  /** The row the list is on (arrow keys, hovering), for the board to light up that Tile (useTileSearchHighlighted). */
   setHighlightedId(id: string | null): void;
   choose(tileId: string): void;
   inputRef: RefObject<HTMLInputElement | null>;
+  /** Every Tile the query finds (the server answers the search, Tags included), which the board highlights too; null with no query, or before the first answer. */
+  matchIds: ReadonlySet<string> | null;
 }
 
 // Open/close belongs to the slot (a RAC MenuTrigger in the default theme).
@@ -407,7 +414,6 @@ export interface BingoPageModel {
   /** Whole team, newest first (drawer). */
   submissions: SubmissionModel[];
   teamSelector: TeamSelectorModel;
-  search: TileSearchModel;
   /** Replaces both the old openTileId state and BoardGrid's own `selected` state. While the Tiles are sealed for this viewer, open() shows a note instead. */
   openTile: { id: string | null; open(id: string): void; close(): void };
   /**
@@ -489,7 +495,13 @@ export interface SubmissionFlowModel {
       detected: { itemName: string; tileName: string } | null;
     } | null;
   };
-  tile: { selectedId: string; options: { id: string; label: string; group?: string }[]; select(id: string): void };
+  tile: {
+    selectedId: string;
+    options: { id: string; label: string; group?: string }[];
+    select(id: string): void;
+    /** Whether an option matches what's typed in the picker: as the board's search finds a Tile, by its Tags too. */
+    matches(option: { id: string }, q: string): boolean;
+  };
   task: {
     selectedId: string;
     options: { id: string; label: string }[];

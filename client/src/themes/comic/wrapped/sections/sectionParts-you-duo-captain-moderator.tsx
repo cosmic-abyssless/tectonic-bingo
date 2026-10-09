@@ -7,6 +7,7 @@ import { COMIC_FIGURES_FONT, COMIC_FONT } from "../../font";
 import { burstPoints } from "../../ui/Burst";
 import { onFill, PrintedShade, toneColors, type Tone, type ToneOrColor } from "../../ui/tones";
 import { useComic } from "../../ui/useComic";
+import { LETTERED } from "../../../lettering";
 
 // The pieces of the comic Wrapped's You, Duo, Captain and Moderator pages (#420). A page is a WrappedScene laid out at the
 // book's fixed 420px width (no viewport breakpoints), and each panel is one Reveal. Everything is drawn from the page's
@@ -51,7 +52,7 @@ export function Kicker({ children, tone = "yellow", tilt = -2, className = "" }:
   const { loud, onLoud } = toneColors(colors, tone);
   return (
     <p data-beat="rise"
-      className={`inline-block self-start border-2 px-2 pt-[3px] pb-px uppercase leading-none ${className}`}
+      className={`${LETTERED} inline-block self-start border-2 px-2 pt-[3px] pb-px uppercase leading-none ${className}`}
       style={{ fontFamily: COMIC_FONT, fontSize: 16, letterSpacing: "0.06em", background: loud, color: onLoud, borderColor: colors.LINE, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
       {children}
@@ -63,7 +64,7 @@ export function Kicker({ children, tone = "yellow", tilt = -2, className = "" }:
 export function InkTitle({ children, size = 48, tilt = 0, align = "left", as: Tag = "h2", className = "" }: { children: ReactNode; size?: number; tilt?: number; align?: "left" | "center"; as?: "h2" | "h3" | "p"; className?: string }) {
   return (
     <Tag data-beat="slam"
-      className={`comic-outline-text uppercase ${className}`}
+      className={`${LETTERED} comic-outline-text uppercase ${className}`}
       style={{
         fontFamily: COMIC_FONT,
         fontWeight: 400,
@@ -87,7 +88,7 @@ export function InkTitle({ children, size = 48, tilt = 0, align = "left", as: Ta
 export function Lettering({ children, size = 22, color, className = "", style }: { children: ReactNode; size?: number; color?: string; className?: string; style?: CSSProperties }) {
   const { colors } = useComic();
   return (
-    <span className={`uppercase leading-none ${className}`} style={{ fontFamily: COMIC_FONT, fontSize: size, letterSpacing: "0.03em", color: color ?? colors.INK, ...style }}>
+    <span className={`${LETTERED} uppercase leading-none ${className}`} style={{ fontFamily: COMIC_FONT, fontSize: size, letterSpacing: "0.03em", color: color ?? colors.INK, ...style }}>
       {children}
     </span>
   );
@@ -99,7 +100,7 @@ export function Sfx({ children, size = 34, tilt = -8, fill, className = "", styl
   return (
     <span data-beat="pop"
       aria-hidden
-      className={`pointer-events-none select-none whitespace-nowrap uppercase leading-none ${className}`}
+      className={`${LETTERED} pointer-events-none select-none whitespace-nowrap uppercase leading-none ${className}`}
       style={{
         fontFamily: COMIC_FONT,
         fontSize: size,
@@ -135,12 +136,12 @@ export function StatBurst({ value, label, size = 150, fill, tilt = -6, spikes = 
           <polygon points={points} fill={colors.SHADOW} transform="translate(3 3.5)" />
           <polygon points={points} fill={paint} stroke={colors.LINE} strokeWidth={2.5} strokeLinejoin="round" />
         </svg>
-        <div className="num absolute inset-0 flex items-center justify-center whitespace-nowrap uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: font, letterSpacing: "0.01em", color: onFill(colors, paint), paddingRight: font / 12 }}>
+        <div className={`${LETTERED} num absolute inset-0 flex items-center justify-center whitespace-nowrap uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: font, letterSpacing: "0.01em", color: onFill(colors, paint), paddingRight: font / 12 }}>
           {coins ? <Gp label={value} /> : value}
         </div>
       </div>
       {label && (
-        <p className="mt-1.5 text-center uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 17, letterSpacing: "0.05em", color: colors.INK }}>
+        <p className={`${LETTERED} mt-1.5 text-center uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 17, letterSpacing: "0.05em", color: colors.INK }}>
           {label}
         </p>
       )}
@@ -154,7 +155,7 @@ export function InkStamp({ children, color, tilt = -8, size = 22, className = ""
   const ink = color ?? colors.OK;
   return (
     <span data-beat="pop"
-      className={`inline-block max-w-full select-none text-center uppercase leading-[1.05] ${className}`}
+      className={`${LETTERED} inline-block max-w-full select-none text-center uppercase leading-[1.05] ${className}`}
       style={{
         fontFamily: COMIC_FONT,
         fontSize: size,
@@ -183,7 +184,7 @@ export function PersonChip({ person, size = 24, nameSize = 19, className = "" }:
         {person.name}
       </Lettering>
       {person.isYou && (
-        <span className="shrink-0 border-2 px-1 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 12, borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
+        <span className={`${LETTERED} shrink-0 border-2 px-1 uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 12, borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
           You
         </span>
       )}

@@ -3,7 +3,7 @@ name: generate-bingo
 description: >
   Run or change the test data generator that builds a prod-like Bingo on a
   dev-mode server, local or staging (HTTP, spoofed timestamps, seeded play),
-  started from Site admin > Test data or the generate-bingo CLI. Use when the
+  started from Site admin > Bingos > Test data or the generate-bingo CLI. Use when the
   user wants to generate a bingo, seed QA data, spin up a prod-like bingo
   (including on staging), tear down testdata, tune the generator, or edit the
   DIFFICULTY table, and when changing server/src/devTools/generateBingo/,
@@ -15,7 +15,7 @@ description: >
 A job inside the server that imports a board, signs up fake players, runs the
 draft, and plays the Bingo through the **real HTTP endpoints** (over loopback),
 with `X-Dev-Now` so the audit log reads like a real one. Started from **Site
-admin > Test data** (dev-mode servers only: local and staging) or the CLI, which
+admin > Bingos > Test data** (dev-mode servers only: local and staging) or the CLI, which
 starts the same job and follows its log. Slugs and fake Discord IDs stay prefixed
 `testdata-`. That prefix is the server's delete-guard, not the product name.
 
@@ -70,7 +70,8 @@ Hard rules (do not reopen):
 - Skip OCR per request with `X-Dev-Skip-Ocr: 1`, and the outside services with
   `X-Dev-Skip-Integrations: 1` (the request context, `audit/context.ts`), not by
   turning them off globally.
-- A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`).
+- A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`), nor to Discord (`discordTeamService.ts`)
+  except a test server given with `--discord-guild` (never `DISCORD_GUILD_ID`).
 - The generator runs inside the server (`job.ts`) and reads no repo files: keep it
   that way, or it stops working on staging.
 - All randomness goes through the seeded `Rng` in `rng.ts`.

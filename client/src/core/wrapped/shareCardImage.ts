@@ -1,10 +1,11 @@
-import { toBlob } from "html-to-image";
-
 // Wrapped's share cards as images (CONTEXT.md "Wrapped"). Made only in the viewer's browser, never on the server (the
 // old site's Wrapped overloaded its server doing that at launch): html-to-image redraws the card's own DOM onto a
 // canvas. The card's images are already data URLs (CardImage copies each one as it loads), so none is fetched again.
 // Web fonts are embedded, but only those the card uses (the comic theme's cards are lettered in Bangers): html-to-image
-// reads them from the page's stylesheets, and a card in the system font stack embeds none.
+// reads them from the page's stylesheets, and a card in the system font stack embeds none. html-to-image itself loads
+// the first time a card is drawn, not with the page.
+
+import { awaitModule } from "../chunkReload";
 
 /** A card is laid out at this size in CSS pixels and drawn at twice that: a 1080×1350 (4:5) PNG. */
 export const SHARE_CARD_WIDTH = 540;
@@ -31,7 +32,7 @@ async function settleImages(node: HTMLElement): Promise<void> {
 
 /** The card's DOM (laid out at SHARE_CARD_WIDTH × SHARE_CARD_HEIGHT) as a PNG. */
 export async function renderShareCard(node: HTMLElement): Promise<Blob> {
-  await settleImages(node);
+  const [{ toBlob }] = await Promise.all([awaitModule(import("html-to-image")), settleImages(node)]);
   const blob = await toBlob(node, {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,

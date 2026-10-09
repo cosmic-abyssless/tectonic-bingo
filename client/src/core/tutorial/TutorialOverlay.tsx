@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTutorial, type TutorialModel, type TutorialStep } from "../../headless";
 import { useSlot, useThemeTokens } from "../../themes/context";
 import { tokensToCssVars } from "../../themes/tokens";
+import { letteringClasses } from "../../themes/lettering";
 import { useIsPhone } from "../ui/useMediaQuery";
 
 // Room around the highlighted element, between it and the card, and from the window's edges.
@@ -142,9 +143,10 @@ function TutorialLayer({ tutorial, step, lastCardHeight, waitMs }: { tutorial: T
   // Inside the ☰ the card goes beside the menu: below an entry, it would cover the entries still to come.
   const cardStyle = placeCard(hole, view, phone, step.inside === "menu", step.large ? LARGE_CARD_WIDTH : CARD_WIDTH);
   const dim = "color-mix(in srgb, var(--color-scrim) 55%, transparent)";
+  const themeVars = tokensToCssVars(tokens);
 
   return (
-    <div ref={rootRef} data-react-aria-top-layer="true" className="pointer-events-none fixed inset-0 z-[100001]" style={tokensToCssVars(tokens)}>
+    <div ref={rootRef} data-react-aria-top-layer="true" className={`${letteringClasses(themeVars)} pointer-events-none fixed inset-0 z-[100001]`} style={themeVars}>
       {hole ? (
         <>
           {/* The dimming, cut around the element, and its outline. */}

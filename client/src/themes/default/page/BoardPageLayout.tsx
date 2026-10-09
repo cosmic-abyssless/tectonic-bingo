@@ -1,4 +1,6 @@
-import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel } from "../../../headless";
+import type { ComponentType } from "react";
+import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel, useTileSearchModel } from "../../../headless";
+import type { TileSearchModel } from "../../../headless/types";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
@@ -7,6 +9,11 @@ import { HistoricalBingoView } from "../../../core/historical/HistoricalBingoVie
 import { useSlot } from "../../context";
 import { ImageViewer } from "../../../core/ui/ImageViewer";
 import { ScreenshotViewerHost } from "../../../core/submissions/screenshotViewer";
+
+// The Tile search box, reading its model from TileSearchProvider itself: typing re-renders it, not this layout.
+function BoardSearch({ TileSearch }: { TileSearch: ComponentType<{ search: TileSearchModel }> }) {
+  return <TileSearch search={useTileSearchModel()} />;
+}
 
 export function BoardPageLayout() {
   const page = useBingoPage();
@@ -59,7 +66,7 @@ export function BoardPageLayout() {
             <>
               {page.canModerate && page.sealed.forPlayers && <SealedTilesNotice slug={page.slug} />}
               <div className="mb-4 flex flex-wrap justify-between gap-4">
-                <TileSearch search={page.search} />
+                <BoardSearch TileSearch={TileSearch} />
                 {page.viewing.team && <TeamBanner team={page.viewing.team} isOtherTeam={page.viewing.isOtherTeam} totalPoints={board.totalPoints} onOpenPoints={page.pointBreakdown.show} />}
               </div>
 

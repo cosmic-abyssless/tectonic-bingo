@@ -8,9 +8,11 @@
 // other two are the server's routeCoverage test and the http.mutation
 // fallback — see server/src/audit/routePolicy.ts and middleware.ts).
 import type { AchievementKey } from "./achievements.ts";
+import type { BoardDiff } from "./boardDraft.ts";
 import type { MinimalUser, Stage } from "./index.ts";
 import { playerName } from "./names.ts";
 import { describeRestrictionTarget } from "./permissions.ts";
+import type { TagKind } from "./tags.ts";
 
 export type AuditVisibility = "mods" | "team" | "public";
 export type AuditActorType = "user" | "system";
@@ -111,6 +113,11 @@ export interface AuditDetailsMap {
       womEnabled: boolean;
       womGroupId: string | null;
       womGroupVerificationCode: string;
+      discordEnabled: boolean;
+      discordCategoryName: string | null;
+      discordCategoryId: string | null;
+      discordGuildId: string | null;
+      discordChannelsJson: string;
       achievementsEnabled: boolean;
       sealedTiles: boolean;
       hideRules: boolean;
@@ -135,6 +142,12 @@ export interface AuditDetailsMap {
   "tile.updated": { changes: FieldChanges<{ name: string; boardRow: number; boardCol: number; categoryId: string | null; imageUrl: string | null; hasFreezePeriod: boolean; freezeDurationMinutes: number; notes: string | null }> };
   "tile.deleted": { name: string; boardRow: number; boardCol: number; taskCount: number };
   "tile.bonus_points_updated": { points: { before: number; after: number } };
+  /**
+   * A Tag (CONTEXT.md) added to or removed from a Tile, or from one of its Parts (`partLabel`). A Boss tag's `aliases`:
+   * how many of the wiki's names for the boss came with it, or went with it.
+   */
+  "tag.added": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
+  "tag.removed": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
 
   "task.created": { tileId: string; tileName: string; after: TaskSnapshot };
   "task.updated": { tileId: string; tileName: string; before: TaskSnapshot; after: TaskSnapshot };
@@ -143,6 +156,15 @@ export interface AuditDetailsMap {
   "line.generated": { pointsPerLine: number; replaced: number; created: { row: number; column: number; diagonal: number } };
   "line.updated": { lineType: string; lineIndex: number; points: { before: number; after: number } };
   "line.deleted": { lineType: string; lineIndex: number; points: number };
+  /**
+   * The Draft board was published (CONTEXT.md "Publish"): `summary` is one line per kind of change ("2 Tiles changed"),
+   * `removedClaims` the Claims it stopped counting, and each Team's points before and after (Points share aside).
+   * `diff`: everything it changed, as the Publish screen showed it. Absent on entries from before it was kept, and on
+   * one too big to keep (its `dropped` names it).
+   */
+  "board.published": { summary: string[]; removedClaims: number; teams: { teamId: string; teamName: string; before: number; after: number }[]; diff?: BoardDiff };
+  /** The Draft board was thrown away (CONTEXT.md "Discard"); `summary` is what it had changed. */
+  "board.discarded": { summary: string[] };
 
   // `form`: "feedback" for a Feedback question (CONTEXT.md); absent means a signup question, as every entry from before
   // Feedback questions was.
@@ -204,7 +226,9 @@ export interface AuditDetailsMap {
   "points.rescored": { delta: number };
 
   // startsAtBackfilled: only on entries written before a start date stopped being filled in by a stage change.
-  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean };
+  // automatic: the Bingo went Live by itself at its start date. startedEarly: an Admin started it ahead of its start
+  // date ("Start now"), which moved the start date (scheduledStart, ISO) to that moment.
+  "stage.changed": { from: Stage; to: Stage; startsAtBackfilled?: boolean; automatic?: boolean; startedEarly?: boolean; scheduledStart?: string };
 
   // Wrapped (CONTEXT.md): a Moderator publishing it, or publishing it again, which recomputes every Player's.
   "wrapped.published": { players: number };
@@ -267,13 +291,25 @@ export interface AuditDetailsMap {
   "signup.stats_fetch_failed": { message: string };
   /** The player's account was renamed in-game: found by its WOM id when a mod refreshed their stats. */
   "signup.name_changed": { before: string; after: string; womId: string };
+  /**
+   * An Admin set a Signup on a Borrowed account (CONTEXT.md "Signup"), or back on the Player's own (`borrowed` false).
+   * `player`: their Discord name then, since inside the Bingo they're named by whichever account they're on.
+   */
+  "signup.account_borrowed": { before: string; after: string; borrowed: boolean; womId: string | null; reason: string; player: string };
 
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
-  "wom.roster_synced": { changed?: ("title" | "startsAt" | "endsAt" | "teams")[] };
+  "wom.roster_synced": { changed?: ("title" | "metric" | "startsAt" | "endsAt" | "teams")[] };
   /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
   "wom.participants_updated": { competitionId: number };
   "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
+
+  /** The Discord team sync (discordTeamService.ts) changed something: labels of what it made, edited or deleted. */
+  "discord.synced": { created: string[]; updated: string[]; deleted: string[]; membersAdded: number; membersRemoved: number };
+  /** Recorded once per distinct failure (a broken setup would otherwise add one per change). */
+  "discord.sync_failed": { message: string };
+  /** An Admin removed every Discord role and channel the sync made for the Bingo. */
+  "discord.removed": { deleted: number };
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
@@ -355,6 +391,10 @@ const actor = (i: { actorName: string | null }) => i.actorName ?? "Someone";
 const settingValue = (v: unknown) => (v === true ? "on" : v === false ? "off" : String(v));
 // ` on "Pets"`, or nothing when the tile's name isn't there.
 const onTile = (preposition: string, tileName: string | undefined) => (tileName ? ` ${preposition} "${tileName}"` : "");
+// `the boss tag "Abyssal Sire" (and 112 of its names)`, `the tag "kq"`; and what it's on: `Part A on "Vorkath"`.
+const describeTag = (d: { kind: TagKind; text: string; aliases?: number }) =>
+  d.kind === "boss" ? `the boss tag "${d.text}"${d.aliases ? ` (and ${d.aliases} of its names)` : ""}` : `the tag "${d.text}"`;
+const tagOwner = (d: { tileName: string; partLabel?: string | null }) => (d.partLabel ? `${d.partLabel} on "${d.tileName}"` : `"${d.tileName}"`);
 /** "feedback" or "signup": which form a question audit entry is about (absent: signup, as before Feedback questions). */
 const formWord = (d: { form?: "feedback" }) => (d.form === "feedback" ? "feedback" : "signup");
 const onBehalf = (i: { onBehalfOfName: string | null }) => (i.onBehalfOfName ? ` (on behalf of ${i.onBehalfOfName})` : "");
@@ -608,12 +648,28 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
         ? `${actor(i)} set "${i.entityLabel ?? ""}"'s full-completion bonus to ${i.details.points.after} pts`
         : `${actor(i)} removed "${i.entityLabel ?? ""}"'s full-completion bonus`,
   },
+  "tag.added": { category: "board", tone: "ok", visibility: "mods", title: "Tag added", label: (i) => `${actor(i)} added ${describeTag(i.details)} to ${tagOwner(i.details)}` },
+  "tag.removed": { category: "board", tone: "danger", visibility: "mods", title: "Tag removed", label: (i) => `${actor(i)} removed ${describeTag(i.details)} from ${tagOwner(i.details)}` },
   // The tile's name can be missing: entries whose details went over the size cap before it kept the small fields.
   "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task${onTile("to", i.details.tileName)}` },
   "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task${onTile("on", i.details.tileName)}` },
   "task.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Task deleted", label: (i) => `${actor(i)} deleted a task${onTile("from", i.details.tileName)}` },
   "line.generated": { category: "board", tone: "neutral", visibility: "mods", title: "Lines generated", label: (i) => `${actor(i)} regenerated bingo lines (${i.details.pointsPerLine} pts each)` },
   "line.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Line updated", label: (i) => `${actor(i)} changed ${i.details.lineType} ${i.details.lineIndex + 1}'s points to ${i.details.points.after}` },
+  "board.published": {
+    category: "board",
+    tone: "ok",
+    visibility: "mods",
+    title: "Board published",
+    label: (i) => `${actor(i)} published the board (${i.details.summary.join(", ")})`,
+  },
+  "board.discarded": {
+    category: "board",
+    tone: "danger",
+    visibility: "mods",
+    title: "Board discarded",
+    label: (i) => `${actor(i)} discarded the unpublished board changes (${i.details.summary.join(", ")})`,
+  },
   "line.deleted": { category: "board", tone: "danger", visibility: "mods", title: "Line deleted", label: (i) => `${actor(i)} deleted ${i.details.lineType} ${i.details.lineIndex + 1}` },
   "question.created": { category: "signup", tone: "ok", visibility: "mods", title: "Question added", label: (i) => `${actor(i)} added the ${formWord(i.details)} question "${i.details.prompt}"` },
   "question.updated": { category: "signup", tone: "neutral", visibility: "mods", title: "Question updated", label: (i) => `${actor(i)} updated the ${formWord(i.details)} question "${i.entityLabel ?? ""}"` },
@@ -768,7 +824,12 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "info",
     visibility: "public",
     title: "Stage changed",
-    label: (i) => `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
+    label: (i) =>
+      i.details.automatic
+        ? "The bingo went live at its start date"
+        : i.details.startedEarly
+          ? `${actor(i)} started the bingo early from ${i.details.from}, moving its start date to now`
+          : `${actor(i)} advanced the bingo from ${i.details.from} to ${i.details.to}`,
   },
   "wrapped.published": {
     category: "bingo",
@@ -940,6 +1001,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Name change",
     label: (i) => `${i.details.before} changed their name to ${i.details.after}`,
   },
+  "signup.account_borrowed": {
+    category: "signup",
+    tone: "info",
+    visibility: "mods",
+    title: "Borrowed account",
+    label: (i) =>
+      i.details.borrowed
+        ? `${actor(i)} put ${i.details.player} on the borrowed account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`
+        : `${actor(i)} put ${i.details.player} back on their own account ${i.details.after} (was ${i.details.before}): "${i.details.reason}"`,
+  },
   "wom.competition_created": { category: "system", tone: "ok", visibility: "mods", title: "WOM competition created", label: () => "Created the Wise Old Man competition" },
   "wom.roster_synced": {
     category: "system",
@@ -947,7 +1018,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "WOM competition synced",
     label: (i) => {
-      const what = { title: "name", startsAt: "start date", endsAt: "end date", teams: "teams" } as const;
+      const what = { title: "name", metric: "metric (to EHB)", startsAt: "start date", endsAt: "end date", teams: "teams" } as const;
       return i.details.changed?.length
         ? `Updated the Wise Old Man competition's ${joinList(i.details.changed.map((c) => what[c]))}`
         : "Synced the Wise Old Man competition roster";
@@ -961,6 +1032,25 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: () => "Asked Wise Old Man to update every player in the competition",
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
+  "discord.synced": {
+    category: "system",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Discord synced",
+    label: (i) => {
+      const d = i.details;
+      const parts = [
+        d.created.length ? `created ${joinList(d.created)}` : null,
+        d.updated.length ? `updated ${joinList(d.updated)}` : null,
+        d.deleted.length ? `deleted ${joinList(d.deleted)}` : null,
+        d.membersAdded ? `gave ${d.membersAdded} ${d.membersAdded === 1 ? "player" : "players"} their team role` : null,
+        d.membersRemoved ? `took the team role from ${d.membersRemoved} ${d.membersRemoved === 1 ? "player" : "players"}` : null,
+      ].filter((p): p is string => !!p);
+      return parts.length ? `Discord: ${parts.join("; ")}` : "Synced the teams to Discord";
+    },
+  },
+  "discord.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "Discord sync failed", label: (i) => `Discord sync failed: ${i.details.message}` },
+  "discord.removed": { category: "system", tone: "warn", visibility: "mods", title: "Discord removed", label: (i) => `Removed ${i.details.deleted} Discord roles and channels` },
   "mcp.tool_called": {
     category: "system",
     tone: "neutral",

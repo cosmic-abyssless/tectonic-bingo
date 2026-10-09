@@ -98,6 +98,14 @@ describe("a Captain renaming their Team", () => {
     expect(body.team?.name).toBe("Revealed");
   });
 
+  it("is refused past 30 characters, Wise Old Man's limit for a competition team name", async () => {
+    setStage("reveal");
+    expect(await rename(captain, `/teams/${team.id}`, "Monster whites & Finnish nights")).toEqual({ status: 400, body: { error: "Team names are at most 30 characters" } });
+    const { status, body } = await rename(captain, `/teams/${team.id}`, "  Monster whites & Finnish nite  ");
+    expect(status).toBe(200);
+    expect(body.team?.name).toBe("Monster whites & Finnish nite");
+  });
+
   it("is refused once the Bingo is Live", async () => {
     for (const stage of ["live", "complete"] as const) {
       setStage(stage);
@@ -107,6 +115,11 @@ describe("a Captain renaming their Team", () => {
 });
 
 describe("an Admin renaming a Team from the mod panel", () => {
+  it("is refused past 30 characters too", async () => {
+    setStage("live");
+    expect(await rename(admin, `/admin/teams/${team.id}`, "x".repeat(31))).toEqual({ status: 400, body: { error: "Team names are at most 30 characters" } });
+  });
+
   it.each(["draft", "reveal", "live"] as const)("works during %s", async (stage) => {
     setStage(stage);
     const { status, body } = await rename(admin, `/admin/teams/${team.id}`, `Fixed in ${stage}`);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Stage } from "@bingo/shared";
+import { TEAM_NAME_MAX, type Stage } from "@bingo/shared";
 import { useRenameTeam } from "../../../api/queries";
 import { useTeamActivityModel } from "../../../headless/useTeamActivity";
 import type { TeamModel } from "../../../headless/types";
@@ -13,6 +13,7 @@ import { ComicButton } from "../ui/ComicButton";
 import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
 import { ComicField } from "../submission/ComicField";
+import { LETTERED } from "../../lettering";
 
 /** The team roster and recent activity, plus the captain's rename field. */
 export function TeamInfoDialog({ slug, team, stage, onClose }: { slug: string; team: TeamModel | null; stage: Stage; onClose: () => void }) {
@@ -29,6 +30,8 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
   const [name, setName] = useState(team.name);
   const trimmed = name.trim();
   const dirty = trimmed !== team.name;
+  // A Team named before the cap can be over it; it can't be saved until it's back under.
+  const tooLong = trimmed.length > TEAM_NAME_MAX;
   const { entries: activity } = useTeamActivityModel(slug, team.id);
 
   return (
@@ -46,13 +49,23 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
             className="flex items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (team.rename?.allowed && dirty && trimmed) rename.mutate({ teamId: team.id, name: trimmed });
+              if (team.rename?.allowed && dirty && trimmed && !tooLong) rename.mutate({ teamId: team.id, name: trimmed });
             }}
           >
-            <ComicField label="Team name" className="flex-1">
-              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!team.rename.allowed} />
+            <ComicField
+              label={
+                <>
+                  Team name ·{" "}
+                  <span className="num" style={tooLong ? { color: colors.RED } : undefined}>
+                    {trimmed.length}/{TEAM_NAME_MAX}
+                  </span>
+                </>
+              }
+              className="flex-1"
+            >
+              <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={TEAM_NAME_MAX} disabled={!team.rename.allowed} />
             </ComicField>
-            <ComicButton type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || rename.isPending}>
+            <ComicButton type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || tooLong || rename.isPending}>
               {rename.isPending ? "Saving…" : "Rename"}
             </ComicButton>
           </form>
@@ -83,7 +96,7 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
             >
               <img src={member.avatarUrl} alt="" className="size-9 shrink-0 border-[2px] object-cover" style={{ borderColor: colors.LINE, background: colors.PAPER_ALT }} />
               <div className="min-w-0 flex-1">
-                <span className="block truncate text-lg leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+                <span className={`${LETTERED} block truncate text-lg leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
                   <PlayerName userId={member.id}>{member.displayName}</PlayerName>
                 </span>
                 <span className="text-xs" style={{ color: colors.INK_SUBTLE }}>

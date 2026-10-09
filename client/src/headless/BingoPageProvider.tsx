@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSetUrlParams } from "../core/ui/useUrlParam";
 import { STAGE_LABEL, areRulesHidden, areTilesSealed, nextMilestone, type BingoShellResponse, type BoardLine, type PointAdjustment, type SubmissionDetails, type SubmissionKind, type TeamNodeState, type Tile, type TileCategory, type TileInterest } from "@bingo/shared";
@@ -11,7 +11,8 @@ import { lockedLeaves, type ExclusiveLocks } from "../core/board/exclusivity";
 import { OPEN_PARAM, TEAM_PARAM, TILE_PARAM, resolveBoardUrl, type BoardDialog } from "./boardUrlState";
 import { useBingoCan, useCloseOnLoss } from "./permissions";
 import { canRewind as canRewindOf, canScout as canScoutOf, canViewStats as canViewStatsOf } from "./useBingoHeader";
-import { tileSearchMatcher, useTileSearch } from "./useTileSearch";
+import { TileSearchProvider } from "./TileSearchProvider";
+import { tileSearchMatcher } from "../core/board/tileSearch";
 import { toastQueue } from "../core/ui/Toast";
 import { usePageEvents } from "./usePageEvents";
 import { BoardProvider } from "./BoardProvider";
@@ -34,18 +35,23 @@ interface BingoPageRaw {
   viewerId: string;
   /** Item nodes the viewed team can't claim because it used them elsewhere (exclusive items). */
   locks: ExclusiveLocks;
+  /** Each Tile's Tags, its Parts' included, for searching the Tiles (BoardResponse.tileTags); none while sealed. */
+  tileTags: Readonly<Record<string, string[]>>;
+  /** The viewed team's progress (its Task interest among it) has arrived, from the server or the cache. */
+  progressLoaded: boolean;
 }
 
 const BingoPageContext = createContext<BingoPageModel | null>(null);
 const BingoPageRawContext = createContext<BingoPageRaw | null>(null);
 
 const EMPTY_TILES: Tile[] = [];
+const EMPTY_CATEGORIES: TileCategory[] = [];
+const NO_TILE_TAGS: Readonly<Record<string, string[]>> = {};
 const EMPTY_LINES: BoardLine[] = [];
 const EMPTY_NODE_STATES: TeamNodeState[] = [];
 const EMPTY_INTERESTS: TileInterest[] = [];
 const EMPTY_SUBMISSIONS: SubmissionDetails[] = [];
 const EMPTY_ADJUSTMENTS: PointAdjustment[] = [];
-const EMPTY_CATEGORIES: TileCategory[] = [];
 
 // Clicking a sealed tile says so, once: a click on another replaces the note instead of stacking a new one.
 let sealedNoteKey: string | null = null;
@@ -79,6 +85,11 @@ export function BingoPageProvider({
     () => (!boardData ? { tiles: EMPTY_TILES, lines: EMPTY_LINES } : boardData.sealed ? sealedBoardAsTiles(boardData, bingoId) : boardData),
     [boardData, bingoId],
   );
+  // The board's search matches in the browser (core/board/tileSearch.ts), with the full board's Tags; the sealed board
+  // has none, and while sealed a Tile is found by its name and Category only.
+  const tileTags = (boardData && !boardData.sealed ? boardData.tileTags : undefined) ?? NO_TILE_TAGS;
+  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
+  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories, tileTags), [sealed, shellCategories, tileTags]);
 
   const can = useBingoCan(slug);
   const { data: permissions, dataUpdatedAt: permissionsAt } = usePermissions(slug);
@@ -116,6 +127,15 @@ export function BingoPageProvider({
   // the entry before it, and otherwise (a link that arrived open) just removes the param. Switching what's open
   // replaces it, so one Back still closes it.
   const openedHere = (location.state as { opened?: string } | null)?.opened;
+  // A double-click outside the Tile closes it twice, and each close must not go Back again, off the board:
+  // - before Back lands, this page still shows it open, so the entry already gone Back from is remembered;
+  // - after, the second click can still reach the closing Tile (it animates out with this render's close), so a close
+  //   rendered for an entry the browser has since left does nothing.
+  const wentBackFrom = useRef<string | null>(null);
+  // Landing anywhere (Back, or Forward onto that same entry again) makes a close go Back again.
+  useEffect(() => {
+    wentBackFrom.current = null;
+  }, [location.key]);
   const openParam = (name: string, value: string) => {
     if (searchParams.get(name) === value) return;
     if (searchParams.get(name) !== null) setUrl({ [name]: value });
@@ -123,8 +143,13 @@ export function BingoPageProvider({
   };
   const closeParam = (name: string) => {
     if (searchParams.get(name) === null) return;
-    if (openedHere === name) navigate(-1);
-    else setUrl({ [name]: null });
+    // React Router keeps the entry's key in history.state ("default" for the first entry, which has none).
+    if (((window.history.state as { key?: string } | null)?.key ?? "default") !== location.key) return;
+    if (openedHere !== name) setUrl({ [name]: null });
+    else if (wentBackFrom.current !== location.key) {
+      wentBackFrom.current = location.key;
+      navigate(-1);
+    }
   };
   const showDialog = (which: BoardDialog) => openParam(OPEN_PARAM, which);
   const hideDialog = (which: BoardDialog) => {
@@ -155,12 +180,12 @@ export function BingoPageProvider({
   // A Restriction on submitting, applied while the submission dialog is open, closes it and says why.
   useCloseOnLoss(viewingTeamId && viewingTeamId !== shell?.myTeam?.id ? "submit_for_any_team" : "submit", submitOpen, () => setSubmitOpen(false), slug);
 
-  // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only while
-  // the bingo is Live and the viewer is on a team — the server ignores an ineligible caller anyway, but there's no
-  // point sending the request. Sent whenever a Tile or the Rules come open, however they were opened (a click, the
+  // Achievements' "Tile opened" / "Rules opened" signal (CONTEXT.md "Achievement"): fire-and-forget, and only from
+  // Board revealed through Live, with the viewer on a team — the server decides (sealed Tiles and hidden rules earn
+  // nothing, and never open for a Player anyway), but there's no point sending the request otherwise. Sent whenever a Tile or the Rules come open, however they were opened (a click, the
   // search box, a link).
   const recordOpened = useRecordAchievementOpened(slug);
-  const eligibleForOpens = shell?.bingo.stage === "live" && !!shell?.myTeam;
+  const eligibleForOpens = (shell?.bingo.stage === "reveal" || shell?.bingo.stage === "live") && !!shell?.myTeam;
   const rulesOpen = dialog === "rules";
   useEffect(() => {
     if (openTileId && eligibleForOpens) recordOpened.mutate({ kind: "tile", tileId: openTileId });
@@ -170,16 +195,15 @@ export function BingoPageProvider({
     if (rulesOpen && eligibleForOpens) recordOpened.mutate({ kind: "rules" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rulesOpen, eligibleForOpens]);
-  const openTileTracked = (tileId: string | null) => {
+  // One function for the page's whole life: every Tile cell gets it, and a new one each render would re-draw them all.
+  const openTileLatest = useRef<(tileId: string | null) => void>(() => {});
+  openTileLatest.current = (tileId) => {
     if (!tileId) return closeParam(TILE_PARAM);
     // A sealed tile doesn't open: the note says when it will.
     if (sealed) return showSealedNote();
     openParam(TILE_PARAM, tileId);
   };
-
-  const shellCategories = shell?.categories ?? EMPTY_CATEGORIES;
-  const matchTile = useMemo(() => tileSearchMatcher(sealed, shellCategories), [sealed, shellCategories]);
-  const search = useTileSearch(tiles, matchTile, openTileTracked);
+  const openTileTracked = useCallback((tileId: string | null) => openTileLatest.current(tileId), []);
   const exclusivityRules = shell?.bingo.exclusivityRules;
   const locks = useMemo(() => lockedLeaves(exclusivityRules ?? [], tiles, submissionsData?.submissions ?? EMPTY_SUBMISSIONS), [exclusivityRules, tiles, submissionsData]);
 
@@ -300,7 +324,6 @@ export function BingoPageProvider({
     showEndCountdown: bingo.stage === "live" && !!bingo.endsAt,
     submissions: buildSubmissionModels(tiles, teamSubmissions, user.id),
     teamSelector: { teams: teamModels, selectedId: viewingTeamId, select: setViewingTeamId },
-    search,
     openTile: { id: openTileId, open: openTileTracked, close: () => closeParam(TILE_PARAM) },
     sealed: { forMe: sealed, forPlayers: areTilesSealed(bingo) },
     rules: { open: rulesOpen, show: () => showDialog("rules"), hide: () => hideDialog("rules") },
@@ -352,9 +375,11 @@ export function BingoPageProvider({
     codeword: bingo.stage === "live" ? (myTeamModel?.codeword ?? null) : null,
   };
 
-  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks };
+  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks, tileTags, progressLoaded: !!progressData };
 
   return (
+    // The search keeps its own state below the page (TileSearchProvider), so typing doesn't re-render the page.
+    <TileSearchProvider tiles={canSee ? tiles : EMPTY_TILES} matches={matchTile} onChoose={openTileTracked}>
     <BingoPageRawContext.Provider value={raw}>
       <BingoPageContext.Provider value={pageModel}>
         <BoardProvider
@@ -366,7 +391,6 @@ export function BingoPageProvider({
           bingoStartsAt={bingo.effectiveStartsAt}
           bingoRows={bingo.boardRows}
           bingoCols={bingo.boardCols}
-          searchQuery={search.query}
           canSubmit={canSubmit}
           canToggleInterest={canToggleInterest}
           interests={interests}
@@ -381,6 +405,7 @@ export function BingoPageProvider({
         </BoardProvider>
       </BingoPageContext.Provider>
     </BingoPageRawContext.Provider>
+    </TileSearchProvider>
   );
 }
 

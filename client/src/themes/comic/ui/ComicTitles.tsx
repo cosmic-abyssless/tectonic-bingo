@@ -6,6 +6,7 @@ import { COMIC_FONT } from "../font";
 import { toneColors, ToneBox, type Tone } from "./tones";
 import { useComic } from "./useComic";
 import { TooltipSpan } from "../../../core/ui/Tooltip";
+import { LETTERED } from "../../lettering";
 
 const GROUP_TONE: Record<TitleGroup, Tone> = { points: "blue", luck: "green", grind: "orange", mishaps: "red" };
 
@@ -33,7 +34,7 @@ export function ComicTitleChip({ title }: TitleChipProps) {
     <TooltipSpan
       text={title.flavour}
       label={title.name}
-      className="inline-flex shrink-0 items-center border-2 px-1.5 py-px text-sm uppercase leading-none"
+      className={`${LETTERED} inline-flex shrink-0 items-center border-2 px-1.5 py-px text-sm uppercase leading-none`}
       style={{ fontFamily: COMIC_FONT, letterSpacing: "0.04em", borderColor: colors.LINE, background: toneColors(colors, GROUP_TONE[title.group]).tint, color: colors.INK }}
     >
       {title.name}

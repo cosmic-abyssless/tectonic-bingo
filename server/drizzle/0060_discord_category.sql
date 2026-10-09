@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `discord_category_id` text;

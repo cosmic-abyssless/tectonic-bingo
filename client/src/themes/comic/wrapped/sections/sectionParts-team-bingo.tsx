@@ -8,6 +8,7 @@ import { COMIC_FIGURES_FONT, COMIC_FONT } from "../../font";
 import { burstPoints } from "../../ui/Burst";
 import { onFill } from "../../ui/tones";
 import { useComic } from "../../ui/useComic";
+import { LETTERED } from "../../../lettering";
 import { halftoneUrl } from "../../fx/halftoneSheet";
 import { WRAPPED_PAGE_WIDTH } from "../camera";
 import { COVER } from "../coverParts";
@@ -65,7 +66,7 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
   const bg = fill ?? colors.YELLOW;
   return (
     <p data-beat="rise"
-      className={`inline-flex max-w-full items-center gap-1.5 self-start border-2 px-2 pt-[3px] pb-px ${className}`}
+      className={`${LETTERED} inline-flex max-w-full items-center gap-1.5 self-start border-2 px-2 pt-[3px] pb-px ${className}`}
       style={{ ...display(14, { letterSpacing: "0.08em" }), background: bg, color: onFill(colors, bg), borderColor: colors.LINE, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
       {dot && <span aria-hidden className="size-2.5 shrink-0 rounded-full border-[1.5px]" style={{ background: dot, borderColor: colors.LINE }} />}
@@ -77,7 +78,7 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
 /** A panel's headline: Bangers capitals, lettered light with an ink outline and drop (the book's display lettering). */
 export function PanelHeading({ children, size = 32, className = "" }: { children: ReactNode; size?: number; className?: string }) {
   return (
-    <h2 data-beat="slam" className={`comic-outline-text text-balance ${className}`} style={{ ...display(size), paddingRight: size / 10, paddingBottom: size / 14 }}>
+    <h2 data-beat="slam" className={`${LETTERED} comic-outline-text text-balance ${className}`} style={{ ...display(size), paddingRight: size / 10, paddingBottom: size / 14 }}>
       {children}
     </h2>
   );
@@ -91,7 +92,7 @@ export function Sfx({ children, size = 26, tilt = -8, className = "", style }: {
   return (
     <span data-beat="pop"
       aria-hidden
-      className={`pointer-events-none select-none ${className}`}
+      className={`${LETTERED} pointer-events-none select-none ${className}`}
       style={{
         ...display(size, { letterSpacing: "0.04em" }),
         color: COVER.YELLOW,
@@ -118,7 +119,7 @@ export function InkBurst({ children, fill, tilt = -6, spikes = 14, className = "
         <polygon points={points} fill={colors.SHADOW} transform="translate(2.5 3)" />
         <polygon points={points} fill={fill ?? colors.YELLOW} stroke={colors.LINE} strokeWidth={3} strokeLinejoin="round" />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center px-[16%] text-center" style={{ ...display(24), color: colors.INK, transform: `rotate(${-tilt}deg)` }}>
+      <div className={`${LETTERED} absolute inset-0 flex items-center justify-center px-[16%] text-center`} style={{ ...display(24), color: colors.INK, transform: `rotate(${-tilt}deg)` }}>
         <span className="text-balance">{children}</span>
       </div>
     </div>
@@ -136,7 +137,7 @@ export function StampLabel({ children, color, tilt = -6, size = 16, className = 
   const { colors } = useComic();
   return (
     <span data-beat="pop"
-      className={`inline-flex shrink-0 items-center justify-center whitespace-nowrap border-[3px] px-1.5 pt-[3px] pb-px ${className}`}
+      className={`${LETTERED} inline-flex shrink-0 items-center justify-center whitespace-nowrap border-[3px] px-1.5 pt-[3px] pb-px ${className}`}
       style={{ ...display(size, { letterSpacing: "0.06em" }), color, borderColor: color, background: colors.PAPER_RAISED, boxShadow: `0 0 0 2px ${colors.PAPER_RAISED}, 0 0 0 4px ${color}`, transform: `rotate(${tilt}deg)`, margin: 4 }}
     >
       {children}
@@ -149,7 +150,7 @@ export function Tally({ value, label, size = 56, align = "center" }: { value: Re
   const { colors } = useComic();
   return (
     <div data-beat="slam" className={align === "center" ? "text-center" : "text-left"}>
-      <div className="num whitespace-nowrap" style={{ ...display(size), color: colors.INK, textShadow: `${Math.max(2, size / 16)}px ${Math.max(2, size / 16)}px 0 ${colors.YELLOW}`, paddingRight: size / 14 }}>
+      <div className={`${LETTERED} num whitespace-nowrap`} style={{ ...display(size), color: colors.INK, textShadow: `${Math.max(2, size / 16)}px ${Math.max(2, size / 16)}px 0 ${colors.YELLOW}`, paddingRight: size / 14 }}>
         {value}
       </div>
       <div className="mt-1.5 text-[13px] leading-tight" style={{ color: colors.INK_BODY }}>
@@ -176,11 +177,11 @@ export function ComicPerson({ person, size = 36, detail, nameSize = 15, column =
       />
       <span className={`flex min-w-0 flex-col ${column ? "items-center" : "text-left"}`}>
         <span className="flex min-w-0 max-w-full items-center gap-1.5">
-          <span className={`truncate leading-tight ${lettered ? "" : "font-bold"}`} style={lettered ? { ...display(nameSize), color: colors.INK, paddingRight: nameSize / 10 } : { fontSize: nameSize, color: colors.INK }}>
+          <span className={`truncate leading-tight ${lettered ? LETTERED : "font-bold"}`} style={lettered ? { ...display(nameSize), color: colors.INK, paddingRight: nameSize / 10 } : { fontSize: nameSize, color: colors.INK }}>
             {person.name}
           </span>
           {person.isYou && (
-            <span className="shrink-0 border-[1.5px] px-1 pt-px leading-none" style={{ ...display(11), borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
+            <span className={`${LETTERED} shrink-0 border-[1.5px] px-1 pt-px leading-none`} style={{ ...display(11), borderColor: colors.LINE, background: colors.YELLOW, color: colors.ON_YELLOW }}>
               You
             </span>
           )}
@@ -220,18 +221,18 @@ export function ComicDrop({ drop, showPlayer = false, burst = false }: { drop: W
       <div className={`min-w-0 flex-1 ${burst && drop.gpLabel ? "pr-[84px]" : ""}`}>
         <div className="flex min-w-0 items-center gap-1.5">
           {media && <WikiIcon name={drop.itemName} />}
-          <span className="min-w-0 break-words" style={{ ...display(23), color: colors.INK, lineHeight: 1.05 }}>
+          <span className={`${LETTERED} min-w-0 break-words`} style={{ ...display(23), color: colors.INK, lineHeight: 1.05 }}>
             {drop.itemName}
           </span>
           {drop.quantityLabel && (
-            <span className="num shrink-0" style={{ ...display(17), color: colors.INK_SUBTLE }}>
+            <span className={`${LETTERED} num shrink-0`} style={{ ...display(17), color: colors.INK_SUBTLE }}>
               {drop.quantityLabel}
             </span>
           )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           {drop.gpLabel && !burst && (
-            <span className="num border-2 px-1.5 pt-[3px] pb-px" style={{ ...display(15), background: colors.GREEN_TINT, borderColor: colors.LINE, color: colors.INK }}>
+            <span className={`${LETTERED} num border-2 px-1.5 pt-[3px] pb-px`} style={{ ...display(15), background: colors.GREEN_TINT, borderColor: colors.LINE, color: colors.INK }}>
               <Gp label={drop.gpLabel} />
             </span>
           )}
@@ -292,7 +293,7 @@ export function Splash({ art, accent, kicker, kickerDot, title, titleBig = 46, m
           {kicker}
         </Kicker>
         <h2
-          className={`text-balance ${hasArt ? "comic-outline-text mt-2.5" : "my-auto py-3 text-center"}`}
+          className={`${LETTERED} text-balance ${hasArt ? "comic-outline-text mt-2.5" : "my-auto py-3 text-center"}`}
           style={
             hasArt
               ? { ...display(size), paddingRight: size / 10, paddingBottom: size / 14 }

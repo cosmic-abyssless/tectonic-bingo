@@ -16,6 +16,7 @@
 // failure is persisted onto bingos.womSyncError for the settings panel to
 // surface rather than bubbling up and breaking the change that triggered it.
 import { now as clockNow } from "../clock";
+import { fitTeamName } from "@bingo/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -32,6 +33,13 @@ type FetchLike = typeof fetch;
 const WOM_BASE_URL = "https://api.wiseoldman.net/v2";
 const WOM_USER_AGENT = `${USER_AGENT} WOM competitions`;
 
+/**
+ * What a Bingo's competition measures: Efficient Hours Bossed, the Wise Old Man number for bossing (CONTEXT.md
+ * "Achievement": hours bossed count like the competition, so a Player's progress matches its numbers). The sync puts a
+ * competition that measures anything else back on it.
+ */
+export const WOM_COMPETITION_METRIC = "ehb";
+
 export interface WomCompetitionTeamInput {
   name: string;
   participants: string[];
@@ -39,7 +47,6 @@ export interface WomCompetitionTeamInput {
 
 export interface CreateCompetitionParams {
   title: string;
-  metric?: string;
   startsAt: Date;
   endsAt: Date;
   groupId: string;
@@ -52,6 +59,7 @@ export interface EditCompetitionParams {
   competitionId: number;
   groupVerificationCode: string;
   title?: string;
+  metric?: string;
   startsAt?: Date;
   endsAt?: Date;
   teams?: WomCompetitionTeamInput[];
@@ -60,6 +68,7 @@ export interface EditCompetitionParams {
 /** What WOM has for a competition, as far as the sync compares it (read from the public GET). */
 export interface WomCompetitionState {
   title: string | null;
+  metric: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
   /** Team name -> its members' usernames, lowercased (how WOM stores them), sorted. */
@@ -103,7 +112,7 @@ export class WomCompetitionClient {
   async createCompetition(params: CreateCompetitionParams): Promise<{ id: number }> {
     const res = await this.request("/competitions", "POST", {
       title: params.title,
-      metric: params.metric ?? "overall",
+      metric: WOM_COMPETITION_METRIC,
       startsAt: params.startsAt.toISOString(),
       endsAt: params.endsAt.toISOString(),
       groupId: Number(params.groupId),
@@ -125,6 +134,7 @@ export class WomCompetitionClient {
     await this.request(`/competitions/${params.competitionId}`, "PUT", {
       verificationCode: params.groupVerificationCode,
       ...(params.title !== undefined && { title: params.title }),
+      ...(params.metric !== undefined && { metric: params.metric }),
       ...(params.startsAt && { startsAt: params.startsAt.toISOString() }),
       ...(params.endsAt && { endsAt: params.endsAt.toISOString() }),
       ...(params.teams && { teams: params.teams }),
@@ -140,10 +150,11 @@ export class WomCompetitionClient {
     await this.request(`/competitions/${competitionId}/update-all`, "POST", { verificationCode: groupVerificationCode });
   }
 
-  /** The competition's title, dates and teams as WOM has them, to compare with the bingo's before an edit. */
+  /** The competition's title, metric, dates and teams as WOM has them, to compare with the bingo's before an edit. */
   async getCompetitionState(competitionId: number): Promise<WomCompetitionState> {
     const raw = (await this.getCompetition(competitionId)) as {
       title?: unknown;
+      metric?: unknown;
       startsAt?: unknown;
       endsAt?: unknown;
       participations?: { teamName?: unknown; player?: { id?: unknown; username?: unknown; displayName?: unknown } }[];
@@ -158,14 +169,14 @@ export class WomCompetitionClient {
       if (typeof player.id === "number") namesById.set(String(player.id), typeof player.displayName === "string" ? player.displayName : player.username);
     }
     for (const [name, members] of teams) teams.set(name, members.sort());
-    return { title: typeof raw.title === "string" ? raw.title : null, startsAt: date(raw.startsAt), endsAt: date(raw.endsAt), teams, namesById };
+    return { title: typeof raw.title === "string" ? raw.title : null, metric: typeof raw.metric === "string" ? raw.metric : null, startsAt: date(raw.startsAt), endsAt: date(raw.endsAt), teams, namesById };
   }
 
   /** Full competition details (title, dates, and every participant's progress) — a public read, no verification code needed. */
   /** The group's name, or null if WOM has no group with that id. */
   async getGroupName(groupId: string): Promise<string | null> {
     try {
-      const raw = (await (await this.request(`/groups/${groupId}`, "GET")).json()) as { name?: unknown };
+      const raw = (await (await this.request(`/groups/${groupId}`, "GET", undefined, [404])).json()) as { name?: unknown };
       return typeof raw.name === "string" ? raw.name : "";
     } catch (err) {
       if (err instanceof WomCompetitionError && err.status === 404) return null;
@@ -180,7 +191,7 @@ export class WomCompetitionClient {
    */
   async isGroupCodeCorrect(groupId: string, verificationCode: string): Promise<boolean> {
     try {
-      await this.request(`/groups/${groupId}`, "PUT", { verificationCode });
+      await this.request(`/groups/${groupId}`, "PUT", { verificationCode }, [400, 403]);
       return true;
     } catch (err) {
       if (err instanceof WomCompetitionError && err.status === 400) return true;
@@ -194,7 +205,12 @@ export class WomCompetitionClient {
     return res.json();
   }
 
-  private async request(path: string, method: string, body?: unknown): Promise<Response> {
+  /**
+   * Any non-2xx is thrown as a WomCompetitionError and, unless the caller is asking a question it answers (`expected`,
+   * e.g. a 404 for "no such group"), reported to Sentry: it means a sync didn't happen, and the audit log alone is easy
+   * to miss.
+   */
+  private async request(path: string, method: string, body?: unknown, expected: number[] = []): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
@@ -211,7 +227,9 @@ export class WomCompetitionClient {
     }
     if (!res.ok) {
       const detail = summarizeErrorBody(await res.text().catch(() => ""));
-      throw new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`, res.status);
+      const error = new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`, res.status);
+      if (!expected.includes(res.status)) log.error("wom request failed", { method, path, status: res.status, err: error });
+      throw error;
     }
     return res;
   }
@@ -237,7 +255,7 @@ function getWomIntegrationConfig(bingo: Bingo): WomIntegrationConfig | null {
 }
 
 /**
- * One WOM team entry per bingo team, named after the team, with its members' names. Teams with none are dropped (WOM
+ * One WOM team entry per bingo team, named after the team (cut to WOM's limit), with its members' names. Teams with none are dropped (WOM
  * rejects an empty team). Each member goes by their signup's RSN, except a player the competition already has (matched
  * by WOM id): WOM's name for them wins. WOM follows an in-game rename by itself, so our RSN can only be the same or out
  * of date, and sending an out-of-date one would swap the player for their old name.
@@ -254,7 +272,8 @@ function getTeamRosters(db: Db, bingoId: string, womNamesById: Map<string, strin
   const rsnByUserId = new Map(signupRows.map((s) => [s.userId, (s.womId && womNamesById.get(s.womId)) || s.rsn]));
   return teamRows
     .map((team) => ({
-      name: team.name,
+      // A Team named before names had a limit goes to WOM cut to fit, or WOM turns the whole edit down.
+      name: fitTeamName(team.name),
       participants: memberRows.filter((m) => m.teamId === team.id).map((m) => rsnByUserId.get(m.userId)).filter((rsn): rsn is string => !!rsn),
     }))
     .filter((t) => t.participants.length > 0);
@@ -350,6 +369,7 @@ export async function syncWomCompetition(db: Db, bingoId: string, client: WomCom
     const current = await client.getCompetitionState(bingo.womCompetitionId);
     const changes: Omit<EditCompetitionParams, "competitionId" | "groupVerificationCode"> = {};
     if (bingo.name !== current.title) changes.title = bingo.name;
+    if (current.metric !== WOM_COMPETITION_METRIC) changes.metric = WOM_COMPETITION_METRIC;
     // The bingo's dates, where it has them: with none, WOM keeps what it was created with (the draft's end, and two
     // weeks on). WOM needs the end after the start.
     const startsAt = effectiveStartsAt(db, bingo) ?? current.startsAt;

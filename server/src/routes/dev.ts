@@ -11,8 +11,11 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { auditSkip } from "../audit/middleware";
 import { ServiceError } from "../services/errors";
 import * as devTestDataService from "../services/devTestDataService";
+import { removeDiscordTeams } from "../services/discordTeamService";
 import { removeUploads } from "../services/uploadFiles";
 import { mockPastCompetition } from "../services/pastWomCompetitionService";
+import { startDueBingos } from "../services/bingoStartService";
+import { now as clockNow } from "../clock";
 import { OptionsError, normalizeOptions, type RawOptions } from "../devTools/generateBingo/options";
 import { fillFakeWomSnapshots } from "../devTools/generateBingo/womSnapshots";
 import { getGenerateJob, isGenerateJobRunning, jobView, startGenerateJob } from "../devTools/generateBingo/job";
@@ -77,6 +80,21 @@ router.post(
   }),
 );
 
+// The generator's own round of the Bingo start (bingoStartService.ts) for the Bingo it's building, at the run's clock
+// (X-Dev-Now): the system makes it Live at its start date, as the real round does on the real clock. Audited, as the
+// real round is: stage.changed, by the system.
+router.post(
+  "/bingos/:slug/start-round",
+  asyncHandler(async (req, res) => {
+    const slug = req.params.slug as string;
+    if (!slug.startsWith(devTestDataService.TESTDATA_PREFIX)) throw new ServiceError(400, "Only a generated bingo's start round can be run");
+    const started = startDueBingos(db, clockNow(), { slug });
+    // Nothing started (not at Board revealed, or its start date is still ahead on the run's clock) is the run's error.
+    if (started.length === 0) throw new ServiceError(409, `${slug} wasn't due to start at ${clockNow().toISOString()}`);
+    res.json({ started: started.length });
+  }),
+);
+
 // Starts a generator run inside the server (devTools/generateBingo/job.ts): the site admin's Test data tab, and the
 // CLI. The board is another bingo's on this server (`from`, a slug) or a document sent along (`document`, the CLI's
 // --export). Everything that can be checked now is, so the caller hears about a bad option at once rather than from a
@@ -132,6 +150,8 @@ router.delete(
     if (isGenerateJobRunning() && getGenerateJob()?.slug === req.params.slug) throw new ServiceError(409, "This bingo is still being generated");
     const result = devTestDataService.teardownTestBingo(db, req.params.slug as string);
     const files = removeUploads(UPLOADS_DIR, result.urls);
+    // Its Team roles and channels in a test Discord server, if it had any (fire-and-forget, like deleting a bingo).
+    void removeDiscordTeams(db, result.bingoId);
     console.info(`[dev] tore down ${req.params.slug}: ${result.usersDeleted} test users, ${files} files`);
     res.json({ deleted: { users: result.usersDeleted, files } });
   }),

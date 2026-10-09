@@ -1,19 +1,20 @@
 import { TooltipTrigger, Tooltip, Focusable } from "react-aria-components";
-import type { TaskModel } from "../../../headless/types";
 import { CheckIcon, LockIcon } from "../../../core/ui/icons";
 import { useSlot } from "../../context";
+import type { TaskPanelProps } from "../../slots";
 import { COMIC_FONT } from "../font";
 import { CaptionBox, InkTag } from "../ui/CaptionBox";
 import { Stamp } from "../ui/Stamp";
 import { useComic } from "../ui/useComic";
 import { ProofNeeded } from "./ProofNeeded";
+import { LETTERED } from "../../lettering";
 
 /**
  * One task ("part") of an issue, laid out like a story page: a big title,
  * the brief in body copy, the requirement checklist, and a yellow caption
  * for notes. Renders inside a BookPage in the tile modal.
  */
-export function TaskPanel({ task, onPostProof }: { task: TaskModel; onPostProof?: () => void }) {
+export function TaskPanel({ task, onPostProof, titleAction, titleNote }: TaskPanelProps) {
   const RequirementTree = useSlot("RequirementTree");
   const { colors } = useComic();
 
@@ -23,12 +24,18 @@ export function TaskPanel({ task, onPostProof }: { task: TaskModel; onPostProof?
 
   return (
     <div className="relative">
-      <div className="mb-3 flex flex-wrap items-center gap-2 pr-6">
-        <h3 className="text-3xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+      <div className={`flex flex-wrap items-center gap-2 pr-6 ${titleNote ? "mb-1.5" : "mb-3"}`}>
+        <h3 className={`${LETTERED} text-3xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
           {task.label}
         </h3>
         {task.complete && <CheckIcon size={18} style={{ color: colors.OK }} aria-label="complete" />}
+        {titleAction && <div className="ml-auto shrink-0">{titleAction}</div>}
       </div>
+      {titleNote && (
+        <div className="mb-3 text-xs leading-tight" style={{ color: colors.INK_SUBTLE }}>
+          {titleNote}
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <InkTag fill={colors.YELLOW} color={colors.ON_YELLOW}>

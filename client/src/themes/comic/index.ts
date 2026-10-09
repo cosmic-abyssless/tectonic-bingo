@@ -1,10 +1,8 @@
+import { lazy } from "react";
 import { pushThemeHmrUpdate, type ThemeDefinition } from "../registry";
 import { COMIC_FONT } from "./font";
 import { DARK_PALETTE } from "./darkPalettes";
 import { BoardPageLayout } from "./page/BoardPageLayout";
-import { DraftPageLayout } from "./page/DraftPageLayout";
-import { StatsPageLayout } from "./page/StatsPageLayout";
-import { FeedbackPageLayout } from "./page/FeedbackPageLayout";
 import { FeedbackBanner } from "./feedback/FeedbackBanner";
 import { DraftPickBurst } from "./draft/DraftPickBurst";
 import { AchievementUnlockCard } from "./achievements/AchievementUnlockCard";
@@ -31,6 +29,7 @@ import { NoTeamStage } from "./page/NoTeamStage";
 import { NotPartStage } from "./page/NotPartStage";
 import { PlanningStage } from "./page/PlanningStage";
 import { ScoutBanner } from "./page/ScoutBanner";
+import { ComicPreStartBanner } from "./board/ComicPreStartBanner";
 import { CodewordBanner } from "./page/CodewordBanner";
 import { BugReportButton } from "./page/BugReportButton";
 import { HeaderMenu } from "./page/HeaderMenu";
@@ -54,7 +53,6 @@ import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
-import { WrappedPage } from "./wrapped/WrappedPage";
 import { WrappedYou } from "./wrapped/sections/WrappedYou";
 import { WrappedDuo } from "./wrapped/sections/WrappedDuo";
 import { WrappedCaptain } from "./wrapped/sections/WrappedCaptain";
@@ -63,6 +61,7 @@ import { WrappedIntro } from "./wrapped/WrappedIntro";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
 import { WrappedTeam } from "./wrapped/sections/WrappedTeam";
 import { WrappedBingo } from "./wrapped/sections/WrappedBingo";
+import { awaitModule } from "../../core/chunkReload";
 // The theme's shared classes (comic-press, comic-rays, comic-halftone, the
 // dialog keyframes…). Was imported on feat/mico-work but dropped when that
 // work landed on main, leaving every one of them unstyled.
@@ -142,6 +141,13 @@ const comicChromeLight = {
   headingWeight: "400",
 };
 
+// As in the default theme, the pages beside the board are their own chunks: this theme loads with the board page,
+// which must not download the Draft room's or Stats' ag-grid tables.
+const DraftPageLayout = lazy(() => awaitModule(import("./page/DraftPageLayout")).then((m) => ({ default: m.DraftPageLayout })));
+const StatsPageLayout = lazy(() => awaitModule(import("./page/StatsPageLayout")).then((m) => ({ default: m.StatsPageLayout })));
+const FeedbackPageLayout = lazy(() => awaitModule(import("./page/FeedbackPageLayout")).then((m) => ({ default: m.FeedbackPageLayout })));
+const WrappedPage = lazy(() => awaitModule(import("./wrapped/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
+
 const comicTheme: ThemeDefinition = {
   key: "comic",
   tokens: {
@@ -181,6 +187,7 @@ const comicTheme: ThemeDefinition = {
     NotPartStage,
     PlanningStage,
     ScoutBanner,
+    PreStartBanner: ComicPreStartBanner,
     CodewordBanner,
     SignupStage,
     BugReportButton,

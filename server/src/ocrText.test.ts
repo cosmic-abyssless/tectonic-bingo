@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { createTextReader } from "./ocrText";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
+import { createTextReader, SkippedForCooldown, withFallback } from "./ocrText";
+
+// log.error reports to Sentry through the SDK, loaded on demand (log.ts).
+const sentry = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@sentry/node", () => sentry);
 
 const image = (text: string) => Buffer.from(text);
 
@@ -45,5 +50,159 @@ describe("createTextReader", () => {
     await expect(read(image("a"), "interactive")).rejects.toThrow("ocr down");
     expect(await read(image("a"), "interactive")).toEqual(["back up"]);
     expect(recognize).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("withFallback", () => {
+  const names = { primary: "Cloud Vision", fallback: "the local engine" };
+  const written = () => (process.stdout.write as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => JSON.parse(String(call[0])) as { level: string; msg: string; err?: { message: string } });
+  let clock = 0;
+  const now = () => clock;
+  const fallback = vi.fn(async () => ["from the fallback"]);
+
+  beforeEach(() => {
+    clock = 1_000_000;
+    fallback.mockClear();
+    sentry.captureException.mockClear();
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reads with the primary while it works", async () => {
+    const read = withFallback(async () => ["from the primary"], fallback, names, { cooldownMs: 60_000, now });
+    expect(await read(image("a"), "interactive")).toEqual(["from the primary"]);
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  // A dead key degrades every reading to the fallback, so it has to reach Sentry rather than only the logs.
+  it("reads with the fallback when the key is refused, and reports that to Sentry", async () => {
+    const refused = new OcrUnavailableError("Cloud Vision answered 403", { needsAttention: true, detail: "PERMISSION_DENIED" });
+    const read = withFallback(async () => { throw refused; }, fallback, names, { cooldownMs: 60_000, now });
+
+    expect(await read(image("a"), "interactive")).toEqual(["from the fallback"]);
+
+    expect(written()).toEqual([expect.objectContaining({ level: "error", err: expect.objectContaining({ message: refused.message }) })]);
+    await vi.waitFor(() => expect(sentry.captureException).toHaveBeenCalledWith(refused, expect.anything()));
+  });
+
+  // Revoked mid-event, a key would otherwise cost a round trip, an error line and a Sentry event per screenshot.
+  it("after a refused key, skips the primary for the cooldown, reports it once, and tries again after", async () => {
+    const primary = vi.fn(async (): Promise<string[]> => { throw new OcrUnavailableError("Cloud Vision answered 403", { needsAttention: true }); });
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, now });
+
+    await read(image("a"), "interactive");
+    clock += 30_000;
+    await read(image("b"), "interactive");
+    expect(primary).toHaveBeenCalledTimes(1);
+    clock += 31_000;
+    await read(image("c"), "interactive");
+    expect(primary).toHaveBeenCalledTimes(2);
+    expect(written().map((l) => l.level)).toEqual(["error"]);
+  });
+
+  it("reports a refused key even while it was already skipping the primary for an outage", async () => {
+    const primary = vi.fn(async (): Promise<string[]> => { throw new OcrUnavailableError("Cloud Vision answered 503", { transient: true }); });
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, now });
+    await read(image("a"), "interactive");
+    clock += 61_000;
+    primary.mockRejectedValueOnce(new OcrUnavailableError("Cloud Vision answered 403", { needsAttention: true }));
+    await read(image("b"), "interactive");
+    expect(written().map((l) => l.level)).toEqual(["warn", "error"]);
+  });
+
+  // In a partial outage some readings succeed while others time out. One that was already under way when another
+  // failed proves little, so only a reading started after the failure ends the cooldown (else it would flap).
+  it("keeps the cooldown when a reading that started before the failure succeeds, and ends it on one started after", async () => {
+    let finishSlow!: (lines: string[]) => void;
+    const primary = vi
+      .fn<() => Promise<string[]>>()
+      .mockImplementationOnce(() => new Promise((resolve) => (finishSlow = resolve)))
+      .mockRejectedValueOnce(new OcrUnavailableError("Cloud Vision gave no answer within 8000 ms", { transient: true }))
+      .mockResolvedValue(["from the primary"]);
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, now });
+
+    const slow = read(image("slow"), "interactive");
+    clock += 1_000;
+    await read(image("timed out"), "interactive");
+    finishSlow(["from the primary"]);
+    await slow;
+    expect(await read(image("still cooling down"), "interactive")).toEqual(["from the fallback"]);
+
+    clock += 61_000;
+    expect(await read(image("after the cooldown"), "interactive")).toEqual(["from the primary"]);
+    expect(written().map((l) => l.msg)).toEqual(["Cloud Vision failed, so the local engine reads screenshots for the next 60 s", "Cloud Vision reads screenshots again"]);
+  });
+
+  // A burst queued behind the limiter would otherwise pay the timeout in waves of 8 after the first one failed.
+  it("lets a reading that was queued when the cooldown opened give way without calling the provider", async () => {
+    let releaseQueued!: () => void;
+    const queuedTurn = new Promise<void>((resolve) => (releaseQueued = resolve));
+    const calls = vi.fn();
+    const primary = vi
+      .fn<(image: Buffer, priority: "interactive" | "background", skipping: () => boolean) => Promise<string[]>>()
+      .mockRejectedValueOnce(new OcrUnavailableError("Cloud Vision gave no answer within 8000 ms", { transient: true }))
+      .mockImplementation(async (_image, _priority, skipping) => {
+        await queuedTurn;
+        if (skipping()) throw new SkippedForCooldown();
+        calls();
+        return ["from the primary"];
+      });
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, now });
+
+    // The queued reading passed the check before the failure, then waits for a slot.
+    const failing = read(image("first"), "interactive");
+    const queued = read(image("queued"), "interactive");
+    await failing;
+    releaseQueued();
+    expect(await queued).toEqual(["from the fallback"]);
+    expect(calls).not.toHaveBeenCalled();
+    expect(written().map((l) => l.level)).toEqual(["warn"]);
+  });
+
+  it("logs a refused key again every hour while it lasts", async () => {
+    const primary = vi.fn(async (): Promise<string[]> => { throw new OcrUnavailableError("Cloud Vision answered 403", { needsAttention: true }); });
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, relogMs: 3_600_000, now });
+    for (let minute = 0; minute <= 61; minute++) {
+      await read(image(`m${minute}`), "interactive");
+      clock += 61_000;
+    }
+    expect(written().map((l) => l.level)).toEqual(["error", "error"]);
+  });
+
+  it("reads an image the primary refused with the fallback, as a warning", async () => {
+    const read = withFallback(async () => { throw new OcrImageError(); }, fallback, names, { cooldownMs: 60_000, now });
+    expect(await read(image("a"), "interactive")).toEqual(["from the fallback"]);
+    expect(written().map((l) => l.level)).toEqual(["warn"]);
+  });
+
+  it("reports anything a reader doesn't mean to throw as a bug", async () => {
+    const read = withFallback(async () => { throw new TypeError("oops"); }, fallback, names, { cooldownMs: 60_000, now });
+    expect(await read(image("a"), "interactive")).toEqual(["from the fallback"]);
+    expect(written().map((l) => l.level)).toEqual(["error"]);
+  });
+
+  // During an outage each screenshot would otherwise wait out the primary's timeout before the fallback even starts.
+  it("after a transient failure, skips the primary for the cooldown, says so once, and says when it's back", async () => {
+    const primary = vi.fn(async (): Promise<string[]> => { throw new OcrUnavailableError("Cloud Vision gave no answer within 8000 ms", { transient: true }); });
+    const read = withFallback(primary, fallback, names, { cooldownMs: 60_000, now });
+
+    await read(image("a"), "interactive");
+    clock += 30_000;
+    await read(image("b"), "interactive");
+    expect(primary).toHaveBeenCalledTimes(1);
+    expect(fallback).toHaveBeenCalledTimes(2);
+
+    // The cooldown over, it's tried again; still down, the cooldown starts over without another log line.
+    clock += 31_000;
+    await read(image("c"), "interactive");
+    expect(primary).toHaveBeenCalledTimes(2);
+    expect(written().map((l) => l.level)).toEqual(["warn"]);
+
+    clock += 61_000;
+    primary.mockResolvedValueOnce(["from the primary"]);
+    expect(await read(image("d"), "interactive")).toEqual(["from the primary"]);
+    expect(written().map((l) => l.msg)).toEqual(["Cloud Vision failed, so the local engine reads screenshots for the next 60 s", "Cloud Vision reads screenshots again"]);
   });
 });

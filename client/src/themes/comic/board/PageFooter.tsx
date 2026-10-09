@@ -1,6 +1,7 @@
 import { COMIC_FONT } from "../font";
 import { bw } from "./ClosedBook";
 import type { ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
 
 /**
  * The strip along the foot of a book page: a rule, then "PAGE n" on the
@@ -12,7 +13,7 @@ import type { ComicColors } from "./colors";
 export function PageFooter({ colors, side, no, role }: { colors: ComicColors; side: "left" | "right"; no: number; role: string }) {
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between uppercase"
+      className={`${LETTERED} pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between uppercase`}
       style={{
         // A right-hand page's outer edge is its right, a left-hand page's its left.
         flexDirection: side === "right" ? "row-reverse" : "row",

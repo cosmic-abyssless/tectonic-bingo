@@ -4,6 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
+import { log } from "../log";
 import { WomCompetitionClient, WomCompetitionError, checkWomGroup, sendDueWomBulkUpdates, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
 
 let sqlite: Database.Database;
@@ -51,6 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   sqlite.close();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("WomCompetitionClient", () => {
@@ -73,6 +75,8 @@ describe("WomCompetitionClient", () => {
     expect(call[1].method).toBe("POST");
     const body = JSON.parse(call[1].body);
     expect(body.groupId).toBe(123);
+    // Efficient Hours Bossed, not overall XP (CONTEXT.md "Achievement": hours bossed count like the competition).
+    expect(body.metric).toBe("ehb");
     expect(body.groupVerificationCode).toBe("secret");
     expect(body.teams).toEqual([{ name: "Team One", participants: ["Rsn"] }]);
     expect((call[1].headers as Record<string, string>)["x-api-key"]).toBeUndefined();
@@ -105,6 +109,15 @@ describe("WomCompetitionClient", () => {
     const fetchImpl = mockFetch([{ status: 403, body: { message: "invalid verification code" } }]);
     const client = new WomCompetitionClient(fetchImpl);
     await expect(client.editCompetition({ competitionId: 1, groupVerificationCode: "wrong", teams: [] })).rejects.toBeInstanceOf(WomCompetitionError);
+  });
+
+  it("reports a non-2xx to Sentry (log.error with the error), not only to the audit log", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    const fetchImpl = mockFetch([{ status: 400, body: { code: "VALIDATION_ERROR", message: "Team names cannot be longer than 30 characters." } }]);
+    const client = new WomCompetitionClient(fetchImpl);
+    await expect(client.editCompetition({ competitionId: 159361, groupVerificationCode: "x", teams: [] })).rejects.toBeInstanceOf(WomCompetitionError);
+    expect(error).toHaveBeenCalledWith("wom request failed", { method: "PUT", path: "/competitions/159361", status: 400, err: expect.any(WomCompetitionError) });
+    expect((error.mock.calls[0]![1] as { err: Error }).err.message).toMatch(/Team names cannot be longer than 30 characters/);
   });
 
   it("drops an HTML error body (e.g. a Cloudflare error page) instead of surfacing it", async () => {
@@ -257,10 +270,11 @@ describe("audit trail", () => {
 
 // What WOM's GET /competitions/:id returns, by default matching seedBingoWithTeam's bingo exactly (it has no dates, so
 // WOM's own are kept).
-function womState(overrides: { title?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { id?: number; username: string; displayName?: string } }[] } = {}) {
+function womState(overrides: { title?: string; metric?: string; startsAt?: string; endsAt?: string; participations?: { teamName: string; player: { id?: number; username: string; displayName?: string } }[] } = {}) {
   return {
     id: 42,
     title: "Test Bingo",
+    metric: "ehb",
     startsAt: "2026-03-01T18:00:00.000Z",
     endsAt: "2026-03-15T18:00:00.000Z",
     participations: [{ teamName: "Team One", player: { username: "captainrsn" } }],
@@ -298,12 +312,34 @@ describe("syncWomCompetition", () => {
     expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", title: "New Name" });
   });
 
+  // Competitions were created on overall XP before EHB: the next sync puts one back on EHB.
+  it("puts a competition measuring anything else back on EHB, and says so in the audit log", async () => {
+    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42 });
+    const fetchImpl = mockFetch([{ body: womState({ metric: "overall" }) }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", metric: "ehb" });
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.roster_synced")).get()!;
+    expect(JSON.parse(row.details)).toEqual({ changed: ["metric"] });
+  });
+
   it("sends the teams after a team rename", async () => {
     const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
     db.update(schema.teams).set({ name: "Renamed Team" }).where(eq(schema.teams.id, team.id)).run();
     const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
     await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
     expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Renamed Team", participants: ["CaptainRsn"] }] });
+  });
+
+  it("cuts a Team name past WOM's 30 characters to fit, and then sees it as unchanged", async () => {
+    const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42 });
+    db.update(schema.teams).set({ name: "Monster whites & Finnish nights" }).where(eq(schema.teams.id, team.id)).run();
+    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Monster whites & Finnish night", participants: ["CaptainRsn"] }] });
+
+    const again = mockFetch([{ body: womState({ participations: [{ teamName: "Monster whites & Finnish night", player: { username: "captainrsn" } }] }) }]);
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(again));
+    expect(calls(again)).toHaveLength(1);
   });
 
   it("sends the teams after a member joins", async () => {
@@ -335,6 +371,18 @@ describe("syncWomCompetition", () => {
     const edited = mockFetch([{ body: renamed }, { body: {} }]);
     await syncWomCompetition(db, bingo.id, new WomCompetitionClient(edited));
     expect(putBody(edited)!.teams).toEqual([{ name: "Renamed Team", participants: ["NewName"] }]);
+  });
+
+  it("swaps a Borrowed account in for the account the player was on (its WOM id no longer matches the old one's)", async () => {
+    const { bingo, captain } = seedBingoWithTeam({ womCompetitionId: 42 });
+    // WOM has the captain's own account (WOM id 7); an Admin then put their Signup on the borrowed account Bob (id 8).
+    db.update(schema.signups).set({ rsn: "Bob", womId: "8", accountBorrowed: true }).where(eq(schema.signups.userId, captain.id)).run();
+    const own = womState({ participations: [{ teamName: "Team One", player: { id: 7, username: "captainrsn", displayName: "CaptainRsn" } }] });
+    const fetchImpl = mockFetch([{ body: own }, { body: {} }]);
+
+    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+
+    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Team One", participants: ["Bob"] }] });
   });
 
   it("sends the bingo's start and end dates when they differ", async () => {
@@ -435,9 +483,19 @@ describe("checkWomGroup", () => {
     expect(calls(fetchImpl)).toHaveLength(0);
   });
 
-  it("never throws when WOM is down", async () => {
+  it("never throws when WOM is down, and reports it", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
     const fetchImpl = mockFetch([{ status: 502 }]);
     expect(await checkWomGroup("123", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "unreachable" });
+    expect(error).toHaveBeenCalledWith("wom request failed", expect.objectContaining({ status: 502 }));
+  });
+
+  it("doesn't report the answers it asks WOM for: no such group (404), a right code (400) or a wrong one (403)", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await checkWomGroup("999", "abc", new WomCompetitionClient(mockFetch([{ status: 404, body: { message: "Group not found." } }])));
+    await checkWomGroup("123", "abc", new WomCompetitionClient(mockFetch([{ body: { name: "Tectonic" } }, { status: 400, body: { message: "Nothing to update." } }])));
+    await checkWomGroup("123", "nope", new WomCompetitionClient(mockFetch([{ body: { name: "Tectonic" } }, { status: 403, body: { message: "Incorrect verification code." } }])));
+    expect(error).not.toHaveBeenCalled();
   });
 });
 

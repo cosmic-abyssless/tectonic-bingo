@@ -13,6 +13,7 @@ import { ComicCheckbox } from "../ui/ComicCheckbox";
 import { PartnerSheet } from "./PartnerSheet";
 import { Callout, CollapsibleSheet, paperVars, Required, StatBox, TabLegend } from "./parts";
 import { TextButton } from "../../../core/ui/TextButton";
+import { LETTERED } from "../../lettering";
 
 /**
  * The signup stage in the comic theme: the form (and, in a duo bingo, the partner step under it) as sheets on the
@@ -58,7 +59,7 @@ function Blocked({ form }: { form: SignupFormModel }) {
         {block.reason === "unavailable" ? <AlertIcon size={16} className="mr-1.5" /> : <LockIcon size={16} className="mr-1.5" />}
         {stamp}
       </Stamp>
-      <h2 className="mt-2 text-3xl uppercase leading-none" style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
+      <h2 className={`${LETTERED} mt-2 text-3xl uppercase leading-none`} style={{ fontFamily: COMIC_FONT, letterSpacing: "0.03em", color: colors.INK }}>
         {title}
       </h2>
       <p className="max-w-md text-sm" style={{ color: colors.INK_BODY }}>

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex, index, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -178,6 +178,23 @@ export const bingos = sqliteTable('bingos', {
   // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.
   historical: integer('historical', { mode: 'boolean' }).notNull().default(false),
+  // Discord team sync (discordTeamService.ts): when on, every Team gets a Discord role (its name, color and members)
+  // and its own channels, under a category named after the Bingo (or discordCategoryName), from the moment the Draft
+  // finishes. Needs DISCORD_BOT_TOKEN and DISCORD_GUILD_ID on the server. What it made is tracked in discord_resources.
+  discordEnabled: integer('discord_enabled', { mode: 'boolean' }).notNull().default(false),
+  discordCategoryName: text('discord_category_name'),
+  // An existing category in the Discord server to put every Team's channels in, instead of one the sync makes (and
+  // names discordCategoryName). The sync never edits or deletes it.
+  discordCategoryId: text('discord_category_id'),
+  // Dev servers only (isDevModeActive): another Discord server to sync to instead of DISCORD_GUILD_ID, for trying it
+  // out on a test server. Ignored elsewhere. Can't change while anything made in the old one is left.
+  discordGuildId: text('discord_guild_id'),
+  // The channels every Team gets: a JSON array of DiscordChannelTemplate (shared/src/discord.ts), parsed by
+  // bingoService.parseDiscordChannels and exposed as `discordChannels`. Starts as a text and a voice channel.
+  discordChannelsJson: text('discord_channels_json').notNull().default('[{"key":"chat","type":"text","name":"{team}"},{"key":"voice","type":"voice","name":"{team}"}]'),
+  // Last sync failure, surfaced in the settings panel; cleared by the next successful sync.
+  discordSyncError: text('discord_sync_error'),
+  discordSyncedAt: integer('discord_synced_at', { mode: 'timestamp' }),
 });
 
 // A Historical Bingo's final standings, as the old site or the maintainers recorded them: one row per Team, its place
@@ -238,6 +255,8 @@ export const stageTransitions = sqliteTable('stage_transitions', {
   toStage: text('to_stage', {
     enum: ['planning', 'signup', 'captains', 'draft', 'reveal', 'live', 'complete'],
   }).notNull(),
+  // When the system made the change (a Bingo going Live by itself at its start date, bingoStartService.ts), the Bingo's
+  // creator: the audit log's "system" actor is the record of who.
   changedByUserId: text('changed_by_user_id').notNull().references(() => users.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
@@ -317,6 +336,9 @@ export const signups = sqliteTable('signups', {
   // RSNs at signup time. Never set from a client-supplied claim.
   womId: text('wom_id'),
   rsnVerified: integer('rsn_verified', { mode: 'boolean' }).notNull().default(false),
+  // A Borrowed account (CONTEXT.md "Signup"): an Admin set this Signup to play on an OSRS account the Player doesn't
+  // own. `rsn` and `womId` are then that account's (womId from Wise Old Man, not the clan) and rsnVerified is false.
+  accountBorrowed: integer('account_borrowed', { mode: 'boolean' }).notNull().default(false),
   // Raw WOM (/players/{rsn}) and RuneProfile (/accounts/{rsn}/full) API
   // responses, fetched at signup (and on mod refresh) and reused as-is at
   // draft time — no live external calls in the draft room's hot path. May
@@ -417,6 +439,31 @@ export const teams = sqliteTable('teams', {
 }, (t) => [
   uniqueIndex('teams_bingo_captain_unq').on(t.bingoId, t.captainUserId),
   uniqueIndex('teams_bingo_codeword_unq').on(t.bingoId, t.codeword),
+]);
+
+// What the Discord team sync (discordTeamService.ts) made in the guild: one row per Discord object, so it can be updated
+// or deleted later. No foreign keys on purpose: a row outlives its Team or Bingo being deleted, so the sync can still
+// delete the role and channels left behind. `applied_json` is what was last sent (name, color, permissions, and for a
+// role its members), compared with what's wanted so only real changes reach Discord: it allows a channel only two
+// renames per 10 minutes.
+export const discordResources = sqliteTable('discord_resources', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull(),
+  // The Discord server it was made in, so it's always edited and deleted there.
+  guildId: text('guild_id').notNull(),
+  // Null for the Bingo's category.
+  teamId: text('team_id'),
+  // codeword_message: the Team's Codeword message, posted and pinned in its first text channel as the Bingo goes Live;
+  // its applied_json the channel it's in, the Codeword it says and whether the pin took. One per Team.
+  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel', 'codeword_message'] }).notNull(),
+  // A channel's entry in bingos.discord_channels_json (its `key`); null for the category, a role and a Codeword message.
+  channelKey: text('channel_key'),
+  discordId: text('discord_id').notNull(),
+  appliedJson: text('applied_json').notNull().default('{}'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => [
+  index('discord_resources_bingo_idx').on(t.bingoId),
 ]);
 
 export const teamMembers = sqliteTable('team_members', {
@@ -642,7 +689,9 @@ export const bugReports = sqliteTable('bug_reports', {
 // single-name leaves). See docs/item-quantity-model.md §2.
 // ---------------------------------------------------------------------------
 
-export const nodes = sqliteTable('nodes', {
+// The columns of a node, shared by the Published board's `nodes` and the Draft board's `draft_nodes` (CONTEXT.md
+// "Draft board"), so the two can't drift apart.
+const nodeColumns = () => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   kind: text('kind', { enum: ['ALL', 'ANY', 'COUNT', 'SUM', 'ITEM', 'MANUAL'] }).notNull(),
@@ -677,14 +726,23 @@ export const nodes = sqliteTable('nodes', {
   proofNote: text('proof_note'),
 });
 
+export const nodes = sqliteTable('nodes', {
+  ...nodeColumns(),
+  // Set when a Publish removed this node while Claims still pointed at it (CONTEXT.md "Publish"): the row stays so the
+  // Claims and their Submissions keep their history, but it has no edges, isn't on the board and never scores
+  // (getFullGraph and getApprovedClaims leave it out). Null on every node still on the board.
+  removedAt: integer('removed_at', { mode: 'timestamp' }),
+});
+
 // A node may have several parents (DAG). sortOrder is scoped to one parent —
 // a node's position among its siblings can differ per parent.
-export const nodeEdges = sqliteTable('node_edges', {
+const nodeEdgeColumns = (nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
-  parentId: text('parent_id').notNull().references(() => nodes.id),
-  childId: text('child_id').notNull().references(() => nodes.id),
+  parentId: text('parent_id').notNull().references(() => nodeTable().id),
+  childId: text('child_id').notNull().references(() => nodeTable().id),
   sortOrder: integer('sort_order').notNull().default(0),
-}, (t) => [
+});
+export const nodeEdges = sqliteTable('node_edges', nodeEdgeColumns(() => nodes), (t) => [
   uniqueIndex('node_edges_parent_child_unq').on(t.parentId, t.childId),
 ]);
 
@@ -694,23 +752,24 @@ export const nodeEdges = sqliteTable('node_edges', {
 
 // Optional per-bingo row/category labels (replaces v1's hardcoded 7-category
 // enum). A bingo can leave this empty and just use raw grid positions.
-export const tileCategories = sqliteTable('tile_categories', {
+const tileCategoryColumns = () => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
   label: text('label').notNull(),
   colorHex: text('color_hex'),
   sortOrder: integer('sort_order').notNull().default(0),
 });
+export const tileCategories = sqliteTable('tile_categories', tileCategoryColumns());
 
 // A tile is a presentation/submission wrapper (grid position, image, freeze
 // window) around one node — its tasks are that node's children.
-export const tiles = sqliteTable('tiles', {
+const tileColumns = (nodeTable: () => { id: AnySQLiteColumn }, categoryTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
+  nodeId: text('node_id').notNull().references(() => nodeTable().id),
   name: text('name').notNull(),
   imageUrl: text('image_url'), // uploaded via the admin panel
-  categoryId: text('category_id').references(() => tileCategories.id),
+  categoryId: text('category_id').references(() => categoryTable().id),
   boardRow: integer('board_row').notNull(), // 0-indexed
   boardCol: integer('board_col').notNull(), // 0-indexed
   hasFreezePeriod: integer('has_freeze_period', { mode: 'boolean' }).notNull().default(false),
@@ -724,23 +783,90 @@ export const tiles = sqliteTable('tiles', {
   // dialog. Null on every Bingo run here, whose Tiles say what they take through their Tasks.
   rulesText: text('rules_text'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (t) => [
+});
+export const tiles = sqliteTable('tiles', tileColumns(() => nodes, () => tileCategories), (t) => [
   uniqueIndex('tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
   uniqueIndex('tiles_node_unq').on(t.nodeId),
+]);
+
+// Tags (CONTEXT.md "Tag"): words the board's search finds a Tile by, never shown to Players. A tag is on a Tile
+// (tileId) or on one of its Parts (nodeId, a tile node's direct child), never both. Its own table rather than columns
+// on tiles/nodes, so nothing that serialises a Tile or a node to Players can carry them by accident: only the board
+// editor, the search endpoint (which answers with Tile ids) and the export read it.
+// Shared by the Published board's `tags` and the Draft board's `draft_tags` (CONTEXT.md "Draft board"), each pointing at
+// its own board's Tiles and Parts.
+const tagColumns = (tileTable: () => { id: AnySQLiteColumn }, nodeTable: () => { id: AnySQLiteColumn }) => ({
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  tileId: text('tile_id').references(() => tileTable().id),
+  nodeId: text('node_id').references(() => nodeTable().id),
+  // A Text tag is any text; a Boss tag's text is the boss's OSRS Wiki page title.
+  kind: text('kind', { enum: ['text', 'boss'] }).notNull(),
+  text: text('text').notNull(),
+  // A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag, removed along with it. Same
+  // table, so plain text with no FK declared, like nodes' self-references.
+  bossTagId: text('boss_tag_id'),
+  // The order the tags were added in, per Tile or Part.
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+export const tags = sqliteTable('tags', tagColumns(() => tiles, () => nodes), (t) => [
+  index('tags_bingo_idx').on(t.bingoId),
 ]);
 
 // All possible lines on the board (rows + cols + diagonals, generated from
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
 // line is a presentation wrapper around a node whose children are the line's
 // tile nodes (an ALL by convention) and whose points are the line bonus.
-export const bingoLines = sqliteTable('bingo_lines', {
+const bingoLineColumns = (nodeTable: () => { id: AnySQLiteColumn }) => ({
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   bingoId: text('bingo_id').notNull().references(() => bingos.id),
-  nodeId: text('node_id').notNull().references(() => nodes.id),
+  nodeId: text('node_id').notNull().references(() => nodeTable().id),
   lineType: text('line_type', { enum: ['row', 'column', 'diagonal', 'custom'] }).notNull(),
   lineIndex: integer('line_index').notNull(),
-}, (t) => [
+});
+export const bingoLines = sqliteTable('bingo_lines', bingoLineColumns(() => nodes), (t) => [
   uniqueIndex('bingo_lines_node_unq').on(t.nodeId),
+]);
+
+// ---------------------------------------------------------------------------
+// DRAFT BOARD (CONTEXT.md "Draft board", #437)
+//
+// The Admins' working copy of a Bingo's Board: a full copy of its nodes, edges, Tiles, lines, Categories and Tags, plus
+// its Exclusive Item rules and Rules text, in tables of the same shape as the Published board's. A row present in both
+// boards has the same id in both, so Claims, team scores and Task interest (which point at the Published board's
+// ids) still point at it after a Publish; only rows the draft added or removed gain or lose ids. Players, Moderators,
+// scoring and the export never read these tables (boardDraftService.ts is their only reader and writer, through
+// boardService's and tagService's DRAFT table set). A Bingo has a draft only while it differs from its Published board:
+// an edit that brings it back level drops it, as do Publish and Discard.
+// ---------------------------------------------------------------------------
+
+export const boardDrafts = sqliteTable('board_drafts', {
+  bingoId: text('bingo_id').primaryKey().references(() => bingos.id),
+  // A fresh random value on every edit, so a Publish can tell the draft it previewed from one changed since.
+  revision: text('revision').notNull(),
+  exclusivityRulesJson: text('exclusivity_rules_json').notNull().default('[]'),
+  rulesMarkdown: text('rules_markdown'),
+  // Who changed it last, and when (the "Unpublished changes" bar).
+  updatedByUserId: text('updated_by_user_id').references(() => users.id),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const draftNodes = sqliteTable('draft_nodes', nodeColumns(), (t) => [index('draft_nodes_bingo_idx').on(t.bingoId)]);
+export const draftNodeEdges = sqliteTable('draft_node_edges', nodeEdgeColumns(() => draftNodes), (t) => [
+  uniqueIndex('draft_node_edges_parent_child_unq').on(t.parentId, t.childId),
+]);
+export const draftTileCategories = sqliteTable('draft_tile_categories', tileCategoryColumns());
+export const draftTiles = sqliteTable('draft_tiles', tileColumns(() => draftNodes, () => draftTileCategories), (t) => [
+  uniqueIndex('draft_tiles_bingo_position_unq').on(t.bingoId, t.boardRow, t.boardCol),
+  uniqueIndex('draft_tiles_node_unq').on(t.nodeId),
+]);
+export const draftBingoLines = sqliteTable('draft_bingo_lines', bingoLineColumns(() => draftNodes), (t) => [
+  uniqueIndex('draft_bingo_lines_node_unq').on(t.nodeId),
+]);
+// Tags (CONTEXT.md "Tag") go through the draft with the rest of the Board: a Publish applies them, keeping their ids.
+export const draftTags = sqliteTable('draft_tags', tagColumns(() => draftTiles, () => draftNodes), (t) => [
+  index('draft_tags_bingo_idx').on(t.bingoId),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -952,7 +1078,8 @@ export const bingoAchievementSettings = sqliteTable('bingo_achievement_settings'
   uniqueIndex('bingo_achievement_settings_bingo_key_unq').on(t.bingoId, t.achievementKey),
 ]);
 
-// One row per player action Achievements care about. Written only while the bingo is Live and only for an
+// One row per player action Achievements care about. Written only while the action can earn one (from Board revealed
+// for Tile and rules opens and interest marks, else only Live) and only for an
 // eligible player (a Team member acting on their own Team's concern), whether or not any Achievement is currently
 // switched on — so a later switch-on can count activity that happened while it was off, back to the moment it was
 // FIRST switched on. `subjectId`/`tileId`/`creditedUserId` are populated per `kind` (see achievementService.ts):

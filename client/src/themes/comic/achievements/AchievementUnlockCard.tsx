@@ -3,6 +3,7 @@ import { WikiIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import { TextButton } from "../../../core/ui/TextButton";
+import { LETTERED } from "../../lettering";
 
 // A yellow narration caption, inked and hard-shadowed like the rest of the book, with the item sprite in a little
 // paper panel of its own.
@@ -18,10 +19,10 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
           <WikiIcon name={achievement.itemName ?? ""} className="size-12 object-contain [image-rendering:pixelated]" />
         </div>
         <div className="min-w-0">
-          <div className="text-sm uppercase leading-none tracking-wider" style={{ fontFamily: COMIC_FONT }}>
+          <div className={`${LETTERED} text-sm uppercase leading-none tracking-wider`} style={{ fontFamily: COMIC_FONT }}>
             Achievement unlocked!
           </div>
-          <div className="mt-1 text-3xl uppercase leading-none tracking-wide [overflow-wrap:anywhere]" style={{ fontFamily: COMIC_FONT }}>
+          <div className={`${LETTERED} mt-1 text-3xl uppercase leading-none tracking-wide [overflow-wrap:anywhere]`} style={{ fontFamily: COMIC_FONT }}>
             {achievement.name}
           </div>
           <div className="mt-1 text-base font-semibold leading-snug">{achievement.description}</div>
@@ -29,7 +30,7 @@ export function AchievementUnlockCard({ achievement, onViewAchievements }: { ach
           <TextButton
             ownColour
             onPress={onViewAchievements}
-            className="mt-1 text-base uppercase tracking-wide decoration-2"
+            className={`${LETTERED} mt-1 text-base uppercase tracking-wide decoration-2`}
             style={{ fontFamily: COMIC_FONT }}
           >
             View my achievements

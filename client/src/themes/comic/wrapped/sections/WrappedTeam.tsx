@@ -3,6 +3,7 @@ import type { WrappedPersonModel, WrappedTeamModel } from "../../../../headless/
 import { PointsChart } from "../../../../core/wrapped/PointsChart";
 import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { useComic } from "../../ui/useComic";
+import { LETTERED } from "../../../lettering";
 import { COVER } from "../coverParts";
 import { ComicDrop, ComicPerson, display, FULL_PANEL, GroundHalftone, InkBurst, Kicker, burstFont, PADDED_PANEL, PanelHeading, Splash, Sfx, Tally } from "./sectionParts-team-bingo";
 import { Gp } from "./sectionParts-you-duo-captain-moderator";
@@ -77,7 +78,7 @@ export function WrappedTeam({ section: t }: { section: WrappedTeamModel }) {
                 <ul className="mt-2.5 flex flex-col gap-1.5">
                   {t.superlatives.map((s) => (
                     <li key={s.category} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-[2.5px] px-2 py-1.5" style={{ borderColor: colors.LINE, background: colors.YELLOW_TINT }}>
-                      <span className="shrink-0 border-2 px-1.5 pt-[3px] pb-px" style={{ ...display(15), background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, transform: "rotate(-1.5deg)" }}>
+                      <span className={`${LETTERED} shrink-0 border-2 px-1.5 pt-[3px] pb-px`} style={{ ...display(15), background: colors.YELLOW, color: colors.ON_YELLOW, borderColor: colors.LINE, transform: "rotate(-1.5deg)" }}>
                         {s.category}
                       </span>
                       {s.winners.map((w) => (
@@ -127,7 +128,7 @@ function Placement({ t }: { t: WrappedTeamModel }) {
         </span>
       </InkBurst>
       <p className="relative text-center text-[14px] leading-tight" style={{ color: colors.INK_BODY }}>
-        <span className="num" style={{ ...display(24), color: colors.INK }}>
+        <span className={`${LETTERED} num`} style={{ ...display(24), color: colors.INK }}>
           {t.pointsLabel}
         </span>{" "}
         points
@@ -182,7 +183,7 @@ function StarCell({ kicker, person, figure, label, drop }: { kicker: ReactNode; 
       {kicker}
       <ComicPerson person={person} size={48} column nameSize={15} />
       <div data-beat="slam" className="mt-auto">
-        <div className="num flex justify-center whitespace-nowrap" style={{ ...display(30), color: colors.INK, textShadow: `2px 2px 0 ${drop}`, paddingRight: 2 }}>
+        <div className={`${LETTERED} num flex justify-center whitespace-nowrap`} style={{ ...display(30), color: colors.INK, textShadow: `2px 2px 0 ${drop}`, paddingRight: 2 }}>
           {figure}
         </div>
         <div className="mt-1 text-[12px] uppercase tracking-wide" style={{ color: colors.INK_SUBTLE, fontWeight: 700 }}>

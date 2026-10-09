@@ -1,5 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AppliedCutChange, ApplyCutReviewResponse, AuditLogFilters, AuditLogResponse, CutChange, QuestionForm, ScoreCutReviewResponse } from "@bingo/shared";
+import type { QueryClient } from "@tanstack/react-query";
+import type { AppliedCutChange, ApplyCutReviewResponse, AuditLogFilters, AuditLogResponse, BoardResponse, CutChange, DraftBoardResponse, QuestionForm, ScoreCutReviewResponse } from "@bingo/shared";
+import { optimisticUpdate } from "./optimistic";
 import { useDebouncedValue } from "../headless/useDebouncedValue";
 import { api } from "./client";
 import { auditLogQueryString, queryKeys } from "./queries";
@@ -9,6 +11,11 @@ export const adminQueryKeys = {
   mods: (slug: string) => ["adminMods", slug] as const,
   staff: (slug: string) => ["adminStaff", slug] as const,
   lines: (slug: string) => ["adminLines", slug] as const,
+  // The Draft board (CONTEXT.md): the board the editor shows, and whether there's anything to publish. Both refetch on
+  // every bingo_changed (WebSocketContext), so every Admin's editor follows the others' edits.
+  boardDraft: (slug: string) => ["adminBoardDraft", slug] as const,
+  boardDraftStatus: (slug: string) => ["adminBoardDraftStatus", slug] as const,
+  publishPreview: (slug: string) => ["adminPublishPreview", slug] as const,
   // Under the signup form's key (WebSocketContext invalidates ["adminQuestions"]), so one refresh covers both forms.
   questions: (slug: string, form: QuestionForm = "signup") => (form === "feedback" ? (["adminQuestions", slug, "feedback"] as const) : (["adminQuestions", slug] as const)),
   superlatives: (slug: string) => ["adminSuperlatives", slug] as const,
@@ -26,7 +33,13 @@ export const adminQueryKeys = {
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
   wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
+  boardTags: (slug: string) => ["adminBoardTags", slug] as const,
 };
+
+/** Every Tag on the board (CONTEXT.md "Tag"), by Tile and by Part: the board editor's. */
+export function useBoardTags(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.boardTags(slug), queryFn: () => adminApi.getBoardTags(slug) });
+}
 
 // The site-wide audit log — every bingo, or just site-level entries
 // (bingoScope: null), or one specific bingo (bingoScope: its id).
@@ -42,6 +55,38 @@ export function useSiteAuditLog(bingoScope: string | null | "all", filters: Audi
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
+}
+
+/** The board the Admins' editor shows: the Draft board while there are unpublished changes, else the Published board. */
+export function useBoardDraft(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.boardDraft(slug), queryFn: () => adminApi.getBoardDraft(slug) });
+}
+
+/** Whether there are unpublished board changes, and who made the last one. `enabled`: only Admins may ask. */
+export function useBoardDraftStatus(slug: string, enabled = true) {
+  return useQuery({ queryKey: adminQueryKeys.boardDraftStatus(slug), queryFn: async () => (await adminApi.getBoardDraftStatus(slug)).status, enabled });
+}
+
+/** The Publish screen: the diff and score preview, made when it opens and never refetched behind the Admin's back. */
+export function usePublishPreview(slug: string, enabled: boolean) {
+  return useQuery({ queryKey: adminQueryKeys.publishPreview(slug), queryFn: async () => (await adminApi.getPublishPreview(slug)).preview, enabled, staleTime: Infinity, gcTime: 0, retry: false });
+}
+
+/** After an edit to the draft, a Publish or a Discard: the editor's board, its Tags and the "Unpublished changes" bar catch up. */
+export function invalidateBoardDraft(queryClient: QueryClient, slug: string) {
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraft(slug) });
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraftStatus(slug) });
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.lines(slug) });
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardTags(slug) });
+}
+
+/** optimisticUpdate on the editor's board (the draft), with the status bar refreshed afterwards. */
+export async function optimisticDraftBoard(queryClient: QueryClient, slug: string, update: (board: BoardResponse) => BoardResponse, request: () => Promise<unknown>): Promise<void> {
+  try {
+    await optimisticUpdate<DraftBoardResponse>(queryClient, adminQueryKeys.boardDraft(slug), (draft) => ({ ...draft, board: update(draft.board) }), request);
+  } finally {
+    invalidateBoardDraft(queryClient, slug);
+  }
 }
 
 export function useItemGroups() {

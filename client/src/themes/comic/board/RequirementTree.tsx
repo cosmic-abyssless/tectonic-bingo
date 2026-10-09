@@ -8,6 +8,7 @@ import { countsAsLabel } from "../../../core/board/labels";
 import { COMIC_FONT } from "../font";
 import { useComic } from "../ui/useComic";
 import type { ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
 
 /** Hand-drawn style checkbox: ink square, green tick when done. */
 function Box({ done, dim, colors }: { done: boolean; dim: boolean; colors: ComicColors }) {
@@ -71,7 +72,7 @@ function LeafRow({ node, colors, bare, hideLock, className }: { node: Requiremen
           {itemNameOf(node) ? <WikiItemLink name={itemNameOf(node)!} /> : node.label}
           {node.kind === "SUM" && <CountsAs countsAs={node.items[0]?.countsAs} colors={colors} />}
           {node.quantity && (
-            <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT }}>
+            <span className={`${LETTERED} num ml-1.5 text-base leading-snug`} style={{ fontFamily: COMIC_FONT }}>
               ×{node.quantity}
             </span>
           )}
@@ -90,7 +91,7 @@ function LeafRow({ node, colors, bare, hideLock, className }: { node: Requiremen
 
 function Progress({ node, colors }: { node: RequirementNodeModel; colors: ComicColors }) {
   return (
-    <span className="num shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.WARN }}>
+    <span className={`${LETTERED} num shrink-0 text-base leading-none`} style={{ fontFamily: COMIC_FONT, color: node.complete ? colors.OK : colors.WARN }}>
       {node.progress!.current}/{node.progress!.target}
     </span>
   );
@@ -103,7 +104,7 @@ function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: Com
       <ItemIcon url={item.iconUrl} className={`${ICON_CLASS} ${node.dim || item.lockedBy ? "opacity-60" : ""}`} />
       <WikiItemLink name={item.name} />
       <CountsAs countsAs={item.countsAs} colors={colors} />
-      <span className="num ml-1.5 text-base leading-snug" style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
+      <span className={`${LETTERED} num ml-1.5 text-base leading-snug`} style={{ fontFamily: COMIC_FONT, color: item.count > 0 ? colors.OK : colors.INK_SUBTLE }}>
         ×{item.count}
       </span>
       {item.lockedBy && <LockedTag text={item.lockedBy} colors={colors} />}
@@ -115,7 +116,7 @@ function SumItemRows({ node, colors }: { node: RequirementNodeModel; colors: Com
 function OrDivider({ dim, colors, className }: { dim: boolean; colors: ComicColors; className?: string }) {
   const color = dim ? colors.INK_SUBTLE : colors.INK;
   return (
-    <li role="separator" className={`flex items-center gap-2 text-sm uppercase leading-none tracking-wide ${dim ? "opacity-60" : ""} ${className ?? ""}`} style={{ fontFamily: COMIC_FONT, color }}>
+    <li role="separator" className={`${LETTERED} flex items-center gap-2 text-sm uppercase leading-none tracking-wide ${dim ? "opacity-60" : ""} ${className ?? ""}`} style={{ fontFamily: COMIC_FONT, color }}>
       <span className="h-0.5 w-5" style={{ background: color }} />
       or
       <span className="h-0.5 w-5" style={{ background: color }} />
@@ -146,13 +147,13 @@ export function RequirementTree({ node, root }: { node: RequirementNodeModel; ro
           // once the team has used the group on another Part.
           <div className="flex items-start gap-2">
             <Box done={node.complete} dim={node.dim || !!node.lockedBy} colors={colors} />
-            <span className="mt-0.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: node.lockedBy && !node.complete ? colors.INK_SUBTLE : headingColor }}>
+            <span className={`${LETTERED} mt-0.5 text-base uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: node.lockedBy && !node.complete ? colors.INK_SUBTLE : headingColor }}>
               {node.label}
               {node.lockedBy && <LockedTag text={node.lockedBy} colors={colors} />}
             </span>
           </div>
         ) : (
-          <span className="inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: headingColor }}>
+          <span className={`${LETTERED} inline-flex items-center gap-1.5 text-base uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: headingColor }}>
             {node.label}
             {node.progress && (
               <>

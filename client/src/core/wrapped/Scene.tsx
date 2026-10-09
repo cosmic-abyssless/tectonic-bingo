@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
-import { motion, useReducedMotion, useScroll, useTransform, type MotionValue } from "motion/react";
+import { useReducedMotion, useScroll, useTransform, type MotionValue } from "motion/react";
+import * as m from "motion/react-m";
 import { useWrappedProgressSource, useWrappedRevealComponent, WRAPPED_SCENE_UNREACHED, type WrappedProgressSource, type WrappedRevealEmphasis, type WrappedSceneState } from "./sceneProgress";
 
 // Wrapped's reveal (CONTEXT.md "Wrapped"): a Scene is one screen of the story, and each Reveal in it fades up at its
@@ -111,15 +112,15 @@ function ScrollReveal({ progress, steps, step, className, children }: { progress
 
   if (reduceMotion) {
     return (
-      <motion.div className={className} initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.4 }}>
+      <m.div className={className} initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.4 }}>
         {children}
-      </motion.div>
+      </m.div>
     );
   }
   return (
-    <motion.div className={className} style={{ opacity, y }}>
+    <m.div className={className} style={{ opacity, y }}>
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -151,7 +152,7 @@ function PageDrivenReveal({
     );
   }
   return (
-    <motion.div
+    <m.div
       className={className}
       data-wrapped-step={step}
       data-revealed={revealed}
@@ -160,6 +161,6 @@ function PageDrivenReveal({
       transition={reduceMotion ? { duration: 0 } : { duration: 0.4, ease: "easeOut" }}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

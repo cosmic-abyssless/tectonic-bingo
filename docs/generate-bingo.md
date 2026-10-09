@@ -21,7 +21,7 @@ server works as it is, integrations and all.
 
 ## From the browser (local or staging)
 
-**Site admin > Test data** (the tab only appears on a dev-mode server). Pick the bingo whose board to copy (its
+**Site admin > Bingos > Test data** (the tab only appears on a dev-mode server). Pick the bingo whose board to copy (its
 tiles, lines, rules and signup questions; nothing else), where to leave the new bingo, the theme to draw it in, and
 whether to put yourself on a team, then **Generate**. The log streams in underneath; a full live run takes about half a minute locally and a
 minute or two on staging. Generated bingos are listed below it with a **Tear down** button. **Do tear down**: a full
@@ -72,6 +72,8 @@ The teardown script takes the same `--base` and `--basic-auth`.
 | `--seed` | random (printed) | the same seed and options give the same people, choices and outcomes |
 | `--slug` | `testdata-<date>-<time>` | must start with `testdata-` |
 | `--theme` | the board's own | the theme the bingo is drawn in (its Board, Wrapped and the rest): `default` or `comic`, any other is refused. Without it, the bingo keeps the theme of the board it's made from (`--from`'s bingo, or the export's); the Test data tab's "Same as the board". A Historical Bingo has none of its own, so it is drawn in `default` unless given |
+| `--discord-guild` | none | a **test** Discord server's ID: the bingo's Team roles and channels are really made there once the draft finishes (`docs/discord-team-sync.md`), with the bot invited to it and `DISCORD_BOT_TOKEN` set. Never the clan's server (`DISCORD_GUILD_ID` is refused). Made-up players aren't in it, so only `--me` gets a role, if you're in that server. Teardown removes them. The Test data tab's "Test Discord server ID". Ignored for a historical bingo |
+| `--discord-category` | none | with `--discord-guild`: an existing category in that server to put the channels in, after what's already there (never edited or deleted), instead of one the bot makes. The Test data tab's "Existing category ID" |
 | `--base` | `http://localhost:3001` | the server |
 | `--from` | none | a bingo on the server to copy the board from |
 | `--export` | repo-root `tectonic-comics-bingo-export.json` | the board to send, when `--from` isn't given |
@@ -87,10 +89,15 @@ target (say `signup`), the later dates are simply scheduled in the future.
 
 ## What it does
 
-1. Imports the board and sets the dates (signups open, draft, reveal, start, end). Unless the board already has an
+1. Imports the board and sets the dates (signups open, draft, reveal, start, end), turning on the **Discord team
+   sync** in the same settings request, with a `{team}-loot` channel added to its channel list (never synced for a `testdata-` bingo; see below). Unless the board already has an
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
+   That PATCH goes to the **Draft board** (CONTEXT.md), as every board edit does, so the admin then **publishes** it
+   through the Publish endpoint, the way the Publish screen does (its preview, then a Publish of the revision it
+   showed): the Bingo plays on the board it set up, and its audit log shows "Board published". The import itself is
+   the Published board, so a run with no board edit publishes nothing.
    The admin also uploads **Wrapped art** (CONTEXT.md) through the Wrapped art manager's endpoints (`wrappedArt.ts`):
    four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
    Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
@@ -121,14 +128,18 @@ target (say `signup`), the later dates are simply scheduled in the future.
    the teams. Once the mods are made, a few **Restrictions** (CONTEXT.md) are applied from the mod roster: a
    Moderator takes rating picks from a Captain and reacting from a Player, and the Admin takes submitting (the
    `submit*` wildcard) from another Player and lifts it again that day. A Moderator also tries to restrict another
-   Moderator, which has to be refused (a sanity check). Before the draft the admin applies an empty **Cut review** (keeping the cuts
+   Moderator, which has to be refused (a sanity check). Later that day the Admin puts one Player on a **Borrowed
+   account** (CONTEXT.md) with a reason: an account named like no one in the Bingo, which Wise Old Man isn't asked
+   about for test data. Before the draft the admin applies an empty **Cut review** (keeping the cuts
    as they are), which the move into the draft needs while any cut is avoidable. Then the
    **real draft** runs: the admin sets the pick order, starts
    the draft, and captains pick in turn a minute or so apart, favouring better players,
    with the admin stepping in for a few picks. (To try the pick-order ceremony yourself,
    leave the bingo at `--stage captains` and move it to the draft stage in the mod panel.)
 4. **Reveal**: each Captain names their Team (the only stage a Captain can), and members raise hands on the parts
-   they mean to do. The Admin adds the
+   they mean to do (and most of a Team on one crowded part, so the Tile dialog's stack of pictures shows "+N") and look
+   the Board over (about half read the rules, most open a few Tiles, the odd one opens every
+   Tile), which earns the Achievements open from Board revealed. The Admin adds the
    **Superlative** categories ("Team MVP", "Team Spirit", "The Grinder") unless the board brought its own.
 5. **Live**: an hourly simulation (see below), with each Team voting on its Superlatives along the way: about 4 in
    5 Players vote (not the run's own player, whose ballot is left to them), most in every category, the odd one
@@ -272,6 +283,10 @@ check for it):
   turning off to run it.
 - A `testdata-` bingo is never synced to WOM (`womCompetitionService.ts`), in any mode: its
   made-up players must never become a real competition.
+- Nor to the clan's Discord (`discordTeamService.ts`): its setting is on, so the settings panel shows it, but
+  without `--discord-guild` the sync says why it isn't syncing and makes nothing, and `X-Dev-Skip-Integrations`
+  keeps the generator's requests off Discord. With `--discord-guild` (a test server, never `DISCORD_GUILD_ID`) both
+  give way for that server only (`onDiscordTestServer`), and teardown removes what was made there.
 - `POST /api/dev/generate` starts a run in the server (`server/src/devTools/generateBingo/job.ts`,
   one at a time), from another bingo's board (`from: <slug>`) or a sent `document`, and
   `GET /api/dev/generate?after=<n>` reports it with the log lines after the n-th. The Test data

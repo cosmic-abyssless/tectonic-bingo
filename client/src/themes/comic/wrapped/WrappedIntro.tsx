@@ -3,6 +3,7 @@ import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { WrappedSectionArt } from "../../../core/wrapped/WrappedParts";
 import { COMIC_FONT } from "../font";
 import { COVER, CoverBurst, CoverCaption, CoverGround, CoverMasthead, CoverTitle, coverShadow, coverTitleSize } from "./coverParts";
+import { LETTERED } from "../../lettering";
 
 /**
  * The front cover (#419): the Wrapped's Intro, drawn as a comic book cover like the share cards are: a masthead with the
@@ -20,7 +21,7 @@ export function WrappedIntro({ section, preview }: { section: WrappedIntroModel;
           <CoverMasthead
             kicker={section.playerName ? "Your Bingo Wrapped" : "Bingo Wrapped"}
             flag={
-              <div className="flex flex-col items-center justify-center px-2.5 text-center uppercase" style={{ borderLeft: `4px solid ${COVER.INK}`, fontFamily: COMIC_FONT, fontSize: 14, lineHeight: 1, background: COVER.YELLOW }}>
+              <div className={`${LETTERED} flex flex-col items-center justify-center px-2.5 text-center uppercase`} style={{ borderLeft: `4px solid ${COVER.INK}`, fontFamily: COMIC_FONT, fontSize: 14, lineHeight: 1, background: COVER.YELLOW }}>
                 <span>Final</span>
                 <span>issue!</span>
               </div>
@@ -37,7 +38,7 @@ export function WrappedIntro({ section, preview }: { section: WrappedIntroModel;
               </CoverTitle>
             </div>
             {section.datesLabel && (
-              <p className="num mt-3 self-start uppercase" style={{ fontFamily: COMIC_FONT, fontSize: 17, letterSpacing: "0.06em", color: COVER.ON_LOUD, textShadow: coverShadow(2) }}>
+              <p className={`${LETTERED} num mt-3 self-start uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 17, letterSpacing: "0.06em", color: COVER.ON_LOUD, textShadow: coverShadow(2) }}>
                 {section.datesLabel}
               </p>
             )}
@@ -76,7 +77,7 @@ export function WrappedIntro({ section, preview }: { section: WrappedIntroModel;
             )}
           </div>
 
-          <div className="relative shrink-0 px-4 py-2.5 text-center uppercase" style={{ background: COVER.PAPER_RAISED, borderTop: `4px solid ${COVER.INK}`, fontFamily: COMIC_FONT, fontSize: 19, lineHeight: 1.1, letterSpacing: "0.03em" }}>
+          <div className={`${LETTERED} relative shrink-0 px-4 py-2.5 text-center uppercase`} style={{ background: COVER.PAPER_RAISED, borderTop: `4px solid ${COVER.INK}`, fontFamily: COMIC_FONT, fontSize: 19, lineHeight: 1.1, letterSpacing: "0.03em" }}>
             {section.playerName ? `It's over, ${section.playerName}. Let's look back.` : "It's over. Let's look back."}
             <span className="mt-1 block text-[13px]" style={{ color: COVER.INK_SUBTLE, letterSpacing: "0.08em" }}>
               {preview ? "Only Moderators can see this until it's published" : "Turn the page to open it"}

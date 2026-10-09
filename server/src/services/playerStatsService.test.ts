@@ -206,6 +206,35 @@ describe("fetchAndPersistPlayerStats", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it("on a Borrowed account, takes the account's details from it but Peak CA from the Player's own RSNs only", async () => {
+    const signup = seedSignup();
+    db.update(schema.signups).set({ rsn: "Bob", accountBorrowed: true }).where(eq(schema.signups.id, signup.id)).run();
+    await fetchAndPersistPlayerStats(db, signup.id, "Bob", {
+      womClient: fakeWomClient({ ehb: 7, type: "regular" }),
+      runeProfileClient: fakeRuneProfileByRsn({ Bob: GM_RP, "Alice Main": EASY_RP }),
+      linkedRsns: ["Alice Main"],
+    });
+
+    const updated = db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()!;
+    expect(JSON.parse(updated.womDataJson!)).toEqual({ ehb: 7, type: "regular" });
+    expect(parseStoredCaStats(updated.caCurrentJson)).toEqual({ tier: "grandmaster", points: 2760 });
+    expect(parseStoredCaStats(updated.caPeakJson)).toEqual({ tier: "easy", points: 41 });
+  });
+
+  it("on a Borrowed account, keeps the Peak CA it had when the Player's own RSNs can't be looked up", async () => {
+    const signup = seedSignup();
+    db.update(schema.signups).set({ rsn: "Bob", accountBorrowed: true, caPeakJson: JSON.stringify({ tier: "elite", points: 1200 }) }).where(eq(schema.signups.id, signup.id)).run();
+    await fetchAndPersistPlayerStats(db, signup.id, "Bob", {
+      womClient: fakeWomClient({ ehb: 7, type: "regular" }),
+      runeProfileClient: fakeRuneProfileByRsn({ Bob: GM_RP }),
+      tectonicClient: null,
+    });
+
+    const updated = db.select().from(schema.signups).where(eq(schema.signups.id, signup.id)).get()!;
+    expect(parseStoredCaStats(updated.caCurrentJson)).toEqual({ tier: "grandmaster", points: 2760 });
+    expect(parseStoredCaStats(updated.caPeakJson)).toEqual({ tier: "elite", points: 1200 });
+  });
+
   it("skips the fetch entirely when PLAYER_STATS_FETCH_DISABLED=true (E2E test hook)", async () => {
     vi.stubEnv("PLAYER_STATS_FETCH_DISABLED", "true");
     const signup = seedSignup();

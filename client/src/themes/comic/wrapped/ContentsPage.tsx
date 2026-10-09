@@ -6,6 +6,7 @@ import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
 import { COVER, CoverCaption } from "./coverParts";
 import { useBook } from "./bookContext";
+import { LETTERED } from "../../lettering";
 
 /**
  * "In this issue": the page after the cover, a contents page listing the viewer's sections with the page each starts on,
@@ -24,10 +25,10 @@ export function ContentsPage() {
           <div className="relative border-[3px] px-3 py-2.5" style={{ background: COVER.YELLOW, borderColor: colors.LINE, boxShadow: `4px 4px 0 ${colors.SHADOW}`, transform: "rotate(-1.2deg)" }}>
             <PrintedShade ink={COVER.ORANGE} strength={30} from={30} />
             <div className="relative">
-              <p className="uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 13, letterSpacing: "0.12em", color: COVER.INK }}>
+              <p className={`${LETTERED} uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 13, letterSpacing: "0.12em", color: COVER.INK }}>
                 {wrapped.bingoName}
               </p>
-              <h2 className="comic-outline-text mt-1 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 46, letterSpacing: "0.02em", color: COVER.TITLE_FILL, ["--comic-title-fill" as string]: COVER.TITLE_FILL, ["--comic-title-stroke" as string]: COVER.INK }}>
+              <h2 className={`${LETTERED} comic-outline-text mt-1 uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 46, letterSpacing: "0.02em", color: COVER.TITLE_FILL, ["--comic-title-fill" as string]: COVER.TITLE_FILL, ["--comic-title-stroke" as string]: COVER.INK }}>
                 In this issue
               </h2>
             </div>
@@ -51,12 +52,12 @@ export function ContentsPage() {
                     style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, color: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW }}
                   >
                     <span
-                      className="flex h-9 min-w-9 shrink-0 items-center justify-center border-[3px] px-1 text-xl leading-none"
+                      className={`${LETTERED} flex h-9 min-w-9 shrink-0 items-center justify-center border-[3px] px-1 text-xl leading-none`}
                       style={{ fontFamily: COMIC_FONT, background: isBack ? COVER.RED : COVER.YELLOW, color: isBack ? COVER.ON_LOUD : COVER.ON_YELLOW, borderColor: colors.LINE }}
                     >
                       {isBack ? "★" : (page?.no ?? "")}
                     </span>
-                    <span className="min-w-0 flex-1 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 24, letterSpacing: "0.03em" }}>
+                    <span className={`${LETTERED} min-w-0 flex-1 uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 24, letterSpacing: "0.03em" }}>
                       {isBack ? backLabel : s.label}
                     </span>
                     <ArrowRightIcon size={18} />

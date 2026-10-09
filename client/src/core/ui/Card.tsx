@@ -1,5 +1,6 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { useOptionalSlot } from "../../themes/context";
+import { HEADING_LETTERED } from "../../themes/lettering";
 
 /** Flat surface with a hairline border. Elevation comes from borders, not shadows. */
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -11,13 +12,14 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 // (this element's own weight class) outside a themed page, or when a theme
 // sets a font but not a weight. Exported so other headings (Disclosure's own
 // title, when it stands in for a CardHeader — see SignupForm) theme the same way.
+// An element styled with it also takes the HEADING_LETTERED class (themes/lettering.ts).
 export const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
 
 export function CardHeader({ title, description, action }: { title: ReactNode; description?: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-outline px-5 py-4">
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold text-on-surface" style={HEADING_FONT}>
+        <h2 className={`${HEADING_LETTERED} text-sm font-semibold text-on-surface`} style={HEADING_FONT}>
           {title}
         </h2>
         {description && <p className="mt-0.5 text-sm text-on-surface-muted">{description}</p>}

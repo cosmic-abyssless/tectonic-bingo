@@ -5,6 +5,7 @@ import type { TileModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
 import { BookBackArt, BookCoverArt, coverTaskMark } from "./BookCoverArt";
 import { pageColors, tilePageColors, type ComicColors } from "./colors";
+import { LETTERED } from "../../lettering";
 
 /*
  * The comic book itself — a stack of leaves hinged along the spine, with a
@@ -370,7 +371,7 @@ function RevealedPageMark({ colors, label }: { colors: ComicColors; label: strin
   return (
     <span
       data-page-mark
-      className="pointer-events-none absolute leading-none"
+      className={`${LETTERED} pointer-events-none absolute leading-none`}
       style={{
         top: inset,
         right: inset,

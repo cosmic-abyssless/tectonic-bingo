@@ -7,10 +7,41 @@ import { UndoPickButton, type UndoLatestPick } from "./UndoPick";
 
 // A duo pair is drafted as one pick, so both rows share a pickNumber — show
 // them as one entry so the roster reads the same way the draft was made.
-export function groupByPick(picks: DraftPick[]): DraftPick[][] {
-  const byNumber = new Map<number, DraftPick[]>();
+export function groupByPick<P extends DraftPick>(picks: P[]): P[][] {
+  const byNumber = new Map<number, P[]>();
   for (const p of picks) byNumber.set(p.pickNumber, [...(byNumber.get(p.pickNumber) ?? []), p]);
   return [...byNumber.entries()].sort(([a], [b]) => a - b).map(([, group]) => group);
+}
+
+/** A pick on a Team's roster; `left`: drafted, but no longer on the Team (removed, or moved to another). */
+export type RosterPick = DraftPick & { left?: boolean };
+
+/**
+ * A Team's roster once the Draft is over, as picks: every pick it made, with whoever has since left it marked `left`
+ * (shown struck through, so a pair stays a pair), then each member it never drafted (a Late signup, a Player moved in)
+ * as a single of their own after the last pick. The pick numbers only order and group the slips; none is shown.
+ */
+export function currentRosterPicks(team: DraftTeam, picks: DraftPick[]): RosterPick[] {
+  // A drafted Player made Captain or co-captain since is still on the Team, though not among its members.
+  const onTeam = new Set([...team.members.map((m) => m.userId), team.captainUserId, team.coCaptain?.userId]);
+  const drafted: RosterPick[] = picks.filter((p) => p.teamId === team.id).map((p) => (onTeam.has(p.userId) ? p : { ...p, left: true }));
+  const draftedIds = new Set(drafted.map((p) => p.userId));
+  const after = Math.max(0, ...picks.map((p) => p.pickNumber));
+  const added = team.members
+    .filter((m) => !draftedIds.has(m.userId))
+    .map((m, i) => ({ id: `member-${m.userId}`, bingoId: team.bingoId, pickNumber: after + 1 + i, teamId: team.id, userId: m.userId, pickedByUserId: "", createdAt: "", user: m.user, rsn: m.rsn }));
+  return [...drafted, ...added];
+}
+
+/** A pick's name on a roster slip; one who has left the Team is struck through and dimmed. */
+export function RosterName({ pick, className = "" }: { pick: RosterPick; className?: string }) {
+  const name = pick.rsn || displayName(pick.user);
+  return (
+    <PlayerName userId={pick.userId} className={`${className} ${pick.left ? "opacity-50" : ""}`}>
+      {pick.left ? <span className="line-through">{name}</span> : name}
+      {pick.left && <span className="sr-only"> (no longer on the team)</span>}
+    </PlayerName>
+  );
 }
 
 /**
@@ -36,7 +67,7 @@ export function ordinal(n: number): string {
 
 export interface TeamRosterProps {
   team: DraftTeam;
-  picks: DraftPick[];
+  picks: RosterPick[];
   isCurrent?: boolean;
   highlight?: boolean;
   showOrder?: boolean;
@@ -102,7 +133,7 @@ export function PlainTeamRoster({ team, picks, isCurrent, highlight, showOrder, 
             <div className="flex min-w-0 flex-1 flex-col justify-center">
               {group.map((p) => (
                 <div key={p.id} className="truncate">
-                  <PlayerName userId={p.userId}>{p.rsn || displayName(p.user)}</PlayerName>
+                  <RosterName pick={p} />
                 </div>
               ))}
             </div>

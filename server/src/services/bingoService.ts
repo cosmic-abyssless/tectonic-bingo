@@ -1,4 +1,4 @@
-import { can, type AchievementKey, type CutMode, type ExclusivityGroup, type ExclusivityRule } from "@bingo/shared";
+import { can, discordChannelsProblem, DISCORD_NAME_MAX, type AchievementKey, type CutMode, type DiscordChannelTemplate, type ExclusivityGroup, type ExclusivityRule } from "@bingo/shared";
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -39,16 +39,25 @@ import {
   submissionReactions,
   superlativeCategories,
   superlativeVotes,
+  tags,
   tiles,
   users,
   womPastCompetitions,
   womReads,
   womSnapshots,
   wrappedArt,
+  boardDrafts,
+  discordResources,
+  draftBingoLines,
+  draftNodeEdges,
+  draftNodes,
+  draftTileCategories,
+  draftTags,
+  draftTiles,
 } from "../db/schema";
 import { ServiceError } from "./errors";
 import { freezeTitleSettings, unfreezeTitleSettings } from "./titleSettingsService";
-import { audit, diffFields, markAuditedNoop } from "../audit/record";
+import { audit, diffFields, markAuditedNoop, markUnchanged } from "../audit/record";
 import { userLabelById } from "../audit/describe";
 import { rsnsInBingo } from "./playerNames";
 import { PUBLIC_USER_COLS } from "./userService";
@@ -92,12 +101,44 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null; discordChannelsJson: string }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil"> & { exclusivityRules: ExclusivityRule[] } {
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil" | "discordChannelsJson"> & { exclusivityRules: ExclusivityRule[]; discordChannels: DiscordChannelTemplate[] } {
   // wrappedCreditsJson is unused (#281), and a category's additional credits go out with the Wrapped art instead.
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, ...rest } = bingo;
-  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson) };
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, discordChannelsJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), discordChannels: parseDiscordChannels(discordChannelsJson) };
+}
+
+/** The channels every Team gets (Settings > Discord). Tolerant like parseExclusivityRules: what's stored was validated. */
+export function parseDiscordChannels(json: string | null | undefined): DiscordChannelTemplate[] {
+  try {
+    const value: unknown = JSON.parse(json ?? "[]");
+    return Array.isArray(value) ? (value as DiscordChannelTemplate[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Validates a channel list from the settings: trims names, and keeps each entry's key (what ties it to its channels
+ * in Discord, so a rename renames them) or mints one for a new entry.
+ */
+export function normalizeDiscordChannels(input: unknown): DiscordChannelTemplate[] {
+  if (!Array.isArray(input)) throw new ServiceError(400, "discordChannels must be an array");
+  const seen = new Set<string>();
+  const channels = input.map((raw): DiscordChannelTemplate => {
+    const c = (raw ?? {}) as Record<string, unknown>;
+    const type = c.type;
+    if (type !== "text" && type !== "voice") throw new ServiceError(400, "A channel is either text or voice");
+    const name = typeof c.name === "string" ? c.name.trim() : "";
+    let key = typeof c.key === "string" && /^[a-z0-9-]{1,40}$/.test(c.key) ? c.key : "";
+    if (!key || seen.has(key)) key = crypto.randomUUID().slice(0, 8);
+    seen.add(key);
+    return { key, type, name };
+  });
+  const problem = discordChannelsProblem(channels);
+  if (problem) throw new ServiceError(400, problem);
+  return channels;
 }
 
 /**
@@ -288,7 +329,12 @@ export function createBingo(db: Db, params: CreateBingoParams) {
 export interface AdvanceStageParams {
   bingoId: string;
   toStage: Stage;
-  changedByUserId: string;
+  /** Null when the system makes the change: going Live by itself at the start date (bingoStartService.ts). */
+  changedByUserId: string | null;
+  /** Going Live ahead of the start date: start now, moving the start date to this moment. */
+  startNow?: boolean;
+  /** Only from this stage: a change decided on before the transaction (the automatic start) isn't made if the stage moved since. */
+  fromStage?: Stage;
   now?: Date; // injectable for tests
 }
 
@@ -303,7 +349,10 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // A Historical Bingo (CONTEXT.md) is always Finished.
     assertNotHistorical(bingo, "its stage can't change");
     if (params.toStage === bingo.stage) {
-      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`);
+      throw new ServiceError(400, `Bingo is already in the "${bingo.stage}" stage`, "already_in_stage");
+    }
+    if (params.fromStage && params.fromStage !== bingo.stage) {
+      throw new ServiceError(409, `The bingo moved to the "${bingo.stage}" stage in the meantime`, "stage_moved");
     }
 
     // Cut review (CONTEXT.md): can't move into the Draft while any cut is Avoidable and no review has been
@@ -315,26 +364,42 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       assertCutReviewSatisfied(tx, bingo);
     }
 
-    // `startsAt` is only ever what an admin set in the settings; it is not written here. Tile freezes
-    // and the submission gate run from the effective start (bingoStart.ts): that date if there is
-    // one, otherwise the moment the bingo was last put live, which the transition logged below
-    // records. (This used to stamp "now" into startsAt the first time the bingo went live, which
-    // pinned the freeze to that first time: moving back to reveal and live again never restarted it.)
+    // `startsAt` is what an admin set in the settings; a stage change only writes it when starting early (below). Tile
+    // freezes and the submission gate run from the effective start (bingoStart.ts): that date if there is one,
+    // otherwise the moment the bingo was last put live, which the transition logged below records. (This used to stamp
+    // "now" into startsAt the first time the bingo went live, which pinned the freeze to that first time: moving back to
+    // reveal and live again never restarted it.)
     const now = params.now ?? clockNow();
 
-    tx.update(bingos).set({ stage: params.toStage }).where(eq(bingos.id, bingo.id)).run();
+    // Live always means started (CONTEXT.md "Stage"). With the start date still ahead, the Bingo goes Live by itself
+    // then (bingoStartService.ts); going Live sooner is starting now, which moves the start date to this moment, so
+    // Submissions, Tile freezes and the Wise Old Man competition all start from it.
+    // Only from before Live: a Finished Bingo has started already, so its start date is never rewritten (and can't be
+    // set ahead, updateBingoSettings).
+    const startsEarly =
+      params.toStage === "live" && STAGE_ORDER.indexOf(bingo.stage) < STAGE_ORDER.indexOf("live") && !!bingo.startsAt && bingo.startsAt.getTime() > now.getTime();
+    if (startsEarly && !params.startNow) {
+      throw new ServiceError(400, "The bingo's start date is still ahead: it goes live by itself then. Start it now to go live sooner.", "start_date_ahead");
+    }
+
+    tx.update(bingos).set({ stage: params.toStage, ...(startsEarly ? { startsAt: now } : {}) }).where(eq(bingos.id, bingo.id)).run();
     // A Finished Bingo keeps the Title settings and Titles it finished with (#221); leaving Finished drops them.
     if (params.toStage === "complete") freezeTitleSettings(tx, bingo.id, now);
     else if (bingo.stage === "complete") unfreezeTitleSettings(tx, bingo.id);
     tx.insert(stageTransitions)
-      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId, createdAt: now })
+      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId ?? bingo.createdByUserId, createdAt: now })
       .run();
     audit(tx, {
       action: "stage.changed",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
-      details: { from: bingo.stage as Stage, to: params.toStage },
-      actor: { userId: params.changedByUserId },
+      details: {
+        from: bingo.stage as Stage,
+        to: params.toStage,
+        ...(params.changedByUserId === null ? { automatic: true } : {}),
+        ...(startsEarly ? { startedEarly: true, scheduledStart: bingo.startsAt!.toISOString() } : {}),
+      },
+      actor: params.changedByUserId === null ? "system" : { userId: params.changedByUserId },
       now: params.now,
     });
 
@@ -344,12 +409,13 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
 
 // Removes a bingo and everything hanging off it. The schema has no ON DELETE
 // CASCADE, so children are deleted leaf-first in one transaction.
-/** Every /uploads/ file a Bingo's rows point at: its Tile pictures, Submission and Proof screenshots, and Wrapped art. */
+/** Every /uploads/ file a Bingo's rows point at: its Tile pictures (the Draft board's too), Submission and Proof screenshots, and Wrapped art. */
 function uploadUrlsOf(tx: Tx, bingoId: string): Set<string> {
   const teamIds = tx.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId));
   const submissionIds = tx.select({ id: submissions.id }).from(submissions).where(inArray(submissions.teamId, teamIds));
   const urls = [
     ...tx.select({ url: tiles.imageUrl }).from(tiles).where(eq(tiles.bingoId, bingoId)).all().map((t) => t.url),
+    ...tx.select({ url: draftTiles.imageUrl }).from(draftTiles).where(eq(draftTiles.bingoId, bingoId)).all().map((t) => t.url),
     ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.submissionId, submissionIds)).all().map((s) => s.url),
     ...tx.select().from(wrappedArt).where(eq(wrappedArt.bingoId, bingoId)).all().flatMap((a) => [a.originalUrl, a.frame1Url, a.frame2Url]),
   ];
@@ -358,11 +424,12 @@ function uploadUrlsOf(tx: Tx, bingoId: string): Set<string> {
 }
 
 /** Of `urls`, the ones no row of any Bingo points at: a new Bingo's Wrapped art shares the previous one's files. */
-function unreferencedUploads(tx: Tx, urls: Set<string>): string[] {
+export function unreferencedUploads(tx: Tx, urls: Set<string>): string[] {
   if (urls.size === 0) return [];
   const list = [...urls];
   const used = new Set<string | null>([
     ...tx.select({ url: tiles.imageUrl }).from(tiles).where(inArray(tiles.imageUrl, list)).all().map((t) => t.url),
+    ...tx.select({ url: draftTiles.imageUrl }).from(draftTiles).where(inArray(draftTiles.imageUrl, list)).all().map((t) => t.url),
     ...tx.select({ url: submissionScreenshots.storageUrl }).from(submissionScreenshots).where(inArray(submissionScreenshots.storageUrl, list)).all().map((s) => s.url),
     ...tx
       .select()
@@ -434,7 +501,16 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(feedbackAnswers).where(inArray(feedbackAnswers.responseId, feedbackResponseIds)).run();
     tx.delete(feedbackResponses).where(eq(feedbackResponses.bingoId, bingoId)).run();
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
+    // The Draft board (CONTEXT.md), if any: the same tables over again.
+    tx.delete(draftTags).where(eq(draftTags.bingoId, bingoId)).run();
+    tx.delete(draftBingoLines).where(eq(draftBingoLines.bingoId, bingoId)).run();
+    tx.delete(draftTiles).where(eq(draftTiles.bingoId, bingoId)).run();
+    tx.delete(draftNodeEdges).where(inArray(draftNodeEdges.parentId, tx.select({ id: draftNodes.id }).from(draftNodes).where(eq(draftNodes.bingoId, bingoId)))).run();
+    tx.delete(draftNodes).where(eq(draftNodes.bingoId, bingoId)).run();
+    tx.delete(draftTileCategories).where(eq(draftTileCategories.bingoId, bingoId)).run();
+    tx.delete(boardDrafts).where(eq(boardDrafts.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
+    tx.delete(tags).where(eq(tags.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();
     tx.delete(tileCategories).where(eq(tileCategories.bingoId, bingoId)).run();
     tx.delete(nodeEdges).where(inArray(nodeEdges.parentId, nodeIds)).run();
@@ -601,6 +677,11 @@ export interface UpdateBingoSettingsParams {
   womEnabled?: boolean;
   womGroupId?: string | null;
   womGroupVerificationCode?: string | null;
+  discordEnabled?: boolean;
+  discordCategoryName?: string | null;
+  discordCategoryId?: string | null;
+  discordGuildId?: string | null;
+  discordChannels?: unknown;
   // Achievements (CONTEXT.md "Achievement"): the master switch is a plain column (below); per-Achievement
   // switches live in their own table and are applied separately (see achievementService.applyAchievementSwitches).
   achievementsEnabled?: boolean;
@@ -613,7 +694,7 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
   return db.transaction((tx) => {
     const existing = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get();
     if (!existing) throw new ServiceError(404, "Bingo not found");
-    if (params.achievements) achievementService.applyAchievementSwitches(tx, bingoId, params.achievements);
+    const switched = params.achievements ? achievementService.applyAchievementSwitches(tx, bingoId, params.achievements) : false;
     if (params.signupMode !== undefined && params.signupMode !== existing.signupMode) {
       // Existing signups were made under the other mode's rules (pairings only
       // mean something in duo), so the switch is only allowed on a clean slate.
@@ -624,25 +705,55 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     const signupMode = params.signupMode ?? existing.signupMode;
     if (params.cutMode === "pairs_only" && signupMode !== "duo") throw new ServiceError(400, "Pairs only is for duo bingos");
     if (params.cutMode === undefined && signupMode !== "duo" && existing.cutMode === "pairs_only") params.cutMode = "even";
+    // A Live or Finished Bingo has started (CONTEXT.md "Stage"), so its start date can't move into the future: that
+    // would make it Live but not started. Moving the start into the future means going back to Board revealed first.
+    if (params.startsAt && (existing.stage === "live" || existing.stage === "complete") && params.startsAt.getTime() > clockNow().getTime()) {
+      throw new ServiceError(400, "The bingo has already started, so its start date can't be in the future. Move it back to Board revealed first.");
+    }
+    // The mirror at Board revealed: a start date moved into the past would start the Bingo at once (bingoStartService.ts),
+    // which is Start now's job, said in its confirmation. Only a change counts: the settings form sends the date it
+    // loaded back with every save, to the minute.
+    const startMoved = params.startsAt && (!existing.startsAt || Math.abs(params.startsAt.getTime() - existing.startsAt.getTime()) >= 60_000);
+    if (startMoved && existing.stage === "reveal" && params.startsAt!.getTime() <= clockNow().getTime()) {
+      throw new ServiceError(400, "That start date has already passed, so the bingo would go live at once. To start it now, use Start now.");
+    }
     if (params.womGroupId != null && !/^\d+$/.test(params.womGroupId)) {
       throw new ServiceError(400, "WOM group ID must be a number");
     }
-    const { exclusivityRules, achievements: _achievements, ...columns } = params;
+    if (params.discordGuildId != null && !/^\d{15,25}$/.test(params.discordGuildId)) {
+      throw new ServiceError(400, "The Discord server ID is a number (Developer Mode, then right-click the server > Copy Server ID)");
+    }
+    if (params.discordGuildId !== undefined && params.discordGuildId !== existing.discordGuildId) {
+      // What was made stays in the server it was made in; moving on would leave it behind untracked.
+      const made = tx.select({ id: discordResources.id }).from(discordResources).where(eq(discordResources.bingoId, bingoId)).get();
+      if (made) throw new ServiceError(400, "Remove this bingo's roles and channels from Discord before changing its Discord server");
+    }
+    if (params.discordCategoryId != null && !/^\d{15,25}$/.test(params.discordCategoryId)) {
+      throw new ServiceError(400, "The Discord category ID is a number (Developer Mode, then right-click the category > Copy Channel ID)");
+    }
+    if (params.discordCategoryName != null && params.discordCategoryName.length > DISCORD_NAME_MAX) {
+      throw new ServiceError(400, `The Discord category name is at most ${DISCORD_NAME_MAX} characters`);
+    }
+    const { exclusivityRules, achievements: _achievements, discordChannels, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
-    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
+    if (discordChannels !== undefined) set.discordChannelsJson = JSON.stringify(normalizeDiscordChannels(discordChannels));
 
-    const changes = diffFields(existing, updated, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
-    if (changes) {
-      audit(tx, {
-        action: "settings.updated",
-        bingoId,
-        entity: { type: "bingo", id: bingoId, label: updated.name },
-        details: { changes: changes as never },
-      });
-    } else {
-      markAuditedNoop();
+    // Saving the form untouched writes and records nothing (#456). The Achievement switches aren't audited, so a change
+    // to only them is written but recorded as nothing to audit, not as unchanged.
+    const changes = diffFields(existing, { ...existing, ...set }, { only: Object.keys(set) as (keyof typeof existing)[], redact: ["womGroupVerificationCode"] });
+    if (!changes) {
+      if (switched) markAuditedNoop();
+      else markUnchanged();
+      return existing;
     }
+    const updated = tx.update(bingos).set(set).where(eq(bingos.id, bingoId)).returning().get();
+    audit(tx, {
+      action: "settings.updated",
+      bingoId,
+      entity: { type: "bingo", id: bingoId, label: updated.name },
+      details: { changes: changes as never },
+    });
     return updated;
   });
 }

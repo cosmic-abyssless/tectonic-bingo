@@ -1,18 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import type { Tile, TileCategory } from "@bingo/shared";
-import { sealedTileMatchesSearch, tileMatchesSearch } from "../core/board/requirementTree";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Tile } from "@bingo/shared";
+import type { TileMatcher } from "../core/board/tileSearch";
 import type { TileSearchModel } from "./types";
 
 const SUGGESTION_CAP = 8;
-
-export type TileMatcher = (tile: Tile, q: string) => boolean;
-
-/** How the board's search finds a tile: by its name, Parts and Items, or while sealed by its name and Category only. */
-export function tileSearchMatcher(sealed: boolean, categories: TileCategory[]): TileMatcher {
-  if (!sealed) return tileMatchesSearch;
-  const labelById = new Map(categories.map((c) => [c.id, c.label]));
-  return (tile, q) => sealedTileMatchesSearch(tile, tile.categoryId ? (labelById.get(tile.categoryId) ?? null) : null, q);
-}
 
 type ShortcutKey = Pick<globalThis.KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "defaultPrevented">;
 type FocusedElement = { tagName: string; isContentEditable?: boolean } | null;
@@ -31,21 +22,24 @@ export function slashFocusesSearch(e: ShortcutKey, focused: FocusedElement, dial
 const OPEN_DIALOG = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], dialog[open]';
 
 // The board's Tile search: the query, the Tiles it matches (the first few) and which one the list is on. Each theme
-// draws it on react-aria's ComboBox, which owns the keyboard. `onChoose` is called with the picked tile's id.
-export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (tileId: string) => void): TileSearchModel {
+// draws it on react-aria's ComboBox, which owns the keyboard. `onChoose` is called with the picked tile's id. It
+// matches in the browser (`matches`: core/board/tileSearch.ts), so each letter's answer is there in the same frame.
+// `onHighlight`: the row the list is on (arrow keys, hovering), for the Tiles to light up; it isn't kept as state here.
+export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (tileId: string) => void, onHighlight: (tileId: string | null) => void): TileSearchModel {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const sq = query.trim().toLowerCase();
-  const allMatching = sq ? tiles.filter((t) => matches(t, sq)) : [];
+  // In board order, row by row.
+  const ordered = useMemo(() => [...tiles].sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol), [tiles]);
+  const allMatching = useMemo(() => (query.trim() ? ordered.filter((t) => matches(t, query)) : []), [ordered, matches, query]);
   const matching = allMatching.slice(0, SUGGESTION_CAP);
+  const matchIds = useMemo(() => (query.trim() ? new Set(allMatching.map((t) => t.id)) : null), [query, allMatching]);
 
   function choose(tileId: string) {
     onChoose(tileId);
     setQuery("");
-    setHighlightedId(null);
+    onHighlight(null);
   }
 
   // "/" anywhere on the board focuses the search, unless the viewer is typing somewhere or a dialog is open.
@@ -68,9 +62,9 @@ export function useTileSearch(tiles: Tile[], matches: TileMatcher, onChoose: (ti
     setFocused,
     results: matching.map((t) => ({ id: t.id, name: t.name })),
     overflowCount: Math.max(0, allMatching.length - SUGGESTION_CAP),
-    highlightedId,
-    setHighlightedId,
+    setHighlightedId: onHighlight,
     choose,
     inputRef,
+    matchIds,
   };
 }

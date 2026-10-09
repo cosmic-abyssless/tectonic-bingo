@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TectonicClient, TectonicUnavailableError, getTectonicConfig, type TectonicConfig } from "./tectonicService";
+import { log } from "../log";
 
 const cfg: TectonicConfig = { baseUrl: "http://tectonic.test", apiKey: "secret-key", guildId: "guild123" };
 
@@ -15,6 +16,7 @@ function mockFetch(responses: Record<string, { status?: number; body?: unknown }
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("getTectonicConfig", () => {
@@ -57,12 +59,63 @@ describe("TectonicClient", () => {
     await expect(client.getRoster()).rejects.toBeInstanceOf(TectonicUnavailableError);
   });
 
+  it("reports a non-2xx to Sentry (log.error with the error), but not a network failure", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await expect(new TectonicClient(cfg, mockFetch({ "/leaderboard": { status: 401, body: { error: "bad key" } } })).getRoster()).rejects.toThrow();
+    expect(error).toHaveBeenCalledWith("tectonic request failed", expect.objectContaining({ status: 401, err: expect.any(TectonicUnavailableError) }));
+
+    error.mockClear();
+    const down = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    await expect(new TectonicClient(cfg, down).getRoster()).rejects.toThrow();
+    expect(error).not.toHaveBeenCalled();
+  });
+
   it("throws TectonicUnavailableError on a network failure", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("ECONNREFUSED");
     }) as unknown as typeof fetch;
     const client = new TectonicClient(cfg, fetchImpl);
     await expect(client.getDetailedUser("111")).rejects.toBeInstanceOf(TectonicUnavailableError);
+  });
+
+  describe("a lookup tectonic-api doesn't answer in time (TECTONIC-SERVER-7)", () => {
+    const quick = { timeoutMs: 40, attempts: 2 };
+    // Never answers: settles only when the request's own timeout aborts it, as a dead connection does.
+    const hang = (_url: string | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)));
+    const answer = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+
+    it("is tried again, and the second try's answer is used", async () => {
+      const fetchImpl = vi.fn().mockImplementationOnce(hang).mockImplementationOnce(() => answer([{ user_id: "1" }]));
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).resolves.toEqual([{ user_id: "1" }]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("gives up after the second try, as unavailable", async () => {
+      const fetchImpl = vi.fn(hang);
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).rejects.toThrow(/no answer in 40 ms/);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("counts an answer whose body never finishes arriving", async () => {
+      const stalledBody = (_url: string | URL, init?: RequestInit) =>
+        Promise.resolve({ ok: true, status: 200, json: () => hang(_url, init) } as unknown as Response);
+      const fetchImpl = vi.fn().mockImplementationOnce(stalledBody).mockImplementationOnce(() => answer([]));
+      const client = new TectonicClient(cfg, fetchImpl as unknown as typeof fetch, quick);
+      await expect(client.getDetailedUsers(["1"])).resolves.toEqual([]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it("isn't tried again on an HTTP error: that's tectonic-api's answer", async () => {
+      const fetchImpl = mockFetch({ "/users/": { status: 500, body: {} } });
+      const client = new TectonicClient(cfg, fetchImpl, quick);
+      await expect(client.getDetailedUsers(["1"])).rejects.toBeInstanceOf(TectonicUnavailableError);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("caches successful responses and skips refetching within the TTL", async () => {
@@ -72,6 +125,25 @@ describe("TectonicClient", () => {
     await client.getRoster();
     await client.getRoster();
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("drops expired entries when it stores a new one, at most once per TTL", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fetchImpl = mockFetch({ "/users/": { body: [] } });
+      const client = new TectonicClient(cfg, fetchImpl);
+      const cache = (client as unknown as { cache: Map<string, unknown> }).cache;
+
+      await client.getDetailedUsers(["1"]);
+      await client.getDetailedUsers(["2"]);
+      expect(cache.size).toBe(2);
+
+      vi.advanceTimersByTime(60_001);
+      await client.getDetailedUsers(["3"]);
+      expect([...cache.keys()]).toEqual([expect.stringContaining("/users/3")]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not cache failures", async () => {

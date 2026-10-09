@@ -47,18 +47,16 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PATCH /api/bingos/:slug/buyins/:signupId": ["signup.buyin_marked"],
 
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
-  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated", "points.rescored"],
+  "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
+  "POST /api/bingos/:slug/admin/discord/remove": ["settings.updated", "discord.removed"],
+  // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, tags, and the Exclusive Item rules and
+  // Rules text at .../board-draft/rules) are auditSkip()'d, audited instead by the Publish that applies them.
+  "POST /api/bingos/:slug/admin/board-draft/publish": ["board.published", "points.rescored"],
+  "POST /api/bingos/:slug/admin/board-draft/discard": ["board.discarded"],
   "POST /api/bingos/:slug/admin/mods": ["moderator.added"],
   "DELETE /api/bingos/:slug/admin/mods/:userId": ["moderator.removed"],
   "POST /api/bingos/:slug/admin/staff": ["staff.added"],
   "DELETE /api/bingos/:slug/admin/staff/:userId": ["staff.removed"],
-  "POST /api/bingos/:slug/admin/categories": ["category.created"],
-  "PATCH /api/bingos/:slug/admin/categories/:id": ["category.updated"],
-  "DELETE /api/bingos/:slug/admin/categories/:id": ["category.deleted"],
-  "POST /api/bingos/:slug/admin/tiles": ["tile.created", "points.rescored"],
-  "PATCH /api/bingos/:slug/admin/tiles/:id": ["tile.updated", "points.rescored"],
-  "DELETE /api/bingos/:slug/admin/tiles/:id": ["tile.deleted", "points.rescored"],
-  "POST /api/bingos/:slug/admin/tiles/:id/image": ["tile.updated"],
   "POST /api/bingos/:slug/admin/wrapped-art/:group": ["wrapped.art_set"],
   "PUT /api/bingos/:slug/admin/wrapped-art/:group/order": ["wrapped.art_reordered"],
   "POST /api/bingos/:slug/admin/wrapped-art/side/bosses": ["wrapped.art_bosses_added"],
@@ -67,14 +65,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_set"],
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id/recut": ["wrapped.art_recut"],
   "DELETE /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_removed"],
-  "PATCH /api/bingos/:slug/admin/tiles/:id/bonus-points": ["tile.bonus_points_updated", "points.rescored"],
-  "POST /api/bingos/:slug/admin/tiles/:tileId/tasks": ["task.created", "points.rescored"],
-  "PATCH /api/bingos/:slug/admin/tasks/:id": ["task.updated", "points.rescored"],
-  "DELETE /api/bingos/:slug/admin/tasks/:id": ["task.deleted", "points.rescored"],
   "POST /api/bingos/:slug/admin/nodes/:nodeId/reprice": ["submission.repriced"],
-  "POST /api/bingos/:slug/admin/lines/generate": ["line.generated", "points.rescored"],
-  "PATCH /api/bingos/:slug/admin/lines/:id": ["line.updated", "points.rescored"],
-  "DELETE /api/bingos/:slug/admin/lines/:id": ["line.deleted", "points.rescored"],
   "POST /api/bingos/:slug/admin/questions": ["question.created"],
   "PATCH /api/bingos/:slug/admin/questions/:id": ["question.updated"],
   "DELETE /api/bingos/:slug/admin/questions/:id": ["question.deleted"],
@@ -89,6 +80,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "DELETE /api/bingos/:slug/admin/teams/:id": ["team.deleted"],
   "DELETE /api/bingos/:slug/admin/teams/:id/members/:userId": ["team.member_removed", "signup.withdrawn", "pairing.dissolved"],
   "POST /api/bingos/:slug/admin/late-signups": ["signup.created", "team.member_added"],
+  "PUT /api/bingos/:slug/admin/signups/:signupId/account": ["signup.account_borrowed"],
   // Cut review scoring (POST .../admin/cut-review/score) is a read-only calculation (auditSkip), not listed here.
   "POST /api/bingos/:slug/admin/cut-review/apply": ["pairing.admin_paired", "pairing.unpaired", "team.created", "team.deleted", "draft.cut_review_applied"],
 
@@ -118,4 +110,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/bugReports.ts, mounted at /api/bug-reports
   "POST /api/bug-reports/": ["bug_report.created"],
+
+  // routes/dev.ts, mounted at /api/dev (dev mode only); the rest are auditSkip()'d test data.
+  "POST /api/dev/bingos/:slug/start-round": ["stage.changed"],
 };

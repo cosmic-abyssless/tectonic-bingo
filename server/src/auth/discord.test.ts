@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DiscordAPIError, REST } from "@discordjs/rest";
 import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { upsertLoginUser } from "./discord";
+import { fetchGuildMembership, upsertLoginUser } from "./discord";
+import { log } from "../log";
 
 let sqlite: Database.Database;
 let db: BetterSQLite3Database<typeof schema>;
@@ -85,5 +87,33 @@ describe("audit trail", () => {
 
     await upsertLoginUser(db, { id: "111", username: "alice" }, null);
     expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "user.admin_changed")).all()).toHaveLength(1);
+  });
+});
+
+describe("fetchGuildMembership", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const discordError = (status: number) =>
+    new DiscordAPIError({ code: 0, message: "nope" }, 0, status, "GET", "https://discord.com/api/v10/users/@me/guilds/g/member", { body: undefined, files: undefined });
+
+  it("reads a 404 as not in the server, without reporting it", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    vi.spyOn(REST.prototype, "get").mockRejectedValue(discordError(404));
+    expect(await fetchGuildMembership("token")).toEqual({ inGuild: false });
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("reports any other error answer to Sentry (log.error with the error), and reads it as unknown", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    vi.spyOn(REST.prototype, "get").mockRejectedValue(discordError(500));
+    expect(await fetchGuildMembership("token")).toBeNull();
+    expect(error).toHaveBeenCalledWith("guild membership lookup failed", { err: expect.any(DiscordAPIError) });
+  });
+
+  it("doesn't report Discord being unreachable", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    vi.spyOn(REST.prototype, "get").mockRejectedValue(new Error("ECONNRESET"));
+    expect(await fetchGuildMembership("token")).toBeNull();
+    expect(error).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { BingoExportDocument, BoardResponse, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import type { BingoExportDocument, BoardDraftStatus, BoardResponse, DraftBoardResponse, PublishPreview, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import { DEFAULT_DISCORD_CHANNELS } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
@@ -48,10 +49,40 @@ export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<voi
 }
 
 /**
- * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, and its
- * theme when one was asked for (the import keeps the board's own otherwise).
+ * How the run's Bingo goes Live (CONTEXT.md "Stage"): mostly by itself at its start date, sometimes by an Admin's Start
+ * now a little ahead of it, which moves the start date to that moment. `at` is when it goes Live.
  */
-export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null): Promise<void> {
+export interface GoLivePlan {
+  at: Date;
+  startNow: boolean;
+}
+
+export function planGoLive(rng: Rng, tl: Ctx["tl"]): GoLivePlan {
+  if (!rng.chance(1 / 3)) return { at: tl.startsAt, startNow: false };
+  return { at: plus(tl.startsAt, -rng.int(5, 30) * MINUTE), startNow: true };
+}
+
+/**
+ * Goes Live as planned, through the real code: Start now through the stage endpoint, or the server's own start round
+ * (bingoStartService.ts) run for this Bingo at the start date on the run's clock. The real clock's round leaves the
+ * Bingo alone while the run is building it (job.ts).
+ */
+export async function goLive(ctx: Ctx, plan: GoLivePlan): Promise<void> {
+  if (plan.startNow) {
+    await ctx.api.as(ctx.admin).post(path(ctx, "/mod/stage"), { toStage: "live", startNow: true }, { at: plan.at });
+    ctx.log(`stage -> live at ${fmt(plan.at)}: an Admin's Start now, ahead of the start date ${fmt(ctx.tl.startsAt)}`);
+    return;
+  }
+  const { started } = await ctx.api.as(ctx.admin).post<{ started: number }>(`/api/dev/bingos/${ctx.slug}/start-round`, {}, { at: plan.at });
+  if (started !== 1) throw new Error(`the start round at ${fmt(plan.at)} didn't start ${ctx.slug}`);
+  ctx.log(`stage -> live at ${fmt(plan.at)}: by itself, at its start date`);
+}
+
+/**
+ * Creates the bingo from an exported board (see run.ts for where the document comes from) and sets its dates, turns on
+ * the Discord team sync (with an extra channel), and sets its theme when one was asked for (the import keeps the board's own otherwise).
+ */
+export async function importBingo(ctx: Ctx, document: BingoExportDocument, name: string, theme: string | null, discordGuildId: string | null = null, discordCategoryId: string | null = null): Promise<void> {
   await ctx.api.as(ctx.admin).post("/api/admin/bingos/import", { slug: ctx.slug, name, document }, { at: ctx.tl.createdAt });
   const { tl } = ctx;
   await ctx.api.as(ctx.admin).patch(
@@ -63,10 +94,18 @@ export async function importBingo(ctx: Ctx, document: BingoExportDocument, name:
       revealScheduledAt: tl.revealAt.toISOString(),
       startsAt: tl.startsAt.toISOString(),
       endsAt: tl.endsAt.toISOString(),
+      // Discord team roles and channels on, with a channel added to the list, as an admin would: the settings panel
+      // shows it, while the sync itself never touches Discord for a test data bingo (discordTeamService.discordSyncBlocker).
+      discordEnabled: true,
+      discordChannels: [...DEFAULT_DISCORD_CHANNELS, { key: "loot", type: "text", name: "{team}-loot" }],
+      // Asked for a test Discord server: the Teams' roles and channels really are made there (only there).
+      ...(discordGuildId ? { discordGuildId } : {}),
+      ...(discordCategoryId ? { discordCategoryId } : {}),
     },
     { at: plus(tl.createdAt, 5 * MINUTE) },
   );
   ctx.log(`imported ${ctx.slug} in ${theme ? `the ${theme} theme` : "its board's own theme"} (created ${fmt(tl.createdAt)}, starts ${fmt(tl.startsAt)}, ends ${fmt(tl.endsAt)})`);
+  if (discordGuildId) ctx.log(`Discord: Team roles and channels go to test server ${discordGuildId}${discordCategoryId ? `, category ${discordCategoryId}` : ""} once the draft finishes`);
 }
 
 /** A Task as the board editor sends it back: every field and child as loaded, ids and all, so nothing else changes. */
@@ -84,13 +123,27 @@ function asInput(node: GraphNode): GraphNodeInput {
  * has one to show even when the board it was made from has none (see board.ts's itemToWeigh for which).
  */
 export async function weighAnItem(ctx: Ctx, at: Date): Promise<void> {
-  const board = await fetchBoard(ctx);
+  const { board } = await ctx.api.as(ctx.admin).get<DraftBoardResponse>(path(ctx, "/admin/board-draft"));
   const tasks = [...board.tiles].sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol).flatMap((t) => t.node.children);
   const pick = itemToWeigh(tasks);
   if (!pick) return;
   const withWeight = (n: GraphNodeInput): GraphNodeInput => (n.id === pick.item.id ? { ...n, countsAs: pick.countsAs } : { ...n, children: n.children?.map(withWeight) });
   await ctx.api.as(ctx.admin).patch(path(ctx, `/admin/tasks/${pick.task.id}`), withWeight(asInput(pick.task)), { at });
   ctx.log(`${pick.item.itemName} counts as ${pick.countsAs} in "${pick.task.label}"`);
+}
+
+/**
+ * Publishes the Admin's setup edits to the board (CONTEXT.md "Publish"), as an Admin would from the Board tab: opens
+ * the Publish screen's preview, then publishes the draft it showed. The import itself is the Published board; the
+ * edits after it (weighAnItem) went to the Draft board, so without this the Bingo would play on the board as imported.
+ */
+export async function publishBoard(ctx: Ctx, at: Date): Promise<void> {
+  const admin = ctx.api.as(ctx.admin);
+  const { status } = await admin.get<{ status: BoardDraftStatus }>(path(ctx, "/admin/board-draft/status"));
+  if (!status.hasChanges) return;
+  const { preview } = await admin.get<{ preview: PublishPreview }>(path(ctx, "/admin/board-draft/preview"));
+  await admin.post(path(ctx, "/admin/board-draft/publish"), { revision: preview.revision }, { at });
+  ctx.log(`published the board (${preview.summary.join(", ")}) at ${fmt(at)}`);
 }
 
 /**
@@ -394,15 +447,63 @@ export function handEvents(
       const key = `${player.index}:${part.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const at = new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
-      events.push({
-        at,
-        run: async () => {
-          await ctx.api.as(player.discordId).put(path(ctx, `/tiles/${part.tileId}/tasks/${part.id}/interest`), { interested: true }, { at });
-          raised.push({ teamId: team.teamId, player, part });
-        },
-      });
+      events.push(raiseHand(ctx, team.teamId, player, part, rng, windowEnd, raised));
+    }
+  }
+  // Every Team also has one crowded part (a raid everyone wants in on): most of its members put a hand up, so the Tile
+  // dialog's stack of pictures overflows into "+N". A hand is a wish, not a claim, so not only those able to do it
+  // (ctx.capable isn't asked, which also leaves its random stream to the simulation). Its own random stream, so the
+  // hands above don't change.
+  const crowdRng = ctx.rng.fork("crowd");
+  for (const team of teams) {
+    if (reachable.length === 0) break;
+    const part = crowdRng.pick(reachable);
+    for (const player of team.members) {
+      const key = `${player.index}:${part.id}`;
+      if (seen.has(key) || !crowdRng.chance(0.85)) continue;
+      seen.add(key);
+      events.push(raiseHand(ctx, team.teamId, player, part, crowdRng, windowEnd, raised));
     }
   }
   return { events, raised };
+}
+
+/** One member putting their hand up for a part, at a random time in the reveal window. */
+function raiseHand(ctx: Ctx, teamId: string, player: Player, part: PartModel, rng: Rng, windowEnd: number, raised: { teamId: string; player: Player; part: PartModel }[]): Timed {
+  const { tl } = ctx;
+  const at = new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
+  return {
+    at,
+    run: async () => {
+      await ctx.api.as(player.discordId).put(path(ctx, `/tiles/${part.tileId}/tasks/${part.id}/interest`), { interested: true }, { at });
+      raised.push({ teamId, player, part });
+    },
+  };
+}
+
+/**
+ * Players looking the Board over during Board revealed (CONTEXT.md "Achievement": opens count from then): about half
+ * read the rules, most open a few Tiles, and the odd thorough one opens every Tile, so a generated Bingo shows Teacher's
+ * pet and Drop detective earned before the start. Through the same fire-and-forget endpoint the client calls.
+ */
+export function openEvents(ctx: Ctx, teams: { members: Player[] }[], board: BoardInfo): Timed[] {
+  const { tl } = ctx;
+  const rng = ctx.rng.fork("opens");
+  const windowEnd = Math.min(tl.startsAt.getTime(), ctx.limit.getTime());
+  const randomAt = () => new Date(tl.revealAt.getTime() + rng.float() * Math.max(0, windowEnd - tl.revealAt.getTime()) * 0.98);
+  const open = (player: Player, at: Date, body: { kind: "tile"; tileId: string } | { kind: "rules" }): Timed => ({
+    at,
+    run: async () => {
+      await ctx.api.as(player.discordId).post(path(ctx, "/achievements/opened"), body, { at });
+    },
+  });
+  const events: Timed[] = [];
+  for (const player of teams.flatMap((t) => t.members)) {
+    if (rng.chance(0.5)) events.push(open(player, randomAt(), { kind: "rules" }));
+    const tiles = rng.chance(0.1) ? board.tiles : board.tiles.filter(() => rng.chance(0.25));
+    const start = randomAt();
+    // One sitting, a Tile every minute or so.
+    tiles.forEach((tile, i) => events.push(open(player, plus(start, i * MINUTE), { kind: "tile", tileId: tile.id })));
+  }
+  return events;
 }

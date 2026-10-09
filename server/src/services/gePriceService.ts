@@ -133,7 +133,8 @@ export class GePriceTable {
   private async getJson<T>(path: string): Promise<T | null> {
     const res = await this.fetchImpl(`${PRICES_BASE_URL}${path}`, { headers: { "User-Agent": PRICES_USER_AGENT } });
     if (!res.ok) {
-      log.warn("ge prices fetch failed", { path, status: res.status });
+      // Goes to Sentry (log.error with an error): prices just stay as they were.
+      log.error("ge prices fetch failed", { path, status: res.status, err: new Error(`GET ${path}: HTTP ${res.status}`) });
       return null;
     }
     return (await res.json()) as T;

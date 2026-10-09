@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
     "compilerOptions": { "rootDir": "..", "noEmit": true },
-    "include": ["./generate-bingo/**/*.ts", "./historical/**/*.ts", "./fetch-drop-rates.ts", "../src/types.ts"]
+    "include": ["./generate-bingo/**/*.ts", "./historical/**/*.ts", "./fetch-drop-rates.ts", "./ocr-compare.ts", "../src/types.ts"]
 }

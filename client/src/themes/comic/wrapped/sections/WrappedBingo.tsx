@@ -3,6 +3,7 @@ import { PointsChart } from "../../../../core/wrapped/PointsChart";
 import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
+import { LETTERED } from "../../../lettering";
 import { COVER } from "../coverParts";
 import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
 import { Gp, PanelBody } from "./sectionParts-you-duo-captain-moderator";
@@ -226,7 +227,7 @@ function Leaderboard({ b }: { b: WrappedBingoModel }) {
             className="flex items-center gap-2.5 border-[2.5px] px-2 py-1.5"
             style={{ borderColor: colors.LINE, background: t.isMine ? colors.YELLOW_TINT : colors.PAPER_RAISED, boxShadow: t.isMine ? `3px 3px 0 ${colors.SHADOW}` : undefined }}
           >
-            <span className="num flex h-8 min-w-11 shrink-0 items-center justify-center border-2 px-1" style={{ ...display(17), borderColor: colors.LINE, background: medal[t.placement - 1] ?? colors.PAPER_ALT, color: colors.INK }}>
+            <span className={`${LETTERED} num flex h-8 min-w-11 shrink-0 items-center justify-center border-2 px-1`} style={{ ...display(17), borderColor: colors.LINE, background: medal[t.placement - 1] ?? colors.PAPER_ALT, color: colors.INK }}>
               {t.placementLabel}
             </span>
             {t.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: t.color, borderColor: colors.LINE }} />}
@@ -238,7 +239,7 @@ function Leaderboard({ b }: { b: WrappedBingoModel }) {
                 </span>
               )}
             </span>
-            <span className="num shrink-0" style={{ ...display(19), color: colors.INK }}>
+            <span className={`${LETTERED} num shrink-0`} style={{ ...display(19), color: colors.INK }}>
               {t.pointsLabel}
             </span>
           </li>
@@ -318,14 +319,14 @@ function TeamPicks({ team }: { team: WrappedBingoModel["teamSuperlatives"][numbe
   const { colors } = useComic();
   return (
     <PanelBody tone={team.color ? { color: team.color } : "yellow"} align="start" gap={0}>
-      <h3 data-beat="slam" className="flex items-center gap-1.5" style={{ ...display(19), color: colors.INK }}>
+      <h3 data-beat="slam" className={`${LETTERED} flex items-center gap-1.5`} style={{ ...display(19), color: colors.INK }}>
         {team.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: team.color, borderColor: colors.LINE }} />}
         <span className="min-w-0 break-words leading-none">{team.teamName}</span>
       </h3>
       <ul className="mt-2 flex flex-col gap-2">
         {team.superlatives.map((s) => (
           <li key={s.category}>
-            <p style={{ ...display(12, { letterSpacing: "0.08em" }), color: colors.INK_SUBTLE }}>{s.category}</p>
+            <p className={LETTERED} style={{ ...display(12, { letterSpacing: "0.08em" }), color: colors.INK_SUBTLE }}>{s.category}</p>
             <div className="mt-0.5 flex flex-col gap-0.5">
               {s.winners.map((w) => (
                 <ComicPerson key={w.id} person={w} size={20} nameSize={12} />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, Tile } from "@bingo/shared";
-import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialState } from "./tutorial";
+import { TUTORIAL_IDLE, tutorialAutoStarts, tutorialReducer, tutorialStepCount, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialState } from "./tutorial";
 
 // CONTEXT.md "Tutorial" (#345): its steps, and how Start / Next / Skip and the real opens and closes move it.
 
@@ -20,7 +20,7 @@ describe("the Tutorial's steps", () => {
     expect(steps.filter((s) => s.large).map((s) => s.id)).toEqual(["welcome"]);
     expect(steps.at(-1)).toMatchObject({ id: "done", number: 9, targets: [] });
     expect(steps.map((s) => s.number)).toEqual([...steps.map((s) => s.number)].sort((a, b) => a - b));
-    expect(new Set(steps.map((s) => s.number)).size).toBe(TUTORIAL_STEP_COUNT);
+    expect(tutorialStepCount(steps)).toBe(9);
   });
 
   it("wait for the real click only at 3 (a Tile), 6 (Submit) and 8 (the ☰ menu)", () => {
@@ -61,6 +61,32 @@ describe("the Tutorial's steps", () => {
       ["submit-review", "submit"],
       ["menu-tutorial", "menu"],
     ]);
+  });
+});
+
+describe("for a Player who has already marked Task interest", () => {
+  const short = tutorialSteps(plain, "Tectonic's Comics Bingo", true);
+  const idx = (id: string) => short.findIndex((s) => s.id === id);
+
+  it("leaves out opening a Tile and what's inside it, and numbers the rest on without a gap", () => {
+    expect(short.map((s) => s.id)).toEqual(steps.map((s) => s.id).filter((id) => !["open-tile", "tile-parts", "task-interest", "tile-submit"].includes(id)));
+    expect(short.filter((s) => s.waitsFor).map((s) => [s.number, s.waitsFor])).toEqual([
+      [3, "submit"],
+      [5, "menu"],
+    ]);
+    expect(tutorialStepCount(short)).toBe(6);
+    expect([0, 1, idx("open-submit"), idx("submit-review"), idx("open-menu"), idx("menu-tutorial"), idx("done")].map((i) => tutorialStepLabel(short, i, []))).toEqual(["1", "2", "3", "4.7", "5", "5.4", "6"]);
+  });
+
+  it("still says a Submission can come from inside a Tile", () => {
+    expect(short[idx("open-submit")].lines.join(" ")).toContain("inside a Tile");
+  });
+
+  it("keeps the Tile's steps left out for the whole run, starting on the Tile they're going for", () => {
+    const started = tutorialReducer(short, TUTORIAL_IDLE, { type: "start", replay: false, knowsTiles: true, tileId: "zulrah" });
+    expect(started).toMatchObject({ active: true, index: 0, knowsTiles: true, tileId: "zulrah" });
+    expect(tutorialReducer(short, started, { type: "start", replay: true, knowsTiles: false })).toBe(started);
+    expect(run([{ type: "start", replay: false, tileId: "zulrah" }])).toMatchObject({ knowsTiles: false, tileId: null });
   });
 });
 

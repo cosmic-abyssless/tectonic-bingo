@@ -5,6 +5,7 @@
 
 // The general comic-lettering font — use this for any text in the comic
 // theme that isn't the Tectonic logo band itself.
+// An element whose inline style names it also takes the LETTERED class (themes/lettering.ts).
 export const COMIC_FONT = '"Bangers", cursive';
 
 // Specific to the Tectonic logo band on the book cover — kept separate

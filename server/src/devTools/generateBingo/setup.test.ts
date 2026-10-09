@@ -1,13 +1,19 @@
 // setup.ts's weighAnItem: the Counts as a run gives one Item after the import, sent back the way the board editor
-// sends a Task, and written by the real board service.
+// sends a Task, and written by the real board service to the Draft board; and publishBoard, which publishes it.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { GraphNodeInput } from "@bingo/shared";
+import type { BingoExportDocument, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
+import { eq } from "drizzle-orm";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { importBingo, weighAnItem, type Ctx } from "./setup";
+import { editDraft, getDraftStatus, getEditorBoard, getPublishPreview, publishDraft } from "../../services/boardDraftService";
+import { DRAFT_BOARD } from "../../services/boardTables";
+import { exportBingo, importBingo as realImport } from "../../services/bingoExportService";
+import { getBoardTags } from "../../services/tagService";
+import { goLive, importBingo, planGoLive, publishBoard, weighAnItem, type Ctx } from "./setup";
+import { Rng } from "./rng";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
 
@@ -36,18 +42,29 @@ function seed() {
   return { bingo, task };
 }
 
-// A Ctx whose requests go straight to the board service, as the routes would.
+// A Ctx whose requests go straight to the board services, as the admin routes would.
 function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[]) {
   const patches: { path: string; body: GraphNodeInput }[] = [];
+  const posts: { path: string; body: unknown }[] = [];
   const session = {
-    get: async () => getBoardForViewer(db, bingo, true),
+    get: async (path: string) => {
+      if (path.endsWith("/admin/board-draft")) return getEditorBoard(db, bingo.id);
+      if (path.endsWith("/admin/board-draft/status")) return { status: getDraftStatus(db, bingo.id) };
+      if (path.endsWith("/admin/board-draft/preview")) return { preview: getPublishPreview(db, bingo.id) };
+      throw new Error(`unexpected GET ${path}`);
+    },
     patch: async (path: string, body: GraphNodeInput) => {
       patches.push({ path, body });
-      return { task: updateNode(db, path.split("/").at(-1)!, body) };
+      return { task: editDraft(db, bingo.id, null, (t) => updateNode(db, path.split("/").at(-1)!, body, t)) };
+    },
+    post: async (path: string, body: { revision: string }) => {
+      posts.push({ path, body });
+      if (!path.endsWith("/admin/board-draft/publish")) throw new Error(`unexpected POST ${path}`);
+      return publishDraft(db, bingo, body.revision);
     },
   };
   const ctx = { api: { as: () => session }, slug: bingo.slug, admin: "admin", log: (m: string) => log.push(m) } as unknown as Ctx;
-  return { ctx, patches };
+  return { ctx, patches, posts };
 }
 
 describe("weighAnItem", () => {
@@ -58,7 +75,9 @@ describe("weighAnItem", () => {
     await weighAnItem(ctx, new Date());
 
     expect(patches.map((p) => p.path)).toEqual([`/api/bingos/testdata-w/admin/tasks/${task.id}`]);
-    const after = getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!;
+    // An edit in the board editor goes to the Draft board; the Published board is as imported until publishBoard.
+    expect(getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!.children[0]!.children.map((c) => c.countsAs)).toEqual([1, 1]);
+    const after = getBoardTiles(db, bingo.id, DRAFT_BOARD).find((t) => t.name === "Wintertodt")!.node.children[0]!;
     const [sum] = after.children;
     expect(sum!.children.map((c) => [c.id, c.itemName, c.countsAs])).toEqual(task.children[0]!.children.map((c) => [c.id, c.itemName, c.itemName === "Bruma torch" ? 25 : 1]));
     expect(sum!.children[1]!.valuedAs).toMatchObject({ itemName: "Tome of fire", divisor: 8 });
@@ -72,6 +91,30 @@ describe("weighAnItem", () => {
     await weighAnItem(ctx, new Date());
     await weighAnItem(ctx, new Date());
     expect(patches).toHaveLength(1);
+  });
+});
+
+describe("publishBoard", () => {
+  it("publishes the setup edits through the Publish endpoint, so the Bingo plays on them and its audit log shows it", async () => {
+    const { bingo, task } = seed();
+    const log: string[] = [];
+    const { ctx, posts } = ctxFor(bingo, log);
+    await weighAnItem(ctx, new Date());
+    await publishBoard(ctx, new Date());
+
+    expect(posts.map((p) => p.path)).toEqual(["/api/bingos/testdata-w/admin/board-draft/publish"]);
+    const sum = getBoardTiles(db, bingo.id).find((t) => t.name === "Wintertodt")!.node.children[0]!.children[0]!;
+    expect(sum.children.map((c) => [c.id, c.countsAs])).toEqual(task.children[0]!.children.map((c) => [c.id, c.itemName === "Bruma torch" ? 25 : 1]));
+    expect(getDraftStatus(db, bingo.id).hasChanges).toBe(false);
+    expect(db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "board.published")).all()).toHaveLength(1);
+    expect(log.at(-1)).toMatch(/^published the board \(1 Tile changed\)/);
+  });
+
+  it("publishes nothing when the setup made no board edits", async () => {
+    const { bingo } = seed();
+    const { ctx, posts } = ctxFor(bingo, []);
+    await publishBoard(ctx, new Date());
+    expect(posts).toHaveLength(0);
   });
 });
 
@@ -90,12 +133,97 @@ describe("importBingo", () => {
     await importBingo(ctx, { bingo: {} } as never, "Test data t", "comic");
 
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/admin/bingos/import", "PATCH /api/bingos/testdata-t/admin/settings"]);
-    expect(calls[1]!.body).toMatchObject({ theme: "comic", startsAt: at.toISOString() });
+    expect(calls[1]!.body).toMatchObject({ theme: "comic", startsAt: at.toISOString(), discordEnabled: true });
+    expect(calls[1]!.body.discordChannels).toContainEqual({ key: "loot", type: "text", name: "{team}-loot" });
 
     // Asked for none, it leaves the theme the import copied from the board alone.
     calls.length = 0;
     await importBingo(ctx, { bingo: {} } as never, "Test data t", null);
     expect(calls[1]!.body).not.toHaveProperty("theme");
+    expect(calls[1]!.body).not.toHaveProperty("discordGuildId");
+
+    // A test Discord server goes in the same settings request.
+    calls.length = 0;
+    await importBingo(ctx, { bingo: {} } as never, "Test data t", null, "700000000000000000");
+    expect(calls[1]!.body).toMatchObject({ discordGuildId: "700000000000000000", discordEnabled: true });
     expect(calls[1]!.body).toMatchObject({ startsAt: at.toISOString() });
+  });
+});
+
+// Going Live (CONTEXT.md "Stage"): the run's Bingo goes Live as a real one does, by itself at its start date or by an
+// Admin's Start now ahead of it, through the real code at the run's clock.
+describe("goLive", () => {
+  const at = new Date("2026-09-19T12:00:00Z");
+  function fakeCtx(started = 1) {
+    const calls: { path: string; body: unknown; at?: Date }[] = [];
+    const session = {
+      post: async (path: string, body: unknown, opts?: { at?: Date }) => {
+        calls.push({ path, body, at: opts?.at });
+        return { started };
+      },
+    };
+    const tl = { now: at, startsAt: at } as Ctx["tl"];
+    return { calls, ctx: { api: { as: () => session }, slug: "testdata-t", admin: "admin", tl, log: () => {} } as unknown as Ctx };
+  }
+
+  it("by itself: the server's start round, run at the start date", async () => {
+    const { calls, ctx } = fakeCtx();
+    await goLive(ctx, { at, startNow: false });
+    expect(calls).toEqual([{ path: "/api/dev/bingos/testdata-t/start-round", body: {}, at }]);
+  });
+
+  it("fails the run when the round didn't start it", async () => {
+    const { ctx } = fakeCtx(0);
+    await expect(goLive(ctx, { at, startNow: false })).rejects.toThrow(/didn't start/);
+  });
+
+  it("by Start now: the stage endpoint, ahead of the start date", async () => {
+    const { calls, ctx } = fakeCtx();
+    const early = new Date(at.getTime() - 10 * 60_000);
+    await goLive(ctx, { at: early, startNow: true });
+    expect(calls).toEqual([{ path: "/api/bingos/testdata-t/mod/stage", body: { toStage: "live", startNow: true }, at: early }]);
+  });
+
+  it("plans both, from the seed: mostly at the start date, sometimes a Start now 5 to 30 minutes ahead", () => {
+    const tl = { startsAt: at } as Ctx["tl"];
+    const plans = Array.from({ length: 60 }, (_, seed) => planGoLive(new Rng(seed), tl));
+    const early = plans.filter((p) => p.startNow);
+    expect(early.length).toBeGreaterThan(0);
+    expect(plans.length - early.length).toBeGreaterThan(early.length);
+    for (const p of plans.filter((p) => !p.startNow)) expect(p.at).toEqual(at);
+    for (const p of early) {
+      const minutesAhead = (at.getTime() - p.at.getTime()) / 60_000;
+      expect(minutesAhead).toBeGreaterThanOrEqual(5);
+      expect(minutesAhead).toBeLessThanOrEqual(30);
+    }
+  });
+});
+
+// Tags (CONTEXT.md "Tag"): a run adds none of its own. The generated Bingo has exactly its board's, which the import
+// carries, and the wiki is never asked.
+describe("tags", () => {
+  it("come across from the board unchanged, and nothing asks the wiki", async () => {
+    const { bingo, task } = seed();
+    const vork = getBoardTiles(db, bingo.id).find((t) => t.name === "Vorkath")!;
+    db.insert(schema.tags).values({ bingoId: bingo.id, tileId: vork.id, kind: "text", text: "vork", sortOrder: 0 }).run();
+    const boss = db.insert(schema.tags).values({ bingoId: bingo.id, nodeId: task.id, kind: "boss", text: "Wintertodt", sortOrder: 0 }).returning().get();
+    db.insert(schema.tags).values({ bingoId: bingo.id, nodeId: task.id, kind: "text", text: "WT", bossTagId: boss.id, sortOrder: 1 }).run();
+    const document = exportBingo(db, bingo.id);
+
+    const session = {
+      post: async (_path: string, body: { slug: string; name: string; document: BingoExportDocument }) => ({ bingo: realImport(db, body.document, { slug: body.slug, name: body.name, createdByUserId: bingo.createdByUserId }) }),
+      patch: async () => ({}),
+    };
+    const at = new Date("2026-09-19T12:00:00Z");
+    const tl = { createdAt: at, signupOpensAt: at, draftAt: at, revealAt: at, startsAt: at, endsAt: at } as Ctx["tl"];
+    const ctx = { api: { as: () => session }, slug: "testdata-tags", admin: "admin", tl, log: () => {} } as unknown as Ctx;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await importBingo(ctx, document, "Test data tags", null);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+
+    const generated = db.select().from(schema.bingos).all().find((b) => b.slug === "testdata-tags")!;
+    expect(exportBingo(db, generated.id).tiles.map((t) => [t.tags, t.tasks.map((x) => x.tags)])).toEqual(document.tiles.map((t) => [t.tags, t.tasks.map((x) => x.tags)]));
+    expect(getBoardTags(db, generated.id).tiles).not.toEqual({});
   });
 });

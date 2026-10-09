@@ -1,13 +1,14 @@
 import type { MyAchievement } from "@bingo/shared";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
-import { achievementCardKind, earnedLabel, progressFraction, progressLabel } from "../../../core/achievements/achievementCard";
+import { achievementCardKind, earnedLabel, progressFraction, progressLabel, shareLabel } from "../../../core/achievements/achievementCard";
 import { COMIC_FONT } from "../font";
 import { InkTag } from "../ui/CaptionBox";
 import { useComic } from "../ui/useComic";
+import { LETTERED } from "../../lettering";
 
 /**
  * One Achievement as a caption box, like the rest of the book's dialogs: earned ones on bright paper with the sprite in
- * its little panel and a green tag with the date, the ones still to get on plain paper with the sprite in greyscale and
+ * its little panel, a green tag with the date and how many Players have it too, the ones still to get on plain paper with the sprite in greyscale and
  * an inked progress bar, the Hidden ones a "???" box on the darker stock.
  */
 export function AchievementRow({ achievement }: { achievement: MyAchievement }) {
@@ -17,6 +18,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
   const masked = kind === "masked";
   const label = progressLabel(achievement.progress);
   const fraction = progressFraction(achievement.progress);
+  const share = shareLabel(achievement.share);
 
   return (
     <div
@@ -30,7 +32,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
     >
       <div className="grid size-14 shrink-0 place-items-center border-[3px]" style={{ background: masked ? colors.PAPER : colors.PAPER_RAISED, borderColor: colors.LINE }}>
         {masked ? (
-          <span aria-hidden className="text-3xl leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
+          <span aria-hidden className={`${LETTERED} text-3xl leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK_SUBTLE }}>
             ?
           </span>
         ) : (
@@ -40,7 +42,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 text-xl uppercase leading-none tracking-wide" style={{ fontFamily: COMIC_FONT, color: masked || !earned ? colors.INK_SUBTLE : colors.INK }}>
+          <div className={`${LETTERED} min-w-0 text-xl uppercase leading-none tracking-wide`} style={{ fontFamily: COMIC_FONT, color: masked || !earned ? colors.INK_SUBTLE : colors.INK }}>
             {masked ? "???" : achievement.name}
           </div>
           {earned && (
@@ -53,8 +55,9 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
           {masked ? "Keep playing to discover this one." : achievement.description}
         </div>
         {earned && (
-          <div className="text-sm italic leading-snug" style={{ color: colors.INK_SUBTLE }}>
-            {achievement.flavor}
+          <div className="flex items-baseline justify-between gap-3" style={{ color: colors.INK_SUBTLE }}>
+            <div className="text-sm italic leading-snug">{achievement.flavor}</div>
+            {share && <div className="num shrink-0 text-xs">{share}</div>}
           </div>
         )}
         {!earned && !masked && label && (
@@ -62,7 +65,7 @@ export function AchievementRow({ achievement }: { achievement: MyAchievement }) 
             <div className="h-3 flex-1 border-2" style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED }}>
               <div className="h-full" style={{ width: `${(fraction ?? 0) * 100}%`, background: colors.YELLOW }} />
             </div>
-            <span className="num shrink-0 text-base leading-none" style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
+            <span className={`${LETTERED} num shrink-0 text-base leading-none`} style={{ fontFamily: COMIC_FONT, color: colors.INK }}>
               {label}
             </span>
           </div>

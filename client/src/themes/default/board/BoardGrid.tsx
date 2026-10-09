@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
+import { TileSearchSlot } from "../../../headless/TileSearchProvider";
 
 export function BoardGrid({
   board,
@@ -33,10 +34,10 @@ export function BoardGrid({
                   const tile = board.grid[row]?.[col];
                   if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
                   return (
-                    <div key={tile.id} data-tile-id={tile.id} className="relative">
+                    <TileSearchSlot key={tile.id} tileId={tile.id} className="relative" dimmedClassName="pointer-events-none opacity-20 saturate-0">
                       <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
                       {tileOverlay?.(tile)}
-                    </div>
+                    </TileSearchSlot>
                   );
                 })}
               </div>

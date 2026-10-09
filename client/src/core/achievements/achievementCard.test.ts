@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MyAchievement } from "@bingo/shared";
-import { achievementCardKind, achievementTotals, earnedLabel, orderForList, progressFraction, progressLabel } from "./achievementCard";
+import { achievementCardKind, achievementTotals, earnedLabel, orderForList, progressFraction, progressLabel, shareLabel } from "./achievementCard";
 
 function achievement(overrides: Partial<MyAchievement> = {}): MyAchievement {
-  return { key: "strong_start", hidden: false, masked: false, name: "Strong start", description: "Submit your first drop.", flavor: "First drop's in. Only a few thousand more to go.", itemName: "Bronze sword", earned: false, earnedAt: null, progress: null, ...overrides };
+  return { key: "strong_start", hidden: false, masked: false, name: "Strong start", description: "Submit your first drop.", flavor: "First drop's in. Only a few thousand more to go.", itemName: "Bronze sword", earned: false, earnedAt: null, progress: null, share: null, ...overrides };
 }
 
 describe("achievementCardKind", () => {
@@ -78,5 +78,22 @@ describe("earnedLabel", () => {
 
   it("starts with Earned once earned", () => {
     expect(earnedLabel("2026-03-03T12:00:00.000Z")).toMatch(/^Earned /);
+  });
+});
+
+describe("shareLabel", () => {
+  it("is a whole percent of players", () => {
+    expect(shareLabel(0.25)).toBe("25% of players");
+    expect(shareLabel(1 / 3)).toBe("33% of players");
+    expect(shareLabel(1)).toBe("100% of players");
+  });
+
+  it("never rounds someone having it down to nothing, or not everyone having it up to everyone", () => {
+    expect(shareLabel(0.001)).toBe("<1% of players");
+    expect(shareLabel(0.996)).toBe("99% of players");
+  });
+
+  it("is null with no share to show (not earned yet)", () => {
+    expect(shareLabel(null)).toBeNull();
   });
 });

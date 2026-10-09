@@ -5,8 +5,8 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import { AUDIT_ACTIONS } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
-import { createTeam } from "./teamService";
-import { createQuestion, createSignup } from "./signupService";
+import { createTeam, removeTeamMember } from "./teamService";
+import { createLateSignup, createQuestion, createSignup } from "./signupService";
 import { adminPair } from "./pairingService";
 import { draftRoomForbiddenMessage, getCutPreview, getCutUserIds, getDraftState, getTeamRatings, ratingsForViewer, makePick, pickOrderTeamIndex, setDraftOrder, setPickRating, shuffleDraftOrder, startDraft, undoLastPick } from "./draftService";
 import { ServiceError } from "./errors";
@@ -448,6 +448,32 @@ describe("getDraftState", () => {
     const state = getDraftState(db, bingo, { includeAnswers: false });
     expect(state.teams.every((t) => t.captainRsn === "c1" || t.captainRsn === "c2")).toBe(true);
     expect(state.picks[0]).toMatchObject({ userId: p1.id, rsn: "PlayerOneRsn" });
+  });
+
+  it("lists each team's members as they are now, while the picks stay as drafted", () => {
+    const bingo = seedBingo();
+    const c1 = seedCaptain(bingo.id, "c1");
+    const c2 = seedCaptain(bingo.id, "c2");
+    const t1 = createTeam(db, { bingoId: bingo.id, captainUserId: c1.id });
+    createTeam(db, { bingoId: bingo.id, captainUserId: c2.id });
+    const [p1, p2] = [seedUser("p1"), seedUser("p2")];
+    for (const p of [p1, p2]) createSignup(db, { ...bingo, stage: "signup" }, { bingoId: bingo.id, userId: p.id, rsn: `${p.discordUsername}Rsn`, answers: [] });
+    beginDraft(bingo, [t1.id, db.select().from(schema.teams).where(ne(schema.teams.id, t1.id)).get()!.id]);
+    makePick(db, { bingo, pickedUserId: p1.id, actingUserId: c1.id, actingIsAdmin: false });
+    makePick(db, { bingo, pickedUserId: p2.id, actingUserId: c2.id, actingIsAdmin: false });
+
+    // Live: p1 is removed from Team one, and a late signup joins it.
+    const live = db.update(schema.bingos).set({ stage: "live" }).where(eq(schema.bingos.id, bingo.id)).returning().get();
+    removeTeamMember(db, t1.id, p1.id, { bingoId: bingo.id });
+    const late = seedUser("late");
+    createLateSignup(db, live, { userId: late.id, rsn: "LateRsn", teamId: t1.id });
+
+    const state = getDraftState(db, live, { includeAnswers: false });
+    const one = state.teams.find((t) => t.id === t1.id)!;
+    const two = state.teams.find((t) => t.id !== t1.id)!;
+    expect(one.members).toEqual([{ userId: late.id, rsn: "LateRsn", user: expect.objectContaining({ id: late.id, rsn: "LateRsn" }) }]);
+    expect(two.members.map((m) => [m.userId, m.rsn])).toEqual([[p2.id, "p2Rsn"]]);
+    expect(state.picks.map((p) => p.userId)).toEqual([p1.id, p2.id]);
   });
 
   it("includes signup answers only when requested", () => {

@@ -30,7 +30,9 @@ $values = @(
     @{ Name = "TF_VAR_staging_password"; Hint = "the staging site's password (username: team)" },
     @{ Name = "TF_VAR_tectonic_api_key"; Hint = "the clan API key" },
     @{ Name = "TF_VAR_wom_api_key"; Hint = "the Wise Old Man API key" },
-    @{ Name = "TF_VAR_runeprofile_api_key"; Hint = "the RuneProfile API key" }
+    @{ Name = "TF_VAR_runeprofile_api_key"; Hint = "the RuneProfile API key" },
+    @{ Name = "TF_VAR_google_vision_api_key"; Hint = "Google Cloud > APIs & Services > Credentials: the API key restricted to Cloud Vision" },
+    @{ Name = "TF_VAR_discord_bot_token"; Hint = "Discord application > Bot > token" }
 )
 
 function Read-Secret([string]$name, [string]$hint) {

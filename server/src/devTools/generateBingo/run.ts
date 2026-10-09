@@ -8,13 +8,14 @@ import { ApiError, type Api } from "./client";
 import type { GenerateOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
-import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, runBuyins, runDraft, runInOrder, runSignups, setStage, weighAnItem, type Ctx } from "./setup";
+import { createTeams, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, goLive, planGoLive, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
 import { ensureCategories, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
+import { runBorrowedAccount } from "./borrowedAccount";
 import { uploadWrappedArt } from "./wrappedArt";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
@@ -128,8 +129,9 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     },
   };
 
-  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme);
+  await importBingo(ctx, document, `Test data ${slug.slice("testdata-".length)}`, options.theme, options.discordGuildId, options.discordCategoryId);
   await weighAnItem(ctx, new Date(tl.createdAt.getTime() + 10 * 60_000));
+  await publishBoard(ctx, new Date(tl.createdAt.getTime() + 15 * 60_000));
   await uploadWrappedArt({ api, adminDiscordId, slug, at: new Date(tl.createdAt.getTime() + 20 * 60_000), log });
   const feedbackQuestions = await ensureFeedbackQuestions(api, adminDiscordId, slug, new Date(tl.createdAt.getTime() + 25 * 60_000));
   log(`feedback questions: ${feedbackQuestions.length}, ${feedbackQuestions.filter((q) => q.audience === "captains").length} for Captains only`);
@@ -151,6 +153,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const restrictions = await runRestrictions(ctx, players, mods, seeds);
   log(`restrictions: ${restrictions.applied} applied, ${restrictions.lifted} lifted`);
   result.problems.push(...restrictions.problems);
+  const borrowed = await runBorrowedAccount(ctx, players, seeds);
+  if (borrowed.player) log(`borrowed account: ${borrowed.player.name} plays on ${borrowed.rsn}`);
   if (options.stage === "captains") {
     for (const p of result.problems) log(`SANITY CHECK FAILED: ${p}`);
     return result;
@@ -176,15 +180,19 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const byUserId = new Map(players.filter((p) => p.userId).map((p) => [p.userId!, p]));
   const teamRows = (await fetchTeams(ctx)).map((t) => ({ ...t, players: t.members.map((m) => byUserId.get(m.user.id)).filter((p): p is Player => !!p) }));
   const hands = handEvents(ctx, teamRows.map((t) => ({ teamId: t.id, members: t.players })), board);
-  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events], new Date(Math.min(tl.startsAt.getTime(), ctx.limit.getTime())));
+  const opens = openEvents(ctx, teamRows.map((t) => ({ members: t.players })), board);
+  // A run that goes Live stops Board revealed's activity there (a Start now ends it early); one that stays at Board revealed runs to its limit.
+  const live = options.stage === "reveal" ? null : planGoLive(rng.fork("go-live"), tl);
+  const revealEnd = new Date(Math.min((live?.at ?? tl.startsAt).getTime(), ctx.limit.getTime()));
+  await runInOrder([...nameTeamEvents(ctx, seeds), ...hands.events, ...opens], revealEnd);
   const raised = hands.raised;
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
-  log(`${seeds.length} teams named, ${raised.length} hands raised`);
+  log(`${seeds.length} teams named, ${raised.length} hands raised, ${opens.filter((o) => o.at <= revealEnd).length} Tile and rules opens`);
   const categories = await ensureCategories(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 30 * 60_000));
   log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
   if (options.stage === "reveal") return result;
 
-  await setStage(ctx, "live", tl.startsAt);
+  await goLive(ctx, live!);
   const simRng = rng.fork("teams");
   const totalCost = board.parts.filter((p) => !board.deadlocked.has(p.id)).reduce((sum, p) => sum + p.effort, 0);
   const simTeams: SimTeam[] = teamRows.map((t) => {

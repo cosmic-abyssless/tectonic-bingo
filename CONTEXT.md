@@ -24,13 +24,13 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 3. **Signups closed** (`captains`) — The roster is final and signups are locked. Captains keep scouting until the draft starts.
 4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every Player can watch; Cut signups are no longer Players from this stage on.
 5. **Board revealed** (`reveal`) — Teams are set; the board is visible for prep, but submissions are not yet accepted.
-6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate.
+6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate. Live always means started: a Bingo at Board revealed goes Live by itself at its start date, and an Admin going Live sooner (**Start now**) moves the start date to that moment. A Live Bingo's start date can't be in the future. It doesn't finish by itself at its end date: an Admin moves it to Finished.
 7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared.
 - **Avoid:** "captains stage" in discussion or UI copy. It is the code value for Signups closed and reads as if it were about the Captain role.
 
 ### Codeword
 A unique, secret text phrase generated for each Team in a Bingo that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
-- **Who sees it:** A Player sees their own Team's, only while the Bingo is Live (any earlier would let a screenshot be staged before the start): beside the Board's title and in the Submit flow. Moderators see the Codeword of whichever Team they're submitting for or reviewing.
+- **Who sees it:** A Player sees their own Team's, only while the Bingo is Live (any earlier would let a screenshot be staged before the start): beside the Board's title and in the Submit flow, and, where the Bingo has Discord channels, pinned in the Team's text channel as the Bingo goes Live. Moderators see the Codeword of whichever Team they're submitting for or reviewing.
 
 ### Pre-load
 A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), without completing the final step. The usual case is pre-loading a chest: finishing a run before the Bingo starts and opening the chest once it's Live (common for the Corrupted Gauntlet).
@@ -72,7 +72,7 @@ A member of the clan's leadership who handles a Bingo's Buy-ins, granted per Bin
 ### Captain
 A designated player who leads a Team during a Bingo.
 - **Capabilities:** Participates in the Draft to pick players/duos for their team; represents the team in disputes.
-- **Team name:** A Captain (or co-captain) names their Team once the Draft has set it, while the Board is revealed. Live locks it, and from then on only Moderators and Admins can rename a Team, until Finished.
+- **Team name:** A Captain (or co-captain) names their Team once the Draft has set it, while the Board is revealed. Live locks it, and from then on only Moderators and Admins can rename a Team, until Finished. A Team name is at most 30 characters, the most a Wise Old Man competition team name can be.
 - **Rules:** Assigned by an Admin, from the signups as they come in, while signups are open or closed. Exactly one or two captains per team. In a duo Bingo a Team is led by a Duo: the Captain and their partner as co-captain, so an unpaired player is paired up before they can captain. The Draft can't begin while a Team isn't. A Duo that leads a Team stays one, and its players can't unpair or withdraw themselves; an Admin has to change the Team.
 
 ### Action
@@ -105,6 +105,8 @@ A player's registration for a specific Bingo, submitted during the `signup` stag
 - **Other option:** A single- or multiple-choice question can allow **Other**: an extra choice with a short free-text box (up to 100 characters), shown as "Melee, Other: hybrid". Other can't be picked without text, and a required question counts Other with text as answered. The setting is exported and imported with the Bingo.
 - **Question helper text:** Each signup question can carry optional plain-text helper text (up to 500 characters), shown under it on the signup form. It is exported and imported with the Bingo.
 - **Late signup:** A Signup an Admin makes on a player's behalf once Signups are closed, for someone joining late. It is a real Signup (an RSN, a buy-in to collect, unanswered questions), made from Signups closed until the Bingo is Finished. Players can only sign themselves up while Signups are open.
+- **Borrowed account:** An OSRS account the Player doesn't own, which an Admin has set their Signup to play on, with a reason, from Signups closed until the Bingo is Finished. It stands for the whole Bingo: the Player is named by its RSN, the account's own details (its type, its Combat Achievements tier) are that account's while anything about the person stays theirs (their best tier across their own accounts, their clan profile), and Wise Old Man counts that account from the start (set while Live, the account they played on before stops counting). The Player sees it on their own player card. Their Discord account, Team, roles and Submissions stay as they were, and a "borrowed" badge on their roster row and player card marks it, with their own name. Wise Old Man has to know the account, and nobody else in the Bingo may be on it. An Admin sets it back the same way.
+- **Avoid:** "rename" or "name change" for a Borrowed account. Those are the same account going by a new name in game.
 
 ### Duo
 Two players who register to enter the Bingo together and must be drafted onto the same team as a single unit.
@@ -134,6 +136,7 @@ The structured selection process during the `draft` stage where Captains take tu
 - **Pairs first:** In a duo Bingo, a Team can't draft a single while there's still a pair it may take: once every pair is drafted (or the Team has its share of pairs), singles open. Every Team gets one pick a round, so with pairs first they all reach their share together. It holds for Admins picking for a Team too.
 
 - **Draft room:** The page where the Draft happens. Captains and Moderators enter it once signups are open; every Player can watch once the Draft stage begins (Cut signups can't).
+- **Team rosters:** The Draft room once the Draft is over (from Board revealed on, and for a Historical Bingo that recorded its Draft): only the Teams and each one's picks, read-only, under "Team rosters" in the ☰ menu.
 - **On the clock:** The Team whose Captain is picking now. Shown to everyone as who is currently picking, with the round and pick number; the Captain on the clock also gets a stronger cue that it is their turn. There is no pick timer.
 
 ### Scouting
@@ -156,6 +159,26 @@ The group of Players a Captain leads, formed by the Draft. Has a name, a color, 
 ### Board
 The full grid of Tiles presented to players for a Bingo.
 - **Geometry:** Configurable grid of rows and columns (e.g. 5x5).
+- **Two copies:** Admins edit the Draft board; everyone else sees the Published board. "The board", unqualified, is the Published board.
+
+### Draft board
+The Admins' working copy of a Bingo's Board (its Tiles, Parts, Tasks, points, lines, Categories, Tags and Tile images, plus its Exclusive Item rules and Rules text). Edits go here; nobody else sees it. One per Bingo, shared by every Admin.
+- **Rules:** Any Admin edits it, and it records who changed it last and when. Any Admin can Publish or Discard it. While it differs from the Published board, the Board tab says so ("Unpublished changes") with who changed it last, to Admins only. Admins can preview it as Players would see it. It works the same in every stage; a Finished Bingo's board stays locked.
+- **What goes through it:** The Board, the Exclusive Item rules and the Rules text. Every other setting (name, theme, dates, signups, Pot, Wise Old Man, reveal options, Once Finished) saves at once.
+- **Tile images:** One uploaded to the draft is stored at once, but shown to Players only once published.
+
+### Published board
+The Board everyone plays on: what Players see, what Moderators review against, what scores, and what is exported. Changes only by Publishing.
+- **Rules:** An imported Bingo's board is its Published board, with no draft.
+
+### Publish
+Applies the Draft board to the Published board, after showing what changes and how every Team's points move.
+- **The Publish screen:** Every Tile, Part and Task added, removed or changed, with old and new values (Tags included), plus changed line bonuses, Categories, Exclusive Item rules and Rules text; a warning about Claims on Items it removes; and each Team's points before and after, with the Tiles and Parts it gains or loses as complete. Points share isn't previewed.
+- **Rules:** It publishes exactly the draft the screen showed: if the draft changed since, it's refused and the new changes are shown. Publishing rescores every Team. A Tile, Part, Task or Item on both boards stays the same one, so its Claims and points stay with it. Claims on an Item it removes stop counting; their Submissions are kept. Players' boards refresh, with no announcement. Recorded in the audit log as "Board published" (who, what changed, each Team's points before and after), for Moderators and Admins.
+- **Valued as:** An Item whose Valued as it changes can have the Submissions already priced re-priced, once published, if the Admin asks.
+
+### Discard
+Throws the Draft board away, back to the Published board, after confirming. Nothing Players see changes. Recorded in the audit log as "Board discarded" (who, and what was thrown away), for Moderators and Admins.
 
 ### Tile
 A single visual cell on the Board.
@@ -174,6 +197,10 @@ A distinct top-level section, milestone, or page within a Tile.
 - **Rules:** A Tile has one or more Parts. In the comic theme, each Part gets its own dedicated story page (e.g. "Part 1 of 2"). A Part awards its own points or gates subsequent Parts.
 - **Composition:** A Part contains one or more **Tasks** or a hierarchy of **Conditions**.
 - **Engineering note:** Corresponds to the immediate children of the Tile's root node in the requirement graph (`tile.node.children`).
+
+### Tag
+A word a Tile or Part is found by in the board's search, never shown to Players. A **Text tag** is any text. A **Boss tag** is a boss, raid or minigame from the wiki (Vorkath, Chambers of Xeric, The Gauntlet); adding one adds the wiki's names for it (aliases and common misspellings) as Text tags, which can be removed one by one, and removing the Boss tag removes them. Not searched while the Tiles are sealed.
+- **Rules:** Edited on the Draft board with the rest of the Board: Players' search uses the Published board's Tags until a Publish.
 
 ### Task
 A concrete objective, check, or nested requirement that must be satisfied.
@@ -217,7 +244,7 @@ A delay configured on a Tile: for its duration after the Bingo starts, no Team c
 A short, skippable walk through the Board for a Player: their Team, opening a Tile, what it needs, Task interest, Submitting, and the ☰ menu.
 - **When:** Once per account, the first time a Player sees their own Team's Board in a Live Bingo. Finishing or skipping it counts as seen, on every device. Anyone can replay it from the ☰ menu; replaying never changes that.
 - **Who:** Players, on their own Team's Board. Not a Moderator or Admin looking at a Board they don't play on.
-- **Steps:** Some wait for the Player to click the real thing (open a Tile, open Submit, open the ☰ menu), which then opens as usual; the rest only point things out. Nothing is ever Submitted: the Tutorial shows the Submit flow's inputs and every way into it, then closes it itself. Only those opens are asked for: marking Task interest and the ☰ menu's entries are shown, never required, so an Achievement they lead to stays a reward for choosing to. What's opened during the Tutorial counts like any other open.
+- **Steps:** Some wait for the Player to click the real thing (open a Tile, open Submit, open the ☰ menu), which then opens as usual; the rest only point things out. Nothing is ever Submitted: the Tutorial shows the Submit flow's inputs and every way into it, then closes it itself. Only those opens are asked for: marking Task interest and the ☰ menu's entries are shown, never required, so an Achievement they lead to stays a reward for choosing to. What's opened during the Tutorial counts like any other open. A Player who has already marked Task interest (so has opened a Tile) skips the Tile's steps: opening one, its Parts, Task interest and Submitting from it.
 - **Avoid:** Tour, onboarding.
 
 ---
@@ -272,8 +299,8 @@ How multi-part Tiles handle identical or overlapping item lists between Parts:
 An Item a Team may use in **one place only**: a Claim on it locks the same Item everywhere else for that Team, but still counts only where it was submitted.
 - **Example:** A pet counts on its boss's Tile *or* on the Pets Tile, not both. Several of the same pet on one Tile all count. On Slayer Bosses, a unique used for Page 1 is spent for Page 2.
 - **Scope:** Each rule limits the Item to one **Tile** (any of its Parts) or one **Part**.
-- **Set up:** Per Bingo, in the settings, as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
-- **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is added after Claims exist, the earliest Claim's place is the one that scores.
+- **Set up:** Per Bingo, in the Board tab with the Draft board (they apply once published), as a list of item names plus a scope, started from a Tile or Part of the board, an Item Group (a snapshot) or nothing, and editable item by item; matched by item name. Each place keeps its own copy of the Item.
+- **Rules:** A pending or approved Claim locks the Item; a rejection frees it. The server refuses the Claim and the board shows "Used on ...". If a rule is published after Claims exist, the earliest Claim's place is the one that scores.
 - **Groups:** A rule can name a group of its items that count as one Item for locking (not an Item Group, which only starts a rule), e.g. "Bludgeon piece": the axon, claw and spine. A Claim on any member locks every member elsewhere in the rule's scope, shown with the piece used: "Used on SLAYER BOSSES · Page 1 (Bludgeon axon)". Several members in the same place stay allowed, and a rejection frees the group. An item is in at most one group per rule, and a group belongs to its rule. Whether several members in one place all *count* is up to the Requirement Tree.
 - **Not:** A Shared Item Pool. Sharing one Item between Parts makes a Claim count toward *each*; an Exclusive Item is the opposite: one place, chosen by where the Claim is submitted.
 
@@ -344,10 +371,11 @@ The entry fee in OSRS GP that each participating player must pay to join the Bin
 
 ### Achievement
 A just-for-fun milestone a Player earns during a Bingo, e.g. "Strong start: submit your first drop". Never affects points, scoring or the Board.
-- **Scope:** Per Bingo: every Bingo starts everyone from nothing. Only Players on a Team earn them (a Moderator who isn't playing never does), and only while the Bingo is Live.
-- **Who earns it:** The Player who did the thing, through the app, so the unlock plays on their own device. Posting a teammate's drop earns the poster "Strong start", not the teammate the drop is credited to. Two kinds are exceptions, and their popups wait for the Player: one for what teammates do to your drop (Reactions on it) goes to the Player the Submission is credited to, and one for in-game play (a clue casket opened, hours bossed or played, bosses killed during the Bingo) is noticed from the Player's Wise Old Man snapshots, so it only arrives once Wise Old Man has an updated snapshot of them. That play counts only from 6 hours after the Bingo starts (or after the Achievement is switched on, if later): the hiscores only update when a player logs out and no session lasts longer than 6 hours, so earlier snapshots can still hold play from before the Bingo. Titles and Luck still count from the start, like the Wise Old Man competition.
+- **Scope:** Per Bingo: every Bingo starts everyone from nothing. Only Players on a Team earn them (a Moderator who isn't playing never does). An Achievement can be earned as soon as a Player can take the action that earns it: from Board revealed for opening Tiles, marking or removing Task interest (not while the Tiles are sealed) and reading the rules (not while they're hidden); only while the Bingo is Live for Submitting, Reactions, Stats and in-game play from Wise Old Man. Nothing is earned once it's Finished.
+- **Who earns it:** The Player who did the thing, through the app, so the unlock plays on their own device. Posting a teammate's drop earns the poster "Strong start", not the teammate the drop is credited to. Two kinds are exceptions, and their popups wait for the Player: one for what teammates do to your drop (Reactions on it) goes to the Player the Submission is credited to, and one for in-game play (a clue casket opened, hours bossed or played, bosses killed during the Bingo) is noticed from the Player's Wise Old Man snapshots, so it only arrives once Wise Old Man has an updated snapshot of them. Hours bossed and bosses killed count from the start (or from when the Achievement is switched on, if later), like the Wise Old Man competition, so a Player's progress matches the competition's numbers. A clue casket opened and hours played count only from 6 hours after the start (or the switch-on): the hiscores only update when a player logs out and no session lasts longer than 6 hours, so earlier snapshots can still hold play from before the Bingo. Titles and Luck count from the start too.
 - **Rules:** Earned the moment its condition is met, and never revisited: not taken away if the Submission behind it is rejected or a Reaction is taken back, and never awarded after the fact by a correction someone else makes. Every Bingo offers the same Achievements; an Admin can switch individual ones, or all of them, off for a Bingo (switching off only hides them). An Achievement added to the catalogue later reaches a Bingo already under way only if an Admin switches it on there, and is earned from then on, never from earlier play.
 - **Visibility:** Not secret, just not shown off: the Player sees their own list, other Players see at most their count ("5 / 16"), and Moderators can see earns in the audit log. Unearned ones show greyed out; a **Hidden** Achievement shows as a "???" slot until earned, so there's something to discover by playing around.
+- **Rarity:** Once a Player has earned an Achievement, they see how many of the Bingo's Players have it too, as a whole percent ("12% of players"), like Steam's. Never on one they haven't earned. The Players are those on a Team in this Bingo now; one who earned it and has since left their Team counts on neither side. Admins see, for every Achievement, how many Players have earned it ("Earned by 12 of 48 Players").
 - **Unlock:** Announced once, on the Player's own device, with a popup in the style of OSRS's combat achievement and collection log popups (icon, title, the description of how it's earned and a line of **flavour text**). The Player's list of Achievements shows the description, and the flavour text only once earned. If they weren't there to see it, it plays next time they open the Bingo; several queue one after another.
 - **Time of day:** Achievements about the time of day ("Night owl") go by the Player's own device clock, and must be earnable on any day of the Bingo, not only at its start or end.
 - **Should work for anyone:** Every Achievement must be earnable, in theory, by any Player. A one-off honour ("first Submission of the Bingo") or a ranking ("most Achievements") is a Title, not an Achievement.
