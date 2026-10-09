@@ -32,7 +32,7 @@ export type TutorialOpening = "tile" | "submit" | "menu";
 
 export interface TutorialStep {
   id: string;
-  /** Its place among the Tutorial's steps (1 to TUTORIAL_STEP_COUNT); a step shown a piece at a time repeats it. */
+  /** Its place among the Tutorial's steps (1 to tutorialStepCount); a step shown a piece at a time repeats it. */
   number: number;
   title: string;
   lines: string[];
@@ -54,8 +54,6 @@ export interface TutorialStep {
   optional: boolean;
 }
 
-export const TUTORIAL_STEP_COUNT = 9;
-
 /** What step 4 says about the Tile that was opened, beyond its Parts. */
 export interface TutorialTileFacts {
   /** It (or one of its Parts) needs a Proof screenshot. */
@@ -76,10 +74,22 @@ function step(input: StepInput): TutorialStep {
   return { targets: [], all: false, waitsFor: null, inside: null, closes: null, optional: false, large: false, ...input, clickable: input.clickable ?? !!input.waitsFor };
 }
 
-/** Every step, in order. Only step 4's lines change, with the Tile that was opened. */
-export function tutorialSteps(tile: TutorialTileFacts, bingoName: string): TutorialStep[] {
-  return [
-    step({ id: "welcome", number: 1, title: `Welcome to ${bingoName}!`, lines: ["This short tutorial will show you around: your Team, the Tiles, and how to Submit."], large: true }),
+/** The steps about opening a Tile and what's inside it, left out for a Player who has already marked Task interest. */
+const TILE_STEP_IDS = new Set(["open-tile", "tile-parts", "task-interest", "tile-submit"]);
+
+/**
+ * Every step, in order. Only step 4's lines change, with the Tile that was opened. A Player who `knowsTiles` (they've
+ * already marked Task interest, so they've opened a Tile) skips the Tile's steps, and the rest are numbered on without a gap.
+ */
+export function tutorialSteps(tile: TutorialTileFacts, bingoName: string, knowsTiles = false): TutorialStep[] {
+  const all = [
+    step({
+      id: "welcome",
+      number: 1,
+      title: `Welcome to ${bingoName}!`,
+      lines: [knowsTiles ? "This short tutorial will show you around: your Team, how to Submit, and the ☰ menu." : "This short tutorial will show you around: your Team, the Tiles, and how to Submit."],
+      large: true,
+    }),
     step({ id: "team", number: 2, title: "Your Team", lines: ["Your Team and its points. Pressing the points shows where they came from."], targets: ["team-banner"] }),
     step({ id: "open-tile", number: 3, title: "Open a Tile", lines: ["Each Tile is a goal for your Team. Click any Tile to open it."], targets: ["board"], waitsFor: "tile" }),
     step({
@@ -114,7 +124,14 @@ export function tutorialSteps(tile: TutorialTileFacts, bingoName: string): Tutor
       closes: "tile",
       optional: true,
     }),
-    step({ id: "open-submit", number: 6, title: "Submit", lines: ["Or Submit from the Board, any time. Click Submit."], targets: ["submit"], waitsFor: "submit" }),
+    step({
+      id: "open-submit",
+      number: 6,
+      title: "Submit",
+      lines: [knowsTiles ? "Submit from inside a Tile, or from the Board any time. Click Submit." : "Or Submit from the Board, any time. Click Submit."],
+      targets: ["submit"],
+      waitsFor: "submit",
+    }),
     step({
       id: "submit-screenshot",
       number: 7,
@@ -151,6 +168,15 @@ export function tutorialSteps(tile: TutorialTileFacts, bingoName: string): Tutor
     step({ id: "menu-tutorial", number: 8, title: "Tutorial", lines: ["This walk through, whenever you want it again."], targets: ["menu-tutorial"], inside: "menu", closes: "menu", optional: true }),
     step({ id: "done", number: 9, title: "Done", lines: ["You're set. Good luck!", "You can replay this any time from ☰ → Tutorial."] }),
   ];
+  if (!knowsTiles) return all;
+  const kept = all.filter((s) => !TILE_STEP_IDS.has(s.id));
+  const numbers = [...new Set(kept.map((s) => s.number))];
+  return kept.map((s) => ({ ...s, number: numbers.indexOf(s.number) + 1 }));
+}
+
+/** How many numbered steps there are (the card's "of N"). */
+export function tutorialStepCount(steps: TutorialStep[]): number {
+  return new Set(steps.map((s) => s.number)).size;
 }
 
 export interface TutorialState {
@@ -162,14 +188,20 @@ export interface TutorialState {
   direction: 1 | -1;
   /** The Tile opened at step 3, for step 4's lines and for the Submit flow at step 7. */
   tileId: string | null;
+  /** Started for a Player who'd already marked Task interest: the Tile's steps are left out (see tutorialSteps). */
+  knowsTiles: boolean;
   /** The steps passed over this time through (nothing to point at), which don't take up a sub-step number. */
   passed: number[];
 }
 
-export const TUTORIAL_IDLE: TutorialState = { active: false, index: 0, replay: false, direction: 1, tileId: null, passed: [] };
+export const TUTORIAL_IDLE: TutorialState = { active: false, index: 0, replay: false, direction: 1, tileId: null, knowsTiles: false, passed: [] };
 
 export type TutorialAction =
-  | { type: "start"; replay: boolean }
+  /**
+   * `knowsTiles` leaves the Tile's steps out for the whole run, so marking Task interest during it doesn't change them.
+   * `tileId` is a Tile they marked interest on, for the Submit flow at step 7 to start on in place of one opened at 3.
+   */
+  | { type: "start"; replay: boolean; knowsTiles?: boolean; tileId?: string | null }
   | { type: "next" }
   | { type: "back" }
   /** The current (optional) step's element isn't there. */
@@ -182,7 +214,11 @@ export type TutorialAction =
 /** How the Tutorial moves between `steps`. Moving past the last step, or skipping, ends it. */
 export function tutorialReducer(steps: TutorialStep[], state: TutorialState, action: TutorialAction): TutorialState {
   // Already running (it started on its own as the ☰ asked for a replay): it carries on as it is.
-  if (action.type === "start") return state.active ? state : { ...TUTORIAL_IDLE, active: true, replay: action.replay };
+  if (action.type === "start") {
+    if (state.active) return state;
+    const knowsTiles = !!action.knowsTiles;
+    return { ...TUTORIAL_IDLE, active: true, replay: action.replay, knowsTiles, tileId: knowsTiles ? (action.tileId ?? null) : null };
+  }
   if (!state.active) return state;
   const current = steps[state.index];
   const goTo = (index: number, direction: 1 | -1): TutorialState =>

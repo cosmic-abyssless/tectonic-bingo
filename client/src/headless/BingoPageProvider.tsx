@@ -37,6 +37,8 @@ interface BingoPageRaw {
   locks: ExclusiveLocks;
   /** Each Tile's Tags, its Parts' included, for searching the Tiles (BoardResponse.tileTags); none while sealed. */
   tileTags: Readonly<Record<string, string[]>>;
+  /** The viewed team's progress (its Task interest among it) has arrived, from the server or the cache. */
+  progressLoaded: boolean;
 }
 
 const BingoPageContext = createContext<BingoPageModel | null>(null);
@@ -373,7 +375,7 @@ export function BingoPageProvider({
     codeword: bingo.stage === "live" ? (myTeamModel?.codeword ?? null) : null,
   };
 
-  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks, tileTags };
+  const raw: BingoPageRaw = { slug, bingo, tiles, categories: categoriesRaw, nodeStates, teamSubmissions, viewingTeam: viewingTeamModel, viewerId: user.id, locks, tileTags, progressLoaded: !!progressData };
 
   return (
     // The search keeps its own state below the page (TileSearchProvider), so typing doesn't re-render the page.
