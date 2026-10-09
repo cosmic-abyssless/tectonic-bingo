@@ -37,8 +37,11 @@ docker build --build-arg SENTRY_RELEASE=$(git rev-parse HEAD) \
 `server/src/ocrGoogle.ts`). It answers in under a second, about five times faster than the local engine, and misreads
 less (issue #485). The local engine below is its fallback: when Cloud Vision is down, slow (`GOOGLE_VISION_TIMEOUT_MS`,
 default 8 s), over quota, refuses the key, or won't take an image, the api reads that screenshot with the `ocr` service
-instead, and logs a warning. A refused key (400/403: the key was deleted, billing stopped, the API was switched off in the
-Google Cloud project) is logged as an error so Sentry says so, while every screenshot still gets read by the fallback.
+instead. A failure that will last (a timeout, over quota, Google down, or a refused key) sends every screenshot to the
+`ocr` service for the next minute, logged once as it starts and once when Cloud Vision reads again. A refused key (401,
+403, or a 400 naming the key: the key was deleted, billing stopped, the API was switched off in the Google Cloud project)
+is logged as an error so Sentry says so, and again hourly while it lasts, while every screenshot still gets read by the
+fallback.
 Staging has no key, so it reads with the `ocr` service alone and keeps that path exercised. Without a key anywhere,
 everything below is the whole story.
 

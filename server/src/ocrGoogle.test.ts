@@ -41,6 +41,9 @@ describe("createGoogleVisionRecognizer", () => {
     expect(await failure(answering(400, '{"error":{"message":"API key not valid. Please pass a valid API key.","details":[{"reason":"API_KEY_INVALID"}]}}'))).toMatchObject({ needsAttention: true });
     // Any other 400 is about the one request, not the key.
     expect(await failure(answering(400, '{"error":{"message":"Request payload size exceeds the limit"}}'))).toMatchObject({ needsAttention: false, transient: false });
+    expect(await failure(answering(413, "too large"))).toMatchObject({ needsAttention: false, transient: false });
+    // Something answering in Google's place (a proxy, a retired endpoint) won't fix itself.
+    for (const status of [404, 405, 410]) expect(await failure(answering(status, "not here"))).toMatchObject({ needsAttention: true, transient: false });
     expect(await failure(answering(429, "RESOURCE_EXHAUSTED"))).toMatchObject({ needsAttention: false, transient: true });
     expect(await failure(answering(503, "unavailable"))).toMatchObject({ needsAttention: false, transient: true });
   });
@@ -49,6 +52,11 @@ describe("createGoogleVisionRecognizer", () => {
     expect(await failure(answering(200, { responses: [{ error: { code: 3, message: "Bad image data." } }] }))).toBeInstanceOf(OcrImageError);
     // An error for one image falls back on its own, without the cooldown that takes Cloud Vision away from everyone.
     expect(await failure(answering(200, { responses: [{ error: { code: 13, message: "Internal error." } }] }))).toMatchObject({ name: "OcrUnavailableError", transient: false, needsAttention: false });
+    expect(await failure(answering(200, { responses: [{ error: { code: 4, message: "Deadline exceeded." } }] }))).toMatchObject({ transient: false, needsAttention: false });
+    // The codes inside a 200 that mirror Google's trouble (RESOURCE_EXHAUSTED, UNAVAILABLE) and a refused key
+    // (PERMISSION_DENIED, UNAUTHENTICATED).
+    for (const code of [8, 14]) expect(await failure(answering(200, { responses: [{ error: { code, message: "x" } }] }))).toMatchObject({ transient: true, needsAttention: false });
+    for (const code of [7, 16]) expect(await failure(answering(200, { responses: [{ error: { code, message: "x" } }] }))).toMatchObject({ transient: false, needsAttention: true });
     expect(await failure(answering(200, "<html>"))).toBeInstanceOf(OcrUnavailableError);
   });
 

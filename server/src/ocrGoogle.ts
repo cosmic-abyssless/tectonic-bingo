@@ -44,12 +44,13 @@ export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fe
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => "")).slice(0, 300);
-      // A refused key won't fix itself: someone has to change the key or the Google Cloud project. That is 401 and 403
-      // (the API turned off, billing stopped, the key restricted to other APIs), and a 400 that names the key
-      // (API_KEY_INVALID); any other 400 is about this one request. 429 (over quota) and 5xx are Google's own trouble,
-      // and pass.
-      const needsAttention = response.status === 401 || response.status === 403 || (response.status === 400 && /API_KEY|API key/i.test(detail));
+      // 429 (over quota) and 5xx are Google's own trouble, and pass. A 400 that doesn't name the key, and 413, are about
+      // this one request. Any other 4xx won't fix itself and needs a person: a refused key (a 400 naming it,
+      // API_KEY_INVALID; 401; 403 for the API turned off, billing stopped, the key restricted to other APIs), or
+      // something answering in Google's place (a proxy's 404, a retired endpoint).
       const transient = response.status === 429 || response.status >= 500;
+      const perRequest = (response.status === 400 && !/API_KEY|API key/i.test(detail)) || response.status === 413;
+      const needsAttention = !transient && !perRequest && response.status >= 400 && response.status < 500;
       throw new OcrUnavailableError(`Cloud Vision answered ${response.status}`, { needsAttention, transient, detail });
     }
 
@@ -64,10 +65,15 @@ export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fe
     const first = Array.isArray(body?.responses) ? body.responses[0] : undefined;
     if (!first || typeof first !== "object") throw new OcrUnavailableError("Cloud Vision sent an unexpected answer", { transient: true });
     if (first.error) {
-      if (first.error.code === INVALID_ARGUMENT) throw new OcrImageError(first.error.message);
-      // An error for this one image (DEADLINE_EXCEEDED, INTERNAL): it falls back on its own, without taking Cloud
-      // Vision away from everyone else's screenshots for the cooldown.
-      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`);
+      const code = first.error.code;
+      if (code === INVALID_ARGUMENT) throw new OcrImageError(first.error.message);
+      // The google.rpc.Code inside a 200 mirrors the HTTP statuses above: RESOURCE_EXHAUSTED (8) and UNAVAILABLE (14) are
+      // Google's trouble, PERMISSION_DENIED (7) and UNAUTHENTICATED (16) a refused key. Anything else (DEADLINE_EXCEEDED,
+      // INTERNAL) is about this one image: it falls back on its own, without taking Cloud Vision away from everyone else.
+      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`, {
+        transient: code === 8 || code === 14,
+        needsAttention: code === 7 || code === 16,
+      });
     }
     // One entry per line Cloud Vision read; a screenshot with no text at all has no fullTextAnnotation (an empty list).
     return (first.fullTextAnnotation?.text ?? "")

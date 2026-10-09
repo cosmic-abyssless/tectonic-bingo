@@ -10,7 +10,7 @@ import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { googleVisionApiKey, googleVisionTimeoutMs, ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
 import { createGoogleVisionRecognizer } from "./ocrGoogle";
 import { createLimiter, type OcrPriority } from "./ocrScheduler";
-import { createTextReader, withFallback, type TextRecognizer } from "./ocrText";
+import { createTextReader, SkippedForCooldown, withFallback, type FallbackPrimary, type TextRecognizer } from "./ocrText";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -55,11 +55,18 @@ const recognizeWithLocalEngine: TextRecognizer = (buffer, priority) => {
 // before "background", as for the local engine). Each is under a second, so the queue only forms in a burst, and it
 // keeps a burst from becoming a wave of 429s that all land on the fallback together.
 const CLOUD_VISION_CONCURRENCY = 8;
-const cloudVisionLimiter = createLimiter(CLOUD_VISION_CONCURRENCY);
+const cloudVisionLimiter = createLimiter(CLOUD_VISION_CONCURRENCY, ({ waitedMs, priority, running, queued }) => {
+  log.info("cloud vision waited for a free slot", { waitedMs, priority, running, queued });
+});
 
-const recognizeWithCloudVision: TextRecognizer = (buffer, priority) => {
+// A reading that waited its turn checks again as it starts: if Cloud Vision failed meanwhile, it goes to the local
+// engine at once rather than paying the same timeout behind the others (withFallback).
+const recognizeWithCloudVision: FallbackPrimary = (buffer, priority, skipping) => {
   const read = createGoogleVisionRecognizer({ apiKey: googleVisionApiKey()!, timeoutMs: googleVisionTimeoutMs() });
-  return cloudVisionLimiter.run(() => read(buffer), priority);
+  return cloudVisionLimiter.run(() => {
+    if (skipping()) throw new SkippedForCooldown();
+    return read(buffer);
+  }, priority);
 };
 
 // With GOOGLE_VISION_API_KEY set, Google Cloud Vision reads each screenshot first (ocrGoogle.ts) and the local engine
