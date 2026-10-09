@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
-import { STAGE_ORDER, type Stage } from "@bingo/shared";
+import type { Stage } from "@bingo/shared";
 import { useBingo } from "../api/queries";
 import { useBoardDraftStatus } from "../api/adminQueries";
 import { useCan, usePageAccess } from "../headless/permissions";
@@ -14,6 +14,7 @@ import { ReviewQueue, SUBMISSION_FILTER_PARAMS } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
 import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
+import { isOutOfStage, MOD_TABS } from "../core/mod/modTabs";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
 import { PermissionsPanel } from "../core/admin/PermissionsPanel";
 import { AchievementsManager } from "../core/admin/AchievementsManager";
@@ -34,46 +35,10 @@ import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useSetUrlParams, useUrlParam } from "../core/ui/useUrlParam";
 
-// adminOnly tabs are hidden from — and their content never rendered for — a
-// mod who may not administer the bingo. The server enforces the same split on the
-// underlying routes (requireAdmin on admin.ts vs requireBingoMod on mod.ts),
-// so this is UX decluttering on top of a real boundary, not the boundary
-// itself.
-//
-// `from`/`until` bound the stages a tab is relevant in. Outside that window
-// (stage already past `until`, or not yet at `from`) the tab is either hidden
-// or dimmed and moved to the end, per the mod's "outOfStageTabs" preference.
-// Tabs without bounds are always shown.
-const TABS: { key: string; label: string; adminOnly: boolean; from?: Stage; until?: Stage }[] = [
-  { key: "submissions", label: "Submissions", adminOnly: false, from: "live" },
-  // The roster (who's playing, on which account, their buy-ins) matters all the way through.
-  { key: "signups", label: "Signups", adminOnly: false },
-  { key: "audit", label: "Audit log", adminOnly: false },
-  // The Feedback form's results (CONTEXT.md "Feedback form"): the Bingo has to be Finished for there to be any.
-  { key: "feedback", label: "Feedback", adminOnly: false, from: "complete" },
-  { key: "settings", label: "Settings", adminOnly: true },
-  { key: "achievements", label: "Achievements", adminOnly: true },
-  { key: "board", label: "Board", adminOnly: true, until: "reveal" },
-  { key: "lines", label: "Lines", adminOnly: true, until: "reveal" },
-  { key: "questions", label: "Signup questions", adminOnly: true, until: "signup" },
-  // Feedback questions can be edited in any stage.
-  { key: "feedback-questions", label: "Feedback questions", adminOnly: true },
-  { key: "superlatives", label: "Superlatives", adminOnly: true },
-  { key: "teams", label: "Captains", adminOnly: true, from: "signup" },
-  { key: "permissions", label: "Permissions", adminOnly: true },
-  { key: "wrapped-art", label: "Wrapped", adminOnly: true },
-];
-type TabDef = (typeof TABS)[number];
-
 // <main> itself is full width now — only the Signups tab (its table benefits from the room, same as the draft
 // pool's) actually wants that. Every other tab's content, plus the stage stepper and tab list above them, opts
 // back into the old reading width with this.
 const NARROW = "mx-auto w-full max-w-6xl";
-
-function isOutOfStage(tab: TabDef, stage: Stage): boolean {
-  const idx = STAGE_ORDER.indexOf(stage);
-  return (tab.until !== undefined && idx > STAGE_ORDER.indexOf(tab.until)) || (tab.from !== undefined && idx < STAGE_ORDER.indexOf(tab.from));
-}
 
 // The tab a mod most likely wants on landing (or lands back on once their current tab goes out of stage) —
 // Signups while signups are open or just closed (who's in, who'll be cut, pairing people up), Captains during the
@@ -111,10 +76,10 @@ export function ModPage() {
     // A Historical Bingo (CONTEXT.md) is read-only: only the lists of what it recorded, whatever the stage says, and for
     // Admins its Board where it recorded Tasks (locked, as a Finished Bingo's is), to check how the old rules came across.
     if (historical)
-      return TABS.filter(
+      return MOD_TABS.filter(
         (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && canAdminister),
       ).map((t) => ({ ...t, dimmed: false }));
-    const allowed = TABS.filter((t) => !t.adminOnly || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) && !(unpublished && (t.key === "board" || t.key === "lines")) }));
+    const allowed = MOD_TABS.filter((t) => t.action === "moderate_bingo" || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) && !(unpublished && (t.key === "board" || t.key === "lines")) }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
   }, [stage, canAdminister, outOfStageTabs, historical, unpublished]);
