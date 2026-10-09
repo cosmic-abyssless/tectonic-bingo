@@ -2,8 +2,9 @@
 // gains from them; luck (#195) takes each boss's kill counts over time from the same rows.
 //
 // A good API citizen: only what WOM already has is read (never an update request), every page of snapshots is one
-// request paced within WOM's limit (20 a minute, 100 with WOM_API_KEY), a 429 holds the queue off, and each read
-// starts from the last stored snapshot, so a Player costs about one request an hour however long the Bingo runs.
+// request paced under WOM's limit (16 a minute of its 20, 80 of its 100 with WOM_API_KEY), a 429 holds the queue
+// off, and each read starts from the last stored snapshot, so a Player costs about one request an hour however long
+// the Bingo runs.
 // Once a Bingo is Finished, one last read runs up to its end, and after that it's never read again.
 import { and, eq, inArray, max } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -26,6 +27,12 @@ export const BASELINE_LOOKBACK_MS = 24 * HOUR_MS;
 export const READ_INTERVAL_MS = HOUR_MS;
 /** A Bingo Finished longer ago than this isn't given its final read after a restart: it predates the reads, or had it. */
 const FINAL_READ_GRACE_MS = 7 * 24 * HOUR_MS;
+/**
+ * The share of WOM's per-minute limit the reads pace to. Pacing at the limit itself drew 429s in production: network
+ * jitter lands two requests closer than the interval, and signups, RSN syncs, admin lookups and competition updates
+ * spend the same key's limit unpaced.
+ */
+const RATE_LIMIT_SHARE = 0.8;
 
 function readsDisabled(): boolean {
   return process.env.WOM_SNAPSHOT_READS_DISABLED === "true";
@@ -159,7 +166,7 @@ export class WomReadQueue {
     private client: WomClient = getWomClient(),
     private deps: { now?: () => Date; sleep?: (ms: number) => Promise<void>; perMinute?: number } = {},
   ) {
-    this.intervalMs = 60_000 / (deps.perMinute ?? (client.hasApiKey ? 100 : 20));
+    this.intervalMs = 60_000 / (deps.perMinute ?? (client.hasApiKey ? 100 : 20) * RATE_LIMIT_SHARE);
   }
 
   /** Queues a read; false when that Player is already queued. */
