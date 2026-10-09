@@ -12,16 +12,45 @@ export type TextRecognizer = (image: Buffer, priority: OcrPriority) => Promise<s
 /**
  * Reads with `primary`, and with `fallback` whenever `primary` fails, for any reason: an outage or a refused key, but
  * also an image it wouldn't take, which the other engine may still read. What `fallback` throws is what the caller sees.
+ *
+ * Each failure is logged here, once, at the level it asks for: an error (so Sentry hears) when someone has to act, a
+ * warning otherwise. A transient failure (a timeout, over quota, the provider down) also skips `primary` for
+ * `cooldownMs`, so during an outage each screenshot goes straight to `fallback` instead of waiting out `primary`'s
+ * timeout first; that is logged once as it starts, and once more when `primary` reads again.
  */
-export function withFallback(primary: TextRecognizer, fallback: TextRecognizer, names: { primary: string; fallback: string }): TextRecognizer {
+export function withFallback(
+  primary: TextRecognizer,
+  fallback: TextRecognizer,
+  names: { primary: string; fallback: string },
+  opts: { cooldownMs: number; now?: () => number } = { cooldownMs: 60_000 },
+): TextRecognizer {
+  const now = opts.now ?? (() => Date.now());
+  let skipUntil = 0;
+  let skipping = false;
   return async (image, priority) => {
+    if (now() < skipUntil) return fallback(image, priority);
     try {
-      return await primary(image, priority);
+      const lines = await primary(image, priority);
+      if (skipping) {
+        skipping = false;
+        log.info(`${names.primary} reads screenshots again`);
+      }
+      return lines;
     } catch (err) {
-      // An outage or a refused image is expected now and then (the reader has logged what needs a person); anything
-      // else is a bug in the reader, and reaches Sentry.
-      const expected = err instanceof OcrUnavailableError || err instanceof OcrImageError;
-      log[expected ? "warn" : "error"](`${names.primary} failed, reading the screenshot with ${names.fallback}`, { err });
+      if (err instanceof OcrUnavailableError && err.transient) {
+        skipUntil = now() + opts.cooldownMs;
+        if (!skipping) log.warn(`${names.primary} failed, so ${names.fallback} reads screenshots for the next ${Math.round(opts.cooldownMs / 1000)} s`, { err, detail: err.detail });
+        skipping = true;
+      } else if (err instanceof OcrUnavailableError || err instanceof OcrImageError) {
+        const needsAttention = err instanceof OcrUnavailableError && err.needsAttention;
+        log[needsAttention ? "error" : "warn"](`${names.primary} failed, reading the screenshot with ${names.fallback}`, {
+          err,
+          detail: err instanceof OcrUnavailableError ? err.detail : undefined,
+        });
+      } else {
+        // Not a failure any reader means to throw: a bug, so it reaches Sentry.
+        log.error(`${names.primary} failed unexpectedly, reading the screenshot with ${names.fallback}`, { err });
+      }
       return fallback(image, priority);
     }
   };

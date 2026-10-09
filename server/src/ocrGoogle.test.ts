@@ -1,15 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { createGoogleVisionRecognizer } from "./ocrGoogle";
-
-const written = () => (process.stdout.write as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => JSON.parse(String(call[0])) as { level: string; msg: string });
-
-beforeEach(() => {
-  vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-});
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 function answering(status: number, body: unknown) {
   return vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response(typeof body === "string" ? body : JSON.stringify(body), { status }));
@@ -25,7 +16,9 @@ describe("createGoogleVisionRecognizer", () => {
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(String(url)).not.toContain("the-key");
     expect((init!.headers as Record<string, string>)["x-goog-api-key"]).toBe("the-key");
-    expect(JSON.parse(String(init!.body))).toEqual({ requests: [{ image: { content: Buffer.from("png bytes").toString("base64") }, features: [{ type: "TEXT_DETECTION" }] }] });
+    expect(JSON.parse(String(init!.body))).toEqual({
+      requests: [{ image: { content: Buffer.from("png bytes").toString("base64") }, features: [{ type: "TEXT_DETECTION" }], imageContext: { languageHints: ["en"] } }],
+    });
   });
 
   it("answers an empty list for a screenshot with no text", async () => {
@@ -33,33 +26,33 @@ describe("createGoogleVisionRecognizer", () => {
     expect(await read(Buffer.from("x"))).toEqual([]);
   });
 
-  it("is unavailable when Cloud Vision can't be reached or doesn't answer in time", async () => {
-    const timedOut = vi.fn(async () => {
-      throw new DOMException("timed out", "TimeoutError");
-    });
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 50, fetchImpl: timedOut })(Buffer.from("x"))).rejects.toThrow(/no answer within 50 ms/);
-    const unreachable = vi.fn(async () => {
-      throw new TypeError("fetch failed");
-    });
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 50, fetchImpl: unreachable })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrUnavailableError);
+  const failure = (fetchImpl: ReturnType<typeof vi.fn>, timeoutMs = 1000) => createGoogleVisionRecognizer({ apiKey: "k", timeoutMs, fetchImpl: fetchImpl as typeof fetch })(Buffer.from("x")).catch((e: unknown) => e);
+
+  it("is unavailable for a while when Cloud Vision can't be reached or doesn't answer in time", async () => {
+    const timedOut = await failure(vi.fn(async () => { throw new DOMException("timed out", "TimeoutError"); }), 50);
+    expect(timedOut).toBeInstanceOf(OcrUnavailableError);
+    expect(timedOut).toMatchObject({ message: expect.stringMatching(/no answer within 50 ms/), transient: true, needsAttention: false });
+    expect(await failure(vi.fn(async () => { throw new TypeError("fetch failed"); }))).toMatchObject({ transient: true });
   });
 
   // A bad key or a switched-off API needs someone to fix the Google Cloud project; Google's own trouble passes.
-  it("reports a refused key as an error, and Google's own trouble as a warning", async () => {
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 1000, fetchImpl: answering(403, "PERMISSION_DENIED") })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrUnavailableError);
-    expect(written().at(-1)).toMatchObject({ level: "error", msg: "cloud vision refused the request" });
-
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 1000, fetchImpl: answering(429, "RESOURCE_EXHAUSTED") })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrUnavailableError);
-    expect(written().at(-1)).toMatchObject({ level: "warn" });
+  it("asks for a person when the key is refused, and not for Google's own trouble", async () => {
+    expect(await failure(answering(403, "PERMISSION_DENIED"))).toMatchObject({ needsAttention: true, transient: false, detail: "PERMISSION_DENIED" });
+    expect(await failure(answering(400, "API key not valid"))).toMatchObject({ needsAttention: true });
+    expect(await failure(answering(429, "RESOURCE_EXHAUSTED"))).toMatchObject({ needsAttention: false, transient: true });
+    expect(await failure(answering(503, "unavailable"))).toMatchObject({ needsAttention: false, transient: true });
   });
 
   it("refuses an image Cloud Vision can't read, and is unavailable on any other error", async () => {
-    const badImage = answering(200, { responses: [{ error: { code: 3, message: "Bad image data." } }] });
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 1000, fetchImpl: badImage })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrImageError);
+    expect(await failure(answering(200, { responses: [{ error: { code: 3, message: "Bad image data." } }] }))).toBeInstanceOf(OcrImageError);
+    expect(await failure(answering(200, { responses: [{ error: { code: 13, message: "Internal error." } }] }))).toBeInstanceOf(OcrUnavailableError);
+    expect(await failure(answering(200, "<html>"))).toBeInstanceOf(OcrUnavailableError);
+  });
 
-    const internal = answering(200, { responses: [{ error: { code: 13, message: "Internal error." } }] });
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 1000, fetchImpl: internal })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrUnavailableError);
-
-    await expect(createGoogleVisionRecognizer({ apiKey: "k", timeoutMs: 1000, fetchImpl: answering(200, "<html>") })(Buffer.from("x"))).rejects.toBeInstanceOf(OcrUnavailableError);
+  // Only a real reading may be cached as "no text": a proxy's page or a change on Google's side must fall back instead.
+  it("is unavailable for an answer in the wrong shape, rather than reading no text", async () => {
+    for (const body of [{}, { responses: [] }, { responses: "nope" }, { responses: [null] }]) {
+      expect(await failure(answering(200, body))).toBeInstanceOf(OcrUnavailableError);
+    }
   });
 });

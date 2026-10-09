@@ -9,7 +9,7 @@ import { createRemoteRecognizer } from "./ocrClient";
 import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 import { googleVisionApiKey, googleVisionTimeoutMs, ocrRequestTimeoutMs, ocrServiceUrl } from "./ocrConfig";
 import { createGoogleVisionRecognizer } from "./ocrGoogle";
-import type { OcrPriority } from "./ocrScheduler";
+import { createLimiter, type OcrPriority } from "./ocrScheduler";
 import { createTextReader, withFallback, type TextRecognizer } from "./ocrText";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -51,15 +51,27 @@ const recognizeWithLocalEngine: TextRecognizer = (buffer, priority) => {
   return url ? createRemoteRecognizer({ url, timeoutMs: ocrRequestTimeoutMs() })(buffer, priority) : recognizeInProcess(buffer, priority);
 };
 
+// At most this many Cloud Vision readings at once; the rest wait, people on the submission modal first ("interactive"
+// before "background", as for the local engine). Each is under a second, so the queue only forms in a burst, and it
+// keeps a burst from becoming a wave of 429s that all land on the fallback together.
+const CLOUD_VISION_CONCURRENCY = 8;
+const cloudVisionLimiter = createLimiter(CLOUD_VISION_CONCURRENCY);
+
+const recognizeWithCloudVision: TextRecognizer = (buffer, priority) => {
+  const read = createGoogleVisionRecognizer({ apiKey: googleVisionApiKey()!, timeoutMs: googleVisionTimeoutMs() });
+  return cloudVisionLimiter.run(() => read(buffer), priority);
+};
+
 // With GOOGLE_VISION_API_KEY set, Google Cloud Vision reads each screenshot first (ocrGoogle.ts) and the local engine
-// above is its fallback: an outage, a refused key or an image Cloud Vision won't take still gets read. Without it, the
-// local engine reads everything, as before. Both settings are looked up per reading, like OCR_URL.
-const recognizeText: TextRecognizer = createTextReader((buffer, priority) => {
-  const apiKey = googleVisionApiKey();
-  if (!apiKey) return recognizeWithLocalEngine(buffer, priority);
-  const google = createGoogleVisionRecognizer({ apiKey, timeoutMs: googleVisionTimeoutMs() });
-  return withFallback(google, recognizeWithLocalEngine, { primary: "Cloud Vision", fallback: "the local engine" })(buffer, priority);
-});
+// above is its fallback: an outage, a refused key or an image Cloud Vision won't take still gets read, and during an
+// outage the local engine reads everything for a minute at a time rather than each screenshot waiting out Cloud
+// Vision's timeout first (withFallback). Without the key, the local engine reads everything, as before. The settings
+// are looked up per reading, like OCR_URL.
+const cloudVisionFirst = withFallback(recognizeWithCloudVision, recognizeWithLocalEngine, { primary: "Cloud Vision", fallback: "the local engine" });
+
+const recognizeText: TextRecognizer = createTextReader((buffer, priority) =>
+  googleVisionApiKey() ? cloudVisionFirst(buffer, priority) : recognizeWithLocalEngine(buffer, priority),
+);
 
 /**
  * Loads the model ahead of the first screenshot so nobody's submission pays for it. Only meaningful when reading

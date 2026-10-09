@@ -10,6 +10,9 @@ import { createTestDb } from "./testUtils/testDb";
 
 const engine = vi.hoisted(() => ({ recognizeLocally: vi.fn(), warmOcrEngine: vi.fn() }));
 vi.mock("./ocrEngine", () => engine);
+// log.error reports to Sentry through the SDK, loaded on demand (log.ts).
+const sentry = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@sentry/node", () => sentry);
 
 import { analyzeSubmissionScreenshot, warmOcr } from "./ocr";
 
@@ -142,12 +145,19 @@ describe("analysing a screenshot with Cloud Vision", () => {
   }
   const levels = () => (process.stdout.write as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) => (JSON.parse(String(call[0])) as { level: string }).level);
 
+  // An outage makes Cloud Vision sit out a minute (withFallback); each test starts an hour after the last, so none
+  // inherits another's.
+  let hour = 0;
   beforeEach(() => {
     vi.stubEnv("GOOGLE_VISION_API_KEY", "test-key");
     googleCalls.mockReset();
+    sentry.captureException.mockClear();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.UTC(2030, 0, 1) + ++hour * 3_600_000));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("reads it with Cloud Vision, and never touches the local engine", async () => {
@@ -193,6 +203,18 @@ describe("analysing a screenshot with Cloud Vision", () => {
 
     expect(result.extractedText).toEqual(["local pikachu"]);
     expect(levels()).toContain("error");
+    await vi.waitFor(() => expect(sentry.captureException).toHaveBeenCalledWith(expect.objectContaining({ name: "OcrUnavailableError", needsAttention: true }), expect.anything()));
+  });
+
+  it("during an outage, reads the next screenshots with the local engine without asking Cloud Vision again", async () => {
+    googleAnswers(503, { error: { message: "unavailable" } });
+    const { db } = createTestDb();
+
+    await analyzeSubmissionScreenshot(db, bingo, team, shot("outage 1"));
+    await analyzeSubmissionScreenshot(db, bingo, team, shot("outage 2"));
+
+    expect(googleCalls).toHaveBeenCalledTimes(1);
+    expect(engine.recognizeLocally).toHaveBeenCalledTimes(2);
   });
 
   it("falls back for an image Cloud Vision won't take, which the local engine may still read", async () => {

@@ -50,9 +50,11 @@ interface Reading {
 
 type Engine = { name: string; read: (image: Buffer, mimetype: string) => Promise<string[]>; warm?: () => Promise<void> };
 
+/** The value after `--name`; none when the flag is missing or followed straight by another flag (`--json --runs 3`). */
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
+  const value = i >= 0 ? process.argv[i + 1] : undefined;
+  return value === undefined || value.startsWith("--") ? undefined : value;
 }
 
 function mimetypeOf(file: string): string {
@@ -138,6 +140,10 @@ async function fetchSet(images: SetImage[], from: string, dir: string): Promise<
     if (existsSync(target)) continue;
     const res = await fetch(`${base}/uploads/${image.file}`, { headers: { Cookie: cookie } });
     if (!res.ok) throw new Error(`GET ${base}/uploads/${image.file}: ${res.status}`);
+    // An expired cookie is redirected to the login page, which fetch follows to a 200: saved as the screenshot, it would
+    // be skipped by every later run (existsSync above) and read as an error forever.
+    const type = res.headers.get("content-type") ?? "";
+    if (!type.startsWith("image/")) throw new Error(`GET ${base}/uploads/${image.file}: got ${type || "no content type"}, not an image (is TB_COOKIE still logged in?)`);
     writeFileSync(target, Buffer.from(await res.arrayBuffer()));
     console.error(`fetched ${image.file}`);
   }

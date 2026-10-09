@@ -3,7 +3,6 @@
 // screenshots it is about five times faster than the local engine and misreads less (issue #485,
 // scripts/ocr-compare.ts).
 
-import { log } from "./log";
 import { OcrImageError, OcrUnavailableError } from "./ocrErrors";
 
 const ENDPOINT = "https://vision.googleapis.com/v1/images:annotate";
@@ -23,6 +22,7 @@ interface AnnotateResponse {
 }
 
 export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fetch }: GoogleVisionOptions) {
+  // Only throws: the caller (withFallback in ocrText.ts) logs each failure once, at the level the error asks for.
   return async function recognizeWithGoogle(buffer: Buffer): Promise<string[]> {
     let response: Response;
     try {
@@ -30,37 +30,43 @@ export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fe
         method: "POST",
         // The key goes in a header, not the URL, so it never lands in a log line or an error message.
         headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ requests: [{ image: { content: buffer.toString("base64") }, features: [{ type: "TEXT_DETECTION" }] }] }),
+        // languageHints: on 100 of the Historical Bingo's screenshots it left the item matches exactly as they were and
+        // cut the lines with stray non-Latin characters (the game's bitmap font read as another script) from 124 to 35.
+        body: JSON.stringify({
+          requests: [{ image: { content: buffer.toString("base64") }, features: [{ type: "TEXT_DETECTION" }], imageContext: { languageHints: ["en"] } }],
+        }),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err) {
       const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
-      throw new OcrUnavailableError(timedOut ? `Cloud Vision gave no answer within ${timeoutMs} ms` : "Cloud Vision could not be reached");
+      throw new OcrUnavailableError(timedOut ? `Cloud Vision gave no answer within ${timeoutMs} ms` : "Cloud Vision could not be reached", { transient: true });
     }
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => "")).slice(0, 300);
-      // 400 (a bad key) and 403 (the API turned off, billing stopped, the key restricted to other APIs) won't fix
-      // themselves: someone has to change the key or the Google Cloud project, so they reach Sentry. 429 (over quota) and
-      // 5xx are Google's own trouble and pass.
-      const needsAPerson = response.status === 400 || response.status === 401 || response.status === 403;
-      log[needsAPerson ? "error" : "warn"]("cloud vision refused the request", { status: response.status, detail });
-      throw new OcrUnavailableError(`Cloud Vision answered ${response.status}`);
+      // 400 (a bad key), 401 and 403 (the API turned off, billing stopped, the key restricted to other APIs) won't fix
+      // themselves: someone has to change the key or the Google Cloud project. 429 (over quota) and 5xx are Google's own
+      // trouble, and pass.
+      const needsAttention = response.status === 400 || response.status === 401 || response.status === 403;
+      throw new OcrUnavailableError(`Cloud Vision answered ${response.status}`, { needsAttention, transient: !needsAttention, detail });
     }
 
     let body: AnnotateResponse;
     try {
       body = (await response.json()) as AnnotateResponse;
     } catch {
-      throw new OcrUnavailableError("Cloud Vision sent an unreadable answer");
+      throw new OcrUnavailableError("Cloud Vision sent an unreadable answer", { transient: true });
     }
-    const first = body.responses?.[0];
-    if (first?.error) {
+    // Anything but one response per image is not a reading (a proxy's page, a change on Google's side): it must not be
+    // cached as "no text" (createTextReader caches every reading for 15 minutes).
+    const first = Array.isArray(body?.responses) ? body.responses[0] : undefined;
+    if (!first || typeof first !== "object") throw new OcrUnavailableError("Cloud Vision sent an unexpected answer", { transient: true });
+    if (first.error) {
       if (first.error.code === INVALID_ARGUMENT) throw new OcrImageError(first.error.message);
-      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`);
+      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`, { transient: true });
     }
-    // One entry per line Cloud Vision read; no text at all is an answer too (an empty list).
-    return (first?.fullTextAnnotation?.text ?? "")
+    // One entry per line Cloud Vision read; a screenshot with no text at all has no fullTextAnnotation (an empty list).
+    return (first.fullTextAnnotation?.text ?? "")
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
