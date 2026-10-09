@@ -160,18 +160,24 @@ function judge(lines: string[], image: SetImage): Pick<Reading, "codewordFound" 
 }
 
 async function readImage(engine: Engine, image: SetImage, buffer: Buffer, runs: number): Promise<Reading> {
+  // The fastest run that worked counts; a run that failed (a 429, a timeout) only counts when none worked, so one
+  // hiccup doesn't count a screenshot an engine read fine as an error.
   let best: { ms: number; lines: string[] } | undefined;
-  try {
-    for (let i = 0; i < runs; i++) {
-      const started = performance.now();
+  let failure: unknown;
+  for (let i = 0; i < runs; i++) {
+    const started = performance.now();
+    try {
       const lines = await engine.read(buffer, mimetypeOf(image.file));
       const ms = performance.now() - started;
       if (!best || ms < best.ms) best = { ms, lines };
+    } catch (err) {
+      failure = err;
     }
-  } catch (err) {
-    return { engine: engine.name, file: image.file, ms: NaN, lines: [], codewordFound: false, terms: image.terms.map((term) => ({ term, found: false })), error: String(err instanceof Error ? err.message : err) };
   }
-  const { ms, lines } = best!;
+  if (!best) {
+    return { engine: engine.name, file: image.file, ms: NaN, lines: [], codewordFound: false, terms: image.terms.map((term) => ({ term, found: false })), error: String(failure instanceof Error ? failure.message : failure) };
+  }
+  const { ms, lines } = best;
   return { engine: engine.name, file: image.file, ms, lines, ...judge(lines, image) };
 }
 

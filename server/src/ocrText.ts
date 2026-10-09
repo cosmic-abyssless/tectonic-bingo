@@ -13,10 +13,11 @@ export type TextRecognizer = (image: Buffer, priority: OcrPriority) => Promise<s
  * Reads with `primary`, and with `fallback` whenever `primary` fails, for any reason: an outage or a refused key, but
  * also an image it wouldn't take, which the other engine may still read. What `fallback` throws is what the caller sees.
  *
- * Each failure is logged here, once, at the level it asks for: an error (so Sentry hears) when someone has to act, a
- * warning otherwise. A transient failure (a timeout, over quota, the provider down) also skips `primary` for
- * `cooldownMs`, so during an outage each screenshot goes straight to `fallback` instead of waiting out `primary`'s
- * timeout first; that is logged once as it starts, and once more when `primary` reads again.
+ * A failure that will last (a timeout, over quota, the provider down, or a refused key) skips `primary` for
+ * `cooldownMs`, so each screenshot goes straight to `fallback` instead of paying `primary`'s round trip (or its timeout)
+ * first, and `primary` is tried again once the cooldown ends. That is logged once as it starts, at the level it asks for
+ * (an error, so Sentry hears, when someone has to act: a refused key), and once when `primary` reads again. Any other
+ * failure (one image) is logged and read with `fallback` on its own.
  */
 export function withFallback(
   primary: TextRecognizer,
@@ -26,27 +27,33 @@ export function withFallback(
 ): TextRecognizer {
   const now = opts.now ?? (() => Date.now());
   let skipUntil = 0;
-  let skipping = false;
+  // Why `primary` is being skipped, if it is: said once per reason, so an outage that turns into a refused key is still
+  // reported (and to Sentry) rather than swallowed by the outage's "said so already".
+  let skippingFor: "outage" | "refused" | null = null;
   return async (image, priority) => {
     if (now() < skipUntil) return fallback(image, priority);
     try {
       const lines = await primary(image, priority);
-      if (skipping) {
-        skipping = false;
+      // Any reading proves `primary` is up, including one that started before a failure opened the cooldown.
+      skipUntil = 0;
+      if (skippingFor) {
+        skippingFor = null;
         log.info(`${names.primary} reads screenshots again`);
       }
       return lines;
     } catch (err) {
-      if (err instanceof OcrUnavailableError && err.transient) {
+      if (err instanceof OcrUnavailableError && (err.transient || err.needsAttention)) {
         skipUntil = now() + opts.cooldownMs;
-        if (!skipping) log.warn(`${names.primary} failed, so ${names.fallback} reads screenshots for the next ${Math.round(opts.cooldownMs / 1000)} s`, { err, detail: err.detail });
-        skipping = true;
+        const reason = err.needsAttention ? "refused" : "outage";
+        if (skippingFor !== reason) {
+          log[err.needsAttention ? "error" : "warn"](`${names.primary} failed, so ${names.fallback} reads screenshots for the next ${Math.round(opts.cooldownMs / 1000)} s`, {
+            err,
+            detail: err.detail,
+          });
+        }
+        skippingFor = reason;
       } else if (err instanceof OcrUnavailableError || err instanceof OcrImageError) {
-        const needsAttention = err instanceof OcrUnavailableError && err.needsAttention;
-        log[needsAttention ? "error" : "warn"](`${names.primary} failed, reading the screenshot with ${names.fallback}`, {
-          err,
-          detail: err instanceof OcrUnavailableError ? err.detail : undefined,
-        });
+        log.warn(`${names.primary} failed, reading the screenshot with ${names.fallback}`, { err, detail: err instanceof OcrUnavailableError ? err.detail : undefined });
       } else {
         // Not a failure any reader means to throw: a bug, so it reaches Sentry.
         log.error(`${names.primary} failed unexpectedly, reading the screenshot with ${names.fallback}`, { err });

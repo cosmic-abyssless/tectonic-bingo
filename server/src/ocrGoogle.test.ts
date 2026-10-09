@@ -38,14 +38,17 @@ describe("createGoogleVisionRecognizer", () => {
   // A bad key or a switched-off API needs someone to fix the Google Cloud project; Google's own trouble passes.
   it("asks for a person when the key is refused, and not for Google's own trouble", async () => {
     expect(await failure(answering(403, "PERMISSION_DENIED"))).toMatchObject({ needsAttention: true, transient: false, detail: "PERMISSION_DENIED" });
-    expect(await failure(answering(400, "API key not valid"))).toMatchObject({ needsAttention: true });
+    expect(await failure(answering(400, '{"error":{"message":"API key not valid. Please pass a valid API key.","details":[{"reason":"API_KEY_INVALID"}]}}'))).toMatchObject({ needsAttention: true });
+    // Any other 400 is about the one request, not the key.
+    expect(await failure(answering(400, '{"error":{"message":"Request payload size exceeds the limit"}}'))).toMatchObject({ needsAttention: false, transient: false });
     expect(await failure(answering(429, "RESOURCE_EXHAUSTED"))).toMatchObject({ needsAttention: false, transient: true });
     expect(await failure(answering(503, "unavailable"))).toMatchObject({ needsAttention: false, transient: true });
   });
 
   it("refuses an image Cloud Vision can't read, and is unavailable on any other error", async () => {
     expect(await failure(answering(200, { responses: [{ error: { code: 3, message: "Bad image data." } }] }))).toBeInstanceOf(OcrImageError);
-    expect(await failure(answering(200, { responses: [{ error: { code: 13, message: "Internal error." } }] }))).toBeInstanceOf(OcrUnavailableError);
+    // An error for one image falls back on its own, without the cooldown that takes Cloud Vision away from everyone.
+    expect(await failure(answering(200, { responses: [{ error: { code: 13, message: "Internal error." } }] }))).toMatchObject({ name: "OcrUnavailableError", transient: false, needsAttention: false });
     expect(await failure(answering(200, "<html>"))).toBeInstanceOf(OcrUnavailableError);
   });
 

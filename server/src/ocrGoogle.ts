@@ -44,11 +44,13 @@ export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fe
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => "")).slice(0, 300);
-      // 400 (a bad key), 401 and 403 (the API turned off, billing stopped, the key restricted to other APIs) won't fix
-      // themselves: someone has to change the key or the Google Cloud project. 429 (over quota) and 5xx are Google's own
-      // trouble, and pass.
-      const needsAttention = response.status === 400 || response.status === 401 || response.status === 403;
-      throw new OcrUnavailableError(`Cloud Vision answered ${response.status}`, { needsAttention, transient: !needsAttention, detail });
+      // A refused key won't fix itself: someone has to change the key or the Google Cloud project. That is 401 and 403
+      // (the API turned off, billing stopped, the key restricted to other APIs), and a 400 that names the key
+      // (API_KEY_INVALID); any other 400 is about this one request. 429 (over quota) and 5xx are Google's own trouble,
+      // and pass.
+      const needsAttention = response.status === 401 || response.status === 403 || (response.status === 400 && /API_KEY|API key/i.test(detail));
+      const transient = response.status === 429 || response.status >= 500;
+      throw new OcrUnavailableError(`Cloud Vision answered ${response.status}`, { needsAttention, transient, detail });
     }
 
     let body: AnnotateResponse;
@@ -63,7 +65,9 @@ export function createGoogleVisionRecognizer({ apiKey, timeoutMs, fetchImpl = fe
     if (!first || typeof first !== "object") throw new OcrUnavailableError("Cloud Vision sent an unexpected answer", { transient: true });
     if (first.error) {
       if (first.error.code === INVALID_ARGUMENT) throw new OcrImageError(first.error.message);
-      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`, { transient: true });
+      // An error for this one image (DEADLINE_EXCEEDED, INTERNAL): it falls back on its own, without taking Cloud
+      // Vision away from everyone else's screenshots for the cooldown.
+      throw new OcrUnavailableError(`Cloud Vision: ${first.error.message ?? "an error"}`);
     }
     // One entry per line Cloud Vision read; a screenshot with no text at all has no fullTextAnnotation (an empty list).
     return (first.fullTextAnnotation?.text ?? "")
