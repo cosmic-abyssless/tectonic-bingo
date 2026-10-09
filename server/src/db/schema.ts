@@ -453,8 +453,11 @@ export const discordResources = sqliteTable('discord_resources', {
   guildId: text('guild_id').notNull(),
   // Null for the Bingo's category.
   teamId: text('team_id'),
-  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel'] }).notNull(),
-  // A channel's entry in bingos.discord_channels_json (its `key`); null for the category and a role.
+  // codeword_message: the Codeword message posted and pinned in a Team's first text channel as the Bingo goes Live, its
+  // applied_json the channel it went to and whether the pin took.
+  kind: text('kind', { enum: ['category', 'role', 'text_channel', 'voice_channel', 'codeword_message'] }).notNull(),
+  // A channel's entry in bingos.discord_channels_json (its `key`, also a Codeword message's channel); null for the
+  // category and a role.
   channelKey: text('channel_key'),
   discordId: text('discord_id').notNull(),
   appliedJson: text('applied_json').notNull().default('{}'),

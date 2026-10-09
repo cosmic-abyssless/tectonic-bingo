@@ -14,6 +14,11 @@ settings), or an existing one (see [Where new channels go](#where-new-channels-g
 | Role | The Team's name, in the Team's color, mentionable | Given to each of the Team's Players |
 | One channel per entry of the **channel list** | The entry's name with `{team}` swapped for the Team's (a text channel as Discord writes it: `{team}-loot` is `red-dragons-loot`) | The Team's role and the bot |
 
+Once the Bingo is **Live**, each Team's first text channel also gets its **Codeword**, posted and pinned by the bot:
+the Codeword, how to show it in a screenshot (the Clan Events plugin, or the chatbox on mobile), a link to the Bingo's
+page, and a ping for the Team's role. Posted once per Team (not again when the Bingo goes back to Board revealed and Live
+again); a Team whose channel is made later gets it then, and so does a channel made anew after it was deleted by hand.
+
 The channel list starts as a text and a voice channel, both just `{team}`. `@everyone` is denied View Channel on all of
 it, so a Team's channels are private to it. No moderator role: Moderators see a Team's channels only if they are on it
 (or are Discord admins).
@@ -91,10 +96,13 @@ A failure (missing permission, Discord down) is shown in the settings panel and 
    needs every one it hands to the Teams:
    - Manage Roles, Manage Channels
    - View Channels, Send Messages, Read Message History, Add Reactions, Attach Files, Embed Links
+   - Pin Messages (for the Codeword message it pins as the Bingo goes Live)
    - Connect, Speak, Video (Stream), Use Voice Activity
 
    Invite link with exactly those (replace `CLIENT_ID` with the app's id):
-   `https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot&permissions=305253968`
+   `https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot&permissions=2251800118939216`
+   A bot invited before the Codeword message needs **Pin Messages** added to its role (**Server Settings > Roles**); until
+   then the message is posted but not pinned, and the settings panel says so. The next sync after it's added pins it.
    (Administrator works too, if you'd rather.)
 3. In **Server Settings > Roles**, drag the bot's role **above** where Team roles should go: a bot can only manage roles
    below its own. New Team roles are made at the bottom of the list.
