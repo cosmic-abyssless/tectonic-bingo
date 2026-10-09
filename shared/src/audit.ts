@@ -297,7 +297,7 @@ export interface AuditDetailsMap {
 
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
-  "wom.roster_synced": { changed?: ("title" | "startsAt" | "endsAt" | "teams")[] };
+  "wom.roster_synced": { changed?: ("title" | "metric" | "startsAt" | "endsAt" | "teams")[] };
   /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
   "wom.participants_updated": { competitionId: number };
   "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
@@ -1009,7 +1009,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "WOM competition synced",
     label: (i) => {
-      const what = { title: "name", startsAt: "start date", endsAt: "end date", teams: "teams" } as const;
+      const what = { title: "name", metric: "metric (to EHB)", startsAt: "start date", endsAt: "end date", teams: "teams" } as const;
       return i.details.changed?.length
         ? `Updated the Wise Old Man competition's ${joinList(i.details.changed.map((c) => what[c]))}`
         : "Synced the Wise Old Man competition roster";
