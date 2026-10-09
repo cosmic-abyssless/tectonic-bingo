@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, PublicUser, RosterEntry, Stage, Team, TeamWithMembers } from "@bingo/shared";
+import { TEAM_NAME_MAX, type BingoShellResponse, type PublicUser, type RosterEntry, type Stage, type Team, type TeamWithMembers } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
@@ -210,7 +210,7 @@ function TeamCard({
           )}
           <div className="flex items-end gap-2">
             <Field label="Name" className="flex-1">
-              <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
+              <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} maxLength={TEAM_NAME_MAX} className="font-semibold" />
             </Field>
             <ColorInput
               aria-label={`${team.name} color`}

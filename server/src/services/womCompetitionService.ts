@@ -16,6 +16,7 @@
 // failure is persisted onto bingos.womSyncError for the settings panel to
 // surface rather than bubbling up and breaking the change that triggered it.
 import { now as clockNow } from "../clock";
+import { fitTeamName } from "@bingo/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -237,7 +238,7 @@ function getWomIntegrationConfig(bingo: Bingo): WomIntegrationConfig | null {
 }
 
 /**
- * One WOM team entry per bingo team, named after the team, with its members' names. Teams with none are dropped (WOM
+ * One WOM team entry per bingo team, named after the team (cut to WOM's limit), with its members' names. Teams with none are dropped (WOM
  * rejects an empty team). Each member goes by their signup's RSN, except a player the competition already has (matched
  * by WOM id): WOM's name for them wins. WOM follows an in-game rename by itself, so our RSN can only be the same or out
  * of date, and sending an out-of-date one would swap the player for their old name.
@@ -254,7 +255,8 @@ function getTeamRosters(db: Db, bingoId: string, womNamesById: Map<string, strin
   const rsnByUserId = new Map(signupRows.map((s) => [s.userId, (s.womId && womNamesById.get(s.womId)) || s.rsn]));
   return teamRows
     .map((team) => ({
-      name: team.name,
+      // A Team named before names had a limit goes to WOM cut to fit, or WOM turns the whole edit down.
+      name: fitTeamName(team.name),
       participants: memberRows.filter((m) => m.teamId === team.id).map((m) => rsnByUserId.get(m.userId)).filter((rsn): rsn is string => !!rsn),
     }))
     .filter((t) => t.participants.length > 0);

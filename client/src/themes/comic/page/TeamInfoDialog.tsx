@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Stage } from "@bingo/shared";
+import { TEAM_NAME_MAX, type Stage } from "@bingo/shared";
 import { useRenameTeam } from "../../../api/queries";
 import { useTeamActivityModel } from "../../../headless/useTeamActivity";
 import type { TeamModel } from "../../../headless/types";
@@ -51,7 +51,7 @@ function TeamDetails({ slug, team, stage, onClose }: { slug: string; team: TeamM
             }}
           >
             <ComicField label="Team name" className="flex-1">
-              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!team.rename.allowed} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={TEAM_NAME_MAX} disabled={!team.rename.allowed} />
             </ComicField>
             <ComicButton type="submit" variant="primary" isDisabled={!team.rename.allowed || !dirty || !trimmed || rename.isPending}>
               {rename.isPending ? "Saving…" : "Rename"}
