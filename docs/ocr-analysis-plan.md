@@ -124,6 +124,11 @@ that function also moved out of `ocr.ts` per the plan's point 4, so `ocr.ts` is 
 now (OCR the image, load the board, hand both to the pure matcher) and the whole matching
 decision is unit-testable without OCR or a DB.
 
+> **Since replaced (#490):** the sliding window is gone (`approxIncludes`, one approximate-substring pass per line,
+> replaces it and `levenshteinWithin`), and `findBestMatch` no longer takes the first item that matches: it ranks how
+> each item was read (exact on a line, exact across a wrapped line, near on a line, a short name as a whole word). See
+> the comment on `findBestMatch`.
+
 **Real gotchas hit:** none on the implementation side — every fixture from the plan's
 spec (`"Fishing Trauler"`, `"0ldSchoolRuneScepe"`, `"MasteringMixology"`, `"Rogues'Den"`,
 `"Halloved Sepulchre"`, the `"Zamorak hilt"`/`"Zamorakian spear"` negative, the codeword

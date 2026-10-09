@@ -9,30 +9,6 @@ export function normalizeForMatch(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// Bounded Levenshtein distance: true iff edit distance <= max. Standard DP
-// over two rolling rows, with an early exit once a row's minimum already
-// exceeds max (no possible cell in a later row can recover from that).
-export function levenshteinWithin(a: string, b: string, max: number): boolean {
-  if (Math.abs(a.length - b.length) > max) return false;
-  const n = b.length;
-  let prev = new Array<number>(n + 1);
-  let curr = new Array<number>(n + 1);
-  for (let j = 0; j <= n; j++) prev[j] = j;
-
-  for (let i = 1; i <= a.length; i++) {
-    curr[0] = i;
-    let rowMin = curr[0];
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
-      if (curr[j] < rowMin) rowMin = curr[j];
-    }
-    if (rowMin > max) return false;
-    [prev, curr] = [curr, prev];
-  }
-  return prev[n] <= max;
-}
-
 export interface FuzzyIncludesOptions {
   /**
    * Override the length-based default (needle length >= 12 ? 2 : 1). Used
@@ -128,69 +104,42 @@ export function wrappedLines(lines: string[]): string[] {
   return joined;
 }
 
-// How well an item is read, best first. A name read exactly on one line is the screenshot's; one read exactly across
-// a wrapped line is next (a join can put two unrelated lines side by side, so it never outranks a whole line, and it
-// takes no edit tolerance: a near match on a join is too weak to stand); a long name read nearly on one line is an OCR
-// slip at best; and a short name (under 6 letters, "Pet", "Vorki") standing as a word is weakest of all, short enough to
-// turn up in anything.
-const enum Tier {
-  ShortWord = 1,
-  NearLine = 2,
-  ExactWrapped = 3,
-  ExactLine = 4,
-}
-
-interface Hit {
-  item: MatchableItem;
-  tier: Tier;
-  /** Which line (of the single lines, or of the joined ones for ExactWrapped) it was read on. */
-  line: number;
-  name: string;
-}
-
-// The item the screenshot shows, when several match: the best tier wins (above); within it, a name inside another
-// name matched on the same line gives way to it ("Crystal weapon seed" inside "Enhanced crystal weapon seed"); then the
-// first in query order. Not the longest name: a loot list or bank on screen shows many names, and a long one there
-// isn't the drop, so the containment rule only applies within one line. Pure decision logic — no DB or OCR involved —
-// so it's testable on its own from plain extracted-text fixtures.
+// The item the screenshot shows, when several match. Items are looked for in four ways, best first, and the first way
+// that finds any decides:
+//   1. a long name read exactly on one line: the screenshot's;
+//   2. read exactly across a wrapped line (a join can put two unrelated lines side by side, so it never outranks a
+//      whole line, and it takes no edit tolerance: a near match on a join is too weak to stand);
+//   3. a long name read nearly on one line: an OCR slip at best;
+//   4. a short name (under 6 letters, "Pet", "Vorki") standing as a word: short enough to turn up in anything.
+// Among those found the same way, a name that was only ever read inside a longer matched name gives way to it ("Crystal
+// weapon seed" inside "Enhanced crystal weapon seed"), and then the first in query order wins. Not the longest name: a
+// loot list or bank on screen shows many names, and a long one there isn't the drop. Pure decision logic — no DB or OCR
+// involved — so it's testable on its own from plain extracted-text fixtures.
 //
-// The near-match scan is the only costly part, so it runs only when no item is read exactly anywhere.
+// The near-match scan (3) is the only costly part, and it runs only when no item is read exactly anywhere.
 export function findBestMatch(extractedText: string[], items: MatchableItem[]): { detectedMatch: DetectedItemMatch | null } {
   const lines = extractedText.map(normalizeForMatch);
   const joined = wrappedLines(extractedText).map(normalizeForMatch);
   const named = items.map((item) => ({ item, name: normalizeForMatch(item.itemName) })).filter((n) => n.name);
   const long = named.filter((n) => n.name.length >= 6);
+  const short = named.filter((n) => n.name.length < 6);
+  const words = extractedText.map((l) => ` ${wordsOf(l)} `);
 
-  let hits: Hit[] = [];
-  for (const { item, name } of long) {
-    const line = lines.findIndex((l) => l.includes(name));
-    if (line >= 0) hits.push({ item, tier: Tier.ExactLine, line, name });
+  // Each way, as the lines it reads and whether a name is on one of them.
+  const ways: { candidates: typeof named; on: string[]; reads: (line: string, n: (typeof named)[number]) => boolean }[] = [
+    { candidates: long, on: lines, reads: (line, n) => line.includes(n.name) },
+    { candidates: long, on: joined, reads: (line, n) => line.includes(n.name) },
+    { candidates: long, on: lines, reads: (line, n) => approxIncludes(line, n.name, defaultMaxEdits(n.name)) },
+    { candidates: short, on: words, reads: (line, n) => line.includes(` ${wordsOf(n.item.itemName)} `) },
+  ];
+  for (const { candidates, on, reads } of ways) {
+    const found = candidates.filter((n) => on.some((line) => reads(line, n)));
+    if (found.length === 0) continue;
+    // Given way only when every line it was read on also holds the longer name: wherever the lines come in the
+    // engine's answer, a drop line with just the shorter name keeps it.
+    const kept = found.filter((n) => !found.some((other) => other.name !== n.name && other.name.includes(n.name) && on.every((line) => !reads(line, n) || reads(line, other))));
+    const { item } = kept[0]!;
+    return { detectedMatch: { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName } };
   }
-  if (hits.length === 0) {
-    for (const { item, name } of long) {
-      const line = joined.findIndex((l) => l.includes(name));
-      if (line >= 0) hits.push({ item, tier: Tier.ExactWrapped, line, name });
-    }
-  }
-  if (hits.length === 0) {
-    for (const { item, name } of long) {
-      const maxEdits = defaultMaxEdits(name);
-      const line = lines.findIndex((l) => approxIncludes(l, name, maxEdits));
-      if (line >= 0) hits.push({ item, tier: Tier.NearLine, line, name });
-    }
-  }
-  if (hits.length === 0) {
-    const words = extractedText.map((l) => ` ${wordsOf(l)} `);
-    for (const { item, name } of named.filter((n) => n.name.length < 6)) {
-      const word = ` ${wordsOf(item.itemName)} `;
-      const line = words.findIndex((l) => l.includes(word));
-      if (line >= 0) hits.push({ item, tier: Tier.ShortWord, line, name });
-    }
-  }
-  if (hits.length === 0) return { detectedMatch: null };
-
-  // Every hit here is in one tier (each step above runs only when the ones before found nothing).
-  hits = hits.filter((h) => !hits.some((other) => other.line === h.line && other.name !== h.name && other.name.includes(h.name)));
-  const { item } = hits[0]!;
-  return { detectedMatch: { tileId: item.tileId, tileName: item.tileName, nodeId: item.nodeId, itemName: item.itemName } };
+  return { detectedMatch: null };
 }

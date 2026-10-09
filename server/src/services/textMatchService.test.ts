@@ -1,29 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { approxIncludes, findBestMatch, fuzzyIncludes, levenshteinWithin, normalizeForMatch, wrappedLines } from "./textMatchService";
+import { approxIncludes, findBestMatch, fuzzyIncludes, normalizeForMatch, wrappedLines } from "./textMatchService";
 
 describe("normalizeForMatch", () => {
   it("lowercases and strips everything but letters and digits", () => {
     expect(normalizeForMatch("Rogues' Den")).toBe("roguesden");
     expect(normalizeForMatch("Mastering Mixology")).toBe("masteringmixology");
     expect(normalizeForMatch("0ldSchoolRuneScepe.")).toBe("0ldschoolrunescepe");
-  });
-});
-
-describe("levenshteinWithin", () => {
-  it("accepts identical strings at distance 0", () => {
-    expect(levenshteinWithin("abcdefghij", "abcdefghij", 0)).toBe(true);
-  });
-
-  it("accepts exactly the boundary distance", () => {
-    expect(levenshteinWithin("abcdefghij", "xbcdefghik", 2)).toBe(true);
-  });
-
-  it("rejects one edit past the boundary", () => {
-    expect(levenshteinWithin("abcdefghij", "xxxdefghij", 2)).toBe(false);
-  });
-
-  it("rejects when the length difference alone exceeds max", () => {
-    expect(levenshteinWithin("short", "a-much-longer-string", 2)).toBe(false);
   });
 });
 
@@ -144,9 +126,11 @@ describe("findBestMatch", () => {
     expect(findBestMatch(lines, [item("Pet"), item("Tumeken's shadow")]).detectedMatch?.itemName).toBe("Tumeken's shadow");
   });
 
-  it("only lets a containing name win when both were read on the same line", () => {
+  it("only lets a containing name win when the shorter one was never read on a line of its own, whatever the line order", () => {
+    const items = [item("Crystal weapon seed"), item("Enhanced crystal weapon seed")];
     const lines = ["Valuable drop: Crystal weapon seed", "Bank: Enhanced crystal weapon seed"];
-    expect(findBestMatch(lines, [item("Crystal weapon seed"), item("Enhanced crystal weapon seed")]).detectedMatch?.itemName).toBe("Crystal weapon seed");
+    expect(findBestMatch(lines, items).detectedMatch?.itemName).toBe("Crystal weapon seed");
+    expect(findBestMatch([...lines].reverse(), items).detectedMatch?.itemName).toBe("Crystal weapon seed");
   });
 
   it("takes no edit tolerance on a joined line", () => {
