@@ -8,6 +8,8 @@ import { COMIC_FIGURES_FONT, COMIC_FONT } from "../../font";
 import { burstPoints } from "../../ui/Burst";
 import { onFill } from "../../ui/tones";
 import { useComic } from "../../ui/useComic";
+import { halftoneUrl } from "../../fx/halftoneSheet";
+import { WRAPPED_PAGE_WIDTH } from "../camera";
 import { COVER } from "../coverParts";
 import { Gp } from "./sectionParts-you-duo-captain-moderator";
 
@@ -29,20 +31,30 @@ export const display = (size: number, extra?: CSSProperties): CSSProperties => (
 /** A Bingo or Team name's size in a lettered title: the longer, the smaller, so it keeps to two lines. */
 export function titleSize(text: string, big = 46): number {
   const n = text.length;
-  return n <= 12 ? big : n <= 20 ? big * 0.8 : n <= 30 ? big * 0.64 : big * 0.52;
+  return n <= 12 ? big : n <= 20 ? big * 0.72 : n <= 30 ? big * 0.6 : big * 0.5;
+}
+
+/** How tall a ground's halftone is drawn (px): it rises from the panel's foot, so a taller panel's top is left clear. */
+const GROUND_DOTS_HEIGHT = 360;
+
+/**
+ * A halftone rising from a panel's foot, as the covers' is (CoverGround): a real screen, its dots growing towards the
+ * foot, drawn once for a page-wide panel and laid at the foot of any narrower one.
+ */
+export function GroundHalftone({ color = "rgb(0 0 0 / 0.24)", from = 0.3 }: { color?: string; from?: number }) {
+  const width = WRAPPED_PAGE_WIDTH;
+  const height = GROUND_DOTS_HEIGHT;
+  const dots = halftoneUrl(`wrapped-panel-ground:${height}:${from}:${color}`, { width, height, step: 7, scale: 3, color, tone: (_x, y) => Math.max(0, (y / height - from) / (1 - from)) ** 1.15 * 0.85 });
+  if (!dots) return null;
+  return <div aria-hidden className="wrapped-panel-ground absolute inset-0" style={{ backgroundImage: `url("${dots}")`, backgroundRepeat: "no-repeat", backgroundPosition: "center bottom", backgroundSize: `${width}px ${height}px` }} />;
 }
 
 /** A printed ground: a colour with rays from a point and a halftone rising from the foot. */
 export function PanelGround({ accent, origin = "50% 100%" }: { accent: string; origin?: string }) {
-  const fade = "linear-gradient(to top, black, transparent 75%)";
   return (
     <>
       <div aria-hidden className="wrapped-panel-ground absolute inset-0" style={{ background: accent, backgroundImage: `repeating-conic-gradient(from 0deg at ${origin}, rgb(255 255 255 / 0.18) 0deg 5deg, transparent 5deg 12deg)` }} />
-      <div
-        aria-hidden
-        className="wrapped-panel-ground absolute inset-0"
-        style={{ backgroundImage: "radial-gradient(rgb(0 0 0 / 0.24) 1.1px, transparent 1.8px)", backgroundSize: "6px 6px", maskImage: fade, WebkitMaskImage: fade }}
-      />
+      <GroundHalftone />
     </>
   );
 }
@@ -54,7 +66,7 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
   return (
     <p data-beat="rise"
       className={`inline-flex max-w-full items-center gap-1.5 self-start border-2 px-2 pt-[3px] pb-px ${className}`}
-      style={{ ...display(14, { letterSpacing: "0.08em" }), background: bg, color: onFill(colors, bg), borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}`, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
+      style={{ ...display(14, { letterSpacing: "0.08em" }), background: bg, color: onFill(colors, bg), borderColor: colors.LINE, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
       {dot && <span aria-hidden className="size-2.5 shrink-0 rounded-full border-[1.5px]" style={{ background: dot, borderColor: colors.LINE }} />}
       <span className="min-w-0">{children}</span>
@@ -62,11 +74,10 @@ export function Kicker({ children, fill, tilt = -1.5, className = "", dot }: { c
   );
 }
 
-/** A panel's headline: Bangers capitals in ink. */
+/** A panel's headline: Bangers capitals, lettered light with an ink outline and drop (the book's display lettering). */
 export function PanelHeading({ children, size = 32, className = "" }: { children: ReactNode; size?: number; className?: string }) {
-  const { colors } = useComic();
   return (
-    <h2 data-beat="slam" className={`text-balance ${className}`} style={{ ...display(size), color: colors.INK, paddingRight: size / 14 }}>
+    <h2 data-beat="slam" className={`comic-outline-text text-balance ${className}`} style={{ ...display(size), paddingRight: size / 10, paddingBottom: size / 14 }}>
       {children}
     </h2>
   );
@@ -276,15 +287,15 @@ export function Splash({ art, accent, kicker, kickerDot, title, titleBig = 46, m
           <WrappedCategoryArt art={art} />
         </div>
       )}
-      <div className={hasArt ? "wrapped-panel-band relative px-3.5 pt-2 pb-2.5" : "relative flex flex-1 flex-col justify-between px-3.5 pt-3.5 pb-4"} style={hasArt ? { background: colors.PAPER_RAISED, borderTop: `3px solid ${colors.LINE}` } : undefined}>
+      <div className={hasArt ? "wrapped-panel-band relative px-5 pt-3 pb-4" : "relative flex flex-1 flex-col justify-between px-5 pt-4 pb-5"} style={hasArt ? { background: colors.PAPER_RAISED, borderTop: `3px solid ${colors.LINE}` } : undefined}>
         <Kicker fill={COVER.YELLOW} dot={kickerDot}>
           {kicker}
         </Kicker>
         <h2
-          className={`text-balance ${hasArt ? "mt-2" : "my-auto py-3 text-center"}`}
+          className={`text-balance ${hasArt ? "comic-outline-text mt-2.5" : "my-auto py-3 text-center"}`}
           style={
             hasArt
-              ? { ...display(size), color: colors.INK, paddingRight: size / 14 }
+              ? { ...display(size), paddingRight: size / 10, paddingBottom: size / 14 }
               : { ...display(size * 1.25), color: COVER.TITLE_FILL, WebkitTextStroke: `${Math.max(1.5, size / 22)}px ${COVER.INK}`, paintOrder: "stroke fill", textShadow: `${size / 11}px ${size / 11}px 0 ${COVER.INK}`, paddingRight: size / 10 }
           }
         >

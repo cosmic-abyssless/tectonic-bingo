@@ -501,8 +501,8 @@
   display: none;
 }
 
-/* A narration panel is set in as an inset: narrower, overlapping the foot of the panel before it, cut out with a ring of
-   paper (the book clips it a little outside its box). The panel it sits on keeps room at its foot so nothing is hidden. */
+/* A narration panel is set in as an inset: narrower, overlapping the foot of the panel before it, stuck on with a torn
+   sheet of paper round it, as the Wrapped art stickers are (the book tears it to the panel's size). The panel it sits on keeps room at its foot so nothing is hidden. */
 .wrapped-book .wrapped-panel[data-emphasis="narration"] {
   --panel-bleed: 0px;
   width: 68%;
@@ -510,7 +510,30 @@
   margin-top: -40px;
   margin-right: -6px;
   z-index: 2;
-  box-shadow: 0 0 0 7px var(--comic-paper);
+  /* Its torn paper (.wrapped-panel-torn) shows round it: the book clips it INSET_HALO out. */
+}
+/* The torn sheet: the stickers' warm white paper, a darker rim of fibres along the tear, and a soft shadow that follows
+   it. Behind the panel's own paper, so it only shows round the panel. */
+.wrapped-book .wrapped-panel-torn {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(1px 4px 4px rgb(0 0 0 / 0.3));
+}
+.wrapped-book .wrapped-panel-torn polygon {
+  fill: #f4f0e4;
+  stroke: #d6cfbe;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+/* Its frame isn't clipped to its box (the paper ring is), so the whole of the ink's line shows: drawn half as wide, it
+   reads as thick as every other panel's. */
+.wrapped-book .wrapped-panel[data-emphasis="narration"] .wrapped-panel-ink {
+  stroke-width: 3.5;
 }
 .wrapped-book .wrapped-panel:has(+ .wrapped-panel[data-emphasis="narration"]) {
   padding-bottom: 46px;

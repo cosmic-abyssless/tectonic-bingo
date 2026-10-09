@@ -1,6 +1,6 @@
 import type {
   AchievementKey, Bingo, BingoExportDocument, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
-  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedCredit,
+  PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedBossArtResult, WrappedCredit,
 } from "@bingo/shared";
 import { api } from "./client";
 
@@ -183,6 +183,9 @@ function imageForm(file: File, keying?: WrappedArtKeying) {
 }
 export function addWrappedArt(slug: string, group: WrappedArtGroup, file: File, keying?: WrappedArtKeying) {
   return api.postForm<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/${group}`, imageForm(file, keying));
+}
+export function addBoardBossesToWrappedArt(slug: string) {
+  return api.post<WrappedBossArtResult>(`${base(slug)}/wrapped-art/side/bosses`, {});
 }
 export function replaceWrappedArt(slug: string, id: string, file: File, keying?: WrappedArtKeying) {
   return api.postForm<{ art: WrappedArtImage }>(`${base(slug)}/wrapped-art/images/${id}`, imageForm(file, keying));

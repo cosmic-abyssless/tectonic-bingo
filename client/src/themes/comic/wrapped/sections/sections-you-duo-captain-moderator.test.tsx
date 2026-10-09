@@ -137,7 +137,11 @@ describe("the comic's You, Duo, Captain and Moderator pages", () => {
     it(`${name} says every line of the default section, in its order`, () => {
       // How to earn an Achievement is the comic's tooltip on its info mark, not a line on the page.
       const tooltips = new Set(fullYou.achievements.map((a) => a.description));
-      const expected = lines(draw(reference, false)).filter((line) => !tooltips.has(line));
+      // The luckiest drop's name is the comic panel's title; the default says it again on the drop card under it.
+      const luckiest = name.startsWith("You") ? fullYou.luckiestDrop?.itemName : undefined;
+      const expected = lines(draw(reference, false))
+        .filter((line) => !tooltips.has(line))
+        .filter((line, i, all) => !(line === luckiest && all.indexOf(line) < i));
       cleanup();
       const got = lines(draw(comic, true));
       const missing = inOrder(expected, got.join("\n"));

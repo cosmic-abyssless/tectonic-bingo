@@ -57,14 +57,17 @@ describe("the camera", () => {
 });
 
 describe("the camera's moves", () => {
-  it("whips a little past the panel, then settles back onto it in held steps", () => {
+  it("whips a little past the panel, then eases back onto it", () => {
     expect(whipCurve(0)).toBe(0);
     expect(whipCurve(1)).toBe(1);
     const samples = Array.from({ length: 101 }, (_, i) => whipCurve(i / 100));
     expect(Math.max(...samples)).toBeCloseTo(WHIP_OVERSHOOT, 2);
-    // The settle holds: only a few distinct values after the peak.
-    const settle = new Set(samples.slice(64).map((v) => v.toFixed(4)));
-    expect(settle.size).toBeLessThanOrEqual(4);
+    // The settle is smooth: after the peak it only ever comes back, a little at a time.
+    const settle = samples.slice(63);
+    for (let i = 1; i < settle.length; i++) {
+      expect(settle[i]!).toBeLessThanOrEqual(settle[i - 1]!);
+      expect(settle[i - 1]! - settle[i]!).toBeLessThan(0.01);
+    }
   });
 
   it("pulls back and pans from 0 to 1 without going past", () => {

@@ -17,6 +17,8 @@ export class ApiError extends Error {
 export interface CallOptions {
   /** The spoofed time of this request (X-Dev-Now). */
   at?: Date;
+  /** Headers over the defaults, e.g. X-Dev-Skip-Integrations: "0" for a call that should reach an outside service. */
+  headers?: Record<string, string>;
 }
 
 // The placeholder screenshot every submission uploads: a 1x1 PNG (the same bytes as e2e/fixtures/screenshot.png),
@@ -73,7 +75,7 @@ export class Session {
   ) {}
 
   private async send<T>(method: string, urlPath: string, body: RequestInit["body"], headers: Record<string, string>, opts: CallOptions): Promise<T> {
-    const all: Record<string, string> = { ...this.api.headers, "X-Dev-Skip-Ocr": "1", "X-Dev-Skip-Integrations": "1", ...headers };
+    const all: Record<string, string> = { ...this.api.headers, "X-Dev-Skip-Ocr": "1", "X-Dev-Skip-Integrations": "1", ...headers, ...opts.headers };
     if (this.discordId) all.cookie = await this.api.cookieFor(this.discordId);
     if (opts.at) all["X-Dev-Now"] = opts.at.toISOString();
     const res = await fetch(`${this.api.base}${urlPath}`, { method, headers: all, body });

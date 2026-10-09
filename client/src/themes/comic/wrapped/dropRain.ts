@@ -54,9 +54,10 @@ function random(seed: number): () => number {
  * Every drop (one icon each, whatever its quantity) shuffled and piled into a pane of `w` × `h`: the icons are sized so
  * the pile fills about the lower part of it, and a Bingo with more drops than fit at the smallest size rains a share of
  * each item's, in proportion. Each icon falls into the lower of two columns picked at random, more often near the middle,
- * so the pile heaps up into a mound with a ragged top, and the ones lower in a column fall first.
+ * so the pile heaps up into a mound with a ragged top, and the ones lower in a column fall first. Each starts above
+ * the pane by `lift` px and a little more (the panel's top, when the pane sits under its heading), out of sight.
  */
-export function rainPile(items: readonly { itemName: string; drops: number }[], w: number, h: number, seed = 1): RainPile {
+export function rainPile(items: readonly { itemName: string; drops: number }[], w: number, h: number, seed = 1, lift = 0): RainPile {
   const rand = random(seed);
   const all: string[] = items.flatMap((i) => Array.from({ length: i.drops }, () => i.itemName));
   if (all.length === 0 || w <= 0 || h <= 0) return { size: 0, pieces: [], duration: 0 };
@@ -94,7 +95,7 @@ export function rainPile(items: readonly { itemName: string; drops: number }[], 
       x,
       y,
       angle: (rand() - 0.5) * 50,
-      fall: y + step + rand() * h * 0.35,
+      fall: y + lift + step + rand() * h * 0.35,
       delay,
     };
   });

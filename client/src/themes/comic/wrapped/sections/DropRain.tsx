@@ -6,13 +6,16 @@ import { pieceAt, rainPile, type RainPile } from "../dropRain";
 
 /**
  * The Bingo's drops raining down into a pile, each its item's wiki icon (dropRain.ts says where each lands). Drawn on
- * one canvas, as hundreds of icons moving at once would be hundreds of elements to move. It rains when the camera sets
- * off for its panel (its `step` reached); a page already passed, or reduced motion, shows the pile as it ended.
+ * one canvas, as hundreds of icons moving at once would be hundreds of elements to move. The pile lies in this box, but
+ * the canvas reaches up to the top of the panel it's in, so the drops fall from there, past the heading. It rains when
+ * the camera sets off for its panel (its `step` reached); a page already passed, or reduced motion, shows the pile as it
+ * ended.
  */
 export function DropRain({ items, step, className = "" }: { items: readonly { itemName: string; drops: number }[]; step: number; className?: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  // The box's size, and how far below its panel's top it sits (the room the drops fall through first).
+  const [size, setSize] = useState({ w: 0, h: 0, lift: 0 });
   const scene = useWrappedSceneState();
   const reached = !scene || scene.reached > step;
   const reduceMotion = useReducedMotion();
@@ -21,7 +24,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
 
   useLayoutEffect(() => {
     const box = boxRef.current!;
-    const measure = () => setSize({ w: box.clientWidth, h: box.clientHeight });
+    const measure = () => setSize({ w: box.clientWidth, h: box.clientHeight, lift: liftWithin(box) });
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
@@ -29,7 +32,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
     return () => observer.disconnect();
   }, []);
 
-  const pile = useMemo(() => rainPile(items, size.w, size.h, items.length * 31 + (items[0]?.drops ?? 0)), [items, size.w, size.h]);
+  const pile = useMemo(() => rainPile(items, size.w, size.h, items.length * 31 + (items[0]?.drops ?? 0), size.lift), [items, size.w, size.h, size.lift]);
   const icons = useIcons(pile);
   // What the canvas shows now (ms into the rain), and how to draw a moment of it: kept for the icons that load late.
   const iconsRef = useRef(icons);
@@ -43,7 +46,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
     // Drawn sharper than the page, as the camera zooms in on the panel.
     const scale = Math.min(4, (window.devicePixelRatio || 1) * 2.5);
     canvas.width = Math.round(size.w * scale);
-    canvas.height = Math.round(size.h * scale);
+    canvas.height = Math.round((size.h + size.lift) * scale);
     ctx.imageSmoothingEnabled = false;
     const draw = (t: number) => {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -56,7 +59,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
         const fit = pile.size / Math.max(img.naturalWidth, img.naturalHeight);
         const iw = img.naturalWidth * fit;
         const ih = img.naturalHeight * fit;
-        ctx.setTransform(scale, 0, 0, scale, p.x * scale, at.y * scale);
+        ctx.setTransform(scale, 0, 0, scale, p.x * scale, (at.y + size.lift) * scale);
         ctx.rotate((at.angle * Math.PI) / 180);
         ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
       }
@@ -75,7 +78,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [pile, size.w, size.h, reached, rainedBefore, reduceMotion]);
+  }, [pile, size.w, size.h, size.lift, reached, rainedBefore, reduceMotion]);
 
   // An icon that loads once the pile has settled is drawn into it (one loading mid-rain joins at its next frame).
   useEffect(() => {
@@ -85,9 +88,17 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
 
   return (
     <div ref={boxRef} aria-hidden className={`relative ${className}`}>
-      <canvas ref={canvasRef} className="absolute inset-0 size-full [image-rendering:pixelated]" />
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-x-0 bottom-0 w-full [image-rendering:pixelated]" style={{ height: size.h + size.lift }} />
     </div>
   );
+}
+
+/** How far below the top of its panel `el` sits (px, from layout alone, so the camera's zoom doesn't count). */
+function liftWithin(el: HTMLElement): number {
+  const panel = el.closest<HTMLElement>(".wrapped-panel");
+  let lift = 0;
+  for (let node: HTMLElement | null = el; node && node !== panel; node = node.offsetParent as HTMLElement | null) lift += node.offsetTop;
+  return panel ? Math.max(0, lift) : 0;
 }
 
 /** The wiki icon of every item in the pile, as each loads (one that fails is left out). */

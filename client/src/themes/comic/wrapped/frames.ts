@@ -121,3 +121,56 @@ export const rectQuad = (r: Rect, by = 0): Quad => [
   { x: r.x + r.w + by, y: r.y + r.h + by },
   { x: r.x - by, y: r.y + r.h + by },
 ];
+
+/** A seeded random number in [0, 1) (mulberry32): the same seed always tears the same way. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** How far a tear wanders from its border's width, as a share of it: a slow wobble, and small sharp jaggies. */
+const TEAR_WOBBLE = 0.35;
+const TEAR_JAGGIES = 0.22;
+/** The distance between a tear's points (px). */
+const TEAR_STEP = 5;
+
+/**
+ * A sheet of paper torn round a `w` × `h` box, about `by` px wide all round, as polygon points in the box's coordinates
+ * (as the stickers' paper is torn round their art, server/src/services/stickerEffect.ts). The edge wobbles slowly and
+ * jags a little at every point, from `seed`, so the same box always tears the same way.
+ */
+export function tornOutline(w: number, h: number, by: number, seed: number): Point[] {
+  const random = seeded(seed);
+  const perimeter = 2 * (w + h);
+  const n = Math.max(8, Math.round(perimeter / TEAR_STEP));
+  // The wobble: a few random knots round the perimeter, eased between, so it wanders smoothly and meets itself.
+  const knots = Array.from({ length: Math.max(4, Math.round(perimeter / 60)) }, () => random() * 2 - 1);
+  const wobble = (t: number) => {
+    const at = t * knots.length;
+    const i = Math.floor(at) % knots.length;
+    const f = at - Math.floor(at);
+    const s = f * f * (3 - 2 * f);
+    return knots[i]! + (knots[(i + 1) % knots.length]! - knots[i]!) * s;
+  };
+  const points: Point[] = [];
+  for (let k = 0; k < n; k++) {
+    const t = k / n;
+    // Round the box clockwise from its top left: where on its edge, and which way is out.
+    let d = t * perimeter;
+    let p: Point;
+    let out: Point;
+    if (d < w) (p = { x: d, y: 0 }), (out = { x: 0, y: -1 });
+    else if ((d -= w) < h) (p = { x: w, y: d }), (out = { x: 1, y: 0 });
+    else if ((d -= h) < w) (p = { x: w - d, y: h }), (out = { x: 0, y: 1 });
+    else (d -= w), (p = { x: 0, y: h - d }), (out = { x: -1, y: 0 });
+    const reach = by * (1 + TEAR_WOBBLE * wobble(t) + TEAR_JAGGIES * (random() * 2 - 1));
+    points.push({ x: p.x + out.x * reach, y: p.y + out.y * reach });
+  }
+  return points;
+}

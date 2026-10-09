@@ -61,6 +61,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "POST /api/bingos/:slug/admin/tiles/:id/image": ["tile.updated"],
   "POST /api/bingos/:slug/admin/wrapped-art/:group": ["wrapped.art_set"],
   "PUT /api/bingos/:slug/admin/wrapped-art/:group/order": ["wrapped.art_reordered"],
+  "POST /api/bingos/:slug/admin/wrapped-art/side/bosses": ["wrapped.art_bosses_added"],
   "PUT /api/bingos/:slug/admin/wrapped-art/:group/credits": ["wrapped.credits_set"],
   "PUT /api/bingos/:slug/admin/wrapped-art/images/:id/credit": ["wrapped.art_credit_set"],
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id": ["wrapped.art_set"],

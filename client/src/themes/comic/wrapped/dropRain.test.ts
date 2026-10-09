@@ -51,6 +51,11 @@ describe("the rain of drops", () => {
     expect(pieceAt(p!, p!.delay + 5000)).toEqual({ y: p!.y, angle: p!.angle });
   });
 
+  it("starts every drop above the panel's top, when the pane sits under a heading", () => {
+    const { pieces } = rainPile(items, 380, 400, 1, 120);
+    for (const p of pieces) expect(pieceAt(p, p.delay)!.y).toBeLessThan(-120);
+  });
+
   it("rains nothing into a pane not yet measured", () => {
     expect(rainPile(items, 0, 0).pieces).toEqual([]);
   });

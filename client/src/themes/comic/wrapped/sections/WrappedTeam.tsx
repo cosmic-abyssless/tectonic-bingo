@@ -1,9 +1,10 @@
-import type { WrappedTeamModel } from "../../../../headless/types";
+import type { ReactNode } from "react";
+import type { WrappedPersonModel, WrappedTeamModel } from "../../../../headless/types";
 import { PointsChart } from "../../../../core/wrapped/PointsChart";
 import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { useComic } from "../../ui/useComic";
 import { COVER } from "../coverParts";
-import { ComicDrop, ComicPerson, display, FULL_PANEL, InkBurst, Kicker, burstFont, PADDED_PANEL, PanelHeading, Splash, Sfx, Tally } from "./sectionParts-team-bingo";
+import { ComicDrop, ComicPerson, display, FULL_PANEL, GroundHalftone, InkBurst, Kicker, burstFont, PADDED_PANEL, PanelHeading, Splash, Sfx, Tally } from "./sectionParts-team-bingo";
 import { Gp } from "./sectionParts-you-duo-captain-moderator";
 
 /**
@@ -118,11 +119,7 @@ function Placement({ t }: { t: WrappedTeamModel }) {
   const sfx = t.placement === 1 ? "Ka-pow!" : t.placement === 2 ? "Wham!" : t.placement === 3 ? "Bam!" : null;
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center gap-2 px-2 py-3" style={{ background: colors.PAPER_RAISED }}>
-      <div
-        aria-hidden
-        className="wrapped-panel-ground absolute inset-0"
-        style={{ backgroundImage: "radial-gradient(" + colors.RULE + " 1.1px, transparent 1.8px)", backgroundSize: "7px 7px", maskImage: "linear-gradient(to bottom, transparent 45%, black)", WebkitMaskImage: "linear-gradient(to bottom, transparent 45%, black)" }}
-      />
+      <GroundHalftone color={colors.RULE} from={0.45} />
       {sfx && <Sfx size={22} tilt={-9} className="absolute top-1.5 left-2 z-[1]">{sfx}</Sfx>}
       <InkBurst fill={medal} tilt={-5} className="relative w-[112px]">
         <span className="num" style={{ fontSize: burstFont(t.placementLabel, 26) }}>
@@ -151,42 +148,47 @@ function Tallies({ t }: { t: WrappedTeamModel }) {
   );
 }
 
-/** The MVP and the top drop value: a panel of two cells, with one cell it is that one's. */
+/** The MVP and the top drop value: a panel of two cells, alike row for row so they line up, with one cell it is that one's. */
 function Stars({ t }: { t: WrappedTeamModel }) {
   const { colors } = useComic();
   return (
     <div className="flex flex-1" style={{ background: colors.PAPER_RAISED }}>
       {t.mvp && (
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 px-3 py-2.5 text-center">
-          <Kicker>MVP</Kicker>
-          <ComicPerson person={t.mvp.person} size={44} column nameSize={15} />
-          <div className="flex items-center gap-2">
-            <InkBurst fill={colors.YELLOW} tilt={8} className="w-[62px]">
-              <span className="num" style={{ fontSize: burstFont(t.mvp.shareLabel, 24) }}>
-                {t.mvp.shareLabel}
-              </span>
-            </InkBurst>
-            <span className="text-[13px] leading-tight" style={{ color: colors.INK_BODY }}>
-              Points share
-            </span>
-          </div>
-        </div>
+        <StarCell kicker={<Kicker>MVP</Kicker>} person={t.mvp.person} figure={t.mvp.shareLabel} label="Points share" drop={colors.YELLOW} />
       )}
       {t.mvp && t.topGpEarner && <div aria-hidden className="w-[3px] shrink-0" style={{ background: colors.LINE }} />}
       {t.topGpEarner && (
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 px-3 py-2.5 text-center">
-          <Kicker tilt={1.5} fill={colors.GREEN_TINT}>
-            Top drop value
-          </Kicker>
-          <ComicPerson person={t.topGpEarner.person} size={44} column nameSize={15} />
-          <p className="text-[13px] leading-tight" style={{ color: colors.INK_BODY }}>
-            <span className="num flex justify-center" style={{ ...display(26), color: colors.INK, textShadow: `2px 2px 0 ${colors.GREEN_TINT}` }}>
-              <Gp label={t.topGpEarner.gpLabel} />
-            </span>
-            drop value
-          </p>
-        </div>
+        <StarCell
+          kicker={
+            <Kicker tilt={1.5} fill={colors.GREEN_TINT}>
+              Top drop value
+            </Kicker>
+          }
+          person={t.topGpEarner.person}
+          figure={<Gp label={t.topGpEarner.gpLabel} />}
+          label="Drop value"
+          drop={colors.GREEN_TINT}
+        />
       )}
+    </div>
+  );
+}
+
+/** One of the Stars' cells: its tag, the Player, and their figure lettered big over what it is. */
+function StarCell({ kicker, person, figure, label, drop }: { kicker: ReactNode; person: WrappedPersonModel; figure: ReactNode; label: string; drop: string }) {
+  const { colors } = useComic();
+  return (
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-3 px-4 pt-4 pb-5 text-center [&>p]:self-center">
+      {kicker}
+      <ComicPerson person={person} size={48} column nameSize={15} />
+      <div data-beat="slam" className="mt-auto">
+        <div className="num flex justify-center whitespace-nowrap" style={{ ...display(30), color: colors.INK, textShadow: `2px 2px 0 ${drop}`, paddingRight: 2 }}>
+          {figure}
+        </div>
+        <div className="mt-1 text-[12px] uppercase tracking-wide" style={{ color: colors.INK_SUBTLE, fontWeight: 700 }}>
+          {label}
+        </div>
+      </div>
     </div>
   );
 }

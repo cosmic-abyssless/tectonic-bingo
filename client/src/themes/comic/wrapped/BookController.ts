@@ -19,7 +19,7 @@ import {
   type StageMode,
 } from "./camera";
 import { deskGroups, deskLayout, type DeskGroup } from "./deskLayout";
-import { panelFrames, quadClipPath, quadCuts, quadPoints, quadWithin, rectQuad } from "./frames";
+import { panelFrames, quadClipPath, quadCuts, quadPoints, quadWithin, rectQuad, tornOutline } from "./frames";
 import { buildPages, CONTENTS_SECTION, isAfter, nextStop, pageStart, prevStop, PULL, reachedAfter, sameStop, sectionIds, sectionStart, withGroups, type GuidePage, type Stop } from "./guide";
 
 // The comic Wrapped's book, run: the pages laid out on the desk (a spread at a time on a wide screen, a page at a time on
@@ -43,8 +43,9 @@ const PAN_HOLD_MS = 260;
 const DEMOTE_AFTER_MS = PAN_HOLD_MS + 140;
 /** The room (px, desk coordinates) the pull-back leaves around a spread: on a wide screen, the side images beside it. */
 const PULL_PAD: Record<StageMode, number> = { wide: 70, phone: 16 };
-/** The paper a narration inset is cut out with, round it (px). */
-const INSET_HALO = 7;
+/** How wide the torn paper round a narration inset is (px), and how far outside it the book clips it: the tear and its shadow. */
+const INSET_PAPER = 9;
+const INSET_HALO = 28;
 
 export interface BookSnapshot {
   /** The Scenes have registered and the book is laid out. */
@@ -85,15 +86,47 @@ interface Tween {
   cancel(): void;
 }
 
-function tween(seconds: number, onUpdate: (t: number) => void): Tween {
+/** Frames per second a move's keyframes are sampled at: the browser blends between them, so this only shapes the curve. */
+const KEYFRAMES_PER_SECOND = 60;
+
+/**
+ * Flies `el` along `at` (the camera t of the way, 0 to 1) over `seconds`, then lands it with `land`. The move runs as a
+ * Web Animation of the camera's transform, sampled from the curve: the browser's compositor plays it, so it keeps its
+ * frame rate while the page is busy drawing the panel the camera is going to. Cancelled, it lands where it had got to.
+ * Without Web Animations (tests) it is driven frame by frame instead.
+ */
+function fly(el: HTMLElement, seconds: number, at: (t: number) => Camera, land: (camera: Camera) => void): Tween {
   let resolve!: (completed: boolean) => void;
   const done = new Promise<boolean>((r) => (resolve = r));
-  const controls = animate(0, 1, { duration: seconds, ease: "linear", onUpdate, onComplete: () => resolve(true) });
+  if (typeof el.animate !== "function") {
+    const controls = animate(0, 1, { duration: seconds, ease: "linear", onUpdate: (t) => land(at(t)), onComplete: () => resolve(true) });
+    return {
+      done,
+      cancel() {
+        controls.stop();
+        resolve(false);
+      },
+    };
+  }
+  const ms = seconds * 1000;
+  const n = Math.max(2, Math.round(seconds * KEYFRAMES_PER_SECOND));
+  const keyframes = Array.from({ length: n + 1 }, (_, i) => ({ transform: cameraTransform(at(i / n)) }));
+  const anim = el.animate(keyframes, { duration: ms, easing: "linear", fill: "forwards" });
+  let settled = false;
+  // The transform is set before the animation goes, so the world never shows a frame of where it started.
+  const finish = (t: number, completed: boolean) => {
+    if (settled) return;
+    settled = true;
+    land(at(t));
+    anim.cancel();
+    resolve(completed);
+  };
+  anim.onfinish = () => finish(1, true);
   return {
     done,
     cancel() {
-      controls.stop();
-      resolve(false);
+      const time = Number(anim.currentTime ?? 0);
+      finish(Math.min(1, Math.max(0, time / ms)), false);
     },
   };
 }
@@ -414,6 +447,13 @@ export class BookController {
         const value = `${Math.round(cuts[side])}px`;
         if (el.style.getPropertyValue(`--panel-cut-${side}`) !== value) el.style.setProperty(`--panel-cut-${side}`, value);
       }
+      if (straight[i]) {
+        const torn = tornOutline(rects[i]!.w, rects[i]!.h, INSET_PAPER, i + 1)
+          .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+          .join(" ");
+        const sheet = el.querySelector<SVGPolygonElement>(":scope > .wrapped-panel-torn polygon");
+        if (sheet && sheet.getAttribute("points") !== torn) sheet.setAttribute("points", torn);
+      }
       const points = quadPoints(own);
       el.querySelectorAll<SVGPolygonElement>(":scope > .wrapped-panel-frame polygon").forEach((p) => {
         if (p.getAttribute("points") !== points) p.setAttribute("points", points);
@@ -493,7 +533,7 @@ export class BookController {
       return token === this.token;
     }
     this.promote();
-    const move = tween(seconds, (t) => this.applyCamera(mixCamera(from, to, curve(t))));
+    const move = fly(this.env!.world, seconds, (t) => mixCamera(from, to, curve(t)), (camera) => this.applyCamera(camera));
     this.camTween = move;
     const completed = await move.done;
     if (this.camTween === move) {

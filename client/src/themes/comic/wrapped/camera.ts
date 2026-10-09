@@ -5,7 +5,7 @@
 //   screen = (x, y) + scale × rotate(angle) × desk
 //
 // It always frames something whole: a panel, filling the screen as far as MAX_ZOOM lets it, or a whole group, when it
-// pulls back at the end of a spread. Moving between them it whips (a fast move, a little past, settling in steps), pulls
+// pulls back at the end of a spread. Moving between them it whips (a fast move, a little past, easing back), pulls
 // back (slowly out), or pans (across the desk to the next group).
 
 /** A page's width in its own coordinates (px at scale 1), and the least height a page has (2:3). */
@@ -113,18 +113,16 @@ export const sameCamera = (a: Camera, b: Camera) => Math.abs(a.scale - b.scale) 
 /** How far a whip carries past its panel before settling back, and when in the move it gets there. */
 export const WHIP_OVERSHOOT = 1.07;
 const WHIP_PEAK_AT = 0.62;
-/** The settle back is drawn in this many held steps, like animation drawn on twos. */
-const WHIP_SETTLE_STEPS = 3;
 
 const easeInOutQuart = (t: number) => (t < 0.5 ? 8 * t ** 4 : 1 - (-2 * t + 2) ** 4 / 2);
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
 
-/** A whip: fast out and in to a little past the panel, then back onto it in steps. */
+/** A whip: fast out and in to a little past the panel, then eased back onto it. */
 export function whipCurve(t: number): number {
   if (t <= 0) return 0;
   if (t >= 1) return 1;
   if (t < WHIP_PEAK_AT) return easeInOutQuart(t / WHIP_PEAK_AT) * WHIP_OVERSHOOT;
-  const settled = Math.floor(((t - WHIP_PEAK_AT) / (1 - WHIP_PEAK_AT)) * WHIP_SETTLE_STEPS) / WHIP_SETTLE_STEPS;
-  return WHIP_OVERSHOOT + (1 - WHIP_OVERSHOOT) * settled;
+  return WHIP_OVERSHOOT + (1 - WHIP_OVERSHOOT) * easeInOutCubic((t - WHIP_PEAK_AT) / (1 - WHIP_PEAK_AT));
 }
 
 /** Pulling back: off at once, easing out to the whole spread. */

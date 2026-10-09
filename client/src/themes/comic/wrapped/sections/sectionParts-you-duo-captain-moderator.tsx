@@ -16,7 +16,7 @@ import { useComic } from "../../ui/useComic";
  * The classes a Reveal gets when its panel should fill the height its row gives it (a grid row's, or the page's spare
  * room): the panel and the brush layer inside it stretch, and the content root is `PanelBody`, which grows into them.
  */
-export const FILL = "flex flex-col p-2.5 [&>.wrapped-panel-content]:flex [&>.wrapped-panel-content]:flex-1 [&>.wrapped-panel-content]:flex-col";
+export const FILL = "flex flex-col p-4 [&>.wrapped-panel-content]:flex [&>.wrapped-panel-content]:flex-1 [&>.wrapped-panel-content]:flex-col";
 
 /**
  * A panel's inside: an optional printed colour (with rays, from a point) behind the content, which is centred in what's
@@ -51,8 +51,8 @@ export function Kicker({ children, tone = "yellow", tilt = -2, className = "" }:
   const { loud, onLoud } = toneColors(colors, tone);
   return (
     <p data-beat="rise"
-      className={`inline-block self-start border-[3px] px-2 py-0.5 uppercase leading-none ${className}`}
-      style={{ fontFamily: COMIC_FONT, fontSize: 16, letterSpacing: "0.06em", background: loud, color: onLoud, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
+      className={`inline-block self-start border-2 px-2 pt-[3px] pb-px uppercase leading-none ${className}`}
+      style={{ fontFamily: COMIC_FONT, fontSize: 16, letterSpacing: "0.06em", background: loud, color: onLoud, borderColor: colors.LINE, transform: tilt ? `rotate(${tilt}deg)` : undefined }}
     >
       {children}
     </p>

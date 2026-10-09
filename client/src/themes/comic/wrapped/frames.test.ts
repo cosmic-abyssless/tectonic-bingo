@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GUTTER_SLANT, panelFrames, quadClipPath, quadCuts, quadWithin, type Quad } from "./frames";
+import { GUTTER_SLANT, panelFrames, quadClipPath, quadCuts, quadWithin, tornOutline, type Quad } from "./frames";
 
 const W = 420;
 // A page: a splash across the top, two panels side by side under it, and one across the foot.
@@ -71,5 +71,24 @@ describe("panel frames", () => {
     expect(cuts.right).toBeGreaterThan(0);
     expect(cuts.left).toBe(0);
     expect(quadCuts(quadWithin(s!, splash), splash.w, splash.h).top).toBe(0);
+  });
+});
+
+describe("tornOutline", () => {
+  it("tears all round the box, never into it, about the border's width out", () => {
+    const points = tornOutline(200, 60, 10, 3);
+    expect(points.length).toBeGreaterThan(50);
+    for (const p of points) {
+      const inside = p.x > 0 && p.x < 200 && p.y > 0 && p.y < 60;
+      expect(inside).toBe(false);
+      const out = Math.max(-p.x, p.x - 200, -p.y, p.y - 60);
+      expect(out).toBeGreaterThan(10 * 0.4);
+      expect(out).toBeLessThan(10 * 1.6);
+    }
+  });
+
+  it("tears the same way for the same seed, and another way for another", () => {
+    expect(tornOutline(200, 60, 10, 3)).toEqual(tornOutline(200, 60, 10, 3));
+    expect(tornOutline(200, 60, 10, 4)).not.toEqual(tornOutline(200, 60, 10, 3));
   });
 });

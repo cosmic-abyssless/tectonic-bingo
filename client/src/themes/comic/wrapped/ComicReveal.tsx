@@ -95,6 +95,12 @@ export function ComicReveal({ step, revealed, bare, emphasis, className, childre
 
   return (
     <div ref={ref} className={`wrapped-panel ${bare ? "wrapped-panel-bare" : ""} ${className ?? ""}`} data-wrapped-step={step} data-revealed={revealed} data-ink={ink} data-bare={bare} data-emphasis={emphasis}>
+      {/* An inset is stuck on over the panels around it on a torn sheet of paper (the book tears it to its size). */}
+      {!bare && emphasis === "narration" && (
+        <svg aria-hidden className="wrapped-panel-torn">
+          <polygon />
+        </svg>
+      )}
       {!bare && <span aria-hidden className="wrapped-panel-paper" />}
       {/* Hidden two ways: a part that makes itself visible (a share card, once it has measured itself) still can't show. */}
       <div className="wrapped-panel-content" style={ink === "pencil" ? { visibility: "hidden", opacity: 0 } : undefined}>

@@ -8,7 +8,7 @@ import { useSlot } from "../../context";
 import { COMIC_FONT } from "../font";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
-import { COVER, CoverCaption, CoverGround, CoverTitle, coverShadow } from "./coverParts";
+import { COVER, CoverCaption, CoverGround, CoverTitle } from "./coverParts";
 
 /**
  * The Outro (#419): first the viewer's share cards, a page each, each with its Copy image, Download and Share buttons
@@ -82,10 +82,10 @@ function Teaser({ tag, title, blurb, button, icon, variant = "secondary", onPres
   return (
     <div className="flex items-center gap-3">
       <div className="min-w-0 flex-1">
-        <CoverCaption tilt={-2} fill={COVER.YELLOW} size={13} style={{ display: "inline-block", boxShadow: coverShadow(2) }}>
+        <CoverCaption tilt={-2} fill={COVER.YELLOW} size={13} style={{ display: "inline-block", borderWidth: 2, boxShadow: "none" }}>
           {tag}
         </CoverCaption>
-        <p className="mt-2 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 30, letterSpacing: "0.03em", color: colors.INK }}>
+        <p className="comic-outline-text mt-2.5 uppercase leading-none" style={{ fontFamily: COMIC_FONT, fontSize: 32, letterSpacing: "0.03em", paddingBottom: 3 }}>
           {title}
         </p>
         <p className="mt-1 text-[14px]" style={{ color: colors.INK_BODY }}>

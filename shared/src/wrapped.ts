@@ -304,6 +304,13 @@ export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
 export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side", "playerCard"] as const;
 export type WrappedArtGroup = (typeof WRAPPED_ART_GROUPS)[number];
 
+/** What adding the Board's bosses to the side images did: every image now, the bosses added, and the ones left out and why. */
+export interface WrappedBossArtResult {
+  art: WrappedArtImage[];
+  added: string[];
+  skipped: { name: string; reason: string }[];
+}
+
 /** How many images a group holds at most: a row above a heading gets crowded quickly; the side pool less so. */
 export function maxWrappedArt(group: WrappedArtGroup): number {
   return group === "side" ? 12 : 6;

@@ -13,6 +13,7 @@ import * as bingoService from "../services/bingoService";
 import * as bingoExportService from "../services/bingoExportService";
 import * as boardService from "../services/boardService";
 import * as wrappedArtService from "../services/wrappedArtService";
+import * as bossArtService from "../services/bossArtService";
 import { rescoreBingo } from "../services/scoringService";
 import * as signupService from "../services/signupService";
 import { assertUserCan } from "../services/permissions";
@@ -342,6 +343,13 @@ router.post(
     if (!req.file) throw new ServiceError(400, "image is required");
     const keying = wrappedArtService.parseKeying(req.body ?? {});
     res.status(201).json({ art: await wrappedArtService.addArt(db, UPLOADS_DIR, req.bingo!, group, req.file.buffer, keying) });
+  }),
+);
+// The Board's bosses as side images, their OSRS Wiki images fetched (once per server) and cut like an upload.
+router.post(
+  "/wrapped-art/side/bosses",
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await bossArtService.addBoardBosses(db, UPLOADS_DIR, req.bingo!));
   }),
 );
 router.put(

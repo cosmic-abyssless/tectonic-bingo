@@ -61,7 +61,7 @@ export function WrappedModerator({ section }: { section: WrappedModeratorModel }
 
       <Reveal step={2} emphasis="narration" className={`${FILL} -rotate-1`}>
         <PanelBody tone="yellow">
-          <Lettering size={25} style={{ lineHeight: 1.12, letterSpacing: "0.02em" }}>
+          <Lettering size={25} className="text-balance" style={{ lineHeight: 1.12, letterSpacing: "0.02em" }}>
             {section.banter}
           </Lettering>
           <Sfx className="absolute -top-8 right-3" size={26} tilt={8} fill={colors.RED}>

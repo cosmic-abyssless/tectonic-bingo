@@ -91,7 +91,7 @@ export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
         {d.carried && (
           <Reveal step={carried} emphasis="narration" className={`${FILL} -rotate-1`}>
             <PanelBody tone="yellow" gap={4}>
-              <Lettering size={25} style={{ lineHeight: 1.1, letterSpacing: "0.02em" }}>
+              <Lettering size={25} className="text-balance" style={{ lineHeight: 1.1, letterSpacing: "0.02em" }}>
                 {d.carried}
               </Lettering>
             </PanelBody>

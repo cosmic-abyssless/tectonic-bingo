@@ -4,33 +4,34 @@ import { StickerArt } from "../../../core/wrapped/StickerArt";
 import type { DeskGroup } from "./deskLayout";
 import type { CameraEffects } from "./BookController";
 
-/** A side image's size on the desk (px, desk coordinates), and how far from its spread it lies. */
+/** A side image's size on the desk (px, desk coordinates). */
 const STICKER_W = 300;
 const STICKER_H = 430;
-const STICKER_GAP = 60;
 
 /**
- * The side images, as stickers slapped on the desk beside the spreads: one per spread, taking the side images in turn,
- * on the spread's left for one and its right for the next, lying at the spread's angle and a little more. They are part
- * of the desk, so the camera shows them as it pulls back from a spread and pans to the next. Wide screens only (the page
- * says when): a phone reads a page at a time, with no room beside it.
+ * The side images, as stickers slapped on the desk between the spreads: one in each gap, taking the side images in turn,
+ * centred across it so two never pile onto each other, lying at the angle of the spread before it and a little more, high
+ * in one gap and low in the next. They are part of the desk, so the camera shows them as it pulls back from a spread and
+ * pans to the next. Wide screens only (the page says when): a phone reads a page at a time, with no room beside it.
  */
 export function DeskStickers({ art, groups }: { art: WrappedArtFrames[]; groups: readonly DeskGroup[] }) {
   if (art.length === 0) return null;
   return (
     <div aria-hidden className="pointer-events-none absolute top-0 left-0">
-      {groups.map((g, n) => {
-        const left = n % 2 === 0;
-        const x = left ? -STICKER_W - STICKER_GAP : g.w + STICKER_GAP;
-        const y = Math.max(0, g.h - STICKER_H - 30 - (n % 3) * 40);
-        const tilt = (left ? -5 : 6) + (n % 3) - 1;
+      {groups.slice(0, -1).map((g, n) => {
+        const next = groups[n + 1]!;
+        // The gap's middle, in this group's coordinates (the next one lies a little turned, so near enough).
+        const x = g.w + (next.place.x - g.place.x - g.w - STICKER_W) / 2;
+        const high = n % 2 === 0;
+        const y = high ? Math.min(40, Math.max(0, g.h - STICKER_H)) : Math.max(0, g.h - STICKER_H - 20);
+        const tilt = (high ? -5 : 6) + (n % 3) - 1;
         return (
           <div
             key={n}
             className="absolute top-0 left-0 origin-top-left"
             style={{ width: STICKER_W, height: STICKER_H, transform: `translate(${g.place.x}px, ${g.place.y}px) rotate(${g.place.angle}deg) translate(${x}px, ${y}px) rotate(${tilt}deg)` }}
           >
-            <StickerArt frames={art[n % art.length]!} className="size-full" phase={left ? 0 : 0.5} />
+            <StickerArt frames={art[n % art.length]!} className="size-full" phase={high ? 0 : 0.5} />
           </div>
         );
       })}
