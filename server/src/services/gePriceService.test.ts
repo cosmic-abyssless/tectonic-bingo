@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { log } from "../log";
 import { GePriceTable } from "./gePriceService";
 
 const MAPPING = [
@@ -34,7 +35,15 @@ function tableAt(clock: { t: number }, wiki: ReturnType<typeof fakeWiki>, enable
   return new GePriceTable(wiki.fetchImpl, () => clock.t, () => enabled);
 }
 
+afterEach(() => vi.restoreAllMocks());
+
 describe("GePriceTable", () => {
+  it("reports a non-2xx to Sentry (log.error with an error)", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    expect(await tableAt({ t: 0 }, fakeWiki({ fail: true })).refreshIfStale()).toBe(false);
+    expect(error).toHaveBeenCalledWith("ge prices fetch failed", expect.objectContaining({ status: 503, err: expect.any(Error) }));
+  });
+
   it("prices at the midpoint of the latest buy and sell, falling back to whichever exists", async () => {
     const table = tableAt({ t: 0 }, fakeWiki());
     await table.refreshIfStale();

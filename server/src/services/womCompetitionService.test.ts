@@ -4,6 +4,7 @@ import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
+import { log } from "../log";
 import { WomCompetitionClient, WomCompetitionError, checkWomGroup, sendDueWomBulkUpdates, syncWomCompetition, syncWomCompetitionAfterDraft } from "./womCompetitionService";
 
 let sqlite: Database.Database;
@@ -51,6 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   sqlite.close();
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("WomCompetitionClient", () => {
@@ -107,6 +109,15 @@ describe("WomCompetitionClient", () => {
     const fetchImpl = mockFetch([{ status: 403, body: { message: "invalid verification code" } }]);
     const client = new WomCompetitionClient(fetchImpl);
     await expect(client.editCompetition({ competitionId: 1, groupVerificationCode: "wrong", teams: [] })).rejects.toBeInstanceOf(WomCompetitionError);
+  });
+
+  it("reports a non-2xx to Sentry (log.error with the error), not only to the audit log", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    const fetchImpl = mockFetch([{ status: 400, body: { code: "VALIDATION_ERROR", message: "Team names cannot be longer than 30 characters." } }]);
+    const client = new WomCompetitionClient(fetchImpl);
+    await expect(client.editCompetition({ competitionId: 159361, groupVerificationCode: "x", teams: [] })).rejects.toBeInstanceOf(WomCompetitionError);
+    expect(error).toHaveBeenCalledWith("wom request failed", { method: "PUT", path: "/competitions/159361", status: 400, err: expect.any(WomCompetitionError) });
+    expect((error.mock.calls[0]![1] as { err: Error }).err.message).toMatch(/Team names cannot be longer than 30 characters/);
   });
 
   it("drops an HTML error body (e.g. a Cloudflare error page) instead of surfacing it", async () => {
@@ -472,9 +483,19 @@ describe("checkWomGroup", () => {
     expect(calls(fetchImpl)).toHaveLength(0);
   });
 
-  it("never throws when WOM is down", async () => {
+  it("never throws when WOM is down, and reports it", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
     const fetchImpl = mockFetch([{ status: 502 }]);
     expect(await checkWomGroup("123", "abc", new WomCompetitionClient(fetchImpl))).toMatchObject({ ok: false, problem: "unreachable" });
+    expect(error).toHaveBeenCalledWith("wom request failed", expect.objectContaining({ status: 502 }));
+  });
+
+  it("doesn't report the answers it asks WOM for: no such group (404), a right code (400) or a wrong one (403)", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await checkWomGroup("999", "abc", new WomCompetitionClient(mockFetch([{ status: 404, body: { message: "Group not found." } }])));
+    await checkWomGroup("123", "abc", new WomCompetitionClient(mockFetch([{ body: { name: "Tectonic" } }, { status: 400, body: { message: "Nothing to update." } }])));
+    await checkWomGroup("123", "nope", new WomCompetitionClient(mockFetch([{ body: { name: "Tectonic" } }, { status: 403, body: { message: "Incorrect verification code." } }])));
+    expect(error).not.toHaveBeenCalled();
   });
 });
 

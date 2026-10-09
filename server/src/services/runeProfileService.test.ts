@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { log } from "../log";
 import { RuneProfileClient, parseAccountType } from "./runeProfileService";
+
+afterEach(() => vi.restoreAllMocks());
 
 function accountBody(key: string) {
   return { username: "C osmic", accountType: { key } };
@@ -34,6 +37,17 @@ describe("RuneProfileClient.getAccountFull", () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
     const client = new RuneProfileClient(fetchImpl, null);
     expect(await client.getAccountFull("Nobody")).toBeNull();
+  });
+
+  it("reports a non-2xx other than a 404 to Sentry (log.error with an error), and never the 404", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await new RuneProfileClient(vi.fn(async () => new Response(null, { status: 404 })) as unknown as typeof fetch, null).getAccountFull("Nobody");
+    expect(error).not.toHaveBeenCalled();
+    expect(await new RuneProfileClient(vi.fn(async () => new Response(null, { status: 500 })) as unknown as typeof fetch, null).getAccountFull("Zezima")).toBeNull();
+    expect(error).toHaveBeenCalledWith("runeprofile request failed", expect.objectContaining({ status: 500, err: expect.any(Error) }));
+    const limited = vi.fn(async () => new Response(null, { status: 429, headers: { "retry-after": "30" } })) as unknown as typeof fetch;
+    await new RuneProfileClient(limited, null).getAccountFull("Zezima");
+    expect(error).toHaveBeenCalledWith("runeprofile rate limited", expect.objectContaining({ err: expect.any(Error) }));
   });
 
   it("returns null on a network failure instead of throwing", async () => {

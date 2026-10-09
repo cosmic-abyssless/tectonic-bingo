@@ -176,7 +176,7 @@ export class WomCompetitionClient {
   /** The group's name, or null if WOM has no group with that id. */
   async getGroupName(groupId: string): Promise<string | null> {
     try {
-      const raw = (await (await this.request(`/groups/${groupId}`, "GET")).json()) as { name?: unknown };
+      const raw = (await (await this.request(`/groups/${groupId}`, "GET", undefined, [404])).json()) as { name?: unknown };
       return typeof raw.name === "string" ? raw.name : "";
     } catch (err) {
       if (err instanceof WomCompetitionError && err.status === 404) return null;
@@ -191,7 +191,7 @@ export class WomCompetitionClient {
    */
   async isGroupCodeCorrect(groupId: string, verificationCode: string): Promise<boolean> {
     try {
-      await this.request(`/groups/${groupId}`, "PUT", { verificationCode });
+      await this.request(`/groups/${groupId}`, "PUT", { verificationCode }, [400, 403]);
       return true;
     } catch (err) {
       if (err instanceof WomCompetitionError && err.status === 400) return true;
@@ -205,7 +205,12 @@ export class WomCompetitionClient {
     return res.json();
   }
 
-  private async request(path: string, method: string, body?: unknown): Promise<Response> {
+  /**
+   * Any non-2xx is thrown as a WomCompetitionError and, unless the caller is asking a question it answers (`expected`,
+   * e.g. a 404 for "no such group"), reported to Sentry: it means a sync didn't happen, and the audit log alone is easy
+   * to miss.
+   */
+  private async request(path: string, method: string, body?: unknown, expected: number[] = []): Promise<Response> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${WOM_BASE_URL}${path}`, {
@@ -222,7 +227,9 @@ export class WomCompetitionClient {
     }
     if (!res.ok) {
       const detail = summarizeErrorBody(await res.text().catch(() => ""));
-      throw new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`, res.status);
+      const error = new WomCompetitionError(`${method} ${path}: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`, res.status);
+      if (!expected.includes(res.status)) log.error("wom request failed", { method, path, status: res.status, err: error });
+      throw error;
     }
     return res;
   }

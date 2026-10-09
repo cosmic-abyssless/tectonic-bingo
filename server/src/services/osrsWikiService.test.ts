@@ -1,9 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { log } from "../log";
 import { bossAliases, OsrsWikiClient, WikiUnavailableError } from "./osrsWikiService";
 
 function mockFetch(body: unknown, status = 200) {
   return vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 const searchBody = (titles: string[]) => ({ query: { search: titles.map((title) => ({ title })) } });
 
@@ -55,6 +58,12 @@ describe("OsrsWikiClient.searchItems", () => {
     const fetchImpl = mockFetch(null, 503);
     const client = new OsrsWikiClient(fetchImpl);
     expect(await client.searchItems("whip")).toEqual([]);
+  });
+
+  it("reports a non-ok response to Sentry (log.error with an error)", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await new OsrsWikiClient(mockFetch(null, 503)).searchItems("whip");
+    expect(error).toHaveBeenCalledWith("osrs-wiki search failed", expect.objectContaining({ status: 503, err: expect.any(Error) }));
   });
 
   it("returns an empty array on a network failure instead of throwing", async () => {
@@ -133,6 +142,12 @@ describe("OsrsWikiClient.bossPage", () => {
     await expect(down.bossPage("Vorkath")).rejects.toBeInstanceOf(WikiUnavailableError);
     await expect(new OsrsWikiClient(mockFetch(null, 503)).bossPage("Vorkath")).rejects.toBeInstanceOf(WikiUnavailableError);
     await expect(new OsrsWikiClient(mockFetch({ error: { code: "badvalue" } })).bossPage("Vorkath")).rejects.toBeInstanceOf(WikiUnavailableError);
+  });
+
+  it("reports the wiki answering with a non-2xx to Sentry (log.error with the error)", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await expect(new OsrsWikiClient(mockFetch(null, 503)).bossPage("Vorkath")).rejects.toThrow("The OSRS Wiki answered HTTP 503");
+    expect(error).toHaveBeenCalledWith("osrs-wiki query failed", expect.objectContaining({ status: 503, err: expect.any(WikiUnavailableError) }));
   });
 });
 

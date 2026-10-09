@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TectonicClient, TectonicUnavailableError, getTectonicConfig, type TectonicConfig } from "./tectonicService";
+import { log } from "../log";
 
 const cfg: TectonicConfig = { baseUrl: "http://tectonic.test", apiKey: "secret-key", guildId: "guild123" };
 
@@ -15,6 +16,7 @@ function mockFetch(responses: Record<string, { status?: number; body?: unknown }
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("getTectonicConfig", () => {
@@ -55,6 +57,19 @@ describe("TectonicClient", () => {
     const fetchImpl = mockFetch({ "/leaderboard": { status: 401, body: { error: "bad key" } } });
     const client = new TectonicClient(cfg, fetchImpl);
     await expect(client.getRoster()).rejects.toBeInstanceOf(TectonicUnavailableError);
+  });
+
+  it("reports a non-2xx to Sentry (log.error with the error), but not a network failure", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    await expect(new TectonicClient(cfg, mockFetch({ "/leaderboard": { status: 401, body: { error: "bad key" } } })).getRoster()).rejects.toThrow();
+    expect(error).toHaveBeenCalledWith("tectonic request failed", expect.objectContaining({ status: 401, err: expect.any(TectonicUnavailableError) }));
+
+    error.mockClear();
+    const down = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+    await expect(new TectonicClient(cfg, down).getRoster()).rejects.toThrow();
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("throws TectonicUnavailableError on a network failure", async () => {

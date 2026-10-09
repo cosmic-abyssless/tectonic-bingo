@@ -182,8 +182,10 @@ export class TectonicClient {
       }
       const ms = Date.now() - started;
       if (!res.ok) {
-        log.warn("tectonic request failed", { path, status: res.status, attempt, ms });
-        throw new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
+        // An answer that's an error goes to Sentry (log.error with the error): most callers carry on without the data.
+        const error = new TectonicUnavailableError(`GET ${path}: HTTP ${res.status}`);
+        log.error("tectonic request failed", { path, status: res.status, attempt, ms, err: error });
+        throw error;
       }
       if (ms > SLOW_MS) log.warn("tectonic request slow", { path, ms, attempt });
       return value!;
