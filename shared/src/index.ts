@@ -1268,6 +1268,9 @@ export interface PlayerProfile {
 export interface DraftTeam extends Team {
   captainRsn: string; // captains aren't in `picks` (assigned pre-draft, not drafted) — this is the only source for their RSN
   coCaptain: { userId: string; rsn: string } | null; // duo mode: joined with the captain, also not in `picks`
+  // Everyone on the Team now but its Captain and co-captain. After the Draft this drifts from `picks`, which stay as
+  // drafted: a Late signup or a moved Player joins without a pick, and Remove from Team leaves the pick behind.
+  members: { userId: string; rsn: string; user: MinimalUser }[];
 }
 
 // What a single pick drafts: one player, or a duo pair that stays together.

@@ -1,9 +1,8 @@
-import { groupByPick, ordinal, type TeamRosterProps } from "../../../core/draft/TeamRoster";
+import { RosterName, groupByPick, ordinal, type TeamRosterProps } from "../../../core/draft/TeamRoster";
 import { UndoPickButton } from "../../../core/draft/UndoPick";
 import { PlayerName } from "../../../core/tectonic/PlayerName";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { LinkIcon } from "../../../core/ui/icons";
-import { displayName } from "../../../core/ui/user";
 import { pageColors } from "../board/colors";
 import { COMIC_FONT } from "../font";
 import { paperVars } from "../signup/parts";
@@ -72,9 +71,7 @@ export function TeamRoster({ team, picks, isCurrent, showOrder, hiddenPickNumber
             <div className="flex min-w-0 flex-1 flex-col justify-center">
               {group.map((p, j) => (
                 <div key={p.id} className="flex min-w-0 items-center gap-1">
-                  <PlayerName userId={p.userId} className="truncate">
-                    {p.rsn || displayName(p.user)}
-                  </PlayerName>
+                  <RosterName pick={p} className="truncate" />
                   {/* A duo pair, drafted as one pick: linked. */}
                   {j < group.length - 1 && <LinkIcon size={11} className="shrink-0" style={{ color: colors.INK_SUBTLE }} aria-label="paired with" />}
                 </div>
