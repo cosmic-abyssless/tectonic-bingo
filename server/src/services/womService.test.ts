@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { log } from "../log";
 import { WomClient, parseSnapshots, parseWomAccount, parseWomSummary } from "./womService";
 
 function mockFetch(responses: Record<string, { status?: number; body?: unknown; headers?: Record<string, string> }>) {
@@ -13,6 +14,8 @@ function mockFetch(responses: Record<string, { status?: number; body?: unknown; 
 }
 
 const playerBody = (ehb: number, type: string) => ({ ehb, type });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("WomClient.getPlayerByUsername", () => {
   it("sends a User-Agent header and returns the raw player object", async () => {
@@ -49,6 +52,18 @@ describe("WomClient.getPlayerByUsername", () => {
     const fetchImpl = mockFetch({ "/players/Nobody": { status: 404 } });
     const client = new WomClient(fetchImpl);
     expect(await client.getPlayerByUsername("Nobody")).toBeNull();
+  });
+
+  it("reports a non-2xx other than a 404 to Sentry (log.error with an error), and never the 404", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    expect(await new WomClient(mockFetch({ "/players/Nobody": { status: 404 } })).getPlayerByUsername("Nobody")).toBeNull();
+    expect(error).not.toHaveBeenCalled();
+
+    expect(await new WomClient(mockFetch({ "/players/Zezima": { status: 500 } })).getPlayerByUsername("Zezima")).toBeNull();
+    expect(error).toHaveBeenCalledWith("wom request failed", expect.objectContaining({ status: 500, err: expect.any(Error) }));
+
+    expect(await new WomClient(mockFetch({ "/players/Zezima": { status: 429, headers: { "retry-after": "30" } } })).getPlayerByUsername("Zezima")).toBeNull();
+    expect(error).toHaveBeenCalledWith("wom rate limited", expect.objectContaining({ err: expect.any(Error) }));
   });
 
   it("returns null on a network failure instead of throwing", async () => {
