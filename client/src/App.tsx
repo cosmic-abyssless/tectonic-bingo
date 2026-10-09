@@ -16,23 +16,24 @@ import { ErrorBoundary } from "./core/ui/ErrorBoundary";
 import { PageLoading } from "./themes/default/page/PageStates";
 import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
 import { useAccessWatch } from "./headless/permissions";
+import { awaitModule } from "./core/chunkReload";
 
 // The board page and the way to it load up front; every other page is its own
 // chunk, so a Player opening the Board doesn't download ag-grid, the Mod Panel or
 // stats first.
-const PhoneLogin = lazy(() => import("./pages/PhoneLogin").then((m) => ({ default: m.PhoneLogin })));
-const ModPage = lazy(() => import("./pages/ModPage").then((m) => ({ default: m.ModPage })));
-const BuyinsPage = lazy(() => import("./pages/BuyinsPage").then((m) => ({ default: m.BuyinsPage })));
-const DraftPage = lazy(() => import("./pages/DraftPage").then((m) => ({ default: m.DraftPage })));
-const StatsPage = lazy(() => import("./pages/StatsPage").then((m) => ({ default: m.StatsPage })));
-const RewindPage = lazy(() => import("./pages/RewindPage").then((m) => ({ default: m.RewindPage })));
-const WrappedPage = lazy(() => import("./pages/WrappedPage").then((m) => ({ default: m.WrappedPage })));
-const FeedbackPage = lazy(() => import("./pages/FeedbackPage").then((m) => ({ default: m.FeedbackPage })));
-const SiteAdminPage = lazy(() => import("./pages/SiteAdminPage").then((m) => ({ default: m.SiteAdminPage })));
-const TermsPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.TermsPage })));
-const PrivacyPage = lazy(() => import("./pages/legal/LegalPage").then((m) => ({ default: m.PrivacyPage })));
+const PhoneLogin = lazy(() => awaitModule(import("./pages/PhoneLogin")).then((m) => ({ default: m.PhoneLogin })));
+const ModPage = lazy(() => awaitModule(import("./pages/ModPage")).then((m) => ({ default: m.ModPage })));
+const BuyinsPage = lazy(() => awaitModule(import("./pages/BuyinsPage")).then((m) => ({ default: m.BuyinsPage })));
+const DraftPage = lazy(() => awaitModule(import("./pages/DraftPage")).then((m) => ({ default: m.DraftPage })));
+const StatsPage = lazy(() => awaitModule(import("./pages/StatsPage")).then((m) => ({ default: m.StatsPage })));
+const RewindPage = lazy(() => awaitModule(import("./pages/RewindPage")).then((m) => ({ default: m.RewindPage })));
+const WrappedPage = lazy(() => awaitModule(import("./pages/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
+const FeedbackPage = lazy(() => awaitModule(import("./pages/FeedbackPage")).then((m) => ({ default: m.FeedbackPage })));
+const SiteAdminPage = lazy(() => awaitModule(import("./pages/SiteAdminPage")).then((m) => ({ default: m.SiteAdminPage })));
+const TermsPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.TermsPage })));
+const PrivacyPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.PrivacyPage })));
 // The animation features of every `m` component (core/ui/motionFeatures.ts), fetched once the app has rendered.
-const loadMotionFeatures = () => import("./core/ui/motionFeatures").then((m) => m.default);
+const loadMotionFeatures = () => awaitModule(import("./core/ui/motionFeatures")).then((m) => m.default);
 
 // Admin was folded into the Mod Panel — redirect any old /b/:slug/admin
 // links there. Builds an absolute path explicitly since relative Navigate

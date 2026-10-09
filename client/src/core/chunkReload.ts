@@ -8,6 +8,16 @@ export function shouldReloadForMissingChunk(lastReloadAt: number | null, now: nu
   return lastReloadAt === null || now - lastReloadAt > MIN_GAP_MS;
 }
 
+/**
+ * Wrap every dynamic import in this. When its chunk is missing, the handler below reloads the page and suppresses
+ * Vite's error (event.preventDefault()), and Vite then resolves the import with undefined instead of the module. Read
+ * from that, a page's code throws ("Cannot read properties of undefined") in the moment before the reload, which shows
+ * the error page or reaches Sentry as a bug. This waits for the reload instead.
+ */
+export function awaitModule<T>(load: Promise<T>): Promise<T> {
+  return load.then((module) => (module === undefined ? new Promise<T>(() => {}) : module));
+}
+
 export function installChunkReload(): void {
   window.addEventListener("vite:preloadError", (event) => {
     let lastReloadAt: number | null = null;

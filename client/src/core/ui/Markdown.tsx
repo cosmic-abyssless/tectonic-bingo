@@ -1,10 +1,11 @@
 import { lazy, Suspense } from "react";
 import type { Components } from "react-markdown";
 import { Link } from "react-router-dom";
+import { awaitModule } from "../chunkReload";
 
 // react-markdown and its unified chain load the first time any markdown shows (the rules dialog is always mounted on
 // the board page, so a static import would put them in the board's first download).
-const ReactMarkdown = lazy(() => import("react-markdown"));
+const ReactMarkdown = lazy(() => awaitModule(import("react-markdown")));
 
 const components: Components = {
   h1: (p) => <h1 className="mt-4 mb-2 text-lg font-semibold text-on-surface first:mt-0" {...p} />,
