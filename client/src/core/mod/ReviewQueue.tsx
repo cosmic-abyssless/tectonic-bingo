@@ -151,10 +151,9 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const submitters = inclusionFilter(selectedSubmitters, submitterChoices);
   const reviewers = inclusionFilter(selectedReviewers, reviewerChoices);
   const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers });
-  // "Pending only" (the default) reads newest-first; any other mix of statuses reads however the server ordered
-  // them, same as before.
+  // Newest first, whatever the filters.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
-  const visible = onlyPending ? [...filtered].reverse() : filtered;
+  const visible = [...filtered].sort((a, b) => Date.parse(b.submission.submittedAt) - Date.parse(a.submission.submittedAt));
   const drawn = page(visible, shown);
 
   // Picking a filter starts its list from the top.
@@ -329,7 +328,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-1.5">
                       <span className="text-sm font-semibold text-on-surface">
-                        {isProof ? `Proof screenshot · ${row.tile.name}${row.submittedByUser ? ` · ${displayName(row.submittedByUser)}` : ""}` : row.tile.name}
+                        {isProof ? `Proof screenshot · ${row.tile.name}${row.submittedByUser ? ` · ${displayName(row.submittedByUser)}` : ""}` : [row.tile.name, ...row.partLabels].join(" · ")}
                       </span>
                       {row.proofTaskLabel && <Badge>{row.proofTaskLabel}</Badge>}
                       {row.leaves.map((leaf) => (

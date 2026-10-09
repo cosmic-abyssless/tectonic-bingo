@@ -491,6 +491,20 @@ describe("getTeamSubmissions / getAllSubmissionsForBingo", () => {
     expect(row!.screenshots).toHaveLength(1);
   });
 
+  it("names the Parts its claims are under, in board order", () => {
+    const { bingo, teamId, memberUserId } = seed();
+    const tile = addTile(bingo.id);
+    const first = addTask(tile.id, { sortOrder: 0, points: 20 });
+    const second = addTask(tile.id, { sortOrder: 1, points: 20 });
+    const post = (leafIds: string[]) => createSubmission(db, bingo, { teamId, submittedByUserId: memberUserId, claims: leafIds.map((nodeId) => ({ nodeId, itemName: "x" })), ...base });
+    const one = post([second.leafId]);
+    const both = post([second.leafId, first.leafId]);
+
+    const partsOf = new Map(getAllSubmissionsForBingo(db, bingo.id).map((r) => [r.submission.id, r.partLabels]));
+    expect(partsOf.get(one.id)).toEqual(["Task 1"]);
+    expect(partsOf.get(both.id)).toEqual(["Task 0", "Task 1"]);
+  });
+
   it("names the reviewer on the Mod panel's rows only: null while pending or with nobody recorded", () => {
     const { bingo, teamId, memberUserId } = seed();
     const task = addTask(addTile(bingo.id).id, { sortOrder: 0, points: 20 });

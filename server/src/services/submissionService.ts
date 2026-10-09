@@ -497,6 +497,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   team: Pick<typeof teams.$inferSelect, "id" | "name" | "color">;
   /** A proof only: its Task's label, when the requirement is per-Task. */
   proofTaskLabel: string | null;
+  /** A drop only: the Parts of its Tile its claims fall under, in board order (more than one when a claimed Item is shared). */
+  partLabels: string[];
   /** A drop only: one per Proof screenshot requirement its claims fall under, with its Player's proofs and flag. */
   proofChecks: ProofCheck[];
   /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
@@ -556,6 +558,16 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typ
   // Which Tiles and Tasks need a Proof screenshot, and which leaves sit under each Task, come from the node trees.
   const trees = getNodeTrees(db, tileRows.map((t) => t.nodeId));
   const withNode = (tile: typeof tiles.$inferSelect): Tile => ({ ...tile, node: trees.get(tile.nodeId)! });
+  // Each Tile's Parts with every node id under them, built once per Tile.
+  const partsByTileId = new Map<string, { label: string; ids: Set<string> }[]>();
+  const partsOf = (tile: typeof tiles.$inferSelect) => {
+    let parts = partsByTileId.get(tile.id);
+    if (!parts) {
+      parts = (trees.get(tile.nodeId)?.children ?? []).map((part, i) => ({ label: part.label || `Part ${i + 1}`, ids: subtreeIds(part) }));
+      partsByTileId.set(tile.id, parts);
+    }
+    return parts;
+  };
   // A drop's Proof checks look at its Player's Proof screenshots whatever their status, so a list filtered by status
   // (pending, say) still reads every Proof screenshot of the bingo.
   const proofs = status
@@ -576,13 +588,14 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typ
     if (!isDrop(d.submission)) {
       const tile = tileById.get(d.submission.proofTileId!)!;
       const task = d.submission.proofTaskId ? trees.get(tile.nodeId)?.children.find((t) => t.id === d.submission.proofTaskId) : undefined;
-      return { ...d, leaves: [], tile, team: r.team, proofTaskLabel: task ? (task.label ?? tile.name) : null, proofChecks: [] };
+      return { ...d, leaves: [], tile, team: r.team, proofTaskLabel: task ? (task.label ?? tile.name) : null, partLabels: [], proofChecks: [] };
     }
     const claimedNodeIds = [...new Set(d.claims.map((c) => c.nodeId))];
     const leaves = claimedNodeIds.map((id) => leafById.get(id)!).filter(Boolean);
     const firstLeafId = claimedNodeIds[0];
     const tile = firstLeafId ? tileOf(firstLeafId) : null;
-    return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [] };
+    const partLabels = tile ? partsOf(tile).filter((p) => claimedNodeIds.some((id) => p.ids.has(id))).map((p) => p.label) : [];
+    return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, partLabels, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [] };
   });
 }
 
