@@ -72,14 +72,16 @@ export async function upsertLoginUser(
 // Asks Discord for the signer's member record in DISCORD_GUILD_ID. A 404
 // means they aren't in the server; anything else (rate limit, outage) is
 // treated as unknown so a flaky lookup never revokes access.
-async function fetchGuildMembership(accessToken: string): Promise<GuildMembership> {
+export async function fetchGuildMembership(accessToken: string): Promise<GuildMembership> {
   try {
     const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
     const member = (await rest.get(`/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`)) as APIGuildMember;
     return { inGuild: true, nick: member.nick ?? null };
   } catch (err) {
     if (err instanceof DiscordAPIError && err.status === 404) return { inGuild: false };
-    log.warn("guild membership lookup failed", { err });
+    // Discord answering with any other error goes to Sentry (log.error); not reaching it at all is only logged.
+    if (err instanceof DiscordAPIError) log.error("guild membership lookup failed", { err });
+    else log.warn("guild membership lookup failed", { err });
     return null;
   }
 }

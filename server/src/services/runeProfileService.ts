@@ -37,12 +37,14 @@ export class RuneProfileClient {
       if (this.apiKey) headers["X-API-Key"] = this.apiKey;
       const res = await this.fetchImpl(`${RUNEPROFILE_BASE_URL}/accounts/${encodeURIComponent(rsn)}/full`, { headers });
       if (res.ok) return await res.json();
+      // Any non-2xx but a 404 (an account RuneProfile doesn't track) goes to Sentry: log.error with an error.
+      const err = new Error(`GET /accounts/${rsn}/full: HTTP ${res.status}`);
       if (res.status === 429) {
         const retryAfterSec = Number(res.headers.get("retry-after"));
         this.rateLimitedUntil = Date.now() + (Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 60_000);
-        log.warn("runeprofile rate limited", { until: new Date(this.rateLimitedUntil).toISOString() });
+        log.error("runeprofile rate limited", { until: new Date(this.rateLimitedUntil).toISOString(), err });
       } else if (res.status !== 404) {
-        log.warn("runeprofile request failed", { status: res.status, rsn });
+        log.error("runeprofile request failed", { status: res.status, rsn, err });
       }
     } catch (err) {
       log.warn("runeprofile request failed", { rsn, err });

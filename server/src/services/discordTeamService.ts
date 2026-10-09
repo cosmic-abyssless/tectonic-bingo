@@ -78,6 +78,15 @@ export class DiscordSyncApiError extends Error {
 
 const LONG_RATE_LIMIT_MS = 30_000;
 
+/**
+ * Discord answering with an error the sync doesn't handle itself (it handles a role or channel deleted by hand, and a
+ * Player who isn't in the server): reported to Sentry, since the settings panel and the audit log alone are easy to
+ * miss. Not a long rate limit (the sync tries again after it), nor Discord being unreachable.
+ */
+function isUnexpectedDiscordAnswer(err: unknown): err is DiscordSyncApiError {
+  return err instanceof DiscordSyncApiError && err.status !== null && err.retryAfterMs === null;
+}
+
 /** How long a rate limit holds a request: a sublimit (a channel's renames) is in retryAfter, not the bucket's reset. */
 function rateLimitWait(limit: Pick<RateLimitData, "timeToReset" | "retryAfter" | "sublimitTimeout">): number {
   return Math.max(limit.timeToReset, limit.retryAfter, limit.sublimitTimeout);
@@ -396,7 +405,8 @@ async function syncNow(db: Db, bingoId: string, options: DiscordSyncOptions, sou
     if (err instanceof DiscordSyncApiError && err.retryAfterMs !== null) {
       setTimeout(() => void syncDiscordTeams(db, bingoId, {}, source), err.retryAfterMs + 1000).unref();
     }
-    log.warn("discord team sync failed", { bingoId, err: message });
+    if (isUnexpectedDiscordAnswer(err)) log.error("discord team sync failed", { bingoId, err });
+    else log.warn("discord team sync failed", { bingoId, err: message });
     // Recorded once per distinct failure: a broken setup would otherwise add one per change.
     if (bingo.discordSyncError !== message) {
       audit(db, { action: "discord.sync_failed", bingoId, entity: { type: "bingo", id: bingoId, label: bingo.name }, details: { message }, actor: "system" });
@@ -662,7 +672,8 @@ async function removeNow(db: Db, bingoId: string, source: DiscordApiSource): Pro
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.warn("discord team removal failed", { bingoId, err: message });
+    if (isUnexpectedDiscordAnswer(err)) log.error("discord team removal failed", { bingoId, err });
+    else log.warn("discord team removal failed", { bingoId, err: message });
     if (bingo) db.update(bingos).set({ discordSyncError: message }).where(eq(bingos.id, bingoId)).run();
     return { ok: false, deleted, message } as const;
   }

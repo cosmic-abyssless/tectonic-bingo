@@ -5,6 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { ChannelType, OverwriteType } from "discord-api-types/v10";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
+import { log } from "../log";
 import { deleteBingo, updateBingoSettings } from "./bingoService";
 import { discordChannelName, discordTextChannelName, type DiscordChannelTemplate } from "@bingo/shared";
 import {
@@ -396,6 +397,28 @@ describe("syncDiscordTeams", () => {
     const { bingo } = seed();
     await syncDiscordTeams(db, bingo.id, {}, guild);
     expect(guild.calls).toEqual([]);
+  });
+
+  it("reports Discord's error answers to Sentry (log.error with the error), but not a long rate limit or Discord being unreachable", async () => {
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    const { bingo } = seed();
+    guild.failNext = new DiscordSyncApiError("Discord: Missing Permissions", 403, 50013);
+    await syncDiscordTeams(db, bingo.id, {}, guild);
+    expect(error).toHaveBeenCalledWith("discord team sync failed", { bingoId: bingo.id, err: expect.any(DiscordSyncApiError) });
+
+    error.mockClear();
+    guild.failNext = new DiscordSyncApiError("Couldn't reach Discord: ECONNRESET", null, null);
+    await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    vi.useFakeTimers();
+    try {
+      guild.failNext = new DiscordSyncApiError("Discord's rate limit holds PATCH /channels/:id for 300s", 429, null, 300_000);
+      await syncDiscordTeams(db, bingo.id, { force: true }, guild);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it("keeps a failure for the settings panel, audits it once, and clears it on the next success", async () => {
