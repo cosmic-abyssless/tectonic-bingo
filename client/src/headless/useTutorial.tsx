@@ -4,8 +4,8 @@ import { useMarkTutorialSeen } from "../api/queries";
 import { NavMenuControlContext } from "../core/ui/headerMenu";
 import { useUrlParam } from "../core/ui/useUrlParam";
 import { useBingoPageRaw, useBingoPage } from "./BingoPageProvider";
-import { useTileModel } from "./BoardProvider";
-import { TUTORIAL_IDLE, TUTORIAL_STEP_COUNT, tutorialAutoStarts, tutorialReducer, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialOpening, type TutorialState, type TutorialStep } from "./tutorial";
+import { useBoardModel, useTileModel } from "./BoardProvider";
+import { TUTORIAL_IDLE, tutorialAutoStarts, tutorialReducer, tutorialStepCount, tutorialStepLabel, tutorialSteps, tutorialTileFacts, type TutorialAction, type TutorialOpening, type TutorialState, type TutorialStep } from "./tutorial";
 import type { TutorialCardModel } from "./types";
 
 /**
@@ -56,7 +56,8 @@ export function useTutorialSubmitSeed(): TutorialContextValue["submitSeed"] {
  */
 export function TutorialProvider({ children }: { children: ReactNode }) {
   const page = useBingoPage();
-  const { tiles } = useBingoPageRaw();
+  const { tiles, progressLoaded } = useBingoPageRaw();
+  const board = useBoardModel();
   const { user, confirmed } = useAuth();
   const markSeen = useMarkTutorialSeen();
   const [state, setState] = useState(TUTORIAL_IDLE);
@@ -65,34 +66,43 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const tileOpen = page.openTile.id !== null;
   const tileId = state.tileId ?? page.openTile.id;
   const facts = tutorialTileFacts(tiles.find((t) => t.id === tileId));
-  const steps = useMemo(() => tutorialSteps(facts, page.bingo.name), [facts.needsProof, facts.pointsWait, page.bingo.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const steps = useMemo(() => tutorialSteps(facts, page.bingo.name, state.knowsTiles), [facts.needsProof, facts.pointsWait, page.bingo.name, state.knowsTiles]); // eslint-disable-line react-hooks/exhaustive-deps
   const dispatch = (action: TutorialAction) => setState((s) => tutorialReducer(steps, s, action));
+  // A Player who has already marked Task interest has opened a Tile: they start without the Tile's steps, with the
+  // Submit flow at step 7 on a Tile they're going for (one that can take a Submission, if any can).
+  const start = (replay: boolean) => {
+    const mine = board.tiles.filter((t) => t.interest.mine);
+    const seed = mine.find((t) => t.canSubmit) ?? mine[0];
+    dispatch({ type: "start", replay, knowsTiles: mine.length > 0, tileId: seed?.id ?? null });
+  };
   const step = state.active ? (steps[state.index] ?? null) : null;
 
   const onOwnTeamBoard = page.stageView === "board" && !!page.myTeam && page.viewing.team?.id === page.myTeam.id;
   const canReplay = page.bingo.stage === "live" && page.stageView === "board" && !!page.viewing.team;
 
   // Once per account, the first time a Player sees their own Team's Board while Live (and only once /api/me has said
-  // whether they've seen it: the record cached from last time may be stale). It starts right away, whatever's open.
-  const autoStarts = confirmed && !!user && tutorialAutoStarts({ stage: page.bingo.stage, onOwnTeamBoard, seen: !!user.tutorialSeenAt });
+  // whether they've seen it: the record cached from last time may be stale), and their Team's Task interest has loaded
+  // (it decides whether the Tile's steps are shown). It starts right away, whatever's open.
+  const autoStarts = confirmed && !!user && progressLoaded && tutorialAutoStarts({ stage: page.bingo.stage, onOwnTeamBoard, seen: !!user.tutorialSeenAt });
   const autoStarted = useRef(false);
   useEffect(() => {
     if (!autoStarts || autoStarted.current) return;
     autoStarted.current = true;
-    dispatch({ type: "start", replay: false });
+    start(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStarts]);
 
   // ☰ → Tutorial from a page away from the Board comes here with ?open=tutorial (see useBingoMenuEntries). The Board
-  // picks the viewer's Team a moment after it loads, so wait for it, unless there's no Team Board to wait for.
+  // picks the viewer's Team a moment after it loads, so wait for it (and its Task interest), unless there's no Team
+  // Board to wait for.
   const [openOnArrival, setOpenOnArrival] = useUrlParam("open");
   useEffect(() => {
     if (openOnArrival !== "tutorial") return;
-    if (canReplay) dispatch({ type: "start", replay: true });
+    if (canReplay && progressLoaded) start(true);
     else if (page.myTeam && page.bingo.stage === "live") return;
     setOpenOnArrival(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openOnArrival, canReplay]);
+  }, [openOnArrival, canReplay, progressLoaded]);
 
   // The real opens and closes move it: a ✋ step goes on once its thing is open, and closing what a step explains
   // steps back to the step that opens it.
@@ -133,7 +143,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
           title: step.title,
           lines: step.lines,
           label: tutorialStepLabel(steps, state.index, state.passed),
-          count: TUTORIAL_STEP_COUNT,
+          count: tutorialStepCount(steps),
           primary: step.waitsFor ? null : { label: state.index === 0 ? "Start" : isLast ? "Finish" : "Next", onPress: next },
           waitsForClick: !!step.waitsFor,
           large: step.large,
@@ -142,7 +152,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
         }
       : null,
     canReplay,
-    start: () => dispatch({ type: "start", replay: true }),
+    start: () => start(true),
     next,
     back: () => dispatch({ type: "back" }),
     skip: end,
@@ -155,8 +165,9 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     },
   };
 
-  // The Submit flow opened at step 6 starts on the Tile from step 3 (and its first Part still open), so step 7 can
-  // point at what you got and, where the Tile needs one, the Proof screenshot. Only a Tile that can take a Submission.
+  // The Submit flow opened at step 6 starts on the Tile from step 3, or the one they're going for when that step was left
+  // out (and its first Part still open), so step 7 can point at what you got and, where the Tile needs one, the Proof
+  // screenshot. Only a Tile that can take a Submission.
   const seedTile = useTileModel(state.tileId);
   const seeding = !!step && (step.waitsFor === "submit" || step.inside === "submit");
   const submitSeed = seeding && seedTile?.canSubmit ? { tileId: seedTile.id, taskId: seedTile.tasks.find((t) => t.available)?.id } : null;
