@@ -30,7 +30,7 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 
 ### Codeword
 A unique, secret text phrase generated for each Team in a Bingo that players must show in their verification screenshots (e.g. spoken in public chat, or in a clan chat message) to prove the screenshot was taken during this specific Bingo.
-- **Who sees it:** A Player sees their own Team's, only while the Bingo is Live (any earlier would let a screenshot be staged before the start): beside the Board's title and in the Submit flow. Moderators see the Codeword of whichever Team they're submitting for or reviewing.
+- **Who sees it:** A Player sees their own Team's, only while the Bingo is Live (any earlier would let a screenshot be staged before the start): beside the Board's title and in the Submit flow, and, where the Bingo has Discord channels, pinned in the Team's text channel as the Bingo goes Live. Moderators see the Codeword of whichever Team they're submitting for or reviewing.
 
 ### Pre-load
 A task or requirement that players are permitted to prepare before the Bingo goes `live` (or before a specific gate opens), without completing the final step. The usual case is pre-loading a chest: finishing a run before the Bingo starts and opening the chest once it's Live (common for the Corrupted Gauntlet).

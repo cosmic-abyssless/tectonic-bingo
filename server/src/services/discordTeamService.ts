@@ -62,6 +62,12 @@ export interface ChannelBody {
   permission_overwrites: PermissionOverwrite[];
 }
 
+export interface MessageBody {
+  content: string;
+  /** Who the message may notify: only the roles listed, never @everyone or anyone named in the text. */
+  allowed_mentions: { parse: never[]; roles: string[] };
+}
+
 /** Discord answered with an error. `code` is Discord's JSON error code (https://discord.com/developers/docs/topics/opcodes-and-status-codes#json). */
 export class DiscordSyncApiError extends Error {
   constructor(
@@ -92,6 +98,7 @@ function rateLimitWait(limit: Pick<RateLimitData, "timeToReset" | "retryAfter" |
   return Math.max(limit.timeToReset, limit.retryAfter, limit.sublimitTimeout);
 }
 const UNKNOWN_CHANNEL = 10003;
+const UNKNOWN_MESSAGE = 10008;
 const UNKNOWN_MEMBER = 10007;
 const UNKNOWN_ROLE = 10011;
 const UNKNOWN_USER = 10013;
@@ -131,6 +138,12 @@ export interface DiscordGuildApi {
   deleteChannel(channelId: string, reason: string): Promise<void>;
   /** Every channel in the server: to check an existing category and place the Teams' channels after what's in it. */
   listChannels(): Promise<GuildChannelInfo[]>;
+  /** Posts a message in a channel; its id. */
+  sendMessage(channelId: string, body: MessageBody): Promise<string>;
+  /** Changes a message's text in place: it stays pinned, and nobody is pinged again. */
+  editMessage(channelId: string, messageId: string, body: MessageBody): Promise<void>;
+  /** Pinning a message that's already pinned is fine. */
+  pinMessage(channelId: string, messageId: string, reason: string): Promise<void>;
 }
 
 /** Discord's REST API with the bot's token. @discordjs/rest queues requests to stay inside Discord's rate limits. */
@@ -195,6 +208,18 @@ export class RestDiscordGuildApi implements DiscordGuildApi {
 
   async deleteChannel(channelId: string, reason: string): Promise<void> {
     await this.call(() => this.rest.delete(Routes.channel(channelId), { reason }));
+  }
+
+  async sendMessage(channelId: string, body: MessageBody): Promise<string> {
+    return ((await this.call(() => this.rest.post(Routes.channelMessages(channelId), { body }))) as { id: string }).id;
+  }
+
+  async editMessage(channelId: string, messageId: string, body: MessageBody): Promise<void> {
+    await this.call(() => this.rest.patch(Routes.channelMessage(channelId, messageId), { body }));
+  }
+
+  async pinMessage(channelId: string, messageId: string, reason: string): Promise<void> {
+    await this.call(() => this.rest.put(Routes.channelMessagesPin(channelId, messageId), { reason }));
   }
 
   private async call<T>(fn: () => Promise<T>): Promise<T> {
@@ -264,6 +289,27 @@ function strayGuildId(db: Db, bingoId: string, guildId: string): string | null {
 export function roleColor(hex: string | null): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex?.trim() ?? "");
   return m ? parseInt(m[1]!, 16) : 0;
+}
+
+/**
+ * The message pinned in each Team's first text channel as the Bingo goes Live (CONTEXT.md "Codeword"): the Team's
+ * Codeword and how to show it, from the clan's rules, pinging the Team's role. `siteUrl` is the Bingo's page, in <> so
+ * Discord adds no preview under the pin.
+ */
+export function codewordMessage({ roleId, codeword, siteUrl }: { roleId: string; codeword: string; siteUrl: string | null }): MessageBody {
+  const content = [
+    `<@&${roleId}>`,
+    `📌 **Your team's Codeword: \`${codeword}\`**`,
+    "",
+    "The bingo is live! Every submission screenshot needs this Codeword on screen:",
+    "- **RuneLite:** show it with the **Clan Events** plugin, along with the date and time.",
+    "- **Mobile or vanilla client:** type the Codeword in the chatbox.",
+    "",
+    "Without it, a screenshot doesn't count as evidence. Screenshots also need to be full-client.",
+    "",
+    `You can always find your Codeword on the bingo site too, next to the board's title and in the Submit form${siteUrl ? `: <${siteUrl}>` : "."}`,
+  ].join("\n");
+  return { content, allowed_mentions: { parse: [], roles: [roleId] } };
 }
 
 const bits = (...flags: bigint[]) => flags.reduce((a, b) => a | b, 0n).toString();
@@ -459,15 +505,7 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
       }
     }
     const id = await ops.create();
-    const appliedJson = JSON.stringify(applied(undefined));
-    if (row) {
-      db.update(discordResources).set({ discordId: id, appliedJson, updatedAt: clockNow() }).where(eq(discordResources.id, row.id)).run();
-      row.discordId = id;
-      row.appliedJson = appliedJson;
-    } else {
-      const values = { bingoId: bingo.id, guildId: api.guildId, teamId: where.teamId, kind: where.kind, channelKey: where.channelKey ?? null, discordId: id, appliedJson, createdAt: clockNow(), updatedAt: clockNow() };
-      rows.push(db.insert(discordResources).values(values).returning().get());
-    }
+    recordResource(db, rows, row, { bingoId: bingo.id, guildId: api.guildId, teamId: where.teamId, kind: where.kind, channelKey: where.channelKey ?? null }, id, applied(undefined));
     changes.created.push(label);
     return { id, recreated: true };
   }
@@ -534,17 +572,140 @@ async function reconcile(db: Db, bingo: Bingo, api: DiscordGuildApi, options: Di
   // Team's channel for an entry taken off the list (or whose type changed, which Discord can only do by replacing it).
   const teamIds = new Set(teamRows.map((t) => t.id));
   const wantedChannels = new Set(templates.map((t) => `${channelKind(t)}:${t.key}`));
+  // A Team's Codeword message row lives as long as the Team (postCodewords follows its channel).
   const orphans = rows.filter(
     (r) =>
-      (r.teamId !== null && (!teamIds.has(r.teamId) || (r.kind !== "role" && !wantedChannels.has(`${r.kind}:${r.channelKey}`)))) ||
+      (r.teamId !== null && (!teamIds.has(r.teamId) || (r.kind !== "role" && r.kind !== "codeword_message" && !wantedChannels.has(`${r.kind}:${r.channelKey}`)))) ||
       // The sync's own category, once the channels have moved to an existing one (deleted last: see orphanOrder).
       (r.kind === "category" && !!bingo.discordCategoryId),
   );
   for (const row of orphanOrder(orphans)) {
     await deleteResource(db, row, reason, api);
+    // Gone from what this sync knows of too: postCodewords looks for the channel a message is in.
+    rows.splice(rows.indexOf(row), 1);
+    // A Codeword message goes with its channel, which says so itself.
+    if (row.kind === "codeword_message") continue;
     const name = parseApplied<ChannelBody & RoleBody>(row).name;
     changes.deleted.push(`${row.kind.replace("_", " ")}${name ? ` "${name}"` : ""}`);
   }
+
+  if (bingo.stage === "live") await postCodewords(db, bingo, api, teamRows, templates, rowFor, rows, options, reason, changes);
+}
+
+interface CodewordApplied {
+  /** The channel it's in. */
+  channelId: string;
+  /** The Codeword it says: a Codeword changed since is edited into it. */
+  codeword: string;
+  pinned: boolean;
+}
+
+/**
+ * Once the Bingo is Live: the Codeword message (codewordMessage) for each Team, posted in its first text channel and
+ * pinned, once (one row per Team, channelKey null). Not again when the Bingo goes back to Board revealed and Live again,
+ * nor when the channel list is reordered: the message stays in the channel it's in while that channel exists, and is
+ * posted anew (in the first text channel) only when it's gone, or when the message itself was deleted by hand. A changed
+ * Codeword is edited into it, which keeps the pin and pings nobody again. A pin that didn't take is tried at the next
+ * sync, and Sync now (`force`) pins it again, putting back one unpinned by hand. A Team whose channel comes later gets it
+ * then. Each Team is tried even when another's fails; the first failure fails the sync, so the settings panel shows it
+ * (and, for a rate limit, the sync tries again), and the others are logged.
+ */
+async function postCodewords(
+  db: Db,
+  bingo: Bingo,
+  api: DiscordGuildApi,
+  teamRows: (typeof teams.$inferSelect)[],
+  templates: DiscordChannelTemplate[],
+  rowFor: (teamId: string | null, kind: ResourceKind, channelKey?: string | null) => ResourceRow | undefined,
+  rows: ResourceRow[],
+  options: DiscordSyncOptions,
+  reason: string,
+  changes: SyncChanges,
+): Promise<void> {
+  const template = templates.find((t) => t.type === "text");
+  if (!template) return;
+  const siteUrl = process.env.CLIENT_URL ? `${process.env.CLIENT_URL.replace(/\/+$/, "")}/b/${bingo.slug}` : null;
+  let failure: unknown = null;
+  for (const team of teamRows) {
+    const role = rowFor(team.id, "role");
+    const firstText = rowFor(team.id, "text_channel", template.key);
+    if (!role || !firstText) continue;
+    const message = codewordMessage({ roleId: role.discordId, codeword: team.codeword, siteUrl });
+    const row = rowFor(team.id, "codeword_message");
+    const applied = row ? parseApplied<CodewordApplied>(row) : null;
+    // Where the message is, if that's still one of the Team's text channels.
+    const home = applied && rows.find((r) => r.teamId === team.id && r.kind === "text_channel" && r.discordId === applied.channelId);
+    const channelName = parseApplied<ChannelBody>(home ?? firstText).name ?? discordChannelName(template, team.name);
+
+    const post = async () => {
+      const messageId = await api.sendMessage(firstText.discordId, message);
+      const posted = recordResource(db, rows, row, { bingoId: bingo.id, guildId: api.guildId, teamId: team.id, kind: "codeword_message", channelKey: null }, messageId, {
+        channelId: firstText.discordId,
+        codeword: team.codeword,
+        pinned: false,
+      } satisfies CodewordApplied);
+      changes.created.push(`Codeword message in #${parseApplied<ChannelBody>(firstText).name ?? channelName}`);
+      await api.pinMessage(firstText.discordId, messageId, reason);
+      saveApplied(db, posted, { ...parseApplied<CodewordApplied>(posted), pinned: true });
+    };
+
+    try {
+      if (!row || !applied || !home) {
+        await post();
+        continue;
+      }
+      try {
+        if (applied.codeword !== team.codeword) {
+          await api.editMessage(home.discordId, row.discordId, message);
+          saveApplied(db, row, { ...applied, codeword: team.codeword });
+          changes.updated.push(`Codeword message in #${channelName}`);
+        }
+        if (!applied.pinned || options.force) {
+          await api.pinMessage(home.discordId, row.discordId, reason);
+          saveApplied(db, row, { ...parseApplied<CodewordApplied>(row), pinned: true });
+        }
+      } catch (err) {
+        // The message was deleted by hand: posted again.
+        if (!(err instanceof DiscordSyncApiError && (err.code === UNKNOWN_MESSAGE || err.status === 404))) throw err;
+        await post();
+      }
+    } catch (err) {
+      const wrapped =
+        err instanceof DiscordSyncApiError
+          ? new DiscordSyncApiError(
+              `Posting the Codeword in #${channelName}: ${err.message}${err.code === MISSING_PERMISSIONS ? " (the bot's role needs Send Messages and Pin Messages)" : ""}`,
+              err.status,
+              // Its own hint is above: not syncNow's one about roles.
+              err.code === MISSING_PERMISSIONS ? null : err.code,
+              err.retryAfterMs,
+            )
+          : err;
+      if (failure) log.warn("discord codeword message failed too", { bingoId: bingo.id, teamId: team.id, err: wrapped instanceof Error ? wrapped.message : String(wrapped) });
+      else failure = wrapped;
+    }
+  }
+  if (failure) throw failure;
+}
+
+/** Records what the sync made in Discord: points `row` (if any) at it, or adds a row for it. */
+function recordResource(
+  db: Db,
+  rows: ResourceRow[],
+  row: ResourceRow | undefined,
+  where: Pick<ResourceRow, "bingoId" | "guildId" | "teamId" | "kind" | "channelKey">,
+  discordId: string,
+  applied: object,
+): ResourceRow {
+  const appliedJson = JSON.stringify(applied);
+  if (row) {
+    db.update(discordResources).set({ discordId, appliedJson, updatedAt: clockNow() }).where(eq(discordResources.id, row.id)).run();
+    row.discordId = discordId;
+    row.appliedJson = appliedJson;
+    return row;
+  }
+  const added = db.insert(discordResources).values({ ...where, discordId, appliedJson, createdAt: clockNow(), updatedAt: clockNow() }).returning().get();
+  rows.push(added);
+  return added;
 }
 
 /**
@@ -648,13 +809,16 @@ async function syncRoleMembers(db: Db, row: ResourceRow, roleId: string, wanted:
 
 /** Channels before the category they sit in and before the role their permissions name. */
 function orphanOrder(rows: ResourceRow[]): ResourceRow[] {
-  const rank: Record<ResourceKind, number> = { text_channel: 0, voice_channel: 0, role: 1, category: 2 };
+  const rank: Record<ResourceKind, number> = { codeword_message: 0, text_channel: 0, voice_channel: 0, role: 1, category: 2 };
   return [...rows].sort((a, b) => rank[a.kind] - rank[b.kind]);
 }
 
 async function deleteResource(db: Db, row: ResourceRow, reason: string, api: DiscordGuildApi): Promise<void> {
   try {
-    if (row.kind === "role") await api.deleteRole(row.discordId, reason);
+    // A Codeword message is only forgotten: it goes with its channel, and while the channel stays it stays pinned there.
+    if (row.kind === "codeword_message") {
+      /* nothing to delete in Discord */
+    } else if (row.kind === "role") await api.deleteRole(row.discordId, reason);
     else await api.deleteChannel(row.discordId, reason);
   } catch (err) {
     // Already deleted by hand: nothing left to do.
@@ -693,7 +857,7 @@ async function removeNow(db: Db, bingoId: string, source: DiscordApiSource): Pro
   try {
     for (const row of orphanOrder(rows)) {
       await deleteResource(db, row, reason, apis.get(row.guildId)!);
-      deleted++;
+      if (row.kind !== "codeword_message") deleted++;
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -730,6 +894,6 @@ export function getDiscordSyncStatus(db: Db, bingo: Bingo, source?: DiscordApiSo
       roleId: idOf(t.id, "role"),
       channels: templates.map((c) => ({ key: c.key, channelId: idOf(t.id, channelKind(c), c.key) })),
     })),
-    resourceCount: rows.length,
+    resourceCount: rows.filter((r) => r.kind !== "codeword_message").length,
   };
 }
