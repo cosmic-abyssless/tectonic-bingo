@@ -1,29 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { findBestMatch, fuzzyIncludes, levenshteinWithin, normalizeForMatch } from "./textMatchService";
+import { approxIncludes, findBestMatch, fuzzyIncludes, normalizeForMatch, wrappedLines } from "./textMatchService";
 
 describe("normalizeForMatch", () => {
   it("lowercases and strips everything but letters and digits", () => {
     expect(normalizeForMatch("Rogues' Den")).toBe("roguesden");
     expect(normalizeForMatch("Mastering Mixology")).toBe("masteringmixology");
     expect(normalizeForMatch("0ldSchoolRuneScepe.")).toBe("0ldschoolrunescepe");
-  });
-});
-
-describe("levenshteinWithin", () => {
-  it("accepts identical strings at distance 0", () => {
-    expect(levenshteinWithin("abcdefghij", "abcdefghij", 0)).toBe(true);
-  });
-
-  it("accepts exactly the boundary distance", () => {
-    expect(levenshteinWithin("abcdefghij", "xbcdefghik", 2)).toBe(true);
-  });
-
-  it("rejects one edit past the boundary", () => {
-    expect(levenshteinWithin("abcdefghij", "xxxdefghij", 2)).toBe(false);
-  });
-
-  it("rejects when the length difference alone exceeds max", () => {
-    expect(levenshteinWithin("short", "a-much-longer-string", 2)).toBe(false);
   });
 });
 
@@ -87,6 +69,18 @@ describe("fuzzyIncludes — codeword mode (explicit maxEdits: 1 regardless of le
   });
 });
 
+describe("approxIncludes", () => {
+  it("finds a pattern anywhere in the text within the allowed edits, and no further", () => {
+    expect(approxIncludes("valuabledropspiritshjeld57249coins", "spiritshield", 1)).toBe(true); // a substitution
+    expect(approxIncludes("valuabledropspiritshjeld57249coins", "spiritshield", 0)).toBe(false);
+    expect(approxIncludes("dropspirtshield", "spiritshield", 1)).toBe(true); // a deletion
+    expect(approxIncludes("dropspiriitshield", "spiritshield", 1)).toBe(true); // an insertion
+    expect(approxIncludes("dropspirtshjeld", "spiritshield", 1)).toBe(false); // two edits
+    expect(approxIncludes("dropspirtshjeld", "spiritshield", 2)).toBe(true);
+    expect(approxIncludes("short", "spiritshield", 2)).toBe(false);
+  });
+});
+
 describe("findBestMatch", () => {
   const items = [
     { nodeId: "node-a", itemName: "Ahrim's hood", tileId: "tile-a", tileName: "Barrows" },
@@ -101,4 +95,94 @@ describe("findBestMatch", () => {
   it("returns null when nothing matches", () => {
     expect(findBestMatch(["Nothing relevant here"], items)).toEqual({ detectedMatch: null });
   });
+
+  // Seen on real screenshots of the Historical Bingo "Who's That Pokémon!?", where the first item in query order used to
+  // win whatever else was on screen.
+  const item = (itemName: string) => ({ nodeId: itemName, itemName, tileId: "t", tileName: "t" });
+
+  it("prefers a name read exactly over one read nearly, whatever the query order", () => {
+    // "Kodai wand" is one edit from "Kodai wane"; "Saradomin sword" is there as written.
+    expect(findBestMatch(["Kodai wane", "Valuable drop: Saradomin sword"], [item("Kodai wand"), item("Saradomin sword")]).detectedMatch?.itemName).toBe("Saradomin sword");
+  });
+
+  it("gives a name inside another matched name way to it", () => {
+    const lines = ["Valuable drop: Enhanced crystal weapon seed"];
+    expect(findBestMatch(lines, [item("Crystal weapon seed"), item("Enhanced crystal weapon seed")]).detectedMatch?.itemName).toBe("Enhanced crystal weapon seed");
+  });
+
+  it("finds a short name only as whole words: no Pet inside competition", () => {
+    expect(findBestMatch(["Wise Old Man competition", "Valuable drop: Blood shard"], [item("Pet"), item("Blood shard")]).detectedMatch?.itemName).toBe("Blood shard");
+    expect(findBestMatch(["You have a funny feeling like you would have been followed: Pet"], [item("Pet")]).detectedMatch?.itemName).toBe("Pet");
+  });
+
+  // The review's inputs for #490: each was a way the ranking could pick the wrong item.
+  it("prefers a name read exactly across a wrapped line over one read nearly on a single line", () => {
+    const lines = ["[22:31] [Tectonic] Flaxpicker_1 received a new collection log item: Eclipse moon", "helm (738/1698)", "Kodai wane"];
+    expect(findBestMatch(lines, [item("Kodai wand"), item("Eclipse moon helm")]).detectedMatch?.itemName).toBe("Eclipse moon helm");
+  });
+
+  it("ranks a short name standing as a word below a long name read with one slip", () => {
+    const lines = ["Valuable drop: Tumeken's shadovv", "my pet is cute"];
+    expect(findBestMatch(lines, [item("Pet"), item("Tumeken's shadow")]).detectedMatch?.itemName).toBe("Tumeken's shadow");
+  });
+
+  it("only lets a containing name win when the shorter one was never read on a line of its own, whatever the line order", () => {
+    const items = [item("Crystal weapon seed"), item("Enhanced crystal weapon seed")];
+    const lines = ["Valuable drop: Crystal weapon seed", "Bank: Enhanced crystal weapon seed"];
+    expect(findBestMatch(lines, items).detectedMatch?.itemName).toBe("Crystal weapon seed");
+    expect(findBestMatch([...lines].reverse(), items).detectedMatch?.itemName).toBe("Crystal weapon seed");
+  });
+
+  it("takes no edit tolerance on a joined line", () => {
+    // One edit from "Eclipse moon helm" only once the two lines are joined.
+    expect(findBestMatch(["item: Eclipse moon", "hekm (738/1698)"], [item("Eclipse moon helm")]).detectedMatch).toBeNull();
+  });
+
+  // A dropped space ("VorkiPet") hides a short name. Letting one match at the start or end of a word would find it, but
+  // replayed on 500 real screenshots it brought a bogus "Pet" back and found nothing new, so short names stay whole words.
+  it("needs a short name to stand as a whole word, even where OCR dropped the space after it", () => {
+    expect(findBestMatch(["I got a VorkiPet!"], [item("Vorki")]).detectedMatch).toBeNull();
+  });
+
+  it("keeps query order between unrelated names read equally well, not the longest", () => {
+    const lines = ["Bank: Tumeken's shadow", "Valuable drop: Warrior ring"];
+    expect(findBestMatch(lines, [item("Warrior ring"), item("Tumeken's shadow")]).detectedMatch?.itemName).toBe("Warrior ring");
+  });
 });
+
+describe("fuzzyIncludes for a short Codeword", () => {
+  it("still finds it run into the date beside it", () => {
+    expect(fuzzyIncludes(["Frost05/03/2026 20:31 UTC"], "Frost", { maxEdits: 1 })).toBe(true);
+  });
+});
+
+// A chat message wrapped onto a second line: a real screenshot from the Historical Bingo "Who's That Pokémon!?", the
+// clan broadcast for an Eclipse Moon helm, as each engine read it (trimmed to the lines that matter).
+describe("findBestMatch on wrapped lines", () => {
+  const helm = { nodeId: "node-helm", itemName: "Eclipse moon helm", tileId: "tile-moons", tileName: "Moons of Peril" };
+  // The local engine: the two halves in order.
+  const wrapped = ["Eclipse Moon 84", "[22:31] [Tectonic] Flaxpicker_1 received a neu collection log item: Eclipse moon", "helm (738/1698)", "Flaxpicker_1: Press Enter to Chat..."];
+  // Cloud Vision: the continuation first.
+  const continuationFirst = ["Eclipse Moon", "[22:31] [Tectonic]", "helm (738/1698)", "Flaxoicker I received a new collection log item: Eclipse moon", "Flaxpicker 1: Press Enter to Chat..."];
+
+  it("finds a name split across a line and its wrapped continuation, whichever order the engine read them in", () => {
+    expect(findBestMatch(wrapped, [helm]).detectedMatch?.nodeId).toBe("node-helm");
+    expect(findBestMatch(continuationFirst, [helm]).detectedMatch?.nodeId).toBe("node-helm");
+  });
+
+  it("doesn't join a line with one that starts something of its own (a capital, a bracket, a timestamp)", () => {
+    expect(findBestMatch(["Eclipse Moon", "Helm of neitiznot"], [helm]).detectedMatch).toBeNull();
+    expect(findBestMatch(["Eclipse Moon", "[22:31] helm"], [helm]).detectedMatch).toBeNull();
+  });
+
+  it("never lets a join outrank a name found whole on one line, whatever the item order", () => {
+    const shield = { nodeId: "node-shield", itemName: "Spirit shield", tileId: "tile-corp", tileName: "Corporeal Beast" };
+    expect(findBestMatch([...wrapped, "Valuable drop: Spirit shield (57,249 coins)"], [helm, shield]).detectedMatch?.nodeId).toBe("node-shield");
+  });
+
+  it("joins a continuation onto its neighbours only", () => {
+    expect(wrappedLines(["A", "b", "C", "D"])).toEqual(["A b", "C b"]);
+    expect(wrappedLines(["only"])).toEqual([]);
+  });
+});
+
