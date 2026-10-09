@@ -143,12 +143,26 @@ export function duoMoments(mine: WrappedDrop[], theirs: WrappedDrop[], tileOf: (
   return moments;
 }
 
+/** Every drop counted by its item, most dropped first (then by name, so the order is the same every time). */
+function countDropItems(drops: WrappedDrop[]): { itemName: string; drops: number }[] {
+  const counts = new Map<string, number>();
+  for (const d of drops) counts.set(d.itemName, (counts.get(d.itemName) ?? 0) + 1);
+  return [...counts].map(([itemName, n]) => ({ itemName, drops: n })).sort((a, b) => b.drops - a.drops || a.itemName.localeCompare(b.itemName));
+}
+
 /** Review stats over some reviewed Submissions (approved or rejected, with who reviewed them and when). */
 function reviewStats(reviews: { reviewerId: string; status: string; submittedAt: Date; reviewedAt: Date }[], userById: Map<string, AvatarUser>): WrappedReviewStats {
   const waits = reviews.map((r) => Math.max(0, r.reviewedAt.getTime() - r.submittedAt.getTime()));
   const byHour = new Map<number, number>();
   for (const r of reviews) byHour.set(r.reviewedAt.getUTCHours(), (byHour.get(r.reviewedAt.getUTCHours()) ?? 0) + 1);
   const busiest = [...byHour].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  // The one clock hour (on its day) with the most reviews: "Sat 12 Oct, 9 pm".
+  const byClockHour = new Map<number, number>();
+  for (const r of reviews) {
+    const start = Math.floor(r.reviewedAt.getTime() / HOUR_MS) * HOUR_MS;
+    byClockHour.set(start, (byClockHour.get(start) ?? 0) + 1);
+  }
+  const busiestAt = [...byClockHour].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
 
   const perReviewer = new Map<string, { reviewed: number; rejected: number }>();
   for (const r of reviews) {
@@ -174,6 +188,7 @@ function reviewStats(reviews: { reviewerId: string; status: string; submittedAt:
     fastestReviewMs: waits.length ? Math.min(...waits) : null,
     withinHourFraction: waits.length ? waits.filter((w) => w <= HOUR_MS).length / waits.length : null,
     busiestHour: busiest ? { hour: busiest[0], reviews: busiest[1] } : null,
+    busiestClockHour: busiestAt ? { at: new Date(busiestAt[0]).toISOString(), reviews: busiestAt[1] } : null,
     topReviewer: top ? { user: top.user, reviewed: top.reviewed } : null,
     reviewers: reviewers.sort((a, b) => b.rejectionRate - a.rejectionRate || b.reviewed - a.reviewed),
   };
@@ -285,6 +300,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     bingoName: bingo.name,
     totalSubmissions: approvedSubs.length,
     totalGp: drops.reduce((sum, d) => sum + (d.gpValue ?? 0), 0),
+    dropItems: countDropItems(drops),
     rarestDrop: rarest ?? null,
     mostReacted: mostReactedDrop ? { drop: mostReactedDrop, reactions: reactionsOf(mostReacted!) } : null,
     teams: wrappedTeams,

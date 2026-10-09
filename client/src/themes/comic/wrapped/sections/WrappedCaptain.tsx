@@ -22,7 +22,7 @@ export function WrappedCaptain({ section: c }: { section: WrappedCaptainModel })
   return (
     <>
       <WrappedScene steps={2}>
-        <Reveal step={0} className={`${FILL} overflow-hidden`}>
+        <Reveal step={0} emphasis="splash" className={`${FILL} overflow-hidden`}>
           <PanelBody tone="blue" rays="85% 20%" gap={10}>
             {hasArt && (
               <div className={ART}>

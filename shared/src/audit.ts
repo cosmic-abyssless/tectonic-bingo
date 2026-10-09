@@ -239,6 +239,8 @@ export interface AuditDetailsMap {
   "wrapped.art_recut": { section: string; tolerance: number; softness: number };
   "wrapped.art_removed": { section: string };
   "wrapped.art_reordered": { section: string };
+  // An Admin adding the Board's bosses to the side images (their OSRS Wiki images), in the order they went in.
+  "wrapped.art_bosses_added": { bosses: string[] };
   // Credits (CONTEXT.md, #281): an Admin setting or clearing one image's credit, or a category's additional credits.
   "wrapped.art_credit_set": { section: string; name: string | null };
   "wrapped.credits_set": { section: string; count: number };
@@ -870,6 +872,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Wrapped art reordered",
     label: (i) => `${actor(i)} reordered the Wrapped art in "${i.details.section}"`,
+  },
+  "wrapped.art_bosses_added": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Board's bosses added to Wrapped art",
+    label: (i) => `${actor(i)} added ${i.details.bosses.length === 1 ? "a boss" : `${i.details.bosses.length} bosses`} from the Board to the side images: ${i.details.bosses.join(", ")}`,
   },
   "wrapped.art_credit_set": {
     category: "settings",

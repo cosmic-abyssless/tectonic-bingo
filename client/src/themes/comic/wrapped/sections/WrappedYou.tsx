@@ -1,18 +1,22 @@
-import type { WrappedYouModel } from "../../../../headless/types";
+import type { WrappedDropModel, WrappedYouModel } from "../../../../headless/types";
+import { ScreenshotLink } from "../../../../core/submissions/ScreenshotThumb";
 import { Reveal, WrappedScene } from "../../../../core/wrapped/Scene";
 import { WrappedCategoryArt } from "../../../../core/wrapped/WrappedParts";
 import { WikiIcon } from "../../../../core/ui/ItemIcon";
+import { InfoIcon } from "../../../../core/ui/icons";
+import { TooltipSpan } from "../../../../core/ui/Tooltip";
 import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
-import { Body, DropCard, FILL, headlineSize, InkStamp, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
+import { COMIC_FIGURES_FONT } from "../../font";
+import { Body, DropCard, FILL, Gp, headlineSize, InkStamp, InkTitle, Kicker, Lettering, PanelBody, Sfx, StatBurst } from "./sectionParts-you-duo-captain-moderator";
 
-/** The art sits in the splash panel with less room around it than the default sections leave. */
-const ART = "[&>div]:mb-2 [&>ul]:mb-2 [&_img]:max-h-28!";
+/** The art sits in the splash panel with less room around it than the default sections leave; a lone image is let grow. */
+const art = (images: number) => `[&>div]:mb-2 [&>ul]:mb-2 ${images === 1 ? "[&_img]:max-h-48!" : "[&_img]:max-h-28!"}`;
 
 /**
- * You, as two comic pages (#420). Page one is the numbers and the best drop: the splash with the Submission count, the
- * comparison and the Points share, the Drop value, the biggest drops and the luckiest. Page two is the rest of the story:
- * the driest streak, the first and last drops, the biggest day, Titles and Achievements, Wise Old Man, and Draft day.
+ * You, as up to four comic pages (#420): the splash with the Submission count, the comparison, the Points share and the
+ * Drop value; the biggest drops, the luckiest and the driest streak; the first and last drops, the biggest day and the
+ * Titles; then the Achievements, Wise Old Man and Draft day.
  * Every line the default section has is here, in its order; a part with nothing to say is left out and the panels left
  * fill its room.
  */
@@ -21,25 +25,29 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
   const hasArt = y.art.images.length > 0;
   const opening = !!(y.submissions || y.points || hasArt);
 
-  // Page one's panels, one per Reveal step, in the order the default section tells them.
+  // Each page's panels, one per Reveal step, in the order the default section tells them. Four pages of three or four
+  // panels, so no page runs much taller than a 2:3 page (and stretches the page beside it in its spread).
   let a = 0;
   const splash = opening ? a++ : -1;
   const comparison = y.submissions?.comparison ? a++ : -1;
   const points = y.points ? a++ : -1;
   const gp = y.gp ? a++ : -1;
-  const drops = y.topDrops.length > 0 ? a++ : -1;
-  const luckiest = y.luckiestDrop ? a++ : -1;
-  const driest = y.driestStreak ? a++ : -1;
 
-  // Page two's.
   let b = 0;
-  const firstLast = y.firstLast ? b++ : -1;
-  const dayHead = y.mostActiveDay ? b++ : -1;
-  const dayDrops = y.mostActiveDay ? b++ : -1;
-  const titles = y.titles.length > 0 ? b++ : -1;
-  const achievements = y.achievements.length > 0 ? b++ : -1;
-  const wom = y.wom ? b++ : -1;
-  const draft = y.draft ? b++ : -1;
+  const drops = y.topDrops.length > 0 ? b++ : -1;
+  const luckiest = y.luckiestDrop ? b++ : -1;
+  const driest = y.driestStreak ? b++ : -1;
+
+  let c = 0;
+  const firstLast = y.firstLast ? c++ : -1;
+  const dayHead = y.mostActiveDay ? c++ : -1;
+  const dayDrops = y.mostActiveDay ? c++ : -1;
+  const titles = y.titles.length > 0 ? c++ : -1;
+
+  let d = 0;
+  const achievements = y.achievements.length > 0 ? d++ : -1;
+  const wom = y.wom ? d++ : -1;
+  const draft = y.draft ? d++ : -1;
 
   const headline = y.submissions ? y.submissions.countLabel : "You showed up";
   const metaLine = y.points ? [y.points.comparison, y.points.teamPercentLabel, y.points.rankLabel].filter(Boolean).join(" · ") : "";
@@ -50,16 +58,17 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
       {a > 0 && (
         <WrappedScene steps={a} className="gap-2!">
           {opening && (
-            <Reveal step={splash} className={`${FILL} flex-[1.25] overflow-hidden`}>
+            <Reveal step={splash} emphasis="splash" className={`${FILL} flex-[1.25] overflow-hidden`}>
               <PanelBody tone="cyan" rays="82% 30%" gap={8}>
                 {hasArt && (
-                  <div className={ART}>
+                  <div className={art(y.art.images.length)}>
                     <WrappedCategoryArt art={y.art} />
                   </div>
                 )}
                 <Kicker>You</Kicker>
                 <InkTitle size={headlineSize(headline)}>{headline}</InkTitle>
-                <Sfx className="absolute right-0 bottom-0" size={36} tilt={-9} fill={colors.YELLOW}>
+                {/* Up in the corner the kicker leaves free, clear of a long headline's end. */}
+                <Sfx className="absolute top-0 right-0" size={34} tilt={8} fill={colors.YELLOW}>
                   {y.submissions ? "Pow!" : "Hi!"}
                 </Sfx>
               </PanelBody>
@@ -67,9 +76,9 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.submissions?.comparison && (
-            <Reveal step={comparison} className={`${FILL} -rotate-1`}>
+            <Reveal step={comparison} emphasis="narration" className={`${FILL} -rotate-1`}>
               <PanelBody tone="yellow" gap={4}>
-                <Lettering size={26} style={{ lineHeight: 1.05, letterSpacing: "0.02em" }}>
+                <Lettering size={23} className="text-balance text-center" style={{ lineHeight: 1.1, letterSpacing: "0.02em" }}>
                   {y.submissions.comparison}
                 </Lettering>
               </PanelBody>
@@ -77,7 +86,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.points && (
-            <Reveal step={points} className={`${FILL} flex-[1.1]`}>
+            <Reveal step={points} emphasis={y.points.isTop ? "highlight" : undefined} className={`${FILL} flex-[1.1]`}>
               <PanelBody tone={y.points.isTop ? "yellow" : "orange"} rays="22% 50%" gap={6}>
                 <div className="flex items-center gap-3">
                   <StatBurst value={y.points.shareLabel} size={118} fill={y.points.isTop ? colors.YELLOW : colors.PAPER_RAISED} />
@@ -103,7 +112,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             <Reveal step={gp} className={FILL}>
               <PanelBody tone="green" rays="18% 50%">
                 <div className="flex items-center gap-3">
-                  <StatBurst value={y.gp.gainedLabel} size={112} fill={colors.YELLOW} tilt={-7} />
+                  <StatBurst value={y.gp.gainedLabel} coins size={112} fill={colors.YELLOW} tilt={-7} />
                   <div className="relative flex min-w-0 flex-1 flex-col gap-2">
                     <Lettering size={24}>Total drop value</Lettering>
                     {y.gp.buyInLabel && y.gp.coveredBuyIn !== null && (
@@ -123,6 +132,12 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
               </PanelBody>
             </Reveal>
           )}
+        </WrappedScene>
+      )}
+
+      {b > 0 && (
+        <WrappedScene steps={b} className="gap-2!">
+
 
           {y.topDrops.length > 0 && (
             <Reveal step={drops} className={`${FILL} flex-[1.2]`}>
@@ -138,17 +153,9 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
 
           {y.luckiestDrop && (
-            <Reveal step={luckiest} className={`${FILL} flex-[1.2] overflow-hidden`}>
-              <PanelBody tone="yellow" rays="90% 15%" gap={6}>
-                <Kicker>Your luckiest drop</Kicker>
-                <InkTitle size={headlineSize(y.luckiestDrop.itemName, [46, 40, 34, 28])}>{y.luckiestDrop.itemName}</InkTitle>
-                <Sfx className="absolute right-0 top-0" size={28} tilt={8}>
-                  Lucky!
-                </Sfx>
-                <Body size={14} className="font-semibold">
-                  {y.luckiestDrop.luck?.sentence}
-                </Body>
-                <DropCard drop={y.luckiestDrop} />
+            <Reveal step={luckiest} emphasis="highlight" className={`${FILL} flex-[1.2] overflow-hidden`}>
+              <PanelBody tone="yellow" rays="90% 15%" gap={0}>
+                <LuckiestDrop drop={y.luckiestDrop} />
               </PanelBody>
             </Reveal>
           )}
@@ -170,8 +177,8 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
         </WrappedScene>
       )}
 
-      {b > 0 && (
-        <WrappedScene steps={b} className="gap-2!">
+      {c > 0 && (
+        <WrappedScene steps={c} className="gap-2!">
           {y.firstLast && (
             <div className={`grid flex-1 gap-3 ${y.firstLast.last ? "grid-cols-2" : "grid-cols-1"}`}>
               <Reveal step={firstLast} className={FILL}>
@@ -193,15 +200,18 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             </div>
           )}
 
+          {/* The day over its drops, one panel on the other: side by side, neither had the width for the drops' names. */}
           {y.mostActiveDay && (
-            <div className="grid flex-1 grid-cols-[0.8fr_1.4fr] gap-2">
+            <>
               <Reveal step={dayHead} className={`${FILL} overflow-hidden`}>
-                <PanelBody tone="cyan" rays="50% 100%" gap={6}>
+                <PanelBody tone="cyan" rays="88% 100%" align="start" gap={6}>
                   <Kicker>Your biggest day</Kicker>
-                  <InkTitle size={23}>{y.mostActiveDay.dateLabel}</InkTitle>
-                  <Body size={14} className="font-semibold">
-                    {y.mostActiveDay.submissionsLabel} in one day.
-                  </Body>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <InkTitle size={23}>{y.mostActiveDay.dateLabel}</InkTitle>
+                    <Body size={14} className="font-semibold">
+                      {y.mostActiveDay.submissionsLabel} in one day.
+                    </Body>
+                  </div>
                 </PanelBody>
               </Reveal>
               <Reveal step={dayDrops} className={FILL}>
@@ -216,7 +226,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
                   )}
                 </PanelBody>
               </Reveal>
-            </div>
+            </>
           )}
 
           {y.titles.length > 0 && (
@@ -224,9 +234,9 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
               <PanelBody tone="orange" rays="50% 130%" gap={6}>
                 <Kicker tone="red">{y.titles.length === 1 ? "Your Title" : "Your Titles"}</Kicker>
                 <InkTitle size={headlineSize(titleNames, [44, 38, 32, 26])}>{titleNames}</InkTitle>
-                <ul className="mt-0.5 flex flex-col gap-1.5">
+                <ul className="mt-0.5 flex flex-col">
                   {y.titles.map((t) => (
-                    <li key={t.id} className="flex flex-wrap items-center gap-x-2 border-[3px] px-2 py-1" style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}>
+                    <li key={t.id} data-beat="rise" className="flex flex-wrap items-center gap-x-2 py-1" style={{ borderBottom: `2px dashed ${colors.RULE}` }}>
                       <Lettering size={19}>{t.name}</Lettering>
                       <Body size={13} className="min-w-0">
                         · {t.text}
@@ -237,29 +247,38 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
               </PanelBody>
             </Reveal>
           )}
+        </WrappedScene>
+      )}
+
+      {d > 0 && (
+        <WrappedScene steps={d} className="gap-2!">
+
 
           {y.achievements.length > 0 && (
             <Reveal step={achievements} className={`${FILL} flex-1`}>
-              <PanelBody align="start" gap={8}>
+              <PanelBody align="start" gap={12}>
                 <Kicker tone="green" tilt={-1.5}>
                   {y.achievements.length === 1 ? "Achievement unlocked" : `${y.achievements.length} Achievements unlocked`}
                 </Kicker>
-                <ul className={`grid gap-2 ${y.achievements.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                <ul className={`grid gap-x-4 gap-y-3 ${y.achievements.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
                   {y.achievements.map((ach) => (
-                    <li key={ach.key} className="flex min-w-0 items-start gap-1.5 border-[3px] p-1.5" style={{ background: colors.PAPER, borderColor: colors.LINE, boxShadow: `2px 2px 0 ${colors.SHADOW}` }}>
+                    <li key={ach.key} data-beat="rise" className="flex min-w-0 items-start gap-1.5">
                       <WikiIcon name={ach.itemName} className="mt-0.5 size-7 shrink-0 [image-rendering:pixelated]" />
                       <span className="min-w-0 flex-1">
-                        <Lettering size={16} className="block truncate" style={{ lineHeight: 1.2 }}>
-                          {ach.name}
-                        </Lettering>
-                        <span className="block text-[11px] leading-tight" style={{ color: colors.INK_SUBTLE }}>
+                        {/* How to earn it is behind the info mark, so the grid is names and dates. */}
+                        <span className="flex min-w-0 items-center gap-1">
+                          <Lettering size={16} className="block min-w-0 truncate" style={{ lineHeight: 1.2 }}>
+                            {ach.name}
+                          </Lettering>
+                          {ach.description && (
+                            <TooltipSpan text={ach.description} label={`How to earn ${ach.name}`} className="inline-flex shrink-0 cursor-help rounded-full" style={{ color: colors.INK_BODY }}>
+                              <InfoIcon size={14} />
+                            </TooltipSpan>
+                          )}
+                        </span>
+                        <span className="block text-[12px] font-semibold leading-tight" style={{ color: colors.INK_BODY }}>
                           {ach.earnedLabel}
                         </span>
-                        {ach.description && (
-                          <span className="mt-0.5 block text-[11.5px] leading-tight" style={{ color: colors.INK_BODY }}>
-                            {ach.description}
-                          </span>
-                        )}
                       </span>
                     </li>
                   ))}
@@ -305,6 +324,53 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
           )}
         </WrappedScene>
       )}
+    </>
+  );
+}
+
+/**
+ * The luckiest drop: the item lettered big, its screenshot (or icon) in a frame knocked askew beside the odds in a burst,
+ * and the whole of its Luck, its value and its time on one caption under them (the drop card's lines, bar its name, which
+ * is the panel's title).
+ */
+function LuckiestDrop({ drop }: { drop: WrappedDropModel }) {
+  const { colors } = useComic();
+  const luck = drop.luck;
+  const frame = { border: `3px solid ${colors.LINE}`, boxShadow: `3px 3px 0 ${colors.SHADOW}`, background: colors.PAPER_ALT, transform: "rotate(-3deg)" } as const;
+  return (
+    <>
+      <Kicker>Your luckiest drop</Kicker>
+      <Sfx className="absolute right-0 top-0" size={28} tilt={8}>
+        Lucky!
+      </Sfx>
+      <InkTitle className="mt-2.5" size={headlineSize(drop.itemName, [46, 40, 34, 28])}>
+        {drop.itemName}
+      </InkTitle>
+      <div className="mt-2 flex w-full items-center justify-center gap-5">
+        {drop.thumbnailUrl && drop.screenshotUrl ? (
+          <ScreenshotLink href={drop.screenshotUrl} className="shrink-0">
+            <img src={drop.thumbnailUrl} alt={`Screenshot of ${drop.itemName}`} loading="lazy" className="block size-24 object-cover" style={frame} />
+          </ScreenshotLink>
+        ) : (
+          <div aria-hidden className="flex size-24 shrink-0 items-center justify-center" style={frame}>
+            <WikiIcon name={drop.itemName} className="size-14 [image-rendering:pixelated]" />
+          </div>
+        )}
+        {luck && <StatBurst value={luck.chanceLabel} label="got it that fast" size={120} fill={colors.PAPER_RAISED} tilt={6} />}
+      </div>
+      <CaptionBox tone="paper" tilt={-0.6} className="mt-3 w-full">
+        {luck && (
+          <Body size={14} className="font-semibold" style={{ color: colors.INK }}>
+            {luck.sentence}
+          </Body>
+        )}
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] font-bold" style={{ fontFamily: COMIC_FIGURES_FONT, color: colors.INK_BODY }}>
+          {drop.quantityLabel && <span className="num">{drop.quantityLabel}</span>}
+          {drop.gpLabel && <Gp label={drop.gpLabel} className="num" />}
+          {luck && <span className="num">{luck.shortLabel}</span>}
+          <span className="ml-auto">{drop.whenLabel}</span>
+        </div>
+      </CaptionBox>
     </>
   );
 }

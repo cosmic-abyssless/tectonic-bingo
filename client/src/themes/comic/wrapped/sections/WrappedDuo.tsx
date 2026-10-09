@@ -23,7 +23,7 @@ export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
   return (
     <>
       <WrappedScene steps={stepCount}>
-        <Reveal step={0} className={`${FILL} flex-[1.2] overflow-hidden`}>
+        <Reveal step={0} emphasis="splash" className={`${FILL} flex-[1.2] overflow-hidden`}>
           <PanelBody tone="cyan" rays="15% 25%" gap={10}>
             {hasArt && (
               <div className={ART}>
@@ -89,9 +89,9 @@ export function WrappedDuo({ section: d }: { section: WrappedDuoModel }) {
         )}
 
         {d.carried && (
-          <Reveal step={carried} className={`${FILL} -rotate-1`}>
+          <Reveal step={carried} emphasis="narration" className={`${FILL} -rotate-1`}>
             <PanelBody tone="yellow" gap={4}>
-              <Lettering size={25} style={{ lineHeight: 1.1, letterSpacing: "0.02em" }}>
+              <Lettering size={25} className="text-balance" style={{ lineHeight: 1.1, letterSpacing: "0.02em" }}>
                 {d.carried}
               </Lettering>
             </PanelBody>

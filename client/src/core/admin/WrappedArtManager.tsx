@@ -11,6 +11,7 @@ import {
   type WrappedArtImage,
   type WrappedArtKeying,
   type WrappedArtSection,
+  type WrappedBossArtResult,
   type WrappedCredit,
 } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
@@ -85,8 +86,9 @@ export function WrappedArtManager({ slug }: { slug: string }) {
           </TabPanel>
           <TabPanel id="side">
             <p className="mb-4 text-sm text-on-surface-muted">
-              Shown large beside the story, one per section in turn, alternating left and right (wide screens only). Taller, full-body cut-outs suit it best.
+              Shown large beside the story, in turn (wide screens only): in the comic theme, on the desk between the spreads. Taller, full-body cut-outs suit it best.
             </p>
+            <BoardBosses slug={slug} full={inGroup("side").length >= maxWrappedArt("side")} />
             <Card className="p-4">
               <ArtGroup slug={slug} group="side" images={inGroup("side")} loading={isLoading} large />
             </Card>
@@ -103,6 +105,52 @@ export function WrappedArtManager({ slug }: { slug: string }) {
         </Tabs>
       </div>
       <HowToMakeOne />
+    </div>
+  );
+}
+
+/**
+ * Adds the Board's bosses to the side images: the bosses that drop its Items, each as its OSRS Wiki image, the bosses
+ * most Items come from first, as many as there's room for. Says what it added and what it left out.
+ */
+function BoardBosses({ slug, full }: { slug: string; full: boolean }) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<WrappedBossArtResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await adminApi.addBoardBossesToWrappedArt(slug));
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.wrappedArt(slug) });
+      await queryClient.invalidateQueries({ queryKey: ["wrapped"] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't add the Board's bosses");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Button onPress={add} isDisabled={busy || full}>
+          {busy ? "Adding the bosses…" : "Add the Board's bosses"}
+        </Button>
+        <p className="min-w-0 flex-1 text-xs text-on-surface-subtle">
+          {full ? "The side images are full: remove some to make room." : "The bosses that drop the Board's Items, each as its OSRS Wiki image, the ones most Items come from first. Ones already here are left out."}
+        </p>
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
+      {result && (
+        <Notice tone={result.added.length > 0 ? "ok" : "warn"}>
+          {result.added.length > 0 ? `Added ${result.added.join(", ")}.` : "No bosses were added."}
+          {result.skipped.length > 0 && ` Left out: ${result.skipped.map((s) => `${s.name} (${s.reason})`).join(", ")}.`}
+        </Notice>
+      )}
     </div>
   );
 }

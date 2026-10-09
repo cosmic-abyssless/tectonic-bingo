@@ -101,7 +101,11 @@ target (say `signup`), the later dates are simply scheduled in the future.
    The admin also uploads **Wrapped art** (CONTEXT.md) through the Wrapped art manager's endpoints (`wrappedArt.ts`):
    four placeholder **Player card art** cut-outs, best first (gold, silver, bronze, grey, each with a star), so each
    Player's share card shows the art for their rank, and three for the **Team** section, so the Team card shows them.
-   A group the Bingo already has art in (copied from the previous real Bingo on the server) is left alone.
+   The **side images** are the Board's bosses, added with the manager's "Add the Board's bosses". Their images come
+   from the OSRS Wiki the first time a server needs each boss, so that one request goes out with
+   `X-Dev-Skip-Integrations: 0`; a server that can't reach the wiki (or has `OSRS_ITEM_SEARCH_DISABLED=true`) adds
+   none, and the run goes on. A group the Bingo already has art in (copied from the previous real Bingo on the server)
+   is left alone.
    The admin also adds the **Feedback questions** (CONTEXT.md "Feedback form") unless the board brought its own:
    every question type, with Other, helper text and required where they fit, and two for Captains only
    (`feedback.ts`).

@@ -136,7 +136,7 @@ function ShareCard({ card, preview, Card, supports }: { card: WrappedShareCardMo
 
 /**
  * A card at its full layout size, scaled to fit the column it's in. The scale is on this wrapper, never on the card
- * itself, so the image is drawn at full size.
+ * itself, so the image is drawn at full size. A theme can dress the wrapper by `data-share-card-frame`.
  */
 function ScaledCard({ label, children }: { label: string; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
@@ -150,7 +150,7 @@ function ScaledCard({ label, children }: { label: string; children: ReactNode })
     return () => observer.disconnect();
   }, []);
   return (
-    <div ref={box} aria-label={label} role="group" className="relative w-full overflow-hidden rounded-lg border border-outline shadow-lg" style={{ aspectRatio: `${SHARE_CARD_WIDTH} / ${SHARE_CARD_HEIGHT}` }}>
+    <div ref={box} aria-label={label} role="group" data-share-card-frame className="relative w-full overflow-hidden rounded-lg border border-outline shadow-lg" style={{ aspectRatio: `${SHARE_CARD_WIDTH} / ${SHARE_CARD_HEIGHT}` }}>
       <div className="absolute top-0 left-0 origin-top-left" style={{ transform: `scale(${scale})`, visibility: scale ? "visible" : "hidden" }}>
         {children}
       </div>

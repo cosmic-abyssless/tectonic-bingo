@@ -1,14 +1,15 @@
-// The comic Wrapped's book, as data: which pages it has, where the reader is in it (a Stop: a page and a panel on it) and
-// where each move leads. Pure, so the controls and navigation are tested without React.
+// The comic Wrapped's book, as data: which pages it has, where the reader is in it (a Stop: a page and a panel on it, or
+// the whole spread the camera pulls back to at its end) and where each move leads. Pure, so the controls and navigation
+// are tested without React.
 //
 // A page is a Scene (core/wrapped/Scene: WrappedScene) and a panel is one of its Reveal steps. The book is laid out
 // from the Scenes the sections register, in document order: the Intro's is the front cover, the contents page the
-// book adds is next, then each section's pages, and the Outro's is the back cover.
+// book adds is next, then each section's pages, and the Outro's last is the back cover.
 
 /** The section id the book gives its own contents page. The model's own sections are WrappedSectionKind. */
 export const CONTENTS_SECTION = "contents";
 
-export type PageKind = "cover" | "contents" | "page" | "back";
+export type PageKind = "cover" | "contents" | "page" | "credits" | "back";
 
 export interface GuideScene {
   id: string;
@@ -21,6 +22,8 @@ export interface GuideScene {
   panels: readonly number[];
   /** The section the Scene is in (WrappedSectionKind, or CONTENTS_SECTION). */
   sectionId: string;
+  /** An Outro Scene printed as a cover of its own (the credits), lying apart from the pages like the back cover. */
+  credits?: boolean;
 }
 
 export interface GuidePage {
@@ -33,44 +36,76 @@ export interface GuidePage {
   no: number | null;
   /** What the page is, for its footer and the contents page. */
   role: string;
+  /** The group of pages on the desk the page lies in (desk.ts: a spread, or the page alone): numbered from 0, in order. Each page is its own until withGroups. */
+  group: number;
 }
 
-/** Where the reader is: a page of the book, and one panel on it. */
+/** Where the reader is: a page of the book, and one panel on it (a Reveal step), or PULL. */
 export interface Stop {
   page: number;
   step: number;
 }
 
 /**
+ * The step of the stop at the end of a group, where the camera pulls back to show the whole spread before moving on. Its
+ * page is the group's last. A group of one page with one panel has none: the camera is already showing all of it.
+ */
+export const PULL = -1;
+
+/**
  * The book's pages, one per Scene, with each one's kind and number. The Intro's Scene is the front cover and the Outro's
- * first is the back cover (its other pages, the share cards, are pages like any other). `labels` names a section for the
- * footer (the model's section label, as "Your Team"); a section it doesn't name is called by its id.
+ * last is the back cover (its pages before it, the share cards, are pages like any other, so they can't be missed behind
+ * it). `labels` names a section for the footer (the model's section label, as "Your Team"); a section it doesn't name is
+ * called by its id.
  */
 export function buildPages(scenes: readonly GuideScene[], labels: Readonly<Record<string, string>>): GuidePage[] {
   let no = 0;
-  let outroSeen = false;
-  return scenes.map((scene) => {
+  const back = scenes.map((s) => s.sectionId).lastIndexOf("outro");
+  return scenes.map((scene, index) => {
     let kind: PageKind = scene.sectionId === CONTENTS_SECTION ? "contents" : "page";
     if (scene.sectionId === "intro") kind = "cover";
-    if (scene.sectionId === "outro" && !outroSeen) {
-      kind = "back";
-      outroSeen = true;
-    }
-    const printed = kind === "cover" || kind === "back" ? null : ++no;
+    if (scene.sectionId === "outro" && scene.credits) kind = "credits";
+    if (index === back) kind = "back";
+    const printed = kind === "page" || kind === "contents" ? ++no : null;
     const role = kind === "contents" ? "In this issue" : (labels[scene.sectionId] ?? scene.sectionId);
     const panels = [...new Set(scene.panels)].sort((a, b) => a - b);
-    return { sceneId: scene.id, sectionId: scene.sectionId, panels: panels.length ? panels : [0], kind, no: printed, role };
+    return { sceneId: scene.id, sectionId: scene.sectionId, panels: panels.length ? panels : [0], kind, no: printed, role, group: index };
   });
 }
 
+/** The pages, each told its group (desk.ts's deskGroups: runs of page indexes, in order). */
+export function withGroups(pages: readonly GuidePage[], groups: readonly number[][]): GuidePage[] {
+  const of = new Map<number, number>();
+  groups.forEach((g, n) => g.forEach((i) => of.set(i, n)));
+  return pages.map((p, i) => ({ ...p, group: of.get(i) ?? 0 }));
+}
+
+/** The pages of a group, as indexes. */
+const groupPages = (pages: readonly GuidePage[], group: number) => pages.flatMap((p, i) => (p.group === group ? [i] : []));
+
+/** Whether a group ends in a pull-back: it has more than the one panel the camera already shows whole. */
+export function pullsBack(pages: readonly GuidePage[], group: number): boolean {
+  const own = groupPages(pages, group);
+  return own.length > 1 || own.some((i) => pages[i]!.panels.length > 1);
+}
+
+/** Whether a page is the last of its group (the pull-back follows it). */
+const lastOfGroup = (pages: readonly GuidePage[], page: number) => pages[page + 1]?.group !== pages[page]!.group;
+
 export const sameStop = (a: Stop, b: Stop) => a.page === b.page && a.step === b.step;
 
-/** The panel after this one: the next on the page, or the first of the next page. Null at the very end. */
+/**
+ * The stop after this one: the next panel on the page, the pull-back once the group's last panel is read, or the first
+ * panel of the next page. Null at the very end.
+ */
 export function nextStop(pages: readonly GuidePage[], at: Stop): Stop | null {
   const page = pages[at.page];
   if (!page) return null;
-  const step = page.panels.find((s) => s > at.step);
-  if (step !== undefined) return { page: at.page, step };
+  if (at.step !== PULL) {
+    const step = page.panels.find((s) => s > at.step);
+    if (step !== undefined) return { page: at.page, step };
+    if (lastOfGroup(pages, at.page) && pullsBack(pages, page.group)) return { page: at.page, step: PULL };
+  }
   const after = pages[at.page + 1];
   return after ? { page: at.page + 1, step: after.panels[0]! } : null;
 }
@@ -78,10 +113,15 @@ export function nextStop(pages: readonly GuidePage[], at: Stop): Stop | null {
 /** The panel before this one: the previous on the page, or the last of the previous page. Null at the very start. */
 export function prevStop(pages: readonly GuidePage[], at: Stop): Stop | null {
   const page = pages[at.page];
-  const earlier = page?.panels.filter((s) => s < at.step) ?? [];
+  if (!page) return null;
+  if (at.step === PULL) return { page: at.page, step: page.panels[page.panels.length - 1]! };
+  const earlier = page.panels.filter((s) => s < at.step);
   if (earlier.length) return { page: at.page, step: earlier[earlier.length - 1]! };
   const before = pages[at.page - 1];
-  return before ? { page: at.page - 1, step: before.panels[before.panels.length - 1]! } : null;
+  if (!before) return null;
+  // Back out of a group into the one before: its pull-back, if it has one.
+  if (before.group !== page.group && pullsBack(pages, before.group)) return { page: at.page - 1, step: PULL };
+  return { page: at.page - 1, step: before.panels[before.panels.length - 1]! };
 }
 
 /** The first panel of a page. */
@@ -95,25 +135,19 @@ export function sectionStart(pages: readonly GuidePage[], sectionId: string): St
   );
 }
 
-/** The first panel of the back cover. */
-export function backCoverStart(pages: readonly GuidePage[]): Stop | null {
-  return pageStart(
-    pages,
-    pages.findIndex((p) => p.kind === "back"),
-  );
-}
-
-/** Which panel of its page a stop is (0 first), and how many the page has. */
+/** Which panel of its page a stop is (0 first), and how many the page has. The pull-back counts as past the last. */
 export function panelPlace(pages: readonly GuidePage[], at: Stop): { index: number; of: number } {
   const page = pages[at.page];
   if (!page) return { index: 0, of: 1 };
+  if (at.step === PULL) return { index: page.panels.length - 1, of: page.panels.length };
   return { index: Math.max(0, page.panels.indexOf(at.step)), of: page.panels.length };
 }
 
-/** What a move from one Stop to another is: staying on a page, or turning it (forward or back, over any number of pages). */
-export function moveKind(from: Stop, to: Stop): "none" | "panel" | "turn-forward" | "turn-back" {
-  if (to.page === from.page) return to.step === from.step ? "none" : "panel";
-  return to.page > from.page ? "turn-forward" : "turn-back";
+/** Whether a stop comes after another in the book (the pull-back after every panel of its page). */
+export function isAfter(a: Stop, b: Stop): boolean {
+  if (a.page !== b.page) return a.page > b.page;
+  const order = (s: Stop) => (s.step === PULL ? Infinity : s.step);
+  return order(a) > order(b);
 }
 
 /**
@@ -123,6 +157,7 @@ export function moveKind(from: Stop, to: Stop): "none" | "panel" | "turn-forward
 export function reachedAfter(reached: readonly number[], to: Stop): number[] {
   const next = [...reached];
   while (next.length <= to.page) next.push(0);
+  if (to.step === PULL) return next;
   next[to.page] = Math.max(next[to.page]!, to.step + 1);
   return next;
 }

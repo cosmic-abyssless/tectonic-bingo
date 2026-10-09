@@ -59,7 +59,7 @@ export function WrappedPageLayout() {
       case "bingo":
         return <WrappedBingo section={section} />;
       case "outro":
-        return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} />;
+        return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} feedback={wrapped.feedback && { responded: wrapped.feedback.responded, onOpen: wrapped.actions.goToFeedback }} />;
     }
   };
 

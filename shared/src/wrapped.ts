@@ -190,6 +190,8 @@ export interface WrappedReviewStats {
   withinHourFraction: number | null;
   /** The UTC hour of day (0–23) with the most reviews, and how many. */
   busiestHour: { hour: number; reviews: number } | null;
+  /** The one clock hour (its start) with the most reviews, and how many. Missing from Wrapped published before it was stored. */
+  busiestClockHour?: { at: string; reviews: number } | null;
   topReviewer: { user: AvatarUser; reviewed: number } | null;
   /**
    * Every Moderator or Admin who reviewed any, highest rejection rate first: "who had to deal with the most nonsense".
@@ -215,6 +217,11 @@ export interface BingoWrapped {
   /** Approved Submissions, and the Drop value of every approved Claim. */
   totalSubmissions: number;
   totalGp: number;
+  /**
+   * Every approved drop, counted by item (a drop is one, whatever its quantity), most dropped first: what the comic
+   * Wrapped rains down. Missing from Wrapped published before it was stored.
+   */
+  dropItems?: { itemName: string; drops: number }[];
   /** The drop with the best Luck in the Bingo. */
   rarestDrop: WrappedDrop | null;
   /** The approved Submission with the most Reactions. */
@@ -296,6 +303,13 @@ export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
 
 export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side", "playerCard"] as const;
 export type WrappedArtGroup = (typeof WRAPPED_ART_GROUPS)[number];
+
+/** What adding the Board's bosses to the side images did: every image now, the bosses added, and the ones left out and why. */
+export interface WrappedBossArtResult {
+  art: WrappedArtImage[];
+  added: string[];
+  skipped: { name: string; reason: string }[];
+}
 
 /** How many images a group holds at most: a row above a heading gets crowded quickly; the side pool less so. */
 export function maxWrappedArt(group: WrappedArtGroup): number {

@@ -12,3 +12,7 @@ export const COMIC_FONT = '"Bangers", cursive';
 // from COMIC_FONT since that one's meant to change more freely as the rest
 // of the theme's typography evolves, without touching the logo.
 export const COMIC_LOGO_FONT = '"Sofia Sans Extra Condensed", sans-serif';
+
+// Hand-lettered small print: a drop's figures (its value, its rate, when it came) in the comic Wrapped. Bold, so it holds
+// its own on a printed tint where the body face fades.
+export const COMIC_FIGURES_FONT = '"Comic Neue", cursive';

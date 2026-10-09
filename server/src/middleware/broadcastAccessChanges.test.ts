@@ -105,6 +105,7 @@ const ROUTES: Record<string, boolean> = {
   "POST /api/bingos/:slug/admin/tiles/:id/image": false,
   "POST /api/bingos/:slug/admin/wrapped-art/:group": false,
   "PUT /api/bingos/:slug/admin/wrapped-art/:group/order": false,
+  "POST /api/bingos/:slug/admin/wrapped-art/side/bosses": false,
   "PUT /api/bingos/:slug/admin/wrapped-art/:group/credits": false,
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id": false,
   "POST /api/bingos/:slug/admin/wrapped-art/images/:id/recut": false,

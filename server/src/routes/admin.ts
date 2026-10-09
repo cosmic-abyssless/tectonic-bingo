@@ -18,6 +18,7 @@ import * as tagService from "../services/tagService";
 import { getOsrsWikiClient, WikiUnavailableError } from "../services/osrsWikiService";
 import { isOsrsItemSearchEnabled } from "./osrsItems";
 import * as wrappedArtService from "../services/wrappedArtService";
+import * as bossArtService from "../services/bossArtService";
 import * as signupService from "../services/signupService";
 import { assertUserCan } from "../services/permissions";
 import { QUESTION_FORMS, type QuestionForm } from "@bingo/shared";
@@ -534,6 +535,13 @@ router.post(
     const keying = wrappedArtService.parseKeying(req.body ?? {});
     broadcastInstead(res, changed(req, "wrapped_art_changed"));
     res.status(201).json({ art: await wrappedArtService.addArt(db, UPLOADS_DIR, req.bingo!, group, req.file.buffer, keying) });
+  }),
+);
+// The Board's bosses as side images, their OSRS Wiki images fetched (once per server) and cut like an upload.
+router.post(
+  "/wrapped-art/side/bosses",
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await bossArtService.addBoardBosses(db, UPLOADS_DIR, req.bingo!));
   }),
 );
 router.put(

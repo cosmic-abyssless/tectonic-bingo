@@ -177,15 +177,24 @@ of truth and will drift less than a doc copy. Broadly:
   `createWrappedProgressStore()`, wraps the sections in `WrappedProgressProvider` and, from its
   camera, tells each Scene `store.setSceneState(id, { reached, current })`. A Scene is one page and
   a `Reveal` step one panel on it; a step the section has no `Reveal` at is skipped. The provider's
-  `reveal` prop gives the page's own component to draw each `Reveal` (the comic's inked panel,
-  empty until the camera arrives, then painted in by a brush stroke), and a `Reveal` that brings its
-  own frame says `bare`. Scenes and Reveals carry `data-wrapped-scene` and `data-wrapped-step` for
+  `reveal` prop gives the page's own component to draw each `Reveal` (the comic's panel, only
+  pencilled in until the camera arrives, then inked and drawn in beat by beat by each piece's
+  `data-beat`), and a `Reveal` that brings its own frame says `bare`. A `Reveal`'s `emphasis` tells
+  a page that stages them how it stands: the comic cuts to a `splash` or a `highlight` with an
+  impact, and sets `narration` in as an inset over the panel before it. Scenes and Reveals carry `data-wrapped-scene` and `data-wrapped-step` for
   the page to find them. The comic page lays every page out at a fixed 420px width (`wrapped/camera`'s
-  `WRAPPED_PAGE_WIDTH`, at least 2:3 tall, taller to fit its content) and frames it with a camera,
-  so a comic section is written for that one page width, with no viewport breakpoints. It paints the
+  `WRAPPED_PAGE_WIDTH`, at least 2:3 tall, taller to fit its content), lies the pages on a desk in
+  spreads (`wrapped/desk`) and frames each panel with a camera, so a comic section is written for
+  that one page width, with no viewport breakpoints. The page draws each panel's frame from where the
+  section put it, slanting the gutters between panels (`wrapped/frames`). It paints the
   default sections' `sm:` sizes back to their phone sizes meanwhile. The book adds its own contents
   page, and the Outro's first Scene is the back cover (its other Scenes, the share cards, are pages
-  like any other: `WrappedShareCardItem` draws one with its buttons).
+  like any other: `WrappedShareCardItem` draws one with its buttons). The comic Team and Bingo
+  sections (#421, `themes/comic/wrapped/sections/`) show how a section is laid out for it: a grid or
+  flex column of `Reveal`s inside each Scene (Reveals at one step are framed as one stop), a long
+  section dealt over several Scenes so no page grows taller than a wide screen frames well (about
+  800px), and a panel that has to fill its page's height grow with `flex-1`. A panel that is empty
+  until its step hides its content with `visibility`, which `StickerArt` honours.
 - **Wrapped share cards** (#232, #314): `WrappedOutro` shows the viewer's cards (`section.cards`:
   a Player's Player and Team cards, none for anyone else) before its way out,
   drawn with `core/wrapped`'s `WrappedShareCards`, which previews each one scaled to fit and

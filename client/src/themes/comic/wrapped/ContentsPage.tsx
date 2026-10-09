@@ -39,13 +39,15 @@ export function ContentsPage() {
           <ol className="flex flex-col gap-2.5">
             {entries.map((s) => {
               const page = pageOf(s.id);
+              // The Outro opens on the share cards when the viewer has any, and is only the back cover when not.
               const isBack = s.id === "outro";
+              const backLabel = page?.kind === "back" ? "The back cover" : page?.kind === "credits" ? "Credits & back cover" : "Share cards & back cover";
               return (
                 <li key={s.id}>
                   <button
                     type="button"
                     onClick={() => controller.goToSection(s.id)}
-                    aria-label={`${isBack ? "The back cover" : s.label}${page?.no ? `, page ${page.no}` : ""}`}
+                    aria-label={`${isBack ? backLabel : s.label}${page?.no ? `, page ${page.no}` : ""}`}
                     className="comic-press comic-lift flex w-full cursor-pointer items-center gap-3 border-[3px] px-3 py-2 text-left"
                     style={{ background: colors.PAPER_RAISED, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}`, color: colors.INK, ["--comic-line" as string]: colors.LINE, ["--comic-shadow" as string]: colors.SHADOW }}
                   >
@@ -56,7 +58,7 @@ export function ContentsPage() {
                       {isBack ? "★" : (page?.no ?? "")}
                     </span>
                     <span className={`${LETTERED} min-w-0 flex-1 uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: 24, letterSpacing: "0.03em" }}>
-                      {isBack ? "The back cover" : s.label}
+                      {isBack ? backLabel : s.label}
                     </span>
                     <ArrowRightIcon size={18} />
                   </button>
