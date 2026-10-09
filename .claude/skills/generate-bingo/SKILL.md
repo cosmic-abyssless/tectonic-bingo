@@ -3,7 +3,7 @@ name: generate-bingo
 description: >
   Run or change the test data generator that builds a prod-like Bingo on a
   dev-mode server, local or staging (HTTP, spoofed timestamps, seeded play),
-  started from Site admin > Test data or the generate-bingo CLI. Use when the
+  started from Site admin > Bingos > Test data or the generate-bingo CLI. Use when the
   user wants to generate a bingo, seed QA data, spin up a prod-like bingo
   (including on staging), tear down testdata, tune the generator, or edit the
   DIFFICULTY table, and when changing server/src/devTools/generateBingo/,
@@ -15,7 +15,7 @@ description: >
 A job inside the server that imports a board, signs up fake players, runs the
 draft, and plays the Bingo through the **real HTTP endpoints** (over loopback),
 with `X-Dev-Now` so the audit log reads like a real one. Started from **Site
-admin > Test data** (dev-mode servers only: local and staging) or the CLI, which
+admin > Bingos > Test data** (dev-mode servers only: local and staging) or the CLI, which
 starts the same job and follows its log. Slugs and fake Discord IDs stay prefixed
 `testdata-`. That prefix is the server's delete-guard, not the product name.
 
