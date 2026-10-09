@@ -16,9 +16,14 @@ describe("currentRosterPicks", () => {
     expect(currentRosterPicks(team("A", ["Ann", "Bob", "Bea"]), picks).map((p) => p.rsn)).toEqual(["Ann", "Bob", "Bea"]);
   });
 
-  it("drops a removed player, leaving their pair partner as a single", () => {
+  it("keeps a player who has left as their pick, marked left, so their pair stays a pair", () => {
     const roster = currentRosterPicks(team("A", ["Ann", "Bob"]), picks);
-    expect(groupByPick(roster).map((g) => g.map((p) => p.rsn))).toEqual([["Ann"], ["Bob"]]);
+    expect(groupByPick(roster).map((g) => g.map((p) => [p.rsn, !!p.left]))).toEqual([[["Ann", false]], [["Bob", false], ["Bea", true]]]);
+  });
+
+  it("doesn't mark a drafted player made Captain since as left", () => {
+    const promoted = { ...team("A", ["Bob", "Bea"]), captainUserId: "Ann" } as DraftTeam;
+    expect(currentRosterPicks(promoted, picks).find((p) => p.rsn === "Ann")?.left).toBeUndefined();
   });
 
   it("adds a member who was never drafted (a late signup, a moved player) as a single after the last pick", () => {

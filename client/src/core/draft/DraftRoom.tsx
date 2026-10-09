@@ -171,8 +171,8 @@ export function DraftRoom({ slug }: { slug: string }) {
     return <div className="py-24 text-center text-on-surface-muted">Loading…</div>;
   }
 
-  // Once the Draft is over the room is Team rosters: only the Teams panel, each Team as it is now (its picks, less
-  // whoever has left it, then whoever joined it without a pick).
+  // Once the Draft is over the room is Team rosters: only the Teams panel, each Team as it is now (its picks, whoever
+  // has left it struck through, then whoever joined it without a pick).
   if (isDraftOver(shell)) {
     const rosterPicks = new Map(state.teams.map((t) => [t.id, currentRosterPicks(t, state.picks)]));
     const finalPairRows = pairPickRows([...rosterPicks.values()]);
