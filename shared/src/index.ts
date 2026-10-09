@@ -205,6 +205,16 @@ export interface TileCategory {
   sortOrder: number;
 }
 
+/** The longest a Team name can be: the most a Wise Old Man competition team name can be. */
+export const TEAM_NAME_MAX = 30;
+
+/** A Team name cut to TEAM_NAME_MAX, never splitting a character made of two UTF-16 units (WOM counts units). */
+export function fitTeamName(name: string): string {
+  let fitted = name.trim().slice(0, TEAM_NAME_MAX);
+  if (/[\uD800-\uDBFF]$/.test(fitted)) fitted = fitted.slice(0, -1);
+  return fitted.trimEnd();
+}
+
 export interface Team {
   id: string;
   bingoId: string;

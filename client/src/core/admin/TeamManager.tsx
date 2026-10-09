@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BingoShellResponse, PublicUser, RosterEntry, Stage, Team, TeamWithMembers } from "@bingo/shared";
+import { TEAM_NAME_MAX, type BingoShellResponse, type PublicUser, type RosterEntry, type Stage, type Team, type TeamWithMembers } from "@bingo/shared";
 import { useBingo, queryKeys } from "../../api/queries";
 import { adminQueryKeys, useCaptainCandidates } from "../../api/adminQueries";
 import * as adminApi from "../../api/adminApi";
@@ -133,6 +133,9 @@ function TeamCard({
   const [removing, setRemoving] = useState<Member | null>(null);
   const [reason, setReason] = useState("");
   const [replacementId, setReplacementId] = useState("");
+  // What's typed in the name field, for its character count, until the saved name changes (and the field with it).
+  const [nameDraft, setNameDraft] = useState<{ of: string; value: string } | null>(null);
+  const nameLength = (nameDraft?.of === team.name ? nameDraft.value : team.name).trim().length;
   const locked = stage === "complete";
   const teamsSet = stage === "reveal" || stage === "live";
   // Before Board revealed only a membership can be undone (no Captain, co-captain or drafted Player); from then on
@@ -209,8 +212,25 @@ function TeamCard({
             </Notice>
           )}
           <div className="flex items-end gap-2">
-            <Field label="Name" className="flex-1">
-              <Input key={team.name} defaultValue={team.name} onBlur={(e) => rename(e.target.value)} className="font-semibold" />
+            <Field
+              label={
+                <span className="flex justify-between">
+                  Name
+                  <span className={`num ${nameLength > TEAM_NAME_MAX ? "text-danger" : "text-on-surface-subtle"}`}>
+                    {nameLength}/{TEAM_NAME_MAX}
+                  </span>
+                </span>
+              }
+              className="flex-1"
+            >
+              <Input
+                key={team.name}
+                defaultValue={team.name}
+                onChange={(e) => setNameDraft({ of: team.name, value: e.target.value })}
+                onBlur={(e) => rename(e.target.value)}
+                maxLength={TEAM_NAME_MAX}
+                className="font-semibold"
+              />
             </Field>
             <ColorInput
               aria-label={`${team.name} color`}

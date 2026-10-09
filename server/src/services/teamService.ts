@@ -1,7 +1,7 @@
 import { now as clockNow } from "../clock";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { FieldChanges } from "@bingo/shared";
+import { fitTeamName, TEAM_NAME_MAX, type FieldChanges } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, bingos, draftPicks, nodeEdges, nodes, pickRatings, signupAnswers, signups, submissions, superlativeVotes, teamMembers, teamNodeState, teamPointAdjustments, teams, tileInterests, tiles, users } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -333,7 +333,7 @@ export function createTeam(db: Db, params: CreateTeamParams) {
 
     const team = tx
       .insert(teams)
-      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: params.name ?? "New Team", codeword, color: nextTeamColor(tx, params.bingoId), createdAt: clockNow(), updatedAt: clockNow() })
+      .values({ bingoId: params.bingoId, captainUserId: params.captainUserId, name: fitTeamName(params.name ?? "") || "New Team", codeword, color: nextTeamColor(tx, params.bingoId), createdAt: clockNow(), updatedAt: clockNow() })
       .returning()
       .get();
     tx.insert(teamMembers).values({ teamId: team.id, userId: params.captainUserId, isCaptain: true, joinedAt: clockNow() }).run();
@@ -370,6 +370,8 @@ export function updateTeam(db: Db, teamId: string, params: UpdateTeamParams) {
     const patch: UpdateTeamParams = {};
     if (params.name !== undefined) {
       if (typeof params.name !== "string" || !params.name.trim()) throw new ServiceError(400, "name must be a non-empty string");
+      // WOM rejects a longer one, and with it every later change to the competition.
+      if (params.name.trim().length > TEAM_NAME_MAX) throw new ServiceError(400, `Team names are at most ${TEAM_NAME_MAX} characters`);
       if (params.name.trim() !== existing.name) patch.name = params.name.trim();
     }
     if (params.color !== undefined) {
