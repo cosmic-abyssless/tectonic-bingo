@@ -16,7 +16,7 @@ import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
 import { DraftPoolGrid } from "./DraftPoolGrid";
 import { useAnswerViewer, visibleQuestions } from "../ui/answerVisibility";
 import { usePreference } from "../ui/preferences";
-import { TeamRoster, pairPickRows } from "./TeamRoster";
+import { TeamRoster, currentRosterPicks, pairPickRows } from "./TeamRoster";
 import { DraftPickReveal } from "./DraftPickReveal";
 import { namesForPick } from "./revealMath";
 import { useDraftReveals } from "./useDraftReveals";
@@ -171,9 +171,11 @@ export function DraftRoom({ slug }: { slug: string }) {
     return <div className="py-24 text-center text-on-surface-muted">Loading…</div>;
   }
 
-  // Once the Draft is over the room is Team rosters: only the Teams panel, each Team's picks as the Draft left them.
+  // Once the Draft is over the room is Team rosters: only the Teams panel, each Team as it is now (its picks, less
+  // whoever has left it, then whoever joined it without a pick).
   if (isDraftOver(shell)) {
-    const finalPairRows = pairPickRows(state.teams.map((t) => state.picks.filter((p) => p.teamId === t.id)));
+    const rosterPicks = new Map(state.teams.map((t) => [t.id, currentRosterPicks(t, state.picks)]));
+    const finalPairRows = pairPickRows([...rosterPicks.values()]);
     return (
       <div className="mx-auto w-full max-w-5xl px-6 py-6">
         <Panel title="Teams">
@@ -184,7 +186,7 @@ export function DraftRoom({ slug }: { slug: string }) {
                 <TeamRoster
                   key={team.id}
                   team={team}
-                  picks={state.picks.filter((p) => p.teamId === team.id)}
+                  picks={rosterPicks.get(team.id)!}
                   showOrder={state.orderReady}
                   reserveCoCaptainRow={state.teams.some((t) => t.coCaptain)}
                   pairRows={finalPairRows}

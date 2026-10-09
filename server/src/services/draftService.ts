@@ -106,7 +106,8 @@ function orderPayload(ordered: { id: string; name: string }[]) {
 }
 
 export interface DraftState {
-  teams: ((typeof teams.$inferSelect) & { captainRsn: string; coCaptain: { userId: string; rsn: string } | null })[]; // sorted by draftOrder once pick order is set
+  // sorted by draftOrder once pick order is set
+  teams: ((typeof teams.$inferSelect) & { captainRsn: string; coCaptain: { userId: string; rsn: string } | null; members: { userId: string; rsn: string; user: MinimalUser }[] })[];
   picks: ((typeof draftPicks.$inferSelect) & { user: MinimalUser; rsn: string })[];
   pool: DraftUnit[];
   draftStarted: boolean;
@@ -223,12 +224,29 @@ export function getDraftState(db: Db, bingo: Bingo, opts: { includeAnswers: bool
     ? db.select({ userId: signups.userId, rsn: signups.rsn }).from(signups).where(and(eq(signups.bingoId, bingoId), inArray(signups.userId, leadUserIds))).all()
     : [];
   const leadRsnByUserId = new Map(leadSignupRows.map((s) => [s.userId, s.rsn]));
+  // Who is on each Team now, for the rosters once the Draft is over (the picks stay as drafted).
+  const memberRows = teamIds.length
+    ? db
+        .select({ teamId: teamMembers.teamId, isCaptain: teamMembers.isCaptain, isCoCaptain: teamMembers.isCoCaptain, user: MINIMAL_USER_COLS })
+        .from(teamMembers)
+        .innerJoin(users, eq(teamMembers.userId, users.id))
+        .where(inArray(teamMembers.teamId, teamIds))
+        .orderBy(teamMembers.joinedAt, sql`${teamMembers}.rowid`)
+        .all()
+    : [];
+  const memberRsns = rsnsInBingo(db, bingoId, memberRows.map((m) => m.user.id));
   const orderedTeams = sortedTeamRows.map((t) => {
     const coCaptainUserId = coCaptainByTeamId.get(t.id);
     return {
       ...t,
       captainRsn: leadRsnByUserId.get(t.captainUserId) ?? "",
       coCaptain: coCaptainUserId ? { userId: coCaptainUserId, rsn: leadRsnByUserId.get(coCaptainUserId) ?? "" } : null,
+      members: memberRows
+        .filter((m) => m.teamId === t.id && !m.isCaptain && !m.isCoCaptain && m.user.id !== t.captainUserId)
+        .map((m) => {
+          const rsn = memberRsns.get(m.user.id) ?? "";
+          return { userId: m.user.id, rsn, user: { ...m.user, rsn: rsn || null } };
+        }),
     };
   });
 

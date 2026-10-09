@@ -14,6 +14,22 @@ export function groupByPick(picks: DraftPick[]): DraftPick[][] {
 }
 
 /**
+ * A Team's roster once the Draft is over, as picks: its picks of whoever is still a member (a pair whose other half
+ * was removed reads as a single), then each member it never drafted (a Late signup, a Player moved in) as a single of
+ * their own after the last pick. The pick numbers only order and group the slips; none is shown.
+ */
+export function currentRosterPicks(team: DraftTeam, picks: DraftPick[]): DraftPick[] {
+  const memberIds = new Set(team.members.map((m) => m.userId));
+  const kept = picks.filter((p) => p.teamId === team.id && memberIds.has(p.userId));
+  const keptIds = new Set(kept.map((p) => p.userId));
+  const after = Math.max(0, ...picks.map((p) => p.pickNumber));
+  const added = team.members
+    .filter((m) => !keptIds.has(m.userId))
+    .map((m, i) => ({ id: `member-${m.userId}`, bingoId: team.bingoId, pickNumber: after + 1 + i, teamId: team.id, userId: m.userId, pickedByUserId: "", createdAt: "", user: m.user, rsn: m.rsn }));
+  return [...kept, ...added];
+}
+
+/**
  * For each pick round (the nth pick group of a team), whether any team's nth pick is a duo pair. Solo picks in that
  * round are padded to a pair's height, so a round lines up across the team columns.
  */

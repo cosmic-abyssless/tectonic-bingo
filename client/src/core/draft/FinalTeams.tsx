@@ -5,7 +5,7 @@ import { LinkIcon } from "../ui/icons";
 import { displayName } from "../ui/user";
 import { PlayerName } from "../tectonic/PlayerName";
 import { inkOn } from "./teamColor";
-import { groupByPick } from "./TeamRoster";
+import { currentRosterPicks, groupByPick } from "./TeamRoster";
 import { HEADING_LETTERED } from "../../themes/lettering";
 
 const HEADING_FONT: CSSProperties = { fontFamily: "var(--font-heading, inherit)", fontWeight: "var(--font-heading-weight, revert)" };
@@ -61,13 +61,16 @@ function FinalTeamCard({ team, picks, mine }: { team: DraftTeam; picks: DraftPic
             )}
           </li>
         ))}
-        {picks.length === 0 && <li className="text-sm text-on-surface-subtle">No players drafted.</li>}
+        {picks.length === 0 && <li className="text-sm text-on-surface-subtle">No players yet.</li>}
       </ul>
     </article>
   );
 }
 
-/** The finished draft: one card per team — captains up top, Duo pairs linked, the viewer's own team framed. */
+/**
+ * The finished draft: one card per team — captains up top, Duo pairs linked, the viewer's own team framed. Each Team as
+ * it is now: a Late signup added since shows, a Player removed doesn't (currentRosterPicks).
+ */
 export function FinalTeams({ teams, picks, myUserId }: { teams: DraftTeam[]; picks: DraftPick[]; myUserId: string | null }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -75,8 +78,8 @@ export function FinalTeams({ teams, picks, myUserId }: { teams: DraftTeam[]; pic
         <FinalTeamCard
           key={team.id}
           team={team}
-          picks={picks.filter((p) => p.teamId === team.id)}
-          mine={!!myUserId && (team.captainUserId === myUserId || team.coCaptain?.userId === myUserId || picks.some((p) => p.teamId === team.id && p.userId === myUserId))}
+          picks={currentRosterPicks(team, picks)}
+          mine={!!myUserId && (team.captainUserId === myUserId || team.coCaptain?.userId === myUserId || team.members.some((m) => m.userId === myUserId))}
         />
       ))}
     </div>
