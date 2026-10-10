@@ -378,7 +378,7 @@ function DeleteQuestionDialog({
           <span className="font-medium text-on-surface">“{q?.prompt}”</span> has <span className="num text-on-surface">{n}</span> answer{n === 1 ? "" : "s"} from
           players. Deleting the question deletes {n === 1 ? "that answer" : "those answers"} too, and it can't be undone.
         </p>
-        {!feedback && <p>To keep a copy, use Copy as CSV on the Signups tab first.</p>}
+        {!feedback && <p>To keep a copy, use Copy as CSV on the Signups tab's Roster first.</p>}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onPress={onClose}>
             Cancel

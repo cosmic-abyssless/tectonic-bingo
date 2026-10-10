@@ -74,6 +74,12 @@ export function isOutOfStage(access: ModTabAccess, stage: Stage): boolean {
   return (access.until !== undefined && idx > STAGE_ORDER.indexOf(access.until)) || (access.from !== undefined && idx < STAGE_ORDER.indexOf(access.from));
 }
 
+/** The Settings tab's list of who sees each tab: a row per sub-tab of a tab that has them ("Feedback: Questions"), as each
+ * has its own Action and stages. */
+export const MOD_TAB_ROWS: ModSection[] = MOD_TABS.flatMap((t) =>
+  t.sections ? t.sections.map((s) => ({ ...s, key: `${t.key}-${s.key}`, label: `${t.label}: ${s.label}` })) : [t],
+);
+
 const mayView = (access: ModTabAccess, canAdminister: boolean) => access.action === "moderate_bingo" || canAdminister;
 
 /** The sub-tabs of `tab` this viewer sees (a tab without any is its own one). */

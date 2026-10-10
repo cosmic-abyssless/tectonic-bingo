@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ACTION_INFO, ACTIONS, RESTRICTABLE_ACTIONS, STAGE_LABEL, STAGE_ORDER, type Action, type Bingo, type Role, type Stage } from "@bingo/shared";
 import { describeStages, roleGrants } from "../../headless/roleGrants";
-import { isOutOfStage, MOD_TABS } from "../mod/modTabs";
+import { isOutOfStage, MOD_TAB_ROWS } from "../mod/modTabs";
 import { CheckIcon, XIcon } from "../ui/icons";
 import { Tooltip } from "../ui/Tooltip";
 import { ModsManager, StaffManager } from "./ModsManager";
@@ -19,8 +19,8 @@ const ROLES: { role: Role; label: string; summary: string }[] = [
     label: ROLE_LABEL.admin,
     summary: "Site-wide: every Action but the Owner's, in every stage the rules for everyone leave it open. Admins can't be restricted.",
   },
-  { role: "moderator", label: ROLE_LABEL.moderator, summary: "Trusted clan members who moderate this Bingo. Admins add them above." },
-  { role: "staff", label: ROLE_LABEL.staff, summary: "Clan leadership who collect the Buy-ins, and see nothing else of the Bingo. Admins add them above." },
+  { role: "moderator", label: ROLE_LABEL.moderator, summary: "Trusted clan members who moderate this Bingo. Admins add them under Moderators and Staff." },
+  { role: "staff", label: ROLE_LABEL.staff, summary: "Clan leadership who collect the Buy-ins, and see nothing else of the Bingo. Admins add them under Moderators and Staff." },
   { role: "captain", label: ROLE_LABEL.captain, summary: "Leads a Team. Assigned in the Captains tab. A Captain is always a Player too, so they also hold the Player column." },
   {
     role: "player",
@@ -82,8 +82,7 @@ export function PermissionsPanel({ slug, bingo, view }: { slug: string; bingo: B
               </tr>
             </thead>
             <tbody>
-              {/* A row per sub-tab of a tab that has them, as each has its own Action and stages. */}
-              {MOD_TABS.flatMap((t) => (t.sections ? t.sections.map((s) => ({ ...s, key: `${t.key}-${s.key}`, label: `${t.label}: ${s.label}` })) : [t])).map((tab) => (
+              {MOD_TAB_ROWS.map((tab) => (
                 <tr key={tab.key} className="border-b border-outline last:border-b-0">
                   <td className="px-4 py-2">
                     <p className="font-medium text-on-surface">{tab.label}</p>

@@ -52,7 +52,8 @@ function defaultTabFor(stage: Stage | undefined, canAdminister: boolean): string
 }
 
 // A tab split into sub-tabs (MOD_TABS `sections`): those this viewer may see, opening on the first one in stage. Out of
-// stage ones are dimmed, unless `inStage` keeps them all in. Just the one a viewer may see has no sub-tab bar.
+// stage ones are hidden or dimmed like tabs, per the "outOfStageTabs" preference, unless `inStage` keeps them all in.
+// Just the one a viewer sees has no sub-tab bar.
 // `listClassName` lays out the sub-tab bar, for a tab whose panels don't share a width.
 function SubTabs({
   tab,
@@ -69,7 +70,10 @@ function SubTabs({
   listClassName?: string;
   panels: Record<string, ReactNode>;
 }) {
-  const sections = visibleSections(tab, canAdminister).map((s) => ({ ...s, dimmed: !inStage && isOutOfStage(s, stage) }));
+  const [outOfStageTabs] = usePreference("outOfStageTabs");
+  // The tab itself is out of stage (only shown when dimming) when every one is: then they're all shown, dimmed.
+  const all = visibleSections(tab, canAdminister).map((s) => ({ ...s, dimmed: !inStage && isOutOfStage(s, stage) }));
+  const sections = outOfStageTabs === "hide" && all.some((s) => !s.dimmed) ? all.filter((s) => !s.dimmed) : all;
   if (sections.length === 1) return <>{panels[sections[0]!.key]}</>;
   return (
     <Tabs defaultSelectedKey={(sections.find((s) => !s.dimmed) ?? sections[0]!).key}>
