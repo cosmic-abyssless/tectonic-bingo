@@ -93,7 +93,7 @@ describe("Overperformer", () => {
     for (let i = 1; i <= 17; i++) if (i !== 8 && i !== 10) pool.push(player(`filler${i}`, { draft: { pickNumber: i } }));
     expect(holdersOf(pool, "overperformer")).toEqual(["late"]);
     const picked = pickTitles(pool, live(48)).find((p) => p.title.id === "overperformer")!;
-    expect(picked.holders[0]).toMatchObject({ value: 15, text: "Picked 18th, finished 3rd" });
+    expect(picked.holders[0]).toMatchObject({ value: 15, text: "Picked 18th, now 3rd" });
   });
 
   it("is judged among the Players shown: one Team's best Steal, placed within that Team", () => {
@@ -106,7 +106,9 @@ describe("Overperformer", () => {
     ];
     const teamA = pool.filter((f) => f.teamId === "A");
     // In Team A alone, a4 is picked 4th and finishes 1st; the whole Bingo would say picked 5th, finished 2nd.
-    expect(pickTitles(teamA, live(48)).find((p) => p.title.id === "overperformer")!.holders[0]).toMatchObject({ userId: "a4", text: "Picked 4th, finished 1st" });
+    expect(pickTitles(teamA, live(48)).find((p) => p.title.id === "overperformer")!.holders[0]).toMatchObject({ userId: "a4", text: "Picked 4th, now 1st" });
+    const ended: TitleContext = { ...live(48), endedAt: at(48) };
+    expect(pickTitles(teamA, ended).find((p) => p.title.id === "overperformer")!.holders[0]).toMatchObject({ text: "Picked 4th, finished 1st" });
   });
 
   it("in a Duo, only the higher scorer can hold it: both halves share the pick, and the lower one's rank is worse", () => {
