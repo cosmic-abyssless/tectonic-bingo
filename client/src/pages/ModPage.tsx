@@ -106,9 +106,17 @@ export function ModPage() {
 
   useEscapeBack(`/b/${slug}`);
 
+  // Clicking the notification brings this tab forward on the Submissions tab (keeping its filters, dropping the Audit
+  // log's; not setTab, whose `tab` would be the one from when the notification was raised).
   useWebSocketEvent((event) => {
-    if (event.type === "submission_created" && "Notification" in window && Notification.permission === "granted") {
-      new Notification("New bingo submission", { body: "A new submission is pending review" });
+    if (event.type !== "submission_created" || event.bingoId !== shell?.bingo.id) return;
+    if ("Notification" in window && Notification.permission === "granted") {
+      const notification = new Notification("New bingo submission", { body: "A new submission is pending review" });
+      notification.onclick = () => {
+        window.focus();
+        setUrl({ tab: "submissions", ...Object.fromEntries(AUDIT_FILTER_PARAMS.map((p) => [p, null])) });
+        notification.close();
+      };
     }
   });
 
