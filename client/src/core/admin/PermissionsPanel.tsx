@@ -37,7 +37,7 @@ const ROLES: { role: Role; label: string; summary: string }[] = [
  */
 export function PermissionsPanel({ slug, bingo }: { slug: string; bingo: Bingo }) {
   // Per role, the stages it holds each Action in; an Action missing from a role's map isn't granted to it.
-  const held = new Map(ROLES.map(({ role }) => [role, new Map(roleGrants(role, bingo).map((g) => [g.action, g.stages]))]));
+  const held = new Map(ROLES.map(({ role }) => [role, new Map(roleGrants(role, bingo).map((g) => [g.action, g]))]));
   const groups: { label: string; actions: Action[] }[] = [
     { label: "Can do", actions: ACTIONS.filter((a) => !a.startsWith("view_")) },
     { label: "Can see", actions: ACTIONS.filter((a) => a.startsWith("view_")) },
@@ -127,6 +127,7 @@ export function PermissionsPanel({ slug, bingo }: { slug: string; bingo: Bingo }
             <LegendItem swatch={<Dot className="bg-on-surface-muted" />}>Held in that stage</LegendItem>
             <LegendItem swatch={<Dot className="bg-outline" />}>Not held in that stage</LegendItem>
             <LegendItem swatch={<span className="w-2.5 text-center text-on-surface-subtle">—</span>}>Never held</LegendItem>
+            <LegendItem swatch={<span className="w-2.5 text-center text-on-surface-subtle">*</span>}>Not while also holding another role (hover it)</LegendItem>
           </ul>
           <div className="overflow-x-auto rounded-lg border border-outline bg-surface">
             <table className="w-full min-w-[44rem] border-collapse text-sm">
@@ -162,7 +163,7 @@ export function PermissionsPanel({ slug, bingo }: { slug: string; bingo: Bingo }
                       </td>
                       {ROLES.map((r) => (
                         <td key={r.role} className="px-2 py-2">
-                          <StageWindow stages={held.get(r.role)!.get(action)} current={bingo.stage} />
+                          <StageWindow stages={held.get(r.role)!.get(action)?.stages} unlessAlso={held.get(r.role)!.get(action)?.unlessAlso} current={bingo.stage} />
                         </td>
                       ))}
                       <td className="px-4 py-2">
@@ -197,10 +198,14 @@ function Dot({ className }: { className: string }) {
   return <span className={`size-2.5 shrink-0 rounded-full ${className}`} />;
 }
 
-/** One role's hold on one Action: a segment per stage, filled where it's held, or a dash where it isn't granted at all. */
-function StageWindow({ stages, current }: { stages: Stage[] | undefined; current: Stage }) {
+/**
+ * One role's hold on one Action: a segment per stage, filled where it's held, or a dash where it isn't granted at all.
+ * A grant someone loses by also holding another role says so ("not while also a Player").
+ */
+function StageWindow({ stages, unlessAlso = [], current }: { stages: Stage[] | undefined; unlessAlso?: readonly Role[]; current: Stage }) {
   if (!stages) return <span className="text-on-surface-subtle">—</span>;
-  const text = describeStages(stages);
+  const unless = unlessAlso.map((role) => ROLE_LABEL[role]).join(" or ");
+  const text = unless ? `${describeStages(stages)}, not while also a ${unless}` : describeStages(stages);
   return (
     <Tooltip content={text}>
       <span role="img" aria-label={text} className="flex w-fit gap-0.5 py-1">
@@ -210,6 +215,7 @@ function StageWindow({ stages, current }: { stages: Stage[] | undefined; current
             className={`h-2.5 w-2 rounded-[2px] ${stages.includes(stage) ? (stage === current ? "bg-ok" : "bg-on-surface-muted") : "bg-outline"}`}
           />
         ))}
+        {unless && <span className="ml-1 text-[11px] leading-none text-on-surface-subtle">*</span>}
       </span>
     </Tooltip>
   );

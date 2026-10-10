@@ -178,10 +178,14 @@ export function mayRestrict(actorRoles: readonly Role[], targetRoles: readonly R
 /** The Actions only Owners hold: Admin's "every Action" stops short of them. */
 export const OWNER_ACTIONS = ["manage_site_admins", "manage_claude_connections"] as const satisfies readonly Action[];
 
-/** An Action a role holds, in every stage or only in the ones listed. */
+/**
+ * An Action a role holds, in every stage or only in the ones listed, and not for someone who also holds one of the
+ * roles in `unlessAlso` (a playing Moderator doesn't see other Teams).
+ */
 export interface Grant {
   action: Action;
   stages?: readonly Stage[];
+  unlessAlso?: readonly Role[];
 }
 
 /** What can() needs of a Bingo: its stage and the per-Bingo settings its rules read. */
@@ -212,7 +216,8 @@ export const GRANTS: { readonly admin: "*" } & { readonly [R in Exclude<Role, "a
     { action: "submit_for_any_team" },
     { action: "view_bingo" },
     { action: "view_hidden_board" },
-    { action: "view_other_teams" },
+    // Only a Moderator who isn't playing: one on a Team sees their own Team's board and stats, like any Player.
+    { action: "view_other_teams", unlessAlso: ["player"] },
     { action: "view_mod_activity" },
     { action: "view_other_teams_screenshots" },
     { action: "view_wrapped_preview" },
@@ -363,7 +368,7 @@ export function can(roles: readonly Role[], bingo: PermissionBingo | null, actio
   let inStage = false;
   for (const role of roles) {
     for (const grant of grantsOf(role)) {
-      if (grant.action !== action) continue;
+      if (grant.action !== action || grant.unlessAlso?.some((other) => roles.includes(other))) continue;
       granted = true;
       if (!grant.stages || (bingo && grant.stages.includes(bingo.stage))) inStage = true;
     }

@@ -12,6 +12,7 @@ import { PointsChart } from "./PointsChart";
 import { PointsShareChart } from "./PointsShareChart";
 import { TileCompletion } from "./TileCompletion";
 import { TimelineTable } from "./TimelineTable";
+import { initialStatsTeams, readStatsTeams, statsTeamsStorageKey, writeStatsTeams } from "./statsTeamsStore";
 import { pickStatsTitles } from "./titles";
 import { TitlesSection } from "./TitlesSection";
 
@@ -35,7 +36,8 @@ export function StatsView({ slug }: { slug: string }) {
   const canModerate = useCan("moderate_bingo", slug).allowed;
   const { data: stats, error } = useStats(slug);
   const boardData = fullBoard(useBoard(slug).data);
-  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(() => new Set());
+  // The team filter as picked on this page, for the stage it was picked in (a Bingo going Finished starts over).
+  const [picked, setPicked] = useState<{ key: string; teams: Set<string> } | null>(null);
 
   // While the bingo is live the server only returns the viewer's own team, so the team list is whatever
   // actually has rows. The team filter then narrows every panel; it only shows when there's a choice to make.
@@ -45,6 +47,20 @@ export function StatsView({ slug }: { slug: string }) {
     return shell.teams.filter((t) => ids.has(t.id));
   }, [shell, stats]);
   const teamOptions = useMemo(() => visibleTeams.map((t) => ({ key: t.id, label: t.name })), [visibleTeams]);
+  const stage = shell?.bingo.stage ?? null;
+  const myTeamId = shell?.myTeam?.id ?? null;
+  const storageKey = stage ? statsTeamsStorageKey(slug, stage) : null;
+  // Until it's picked here: the remembered pick, or the viewer's own Team while Live, or every Team.
+  const selectedTeams = useMemo(() => {
+    if (picked && picked.key === storageKey) return picked.teams;
+    if (!stage) return new Set<string>();
+    return new Set(initialStatsTeams(readStatsTeams(slug, stage), { stage, myTeamId, teamIds: visibleTeams.map((t) => t.id) }));
+  }, [picked, storageKey, slug, stage, myTeamId, visibleTeams]);
+  const setSelectedTeams = (teams: Set<string>) => {
+    if (!stage || !storageKey) return;
+    setPicked({ key: storageKey, teams });
+    writeStatsTeams(slug, stage, [...teams]);
+  };
   const teamFilter = inclusionFilter(selectedTeams, teamOptions);
 
   const filtered = useMemo(() => {

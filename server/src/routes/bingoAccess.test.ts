@@ -35,6 +35,7 @@ let base: string;
 beforeAll(async () => {
   ({ db, sqlite } = (await import("../db")) as unknown as { db: typeof db; sqlite: typeof sqlite });
   const { default: bingosRouter } = await import("./bingos");
+  const { default: modRouter } = await import("./mod");
   const { errorHandler } = await import("../middleware/errorHandler");
   const app = express();
   app.use(express.json());
@@ -44,6 +45,7 @@ beforeAll(async () => {
     req.isAuthenticated = (() => !!actingAs) as typeof req.isAuthenticated;
     next();
   });
+  app.use("/api/bingos/:slug/mod", modRouter);
   app.use("/api/bingos", bingosRouter);
   app.use(errorHandler);
   server = app.listen(0);
@@ -373,5 +375,40 @@ describe("mods and admins", () => {
         expect((await get(p, path)).status, `${p} ${path}`).toBe(200);
       }
     }
+  });
+});
+
+describe("a Moderator who also plays", () => {
+  beforeEach(() => {
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: people.memberA.id }).run();
+  });
+
+  it("sees only their own Team while Live, as their teammates do", async () => {
+    setStage("live");
+    for (const path of [`/b1/teams/${teamA.id}/progress`, `/b1/teams/${teamA.id}/submissions`, "/b1/stats"]) {
+      expect((await get("memberA", path)).status, path).toBe(200);
+    }
+    for (const path of [`/b1/teams/${teamB.id}/progress`, `/b1/teams/${teamB.id}/submissions`, `/b1/teams/${teamB.id}/activity`]) {
+      expect((await get("memberA", path)).status, path).toBe(403);
+    }
+    expect((await get("memberA", "/b1/stats")).body).toEqual((await get("captainA", "/b1/stats")).body);
+  });
+
+  it("still reviews every Team's Submissions", async () => {
+    setStage("live");
+    const { status, body } = await get("memberA", "/b1/mod/submissions");
+    expect(status).toBe(200);
+    const submissions = body.submissions as { submission: { id: string }; team: { id: string } }[];
+    expect(new Set(submissions.map((s) => s.team.id))).toEqual(new Set([teamA.id, teamB.id]));
+    const teamBSubmission = submissions.find((s) => s.team.id === teamB.id)!.submission;
+    actingAs = people.memberA;
+    const review = await fetch(`${base}/b1/mod/submissions/${teamBSubmission.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "approve" }) });
+    expect(review.status, await review.clone().text()).toBe(200);
+  });
+
+  it("sees every Team once the Bingo is Finished", async () => {
+    setStage("complete");
+    expect((await get("memberA", `/b1/teams/${teamB.id}/progress`)).status).toBe(200);
+    expect((await get("memberA", "/b1/stats")).body).toEqual((await get("mod", "/b1/stats")).body);
   });
 });
