@@ -26,6 +26,11 @@ describe("shouldReportError", () => {
     expect(shouldReportError(new MulterError("LIMIT_FILE_SIZE"))).toBe(false);
   });
 
+  it("ignores an upload the client hung up on partway", () => {
+    expect(shouldReportError(new Error("Request aborted"))).toBe(false);
+    expect(shouldReportError(new Error("Request closed"))).toBe(false);
+  });
+
   it("ignores client errors raised by Express and body parsers", () => {
     expect(shouldReportError(Object.assign(new Error("request entity too large"), { status: 413 }))).toBe(false);
     expect(shouldReportError(Object.assign(new SyntaxError("Unexpected token"), { statusCode: 400 }))).toBe(false);

@@ -3,11 +3,19 @@ import { MulterError } from "multer";
 import { ServiceError } from "../services/errors";
 import { MAX_UPLOAD_MB } from "./upload";
 import { runWithAuditContext } from "../audit/context";
+import { isUploadAbandoned } from "../errorReporting";
+import { log, requestPath } from "../log";
 
 // Catches ServiceError thrown by services (via express-async-errors-free
 // try/catch in routes, or a rejected async handler) and shapes the response.
-export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   res.locals.error = err;
+  // Not reported to Sentry, but logged so a burst of them (a proxy cutting uploads short, a stalled server) shows up.
+  if (isUploadAbandoned(err)) {
+    log.warn("upload abandoned by client", { method: req.method, path: requestPath(req.originalUrl), contentLength: req.get("content-length"), reason: (err as Error).message });
+    res.status(400).json({ error: "Upload did not finish" });
+    return;
+  }
   if (err instanceof ServiceError) {
     res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
     return;

@@ -9,12 +9,22 @@ import { ServiceError } from "./services/errors";
  * is a bad request. Everything else is unexpected, and so is a ServiceError that is itself a 500.
  * The OCR service being unreachable is a 503 that is expected now and then (it restarts on a deploy), so it is not a bug
  * in this request; a real fault inside the service is reported by the service itself.
+ * An upload the client gave up on partway (see isUploadAbandoned) is the browser leaving, not a bug.
  */
 export function shouldReportError(err: unknown): boolean {
   if (err instanceof OcrUnavailableError) return false;
+  if (isUploadAbandoned(err)) return false;
   if (err instanceof ServiceError) return err.status >= 500;
   if (err instanceof MulterError) return false;
   const { status, statusCode } = (err ?? {}) as { status?: unknown; statusCode?: unknown };
   const code = typeof status === "number" ? status : typeof statusCode === "number" ? statusCode : undefined;
   return code === undefined || code >= 500;
+}
+
+/**
+ * Whether multer stopped reading an upload because the client hung up mid-body (closed the tab, navigated away, lost
+ * its connection). Multer raises these as a plain Error with no code or status, so only the message tells them apart.
+ */
+export function isUploadAbandoned(err: unknown): boolean {
+  return err instanceof Error && (err.message === "Request aborted" || err.message === "Request closed");
 }
