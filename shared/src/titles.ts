@@ -65,12 +65,11 @@ export interface PlayerTitleFacts {
    */
   achievements: { earned: number; lastEarnedAt: string | null } | null;
   /**
-   * Where they were drafted and where they finished (Steal, CONTEXT.md). `position` is the number of Players drafted
-   * before them + 1, so both halves of a Duo share their pick's. `rank` is their Points share rank among every drafted
-   * Player in the Bingo (1 + how many scored more), whatever the team filter shows. Null when they weren't drafted
-   * (Captains, or a Bingo with no Draft).
+   * Their Draft pick's number (a Duo's halves share it), for Steal (CONTEXT.md). Where that places them, and where they
+   * finished, depends on who else is being judged: see placeDrafted. Null when they weren't drafted (Captains, or a
+   * Bingo with no Draft).
    */
-  draft: { position: number; rank: number } | null;
+  draft: { pickNumber: number } | null;
   /**
    * When each Submission count last went up (the Submission's time), for ties: approved and rejected Submissions,
    * ones posted for a teammate, a new distinct item, and any item Claim. Null while it's 0.
@@ -110,6 +109,38 @@ export interface TitleContext {
   endedAt: Date | null;
 }
 
+/**
+ * Where a drafted Player was picked and where they finished, among the drafted Players being judged together (one
+ * Team, the Teams selected, or the whole Bingo). `position` is the number of them picked before this Player + 1, so
+ * both halves of a Duo share their pick's. `rank` is 1 + how many of them have a bigger Points share.
+ */
+export interface DraftPlace {
+  position: number;
+  rank: number;
+}
+
+/** A Player's facts as a Title judges them: with their DraftPlace among the pool (null when they weren't drafted). */
+export type JudgedTitleFacts = PlayerTitleFacts & { draftPlace: DraftPlace | null };
+
+/**
+ * Each Player in `pool` with their DraftPlace among the drafted Players in it. Judged only against the pool, so a
+ * view of one Team never says where its Players stand in the whole Bingo.
+ */
+export function placeDrafted(pool: PlayerTitleFacts[]): JudgedTitleFacts[] {
+  const drafted = pool.filter((f) => f.draft);
+  // Points shares that differ only by floating-point noise (a Duo's halves) are the same rank.
+  const beats = (a: number, b: number) => a - b > 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+  return pool.map((f) => ({
+    ...f,
+    draftPlace: f.draft
+      ? {
+          position: drafted.filter((o) => o.draft!.pickNumber < f.draft!.pickNumber).length + 1,
+          rank: drafted.filter((o) => beats(o.pointsShare, f.pointsShare)).length + 1,
+        }
+      : null,
+  }));
+}
+
 export type TitleId =
   | "on_fire"
   | "carry"
@@ -146,23 +177,23 @@ export interface TitleDefinition {
   /** "wom" Titles come from Wise Old Man gains, and show how fresh those are. */
   source: "bingo" | "wom";
   /** Higher wins. Null when the Player isn't eligible at all (no Wise Old Man data, no Submissions). */
-  measure: (facts: PlayerTitleFacts, ctx: TitleContext) => number | null;
+  measure: (facts: JudgedTitleFacts, ctx: TitleContext) => number | null;
   /**
    * The one number a Site admin can tune (Title settings): the minimum `qualifies` holds a Player to. Null for the
    * luck Titles, whose floors are in the luck weights, because the calculator applies them.
    */
   minimum: { default: number; label: string; whole: boolean } | null;
   /** Whether a Player qualifies, given the measure and the minimum in force (the default when there's none). */
-  qualifies: (value: number, facts: PlayerTitleFacts, min: number) => boolean;
+  qualifies: (value: number, facts: JudgedTitleFacts, min: number) => boolean;
   /** The bar to reach, shown on a visible Title nobody holds yet. */
   requirement: (min: number, luck: LuckWeights) => string;
   /** The number behind a holder's Title: "42% of the team's points". */
-  format: (value: number, facts: PlayerTitleFacts, ctx: TitleContext) => string;
+  format: (value: number, facts: JudgedTitleFacts, ctx: TitleContext) => string;
   /**
    * When the Player reached their value (ms), for ties: of the Players tied at the best, the one holding the fewest
    * Titles gets it, then whoever got there first. Null when it can't be told (then the pool's order decides).
    */
-  reachedAt: (facts: PlayerTitleFacts, ctx: TitleContext) => number | null;
+  reachedAt: (facts: JudgedTitleFacts, ctx: TitleContext) => number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -454,16 +485,16 @@ export const TITLES: TitleDefinition[] = [
     id: "overperformer",
     name: "Overperformer",
     flavour: "The captains will be thinking about this one.",
-    explanation: "Beat their draft position by the most: how many places higher they finished in points share, among every drafted player in the bingo, than they were picked. A duo shares its pick.",
+    explanation: "Beat their draft position by the most: how many places higher they finished in points share than they were picked, among the drafted players shown (one team, the teams selected, or the whole bingo). A duo shares its pick.",
     group: "points",
     hidden: false,
     source: "bingo",
     // Captains and undrafted Players have no position; a Player with no points share hasn't finished anywhere.
-    measure: (f) => (f.draft && f.pointsShare > 0 ? f.draft.position - f.draft.rank : null),
+    measure: (f) => (f.draftPlace && f.pointsShare > 0 ? f.draftPlace.position - f.draftPlace.rank : null),
     minimum: { default: 3, label: "Places beaten", whole: true },
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Finish at least ${plural(min, "place")} higher in points share than their draft pick`,
-    format: (_v, f) => `Picked ${ordinal(f.draft!.position)}, finished ${ordinal(f.draft!.rank)}`,
+    format: (_v, f) => `Picked ${ordinal(f.draftPlace!.position)}, finished ${ordinal(f.draftPlace!.rank)}`,
     reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
   },
   {
@@ -544,16 +575,17 @@ export function titleMinimum(title: TitleDefinition, settings: TitleSettings): n
  * Every Title's holder among `pool`, in priority order: the Player with the best qualifying value. A Title is never
  * shared: a tie goes to the tied Player holding the fewest Titles, then to whoever reached the value first
  * (TitleDefinition.reachedAt), then to the one earlier in `pool`. A hidden Title nobody holds is left out entirely, so
- * nothing hints it exists.
+ * nothing hints it exists. Overperformer judges draft places among `pool` alone (placeDrafted).
  */
 export function pickTitles(pool: PlayerTitleFacts[], ctx: TitleContext, settings: TitleSettings = DEFAULT_TITLE_SETTINGS, titles: TitleDefinition[] = TITLES): PickedTitle[] {
-  type Candidate = { facts: PlayerTitleFacts; value: number };
+  type Candidate = { facts: JudgedTitleFacts; value: number };
+  const judged = placeDrafted(pool);
   const contested: { title: TitleDefinition; min: number; top: Candidate[] }[] = [];
   for (const title of titles) {
     if (settings.disabled.includes(title.id)) continue;
     const min = titleMinimum(title, settings);
     const qualifying: Candidate[] = [];
-    for (const facts of pool) {
+    for (const facts of judged) {
       const value = title.measure(facts, ctx);
       if (value !== null && Number.isFinite(value) && title.qualifies(value, facts, min)) qualifying.push({ facts, value });
     }
