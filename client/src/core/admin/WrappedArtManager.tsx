@@ -39,10 +39,10 @@ const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
 };
 
 /**
- * The mod panel's Wrapped art tab (admins only, #262), in three parts. Category images: any number per section, shown
- * side by side above its heading. Side images: one pool, shown large beside the story's sections in turn (wide screens
- * only). Player card art (#396): a ranked pool for the Player share card, best first, never shown in the story. Each
- * image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin adds,
+ * The Wrapped art sub-tab of the mod panel's Extras tab (admins only, #262), in three parts. Category images: any number
+ * per section, shown side by side above its heading. Side images: one pool, shown large beside the story's sections in
+ * turn (wide screens only). Player card art (#396): a ranked pool for the Player share card, best first, never shown in
+ * the story. Each image is a cut-out (a transparent PNG, or a RuneLite Blindfold screenshot the server keys out) an Admin adds,
  * reorders, replaces, re-cuts or removes, watching its two sticker frames boil.
  * Credits (CONTEXT.md) are edited here too: a Category image can credit someone (their name captioned on it), and each
  * category can hold additional credits with no image, listed under its images.

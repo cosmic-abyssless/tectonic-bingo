@@ -146,7 +146,7 @@ router.get(
 );
 
 // Superlative turnout: how many of each Team's Players have voted, as counts only (never who, or for whom), so it's
-// readable at any stage. Admin-only, like the rest of the Superlatives tab.
+// readable at any stage. Admin-only, like the rest of the Feedback tab's Superlatives.
 router.get(
   "/superlatives/turnout",
   requireAdmin,
