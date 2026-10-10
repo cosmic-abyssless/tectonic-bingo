@@ -494,7 +494,7 @@ export const TITLES: TitleDefinition[] = [
     minimum: { default: 3, label: "Places beaten", whole: true },
     qualifies: (v, _f, min) => v >= min,
     requirement: (min) => `Finish at least ${plural(min, "place")} higher in points share than their draft pick`,
-    format: (_v, f) => `Picked ${ordinal(f.draftPlace!.position)}, finished ${ordinal(f.draftPlace!.rank)}`,
+    format: (_v, f, ctx) => `Picked ${ordinal(f.draftPlace!.position)}, ${ctx.endedAt ? "finished" : "now"} ${ordinal(f.draftPlace!.rank)}`,
     reachedAt: (f) => latest(...f.awards.map((a) => a.completedAt)),
   },
   {
