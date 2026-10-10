@@ -638,33 +638,18 @@ describe("draftFacts (for the Overperformer Title)", () => {
     return ids;
   }
 
-  it("counts Players drafted before them, so a Duo's halves share a position and the next pick comes two later", () => {
+  it("gives each drafted Player their pick number, a Duo's halves sharing it; Captains and undrafted Players get nothing", () => {
     const fx = seedFixture();
     const ids = draft(fx, [[1, "solo", fx.teamAId], [2, "duo1", fx.teamBId], [2, "duo2", fx.teamBId], [3, "late", fx.teamAId]]);
-    const facts = draftFacts(db, fx.bingoId, Object.values(ids).map((userId) => ({ userId, pointsShare: 1 })));
-    expect([ids.solo, ids.duo1, ids.duo2, ids.late].map((id) => facts.get(id!)?.position)).toEqual([1, 2, 2, 4]);
-  });
-
-  it("ranks by Points share among drafted Players only, ties sharing a rank; Captains and undrafted Players get nothing", () => {
-    const fx = seedFixture();
-    const ids = draft(fx, [[1, "first", fx.teamAId], [2, "second", fx.teamBId], [3, "third", fx.teamAId]]);
+    const facts = draftFacts(db, fx.bingoId);
+    expect([ids.solo, ids.duo1, ids.duo2, ids.late].map((id) => facts.get(id!))).toEqual([{ pickNumber: 1 }, { pickNumber: 2 }, { pickNumber: 2 }, { pickNumber: 3 }]);
     const captain = db.select().from(schema.teams).where(eq(schema.teams.id, fx.teamAId)).get()!.captainUserId;
-    const facts = draftFacts(db, fx.bingoId, [
-      { userId: captain, pointsShare: 99 }, // a Captain outscoring everyone doesn't push anyone down
-      { userId: ids.first!, pointsShare: 5 },
-      { userId: ids.second!, pointsShare: 0.1 + 0.2 },
-      { userId: ids.third!, pointsShare: 0.3 },
-      { userId: fx.memberUserId, pointsShare: 50 }, // on a Team but never drafted
-    ]);
-    expect(facts.get(ids.first!)).toEqual({ position: 1, rank: 1 });
-    expect(facts.get(ids.second!)).toEqual({ position: 2, rank: 2 });
-    expect(facts.get(ids.third!)).toEqual({ position: 3, rank: 2 });
     expect(facts.has(captain)).toBe(false);
     expect(facts.has(fx.memberUserId)).toBe(false);
   });
 
   it("is empty for a Bingo with no Draft", () => {
     const fx = seedFixture();
-    expect(draftFacts(db, fx.bingoId, [{ userId: fx.memberUserId, pointsShare: 3 }]).size).toBe(0);
+    expect(draftFacts(db, fx.bingoId).size).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, shortGp, TITLES, titlesByHolder, titlesHeldBy, titleNotRecorded, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
+import { DEFAULT_TITLE_SETTINGS, oneIn, pickTitles, placeDrafted, shortGp, TITLES, titlesByHolder, titlesHeldBy, titleNotRecorded, type LuckFacts, type PlayerTitleFacts, type TitleAwardFact, type TitleContext, type TitleId } from "@bingo/shared";
 
 const HOUR = 60 * 60 * 1000;
 const LIVE_AT = new Date("2026-01-01T00:00:00Z");
@@ -53,24 +53,69 @@ describe("Overachiever", () => {
   });
 });
 
+describe("placeDrafted", () => {
+  const pick = (userId: string, pickNumber: number, pointsShare: number, teamId = "team") => player(userId, { teamId, pointsShare, draft: { pickNumber } });
+  const placesOf = (pool: PlayerTitleFacts[]) => Object.fromEntries(placeDrafted(pool).map((f) => [f.userId, f.draftPlace]));
+
+  it("counts Players picked before them, so a Duo's halves share a position and the next pick comes two later", () => {
+    const pool = [pick("solo", 1, 1), pick("duo1", 2, 1), pick("duo2", 2, 1), pick("late", 3, 1)];
+    expect(Object.values(placesOf(pool)).map((p) => p?.position)).toEqual([1, 2, 2, 4]);
+  });
+
+  it("ranks by Points share among drafted Players only, ties sharing a rank; Captains and undrafted Players get nothing", () => {
+    const places = placesOf([
+      player("captain", { pointsShare: 99 }), // a Captain outscoring everyone doesn't push anyone down
+      pick("first", 1, 5),
+      pick("second", 2, 0.1 + 0.2),
+      pick("third", 3, 0.3),
+    ]);
+    expect(places).toEqual({ captain: null, first: { position: 1, rank: 1 }, second: { position: 2, rank: 2 }, third: { position: 3, rank: 2 } });
+  });
+
+  it("judges only against the pool, so one Team's view never places its Players in the whole Bingo", () => {
+    const bingo = [pick("a1", 1, 5, "A"), pick("b1", 2, 50, "B"), pick("b2", 3, 40, "B"), pick("a2", 4, 30, "A")];
+    expect(placesOf(bingo).a2).toEqual({ position: 4, rank: 3 });
+    expect(placesOf(bingo.filter((f) => f.teamId === "A"))).toEqual({ a1: { position: 1, rank: 2 }, a2: { position: 2, rank: 1 } });
+  });
+});
+
 describe("Overperformer", () => {
-  const drafted = (position: number, rank: number, pointsShare = 10, hours = 1) => ({ draft: { position, rank }, pointsShare, awards: [award(pointsShare, hours)] });
+  // `pickNumber` Players are picked ahead of this one, each with a bigger Points share than `pointsShare` until
+  // `rank - 1` of them; the rest score nothing. So they're picked (pickNumber + 1)th and finish rankth.
+  function drafted(userId: string, position: number, rank: number, pointsShare = 10, hours = 1): PlayerTitleFacts[] {
+    const ahead = Array.from({ length: position - 1 }, (_, i) => player(`${userId}-ahead${i}`, { draft: { pickNumber: i + 1 }, pointsShare: i < rank - 1 ? pointsShare + 1 : 0 }));
+    return [...ahead, player(userId, { draft: { pickNumber: position }, pointsShare, awards: [award(pointsShare, hours)] })];
+  }
 
   it("goes to the late pick who beat their draft position by the most", () => {
-    // 18th drafted, finished 3rd: 15 places. 10th drafted, finished 1st: 9.
-    const pool = [player("early", drafted(10, 1, 50)), player("late", drafted(18, 3, 30)), player("mid", drafted(8, 2, 40))];
+    // 10th picked, finished 1st: 9 places. 18th picked, finished 3rd: 15.
+    const pool = [player("early", { draft: { pickNumber: 10 }, pointsShare: 50, awards: [award(50, 1)] }), player("mid", { draft: { pickNumber: 8 }, pointsShare: 40, awards: [award(40, 1)] }), player("late", { draft: { pickNumber: 18 }, pointsShare: 30, awards: [award(30, 1)] })];
+    for (let i = 1; i <= 17; i++) if (i !== 8 && i !== 10) pool.push(player(`filler${i}`, { draft: { pickNumber: i } }));
     expect(holdersOf(pool, "overperformer")).toEqual(["late"]);
     const picked = pickTitles(pool, live(48)).find((p) => p.title.id === "overperformer")!;
     expect(picked.holders[0]).toMatchObject({ value: 15, text: "Picked 18th, finished 3rd" });
   });
 
+  it("is judged among the Players shown: one Team's best Steal, placed within that Team", () => {
+    const pool = [
+      player("a1", { teamId: "A", draft: { pickNumber: 1 }, pointsShare: 1, awards: [award(1, 1)] }),
+      player("b1", { teamId: "B", draft: { pickNumber: 2 }, pointsShare: 90, awards: [award(90, 1)] }),
+      player("a2", { teamId: "A", draft: { pickNumber: 3 }, pointsShare: 2, awards: [award(2, 1)] }),
+      player("a3", { teamId: "A", draft: { pickNumber: 4 }, pointsShare: 3, awards: [award(3, 1)] }),
+      player("a4", { teamId: "A", draft: { pickNumber: 5 }, pointsShare: 50, awards: [award(50, 1)] }),
+    ];
+    const teamA = pool.filter((f) => f.teamId === "A");
+    // In Team A alone, a4 is picked 4th and finishes 1st; the whole Bingo would say picked 5th, finished 2nd.
+    expect(pickTitles(teamA, live(48)).find((p) => p.title.id === "overperformer")!.holders[0]).toMatchObject({ userId: "a4", text: "Picked 4th, finished 1st" });
+  });
+
   it("in a Duo, only the higher scorer can hold it: both halves share the pick, and the lower one's rank is worse", () => {
-    const pool = [player("higher", drafted(12, 2, 30)), player("lower", drafted(12, 5, 20))];
+    const pool = [...drafted("higher", 12, 2, 30), player("lower", { draft: { pickNumber: 12 }, pointsShare: 20, awards: [award(20, 1)] })];
     expect(holdersOf(pool, "overperformer")).toEqual(["higher"]);
   });
 
   it("isn't shared when a Duo's halves tie: whoever got there first holds it", () => {
-    const pool = [player("a", drafted(12, 2, 30, 9)), player("b", drafted(12, 2, 30, 4))];
+    const pool = [...drafted("a", 12, 1, 30, 9).slice(0, -1), player("a", { draft: { pickNumber: 12 }, pointsShare: 30, awards: [award(30, 9)] }), player("b", { draft: { pickNumber: 12 }, pointsShare: 30, awards: [award(30, 4)] })];
     expect(holdersOf(pool, "overperformer")).toEqual(["b"]);
   });
 
@@ -79,13 +124,13 @@ describe("Overperformer", () => {
   });
 
   it("needs the minimum (3 places by default) and some points share", () => {
-    expect(holdersOf([player("a", drafted(5, 3))], "overperformer")).toEqual([]);
-    expect(holdersOf([player("a", drafted(6, 3))], "overperformer")).toEqual(["a"]);
-    expect(holdersOf([player("a", { draft: { position: 20, rank: 1 }, pointsShare: 0 })], "overperformer")).toEqual([]);
+    expect(holdersOf(drafted("a", 5, 3), "overperformer")).toEqual([]);
+    expect(holdersOf(drafted("a", 6, 3), "overperformer")).toEqual(["a"]);
+    expect(holdersOf(drafted("a", 20, 1, 0), "overperformer")).toEqual([]);
   });
 
   it("uses the tuned minimum, and can be switched off", () => {
-    const pool = [player("a", drafted(10, 3))];
+    const pool = drafted("a", 10, 3);
     const settings = (s: Partial<typeof DEFAULT_TITLE_SETTINGS>) => ({ ...DEFAULT_TITLE_SETTINGS, ...s });
     const held = (s: Partial<typeof DEFAULT_TITLE_SETTINGS>) => pickTitles(pool, live(48), settings(s)).find((p) => p.title.id === "overperformer")?.holders.map((h) => h.userId);
     expect(held({ minimums: { overperformer: 8 } })).toEqual([]);

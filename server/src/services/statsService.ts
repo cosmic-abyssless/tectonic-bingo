@@ -578,7 +578,7 @@ export function getTitleFacts(
   const timelines: Map<string, WomSnapshot[]> = start ? loadTimelines(db, bingoId) : new Map();
   const luck = start ? luckFacts(graph, teamCredits, timelines, teamByUser, start, end, luckWeights) : new Map<string, LuckFacts>();
   const achievementTallies = getAchievementTallies(db, bingo);
-  const draft = draftFacts(db, bingoId, contributions);
+  const draft = draftFacts(db, bingoId);
 
   return contributions.map((c) => {
     const awards: TitleAwardFact[] = (shares.get(c.userId)?.credits ?? []).map((credit) => {
@@ -620,26 +620,13 @@ export function getTitleFacts(
 }
 
 /**
- * Each drafted Player's draft position and Points share rank (PlayerTitleFacts.draft), for Overperformer. The position
- * counts Players, not picks: a Duo's pick drafts two, so both halves share it and the next pick is two further on. The
- * rank is among every drafted Player with a `contributions` entry; one without has no Points share, so leaving them out
- * changes nobody's rank ahead of theirs.
+ * Each drafted Player's pick number (PlayerTitleFacts.draft), for Overperformer. Only the pick: where it places them
+ * and where they finished is judged among the Players a view shows (placeDrafted), so a Team's own stats never carry
+ * its Players' rank in the whole Bingo.
  */
-export function draftFacts(db: Db, bingoId: string, contributions: Pick<ContributionCount, "userId" | "pointsShare">[]): Map<string, { position: number; rank: number }> {
+export function draftFacts(db: Db, bingoId: string): Map<string, { pickNumber: number }> {
   const picks = db.select({ userId: draftPicks.userId, pickNumber: draftPicks.pickNumber }).from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all();
-  const pickOf = new Map(picks.map((p) => [p.userId, p.pickNumber]));
-  const drafted = contributions.filter((c) => pickOf.has(c.userId));
-  // Points shares that differ only by floating-point noise (a Duo's halves) are the same rank.
-  const beats = (a: number, b: number) => a - b > 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
-  const out = new Map<string, { position: number; rank: number }>();
-  for (const c of drafted) {
-    const pick = pickOf.get(c.userId)!;
-    out.set(c.userId, {
-      position: picks.filter((p) => p.pickNumber < pick).length + 1,
-      rank: drafted.filter((o) => beats(o.pointsShare, c.pointsShare)).length + 1,
-    });
-  }
-  return out;
+  return new Map(picks.map((p) => [p.userId, { pickNumber: p.pickNumber }]));
 }
 
 export interface Stats {

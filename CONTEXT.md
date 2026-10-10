@@ -427,7 +427,7 @@ A scrolling story of a Finished Bingo, told from one Player's point of view: You
 ### Steal
 A Draft pick who finished far higher in Points share than their pick number suggested: a late pick near the top. A Duo counts as one pick.
 - **Rules:** Wrapped names steals, never the opposite: an early pick who scored low is not singled out.
-- **Title:** The Overperformer Title goes to the Player who beat their draft position by the most, which is the Bingo's biggest Steal among eligible Players. In a Duo, only the higher scorer can hold it.
+- **Title:** The Overperformer Title goes to the Player who beat their draft position by the most among the drafted Players shown: one Team's, the Teams selected, or the whole Bingo's, where it is the Bingo's biggest Steal among eligible Players. Both the pick and the finish are counted within that view, so a Team's own stats never tell where its Players stand in the Bingo. In a Duo, only the higher scorer can hold it.
 
 ---
 

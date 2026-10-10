@@ -9,6 +9,7 @@ import {
   achievementDef,
   can,
   pickTitles,
+  placeDrafted,
   titlesHeldBy,
   type AvatarUser,
   type BingoWrapped,
@@ -211,7 +212,8 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const contributionOf = new Map(contributions.map((c) => [c.userId, c]));
   const titleSettings = getBingoTitleSettings(db, bingo);
   const titleFacts = statsService.getTitleFacts(db, bingoId, contributions, teamCredits, shares, titleSettings.luck);
-  const factsOf = new Map(titleFacts.map((f) => [f.userId, f]));
+  // Wrapped is the whole Bingo's, so draft places are among every drafted Player.
+  const factsOf = new Map(placeDrafted(titleFacts).map((f) => [f.userId, f]));
   const liveAt = effectiveStartsAt(db, bingo);
   const finishedAt = endedAt(db, bingo);
   const picked = pickTitles(titleFacts, { now: finishedAt ?? clockNow(), liveAt, endedAt: finishedAt }, titleSettings);
@@ -280,15 +282,15 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     })
     .sort((a, b) => a.placement - b.placement || a.name.localeCompare(b.name));
 
-  // Steals: draft position against final Points share rank among drafted Players (statsService.draftFacts). A Duo's
+  // Steals: draft position against final Points share rank among every drafted Player (placeDrafted). A Duo's
   // halves share a position and the lower scorer always ranks worse, so only its higher scorer can be the Steal.
   // Busts (the other direction) are never looked at.
   let biggestSteal: WrappedSteal | null = null;
-  for (const f of titleFacts) {
-    if (!f.draft || f.pointsShare <= 0) continue;
-    const placesBeaten = f.draft.position - f.draft.rank;
+  for (const f of factsOf.values()) {
+    if (!f.draftPlace || f.pointsShare <= 0) continue;
+    const placesBeaten = f.draftPlace.position - f.draftPlace.rank;
     if (placesBeaten <= 0 || (biggestSteal && placesBeaten <= biggestSteal.placesBeaten)) continue;
-    biggestSteal = { player: userById.get(f.userId)!, teamId: f.teamId, pickNumber: pickOf.get(f.userId)!.pickNumber, position: f.draft.position, rank: f.draft.rank, placesBeaten };
+    biggestSteal = { player: userById.get(f.userId)!, teamId: f.teamId, pickNumber: pickOf.get(f.userId)!.pickNumber, position: f.draftPlace.position, rank: f.draftPlace.rank, placesBeaten };
   }
 
   const reactionsOf = (s: RewindSubmission) => s.reactions.reduce((sum, g) => sum + g.users.length, 0);
@@ -369,7 +371,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         picks: [...byPick]
           .sort((a, b) => a[0] - b[0])
           .map(([pickNumber, ids]) => {
-            const draft = ids.map((id) => factsOf.get(id)?.draft).filter((d): d is NonNullable<typeof d> => !!d);
+            const draft = ids.map((id) => factsOf.get(id)?.draftPlace).filter((d): d is NonNullable<typeof d> => !!d);
             return {
               players: ids.map((id) => userById.get(id)!).filter(Boolean),
               pickNumber,
@@ -412,7 +414,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
           womGains && timeline
             ? { ehb: womGains.ehb, bosses: bossGainsOf(timeline, liveAt!, finishedAt).slice(0, TOP_BOSSES).map((b) => ({ ...b, name: bossName(b.metric) })), asOf: womGains.asOf }
             : null,
-        draft: pick && facts?.draft ? { pickNumber: pick.pickNumber, position: facts.draft.position } : null,
+        draft: pick && facts?.draftPlace ? { pickNumber: pick.pickNumber, position: facts.draftPlace.position } : null,
       },
       duo,
       captain,
