@@ -105,6 +105,19 @@ describe("can()", () => {
       expect(outcome(["moderator", "player"], "live", "submit_for_any_team")).toBeNull();
     });
 
+    it("keeps a Moderator who also plays to their own Team's board and stats until the Bingo is Finished", () => {
+      for (const stage of ["signup", "captains", "draft", "reveal", "live"] as const) {
+        expect(outcome(["moderator", "player"], stage, "view_other_teams"), stage).toBe("role");
+        expect(outcome(["moderator", "captain", "player"], stage, "view_other_teams"), stage).toBe("role");
+      }
+      expect(outcome(["moderator", "player"], "complete", "view_other_teams")).toBeNull();
+      expect(outcome(["moderator", "player"], "live", "view_team_stats")).toBeNull();
+      // A Moderator who isn't playing still sees every Team, and so does an Admin who plays.
+      expect(outcome(["moderator"], "live", "view_other_teams")).toBeNull();
+      expect(outcome(["moderator", "staff"], "live", "view_other_teams")).toBeNull();
+      expect(outcome(["admin", "player"], "live", "view_other_teams")).toBeNull();
+    });
+
     it("gives a Captain who is also a Player the Captain's Actions, in the Captain's stages", () => {
       expect(outcome(["captain", "player"], "draft", "make_draft_pick")).toBeNull();
       expect(outcome(["captain", "player"], "draft", "rename_team")).toBe("stage");

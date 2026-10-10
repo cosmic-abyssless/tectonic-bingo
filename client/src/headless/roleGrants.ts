@@ -6,6 +6,8 @@ export interface RoleGrant {
   action: Action;
   /** The stages it's open in, in STAGE_ORDER: the role's grant, less the ones a rule for everyone (or ACTION_INFO's `onlyIn`) closes. */
   stages: Stage[];
+  /** Not held by someone who also holds one of these roles (Grant.unlessAlso). */
+  unlessAlso: readonly Role[];
   /** Something they do rather than see. Only these can be restricted, and not all of them (see `restrictable`). */
   does: boolean;
   /** A Restriction can take it from one user (RESTRICTABLE_ACTIONS). Never for an Admin, who can't be restricted. */
@@ -18,8 +20,9 @@ export interface RoleGrant {
  */
 export function roleGrants(role: Role, settings: Pick<PermissionBingo, "showScreenshotsWhenFinished">): RoleGrant[] {
   return grantsOf(role)
-    .map(({ action, stages }) => ({
+    .map(({ action, stages, unlessAlso }) => ({
       action,
+      unlessAlso: unlessAlso ?? [],
       stages: STAGE_ORDER.filter(
         (stage) => (!stages || stages.includes(stage)) && (ACTION_INFO[action].onlyIn?.includes(stage) ?? true) && passesRules({ ...settings, stage }, action),
       ),

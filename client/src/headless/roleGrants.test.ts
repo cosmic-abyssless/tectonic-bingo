@@ -32,6 +32,11 @@ describe("roleGrants", () => {
     expect(grant("admin", "react")?.stages).toEqual(["live"]);
   });
 
+  it("says which grants a role loses by also holding another", () => {
+    expect(grant("moderator", "view_other_teams")?.unlessAlso).toEqual(["player"]);
+    expect(grant("moderator", "moderate_bingo")?.unlessAlso).toEqual([]);
+  });
+
   it("keeps a role's own stage limits", () => {
     expect(grant("captain", "rename_team")?.stages).toEqual(["reveal"]);
     expect(grant("staff", "view_buyins")?.stages).toEqual(["signup", "captains", "draft", "reveal"]);

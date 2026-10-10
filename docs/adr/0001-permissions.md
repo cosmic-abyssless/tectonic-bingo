@@ -4,7 +4,7 @@ Who can do what in a Bingo is decided by one `can()` that the server and client 
 
 A grant can be limited to certain stages ("a Captain renames their Team during Board revealed"). A rule that holds for *everyone*, Admins included ("a Finished Bingo is locked"), is not a grant. It stays a domain rule that every grant passes through, so new grants can't forget it.
 
-The narrowest scope wins: Admin (site-wide), then a Bingo role (Moderator, Staff, Captain, Player), then a Restriction on one user in one Bingo. Roles combine, and a Restriction beats any role. There are no one-off grants to a single user, because then nobody can tell what someone can do by looking at their roles. Admins can't be restricted, because they are the ones who lift Restrictions.
+The narrowest scope wins: Admin (site-wide), then a Bingo role (Moderator, Staff, Captain, Player), then a Restriction on one user in one Bingo. Roles combine, and a Restriction beats any role. The one exception is a grant held only by someone who doesn't also hold a given role (`unlessAlso`): a Moderator sees other Teams only while they aren't playing, because a playing Moderator who could scout the other Teams' boards and stats would have an unfair edge. There are no one-off grants to a single user, because then nobody can tell what someone can do by looking at their roles. Admins can't be restricted, because they are the ones who lift Restrictions.
 
 Wildcards (`signups.*`) are allowed only where they fail closed: in Restrictions, and in Admin's `*`. Every other role lists its Actions in full, so a new sensitive Action is never quietly granted to a role.
 

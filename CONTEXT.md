@@ -59,8 +59,9 @@ The same people as Site Admins, named for what they do in a Bingo: create, confi
 
 ### Moderator
 A trusted clan member whose elevated permissions are scoped to a single specific Bingo, granted by an Admin (or inherited by Site Admins).
-- **Capabilities:** Review submissions (approve / reject), view all team boards, inspect audit logs, adjust team points manually.
+- **Capabilities:** Review submissions (approve / reject), view all team boards (not while playing), inspect audit logs, adjust team points manually.
 - **Not:** Change the Bingo's stage or run the draft's pick order; those are for Admins. The stage read-out shows, without the buttons.
+- **Playing:** A Moderator who is also a Player in the Bingo doesn't see other Teams' boards or stats: like any Player, only their own Team's until the Bingo is Finished. They still review every Team's Submissions.
 - **Rules:** A Moderator **can** also be a Player in the same Bingo, and **is permitted** to approve their own team's submissions, as they are trusted clan members.
 
 ### Staff
@@ -314,7 +315,8 @@ A Player's portion of their Team's points, credited from the Claims that complet
 
 ### Stats
 The Bingo's stats page: points over time, each Player's Points share over time (the top five and you, to start), the timeline, top contributors (ranked by Points share) and tile completion.
-- **Rules:** Moderators see every Team at every stage. While the Bingo is Live a Player sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
+- **Rules:** Moderators who aren't playing see every Team at every stage. While the Bingo is Live a Player (a playing Moderator included) sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
+- **Team filter:** For a viewer who sees more than one Team. It starts on their own Team while the Bingo is Live, and on every Team otherwise, and remembers their pick, per Bingo and stage, in that browser.
 
 ### Title
 A tongue-in-cheek label a Player holds on the Stats page for how they played ("Carry", "Closer", "Butterfingers"), recomputed as the stats change.
