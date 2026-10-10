@@ -170,17 +170,28 @@ export interface SubmissionPostedEvent {
   occurredAt: Date;
 }
 
-/** A Submission was posted (Strong start, Partner slayer, Night owl, Early bird, Regular, Globetrotter, Called it). */
+/**
+ * A Submission was posted. Its Achievements (Strong start, Night owl, Early bird, Regular, Globetrotter, Called it) go
+ * to the Player it's credited to, whoever uploaded it; Partner slayer goes to a teammate who posted it for them. The
+ * time of day is the poster's device's, as the drop was sent.
+ */
 export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): void {
   safely(() => {
     db.transaction((tx) => {
-      if (!isLive(tx, event.bingoId) || !isTeamMember(tx, event.teamId, event.posterUserId)) return;
+      if (!isLive(tx, event.bingoId)) return;
       const settings = loadSettings(tx, event.bingoId);
+
+      if (event.creditedUserId !== event.posterUserId && isTeamMember(tx, event.teamId, event.posterUserId)) {
+        tryEarn(tx, event.bingoId, event.posterUserId, "partner_slayer", event.occurredAt, settings, () => true);
+      }
+
+      const userId = event.creditedUserId;
+      if (!isTeamMember(tx, event.teamId, userId)) return;
       const { date, hour } = localTimeOf(event.occurredAt, getTimezone());
 
       upsertActivity(tx, {
         bingoId: event.bingoId,
-        userId: event.posterUserId,
+        userId,
         kind: "posted",
         subjectId: event.submissionId,
         tileId: event.tileId,
@@ -191,50 +202,47 @@ export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): vo
         occurredAt: event.occurredAt,
       });
 
-      tryEarn(tx, event.bingoId, event.posterUserId, "strong_start", event.occurredAt, settings, () => true);
-
-      if (event.creditedUserId !== event.posterUserId) {
-        tryEarn(tx, event.bingoId, event.posterUserId, "partner_slayer", event.occurredAt, settings, () => true);
-      }
+      tryEarn(tx, event.bingoId, userId, "strong_start", event.occurredAt, settings, () => true);
 
       // Night owl 02:00-05:59, Early bird 06:00-08:59, device-local (see the catalogue's descriptions).
-      if (hour >= 2 && hour <= 5) tryEarn(tx, event.bingoId, event.posterUserId, "night_owl", event.occurredAt, settings, () => true);
-      else if (hour >= 6 && hour <= 8) tryEarn(tx, event.bingoId, event.posterUserId, "early_bird", event.occurredAt, settings, () => true);
+      if (hour >= 2 && hour <= 5) tryEarn(tx, event.bingoId, userId, "night_owl", event.occurredAt, settings, () => true);
+      else if (hour >= 6 && hour <= 8) tryEarn(tx, event.bingoId, userId, "early_bird", event.occurredAt, settings, () => true);
 
-      tryEarn(tx, event.bingoId, event.posterUserId, "regular", event.occurredAt, settings, () => {
+      tryEarn(tx, event.bingoId, userId, "regular", event.occurredAt, settings, () => {
         const cutoff = settings.get("regular")!.firstSwitchedOnAt;
         const dates = distinct(
           tx
             .select({ localDate: achievementActivity.localDate })
             .from(achievementActivity)
-            .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, event.posterUserId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
+            .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, userId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
             .all()
             .map((r) => r.localDate),
         );
         return dates.size >= 5;
       });
 
-      tryEarn(tx, event.bingoId, event.posterUserId, "globetrotter", event.occurredAt, settings, () => {
+      tryEarn(tx, event.bingoId, userId, "globetrotter", event.occurredAt, settings, () => {
         const cutoff = settings.get("globetrotter")!.firstSwitchedOnAt;
         const tileIds = distinct(
           tx
             .select({ tileId: achievementActivity.tileId })
             .from(achievementActivity)
-            .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, event.posterUserId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
+            .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, userId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
             .all()
             .map((r) => r.tileId),
         );
         return tileIds.size >= 5;
       });
 
-      tryEarn(tx, event.bingoId, event.posterUserId, "called_it", event.occurredAt, settings, () => {
+      // The credited Player's own interest: the drop is theirs.
+      tryEarn(tx, event.bingoId, userId, "called_it", event.occurredAt, settings, () => {
         if (event.claimedLeafIds.length === 0) return false;
         const partIds = partsContaining(tx, event.tileNodeId, event.claimedLeafIds);
         if (partIds.size === 0) return false;
         return !!tx
           .select({ id: tileInterests.id })
           .from(tileInterests)
-          .where(and(eq(tileInterests.userId, event.posterUserId), inArray(tileInterests.taskId, [...partIds])))
+          .where(and(eq(tileInterests.userId, userId), inArray(tileInterests.taskId, [...partIds])))
           .get();
       });
     });
@@ -269,18 +277,19 @@ export function recordSubmissionsFirstPriced(db: Db, submissionIds: string[]): v
     safely(() => {
       db.transaction((tx) => {
         const submission = tx
-          .select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId, postedByUserId: submissions.postedByUserId, createdAt: submissions.createdAt })
+          .select({ teamId: submissions.teamId, submittedByUserId: submissions.submittedByUserId, createdAt: submissions.createdAt })
           .from(submissions)
           .where(eq(submissions.id, submissionId))
           .get();
         if (!submission) return;
         const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, submission.teamId)).get();
         if (!team) return;
-        const posterUserId = submission.postedByUserId ?? submission.submittedByUserId;
-        if (!isTeamMember(tx, submission.teamId, posterUserId)) return;
+        // The credited Player's, like the rest of a Submission's Achievements (recordSubmissionPosted).
+        const userId = submission.submittedByUserId;
+        if (!isTeamMember(tx, submission.teamId, userId)) return;
         const settings = loadSettings(tx, team.bingoId);
 
-        tryEarn(tx, team.bingoId, posterUserId, "big_spender", submission.createdAt, settings, () => {
+        tryEarn(tx, team.bingoId, userId, "big_spender", submission.createdAt, settings, () => {
           const claimRows = tx.select({ gpValue: schema.claims.gpValue }).from(schema.claims).where(eq(schema.claims.submissionId, submissionId)).all();
           const total = claimRows.reduce((sum, c) => sum + (c.gpValue ?? 0), 0);
           return total >= 25_000_000;

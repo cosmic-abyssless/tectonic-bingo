@@ -95,13 +95,13 @@ function earned(bingo: typeof schema.bingos.$inferSelect, userId: string, key: A
 // ---------------------------------------------------------------------------
 
 describe("Strong start", () => {
-  it("is earned by the poster, not the credited player, on their first post", () => {
+  it("is earned by the credited Player on their first drop, not by a teammate who posted it for them", () => {
     const { bingo, team, alice, bob } = seed();
     const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
     submit(bingo, team.id, alice.id, leafId, itemName, { postedByUserId: bob.id }); // bob posts a drop credited to alice
 
-    expect(earned(bingo, bob.id, "strong_start")).toBe(true);
-    expect(earned(bingo, alice.id, "strong_start")).toBe(false); // alice hasn't posted anything herself yet
+    expect(earned(bingo, alice.id, "strong_start")).toBe(true);
+    expect(earned(bingo, bob.id, "strong_start")).toBe(false); // bob only posted it for her
   });
 
   it("is not earned before the bingo is live", () => {
@@ -115,11 +115,13 @@ describe("Strong start", () => {
     expect(earned(getBingo(bingo.id), alice.id, "strong_start")).toBe(false);
   });
 
-  it("earns nothing for a moderator posting to a team they aren't a member of", () => {
+  it("earns nothing for a moderator posting to a team they aren't a member of, and the credited Player still earns it", () => {
     const { bingo, team, carol } = seed(); // carol captains Team B, not Team A
     const { leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
     submit(bingo, team.id, team.captainUserId, leafId, itemName, { postedByUserId: carol.id });
     expect(earned(bingo, carol.id, "strong_start")).toBe(false);
+    expect(earned(bingo, carol.id, "partner_slayer")).toBe(false);
+    expect(earned(bingo, team.captainUserId, "strong_start")).toBe(true);
   });
 });
 
@@ -217,6 +219,16 @@ describe("Called it (hidden)", () => {
     at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, tile.id, leafId, true));
     submit(bingo, team.id, alice.id, leafId, itemName);
     expect(earned(bingo, alice.id, "called_it")).toBe(true);
+  });
+
+  it("goes by the credited Player's interest on a drop a teammate posted for them, and is theirs", () => {
+    const { bingo, team, alice, bob } = seed();
+    const { tile, leafId, itemName } = tileWithLeaf(bingo.id, 0, 0);
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, alice.id, tile.id, leafId, true));
+    at(STARTS_AT, "UTC", () => setTileInterest(db, team.id, bob.id, tile.id, leafId, true));
+    submit(bingo, team.id, alice.id, leafId, itemName, { postedByUserId: bob.id });
+    expect(earned(bingo, alice.id, "called_it")).toBe(true);
+    expect(earned(bingo, bob.id, "called_it")).toBe(false);
   });
 
   it("is not earned without a current interest mark on a Part containing the claim", () => {
@@ -538,6 +550,15 @@ describe("Big spender", () => {
     void sub;
   });
 
+  it("goes to the credited Player when a teammate posted the drop for them", async () => {
+    const { bingo, team, alice, bob } = seed();
+    const { leafId } = tileWithLeaf(bingo.id, 0, 0, "Twisted bow");
+    submit(bingo, team.id, alice.id, leafId, "Twisted bow", { postedByUserId: bob.id });
+    fillMissingGpValuesAndNotify(db, await loadedTable(30_000_000));
+    expect(earned(bingo, alice.id, "big_spender")).toBe(true);
+    expect(earned(bingo, bob.id, "big_spender")).toBe(false);
+  });
+
   it("is not earned when the total stays under 25m", async () => {
     const { bingo, team, alice } = seed();
     tileWithLeaf(bingo.id, 0, 0, "Twisted bow");
@@ -772,15 +793,15 @@ describe("Popup queue", () => {
     const a = tileWithLeaf(bingo.id, 0, 0);
     const b = tileWithLeaf(bingo.id, 0, 1);
     const noon = new Date(STARTS_AT.getTime() + 12 * 3_600_000); // outside Night owl/Early bird's ranges
-    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { postedByUserId: bob.id, now: noon }); // strong_start + partner_slayer for bob
-    submit(bingo, team.id, bob.id, b.leafId, b.itemName, { now: new Date(noon.getTime() + 1000) }); // globetrotter progress only, no new earn
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { postedByUserId: bob.id, now: noon }); // partner_slayer for bob
+    submit(bingo, team.id, bob.id, b.leafId, b.itemName, { now: new Date(noon.getTime() + 1000) }); // strong_start for bob
 
     const popups = myAchievements(bingo, bob.id).unshownPopups;
-    expect(popups).toEqual(["strong_start", "partner_slayer"]);
+    expect(popups).toEqual(["partner_slayer", "strong_start"]);
 
-    achievementService.markPopupsShown(db, bingo.id, bob.id, ["strong_start"]);
-    expect(myAchievements(bingo, bob.id).unshownPopups).toEqual(["partner_slayer"]);
     achievementService.markPopupsShown(db, bingo.id, bob.id, ["partner_slayer"]);
+    expect(myAchievements(bingo, bob.id).unshownPopups).toEqual(["strong_start"]);
+    achievementService.markPopupsShown(db, bingo.id, bob.id, ["strong_start"]);
     expect(myAchievements(bingo, bob.id).unshownPopups).toEqual([]);
   });
 });
