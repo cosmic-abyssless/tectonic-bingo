@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomClient, type WomSnapshot } from "./womService";
-import { gainsOf, queueDueReads, readPlayer, WomReadQueue } from "./womReadService";
+import { gainsOf, queueDueReads, queueDueWomUpdates, readPlayer, WomReadQueue } from "./womReadService";
 import * as achievementService from "./achievementService";
 
 let sqlite: Database.Database;
@@ -20,11 +20,11 @@ beforeEach(() => {
 });
 afterEach(() => sqlite.close());
 
-function seed(opts: { stage?: "live" | "complete"; endedAt?: Date; players?: number } = {}) {
+function seed(opts: { stage?: "live" | "complete"; endedAt?: Date; players?: number; bingo?: Partial<typeof schema.bingos.$inferInsert> } = {}) {
   const [admin] = db.insert(schema.users).values({ discordId: "admin", discordUsername: "admin" }).returning().all();
   const [bingo] = db
     .insert(schema.bingos)
-    .values({ slug: "b", name: "B", boardRows: 1, boardCols: 1, stage: opts.stage ?? "live", startsAt: START, createdByUserId: admin!.id })
+    .values({ slug: "b", name: "B", boardRows: 1, boardCols: 1, stage: opts.stage ?? "live", startsAt: START, createdByUserId: admin!.id, ...opts.bingo })
     .returning()
     .all();
   if (opts.endedAt) db.insert(schema.stageTransitions).values({ bingoId: bingo!.id, fromStage: "live", toStage: "complete", changedByUserId: admin!.id, createdAt: opts.endedAt }).run();
@@ -472,6 +472,22 @@ describe("WomReadQueue", () => {
     expect(wom.fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("sends an update job as one paced request asking WOM to update the Player, separately from their read", async () => {
+    const { bingoId, userIds } = seed();
+    const wom = fakeWom([raw(at(1), 1)]);
+    const { queue, waits } = pacedQueue(wom.client, 20);
+    expect(queue.add({ bingoId, userId: userIds[0]!, kind: "update" })).toBe(true);
+    expect(queue.add({ bingoId, userId: userIds[0]! })).toBe(true);
+    expect(queue.add({ bingoId, userId: userIds[0]!, kind: "update" })).toBe(false);
+    await queue.whenIdle();
+    const [[updateUrl, updateInit], [readUrl, readInit]] = wom.fetchImpl.mock.calls;
+    expect(String(updateUrl)).toBe("https://api.wiseoldman.net/v2/players/Player%200");
+    expect(updateInit?.method).toBe("POST");
+    expect(new URL(String(readUrl)).pathname).toBe("/v2/players/Player%200/snapshots");
+    expect(readInit?.method).toBe("GET");
+    expect(waits).toEqual([3000]);
+  });
+
   it("holds off after a 429, then retries the same Player", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(at(5));
@@ -502,6 +518,34 @@ describe("WomReadQueue", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("queueDueWomUpdates", () => {
+  const withCompetition = { womEnabled: true, womGroupId: "123", womGroupVerificationCode: "code", womCompetitionId: 555 };
+  const queued = (queue: WomReadQueue) => (queue.add as ReturnType<typeof vi.fn>).mock.calls.map(([job]) => job);
+
+  it("queues an update of every Player once, at start + 6h, and records it", () => {
+    const { bingoId, userIds } = seed({ players: 3, bingo: withCompetition });
+    const queue = { add: vi.fn(() => true) } as unknown as WomReadQueue;
+    queueDueWomUpdates(db, queue, at(5.9));
+    expect(queue.add).not.toHaveBeenCalled();
+
+    queueDueWomUpdates(db, queue, at(6));
+    expect(queued(queue)).toEqual(expect.arrayContaining(userIds.map((userId) => ({ bingoId, userId, kind: "update" }))));
+    expect(queued(queue)).toHaveLength(3);
+    const entry = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "wom.participants_updated")).get()!;
+    expect(JSON.parse(entry.details)).toEqual({ players: 3 });
+
+    queueDueWomUpdates(db, queue, at(6.1));
+    expect(queued(queue)).toHaveLength(3);
+  });
+
+  it("queues nothing for a Bingo without a Wise Old Man competition", () => {
+    seed({ players: 2 });
+    const queue = { add: vi.fn(() => true) } as unknown as WomReadQueue;
+    queueDueWomUpdates(db, queue, at(6));
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });
 

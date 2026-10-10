@@ -300,8 +300,11 @@ export interface AuditDetailsMap {
   "wom.competition_created": { competitionId: number };
   // changed: what the sync sent (older entries, from team renames only, have none).
   "wom.roster_synced": { changed?: ("title" | "metric" | "startsAt" | "endsAt" | "teams")[] };
-  /** The bulk update at start + 6h: WOM was asked to update every participant of the competition. */
-  "wom.participants_updated": { competitionId: number };
+  /**
+   * The update at start + 6h: WOM is asked to update each of the Bingo's `players`. Entries from before it went Player by
+   * Player have `competitionId` instead: one request for the whole competition.
+   */
+  "wom.participants_updated": { players?: number; competitionId?: number };
   "wom.sync_failed": { operation: "create" | "rename" | "sync" | "update"; message: string };
 
   /** The Discord team sync (discordTeamService.ts) changed something: labels of what it made, edited or deleted. */
@@ -1029,7 +1032,8 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     tone: "neutral",
     visibility: "mods",
     title: "WOM players updated",
-    label: () => "Asked Wise Old Man to update every player in the competition",
+    label: (i) =>
+      i.details.players === undefined ? "Asked Wise Old Man to update every player in the competition" : `Asked Wise Old Man to update the Bingo's ${i.details.players} players`,
   },
   "wom.sync_failed": { category: "system", tone: "warn", visibility: "mods", title: "WOM sync failed", label: (i) => `Wise Old Man ${i.details.operation} failed: ${i.details.message}` },
   "discord.synced": {
