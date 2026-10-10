@@ -1,5 +1,5 @@
 import { useEscapeBack } from "../core/ui/useEscapeBack";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useBingoHeader, useBingoMenuEntries } from "../headless";
 import type { Key } from "react-aria-components";
@@ -14,7 +14,7 @@ import { ReviewQueue, SUBMISSION_FILTER_PARAMS } from "../core/mod/ReviewQueue";
 import { StageControls } from "../core/mod/StageControls";
 import { WrappedControls } from "../core/mod/WrappedControls";
 import { SignupRoster } from "../core/mod/SignupRoster";
-import { isOutOfStage, MOD_TABS } from "../core/mod/modTabs";
+import { isOutOfStage, isTabOutOfStage, MOD_TABS, mayViewTab, visibleSections, type ModTab } from "../core/mod/modTabs";
 import { BingoSettingsForm } from "../core/admin/BingoSettingsForm";
 import { PermissionsPanel } from "../core/admin/PermissionsPanel";
 import { AchievementsManager } from "../core/admin/AchievementsManager";
@@ -51,6 +51,44 @@ function defaultTabFor(stage: Stage | undefined, canAdminister: boolean): string
   return "submissions";
 }
 
+// A tab split into sub-tabs (MOD_TABS `sections`): those this viewer may see, opening on the first one in stage. Out of
+// stage ones are dimmed, unless `inStage` keeps them all in. Just the one a viewer may see has no sub-tab bar.
+// `listClassName` lays out the sub-tab bar, for a tab whose panels don't share a width.
+function SubTabs({
+  tab,
+  stage,
+  canAdminister,
+  inStage = false,
+  listClassName,
+  panels,
+}: {
+  tab: ModTab;
+  stage: Stage;
+  canAdminister: boolean;
+  inStage?: boolean;
+  listClassName?: string;
+  panels: Record<string, ReactNode>;
+}) {
+  const sections = visibleSections(tab, canAdminister).map((s) => ({ ...s, dimmed: !inStage && isOutOfStage(s, stage) }));
+  if (sections.length === 1) return <>{panels[sections[0]!.key]}</>;
+  return (
+    <Tabs defaultSelectedKey={(sections.find((s) => !s.dimmed) ?? sections[0]!).key}>
+      <TabList className={listClassName}>
+        {sections.map((s) => (
+          <Tab key={s.key} id={s.key} dimmed={s.dimmed}>
+            {s.label}
+          </Tab>
+        ))}
+      </TabList>
+      {sections.map((s) => (
+        <TabPanel key={s.key} id={s.key}>
+          {panels[s.key]}
+        </TabPanel>
+      ))}
+    </Tabs>
+  );
+}
+
 // Mod surfaces never theme — always core/, regardless of bingo.theme.
 export function ModPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -69,8 +107,8 @@ export function ModPage() {
   const bingoMenuEntries = useBingoMenuEntries(slug ?? "", useBingoHeader(slug ?? ""));
 
   const historical = shell?.historical ?? null;
-  // The Draft board (CONTEXT.md): while it has unpublished changes, the Board tab says so (Admins only), and it and the
-  // Lines tab stay in stage whatever the stage, so the changes are never out of sight.
+  // The Draft board (CONTEXT.md): while it has unpublished changes, the Board tab says so (Admins only), and it
+  // stays in stage whatever the stage, so the changes are never out of sight.
   const { data: draftStatus } = useBoardDraftStatus(slug ?? "", !!slug && canAdminister && !historical);
   const unpublished = canAdminister && !!draftStatus?.hasChanges;
   const visibleTabs = useMemo(() => {
@@ -81,7 +119,7 @@ export function ModPage() {
       return MOD_TABS.filter(
         (t) => (t.key === "submissions" && historical.submissions) || (t.key === "signups" && historical.signupRoster) || (t.key === "board" && historical.tasks && canAdminister),
       ).map((t) => ({ ...t, dimmed: false }));
-    const allowed = MOD_TABS.filter((t) => t.action === "moderate_bingo" || canAdminister).map((t) => ({ ...t, dimmed: isOutOfStage(t, stage) && !(unpublished && (t.key === "board" || t.key === "lines")) }));
+    const allowed = MOD_TABS.filter((t) => mayViewTab(t, canAdminister)).map((t) => ({ ...t, dimmed: isTabOutOfStage(t, stage, canAdminister) && !(unpublished && t.key === "board") }));
     const current = allowed.filter((t) => !t.dimmed);
     return outOfStageTabs === "hide" ? current : [...current, ...allowed.filter((t) => t.dimmed)];
   }, [stage, canAdminister, outOfStageTabs, historical, unpublished]);
@@ -195,8 +233,22 @@ export function ModPage() {
                   <ReviewQueue slug={slug} />
                 </div>
               </TabPanel>
+              {/* Full width for the roster's table; its sub-tab bar and the questions keep to NARROW. */}
               <TabPanel id="signups">
-                <SignupRoster slug={slug} />
+                <SubTabs
+                  tab={MOD_TABS.find((t) => t.key === "signups")!}
+                  stage={shell.bingo.stage}
+                  canAdminister={canAdminister && !historical}
+                  listClassName={NARROW}
+                  panels={{
+                    roster: <SignupRoster slug={slug} />,
+                    questions: (
+                      <div className={NARROW}>
+                        <QuestionBuilder slug={slug} />
+                      </div>
+                    ),
+                  }}
+                />
               </TabPanel>
               <TabPanel id="audit">
                 <div className={NARROW}>
@@ -205,14 +257,34 @@ export function ModPage() {
               </TabPanel>
               <TabPanel id="feedback">
                 <div className={NARROW}>
-                  <FeedbackResults slug={slug} />
+                  <SubTabs
+                    tab={MOD_TABS.find((t) => t.key === "feedback")!}
+                    stage={shell.bingo.stage}
+                    canAdminister={canAdminister}
+                    panels={{
+                      responses: <FeedbackResults slug={slug} />,
+                      questions: <QuestionBuilder slug={slug} form="feedback" />,
+                      superlatives: <SuperlativesManager slug={slug} bingo={shell.bingo} />,
+                    }}
+                  />
                 </div>
               </TabPanel>
-              {/* Offered on a Historical Bingo too, where it recorded Tasks (the tab list above decides), and locked there. */}
+              {/* Offered on a Historical Bingo too, where it recorded Tasks (the tab list above decides), and locked there:
+                  just its Tiles, as it has no Lines to edit. */}
               {canAdminister && (
                 <TabPanel id="board">
                   <div className={NARROW}>
-                    <BoardEditor slug={slug} bingo={shell.bingo} />
+                    {historical ? (
+                      <BoardEditor slug={slug} bingo={shell.bingo} />
+                    ) : (
+                      <SubTabs
+                        tab={MOD_TABS.find((t) => t.key === "board")!}
+                        stage={shell.bingo.stage}
+                        canAdminister={canAdminister}
+                        inStage={unpublished}
+                        panels={{ tiles: <BoardEditor slug={slug} bingo={shell.bingo} />, lines: <LineEditor slug={slug} bingo={shell.bingo} /> }}
+                      />
+                    )}
                   </div>
                 </TabPanel>
               )}
@@ -220,32 +292,18 @@ export function ModPage() {
                 <>
                   <TabPanel id="settings">
                     <div className={NARROW}>
-                      <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="achievements">
-                    <div className={NARROW}>
-                      <AchievementsManager slug={slug} bingo={shell.bingo} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="lines">
-                    <div className={NARROW}>
-                      <LineEditor slug={slug} bingo={shell.bingo} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="questions">
-                    <div className={NARROW}>
-                      <QuestionBuilder slug={slug} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="feedback-questions">
-                    <div className={NARROW}>
-                      <QuestionBuilder slug={slug} form="feedback" />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="superlatives">
-                    <div className={NARROW}>
-                      <SuperlativesManager slug={slug} bingo={shell.bingo} />
+                      <SubTabs
+                        tab={MOD_TABS.find((t) => t.key === "settings")!}
+                        stage={shell.bingo.stage}
+                        canAdminister={canAdminister}
+                        panels={{
+                          general: <BingoSettingsForm slug={slug} bingo={shell.bingo} paidSignupCount={shell.paidSignupCount} potTotal={shell.potTotal} hasSignups={shell.hasSignups} />,
+                          // Every role and what it may do; Moderators and Staff, granted per Bingo, are also managed here.
+                          people: <PermissionsPanel slug={slug} bingo={shell.bingo} view="people" />,
+                          tabs: <PermissionsPanel slug={slug} bingo={shell.bingo} view="tabs" />,
+                          roles: <PermissionsPanel slug={slug} bingo={shell.bingo} view="roles" />,
+                        }}
+                      />
                     </div>
                   </TabPanel>
                   <TabPanel id="teams">
@@ -253,15 +311,14 @@ export function ModPage() {
                       <TeamManager slug={slug} />
                     </div>
                   </TabPanel>
-                  <TabPanel id="permissions">
-                    {/* Every role and what it may do; Moderators and Staff, granted per Bingo, are also managed here. */}
+                  <TabPanel id="extras">
                     <div className={NARROW}>
-                      <PermissionsPanel slug={slug} bingo={shell.bingo} />
-                    </div>
-                  </TabPanel>
-                  <TabPanel id="wrapped-art">
-                    <div className={`${NARROW} space-y-8`}>
-                      <WrappedArtManager slug={slug} />
+                      <SubTabs
+                        tab={MOD_TABS.find((t) => t.key === "extras")!}
+                        stage={shell.bingo.stage}
+                        canAdminister={canAdminister}
+                        panels={{ achievements: <AchievementsManager slug={slug} bingo={shell.bingo} />, "wrapped-art": <WrappedArtManager slug={slug} /> }}
+                      />
                     </div>
                   </TabPanel>
                 </>

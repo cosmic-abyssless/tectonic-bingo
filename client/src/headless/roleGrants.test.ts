@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ACTIONS, OWNER_ACTIONS, type Action } from "@bingo/shared";
 import { describeStages, roleGrants } from "./roleGrants";
 
-// The mod panel's Permissions tab (CONTEXT.md "Action"): every role's grants, in the stages they're open in.
+// The mod panel's permissions (CONTEXT.md "Action"): every role's grants, in the stages they're open in.
 
 const settings = { showScreenshotsWhenFinished: true };
 const grant = (role: Parameters<typeof roleGrants>[0], action: string) => roleGrants(role, settings).find((g) => g.action === action);

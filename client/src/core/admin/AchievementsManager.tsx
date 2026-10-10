@@ -10,8 +10,8 @@ import { WikiIcon } from "../ui/ItemIcon";
 import { Switch } from "../ui/Switch";
 
 /**
- * The mod panel's Achievements tab (admins only): the Bingo's master switch and one switch per Achievement
- * (CONTEXT.md "Achievement"). Saved on its own, through the same settings update as the Settings tab.
+ * The Achievements sub-tab of the mod panel's Extras tab (admins only): the Bingo's master switch and one switch per
+ * Achievement (CONTEXT.md "Achievement"). Saved on its own, through the same settings update as the Settings tab.
  */
 export function AchievementsManager({ slug, bingo }: { slug: string; bingo: Bingo }) {
   const queryClient = useQueryClient();

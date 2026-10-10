@@ -145,7 +145,7 @@ function Loaded({ data, which, setWhich }: { data: FeedbackResultsResponse; whic
       </div>
       {data.questions.length === 0 ? (
         <EmptyState icon={<ListIcon />} title="No feedback questions">
-          Add them under Feedback questions. Players can answer once the Bingo is Finished.
+          Add them under Questions. Players can answer once the Bingo is Finished.
         </EmptyState>
       ) : (
         <>

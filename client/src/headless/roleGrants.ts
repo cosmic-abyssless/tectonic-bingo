@@ -1,4 +1,4 @@
-// What every role holds in a Bingo, for the mod panel's Permissions tab: GRANTS (@bingo/shared permissions.ts) read out
+// What every role holds in a Bingo, for the mod panel's Settings tab: GRANTS (@bingo/shared permissions.ts) read out
 // role by role, each Action with the stages it's open in once the rules for everyone have had their say. No React.
 import { ACTION_INFO, ACTIONS, grantsOf, RESTRICTABLE_ACTIONS, STAGE_LABEL, STAGE_ORDER, passesRules, type Action, type PermissionBingo, type Role, type Stage } from "@bingo/shared";
 
