@@ -28,6 +28,7 @@ import { userPresence } from "../ws";
 import { ServiceError } from "./errors";
 import { discordUnreachableSince, getSettings, setDiscordUnreachable, setDmHandoff, INBOX_DAYS, type StoredNotification } from "./notificationService";
 import { stillTrue } from "./notificationDispatch";
+import { dmScreenshot, SCREENSHOT_KINDS, type DmImage } from "./dmScreenshot";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -100,9 +101,9 @@ export function updateFoldingWindows(db: Db, input: unknown, userId: string): Fo
 // Sending
 // ---------------------------------------------------------------------------
 
-/** Sends a DM to a Discord user. Throws DmError. Tests pass a fake. */
+/** Sends a DM to a Discord user, with an image attached when given. Throws DmError. Tests pass a fake. */
 export interface DiscordDmApi {
-  send(discordId: string, content: string): Promise<void>;
+  send(discordId: string, content: string, image?: DmImage): Promise<void>;
 }
 
 export class DmError extends Error {
@@ -120,14 +121,15 @@ class RestDiscordDmApi implements DiscordDmApi {
   constructor(token: string) {
     this.rest = new REST({ version: "10", retries: 1 }).setToken(token);
   }
-  async send(discordId: string, content: string): Promise<void> {
+  async send(discordId: string, content: string, image?: DmImage): Promise<void> {
     try {
       let channelId = this.channels.get(discordId);
       if (!channelId) {
         channelId = ((await this.rest.post(Routes.userChannels(), { body: { recipient_id: discordId } })) as { id: string }).id;
         this.channels.set(discordId, channelId);
       }
-      await this.rest.post(Routes.channelMessages(channelId), { body: { content, allowed_mentions: { parse: [] } } });
+      const body = { content, allowed_mentions: { parse: [] } };
+      await this.rest.post(Routes.channelMessages(channelId), image ? { body, files: [{ name: image.name, data: image.data, contentType: "image/webp" }] } : { body });
     } catch (err) {
       if (err instanceof DiscordAPIError) throw new DmError(`Discord: ${err.message}`, typeof err.code === "number" ? err.code : null);
       throw new DmError(`Couldn't reach Discord: ${err instanceof Error ? err.message : String(err)}`, null);
@@ -166,7 +168,7 @@ function siteUrl(path: string | null): string {
   return path ? `${base}${path}` : base || "";
 }
 
-/** One DM's text: the Notification's own words, or the kind's fold for several. A link to the site, no screenshots. */
+/** One DM's text: the Notification's own words, or the kind's fold for several, and a link to the site. A DM about one drop of the recipient's own Team also carries its screenshot (dmScreenshot.ts). */
 export function dmText(rows: StoredNotification[], bingoName: string | null): string {
   const first = rows[0]!;
   const kind = first.kind as NotificationKind;
@@ -180,16 +182,18 @@ export function dmText(rows: StoredNotification[], bingoName: string | null): st
 }
 
 /** Sends (or, on a dev server, sinks) one DM and logs it. A 50007 marks the user unreachable. Null if it went, else why not. */
-async function sendDm(db: Db, user: { id: string; discordId: string }, kind: NotificationKind, bingoId: string | null, text: string, count: number): Promise<string | null> {
+async function sendDm(db: Db, user: { id: string; discordId: string }, kind: NotificationKind, bingoId: string | null, text: string, count: number, image?: DmImage): Promise<string | null> {
   const sentAt = new Date();
   if (usesSink()) {
-    db.insert(notificationDmLog).values({ userId: user.id, bingoId, kind, text, count, sink: true, sentAt }).run();
+    // The sink keeps text only: it notes the image, so a generated DM shows it would have carried one.
+    const logged = image ? `${text}\n[screenshot attached, ${Math.round(image.data.length / 1024)} KB]` : text;
+    db.insert(notificationDmLog).values({ userId: user.id, bingoId, kind, text: logged, count, sink: true, sentAt }).run();
     return null;
   }
   const api = discordDmApi();
   if (!api) return "Discord DMs aren't set up on this server";
   try {
-    await api.send(user.discordId, text);
+    await api.send(user.discordId, text, image);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     if (err instanceof DmError && err.code === DISCORD_CANNOT_DM) {
@@ -270,7 +274,10 @@ export async function runDmRound(db: Db, now = new Date()): Promise<number> {
     const user = db.select({ id: users.id, discordId: users.discordId }).from(users).where(eq(users.id, item.userId)).get();
     if (!user) continue;
     const bingoName = item.bingoId ? (db.select({ name: bingos.name }).from(bingos).where(eq(bingos.id, item.bingoId)).get()?.name ?? null) : null;
-    if ((await sendDm(db, user, kind, item.bingoId, dmText(live, bingoName), live.length)) === null) sent++;
+    // A DM about one drop of their own Team carries its screenshot; a fold of several doesn't.
+    const submissionId = live.length === 1 && SCREENSHOT_KINDS.has(kind) ? (JSON.parse(live[0]!.dataJson) as NotificationData).submissionId : undefined;
+    const image = submissionId ? ((await dmScreenshot(db, submissionId)) ?? undefined) : undefined;
+    if ((await sendDm(db, user, kind, item.bingoId, dmText(live, bingoName), live.length, image)) === null) sent++;
   }
   return sent;
 }
