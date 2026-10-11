@@ -10,6 +10,7 @@ import {
   can,
   pickTitles,
   placeDrafted,
+  playerName,
   titlesHeldBy,
   type AvatarUser,
   type BingoWrapped,
@@ -21,6 +22,7 @@ import {
   type WrappedCaptain,
   type WrappedDrop,
   type WrappedDuo,
+  type WrappedBossLeader,
   type WrappedDuoMoment,
   type WrappedModerator,
   type WrappedReviewStats,
@@ -45,6 +47,8 @@ import { artSet } from "./wrappedArtService";
 import { rsnsInBingo } from "./playerNames";
 import { BOSS_NAMES } from "./luck/bossSources";
 import { computeWinners } from "./superlativeService";
+import { removedPlayerTeams } from "./teamService";
+import { parseWrappedBosses } from "./wrappedBossesService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Bingo = typeof schema.bingos.$inferSelect;
@@ -151,6 +155,45 @@ function countDropItems(drops: WrappedDrop[]): { itemName: string; drops: number
   return [...counts].map(([itemName, n]) => ({ itemName, drops: n })).sort((a, b) => b.drops - a.drops || a.itemName.localeCompare(b.itemName));
 }
 
+/**
+ * Who killed each raid and boss of `metrics` the most (BingoWrapped.bossLeaders), in that order: each Team's kills at it
+ * are its Players' kill-count gains added up, and the Team or Teams with the most lead, each with its top Player or
+ * Players. A boss nobody gained kills at is left out. `gains` is each Player's boss gains over the Bingo (bossGainsOf),
+ * with the Team they count for. Tied Teams follow `teamOrder` (the final standings), and tied Players their names.
+ */
+export function bossLeadersOf(
+  metrics: string[],
+  gains: { userId: string; teamId: string; bosses: { metric: string; kills: number }[] }[],
+  userById: Map<string, AvatarUser>,
+  teamOrder: string[],
+): WrappedBossLeader[] {
+  return metrics.flatMap((metric) => {
+    const byTeam = new Map<string, { kills: number; players: { userId: string; kills: number }[] }>();
+    for (const g of gains) {
+      const kills = g.bosses.find((b) => b.metric === metric)?.kills ?? 0;
+      if (kills <= 0 || !userById.has(g.userId)) continue;
+      const team = byTeam.get(g.teamId) ?? { kills: 0, players: [] };
+      team.kills += kills;
+      team.players.push({ userId: g.userId, kills });
+      byTeam.set(g.teamId, team);
+    }
+    if (byTeam.size === 0) return [];
+    const most = Math.max(...[...byTeam.values()].map((t) => t.kills));
+    const teams = [...byTeam]
+      .filter(([, t]) => t.kills === most)
+      .sort(([a], [b]) => teamOrder.indexOf(a) - teamOrder.indexOf(b))
+      .map(([teamId, t]) => {
+        const top = Math.max(...t.players.map((p) => p.kills));
+        const topPlayers = t.players
+          .filter((p) => p.kills === top)
+          .map((p) => ({ player: userById.get(p.userId)!, kills: p.kills }))
+          .sort((a, b) => playerName(a.player).localeCompare(playerName(b.player)));
+        return { teamId, kills: t.kills, topPlayers };
+      });
+    return [{ metric, name: bossName(metric), teams }];
+  });
+}
+
 /** Review stats over some reviewed Submissions (approved or rejected, with who reviewed them and when). */
 function reviewStats(reviews: { reviewerId: string; status: string; submittedAt: Date; reviewedAt: Date }[], userById: Map<string, AvatarUser>): WrappedReviewStats {
   const waits = reviews.map((r) => Math.max(0, r.reviewedAt.getTime() - r.submittedAt.getTime()));
@@ -231,8 +274,10 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     : [];
   const picks = db.select().from(draftPicks).where(eq(draftPicks.bingoId, bingoId)).all();
   const pickOf = new Map(picks.map((p) => [p.userId, p]));
+  // Players removed from a Team still count for it in Wrapped (CONTEXT.md "Remove from Team"), so for the kills they gained.
+  const removedTeamOf = removedPlayerTeams(db, bingoId);
 
-  const userById = avatarUsers(db, bingoId, [...memberRows.map((m) => m.userId), ...contributions.map((c) => c.userId), ...reviews.map((r) => r.reviewerId)]);
+  const userById = avatarUsers(db, bingoId, [...memberRows.map((m) => m.userId), ...contributions.map((c) => c.userId), ...reviews.map((r) => r.reviewerId), ...removedTeamOf.keys()]);
   for (const c of contributions) userById.set(c.userId, c.user);
 
   const drops = dropsOf(rewind.submissions, userById);
@@ -298,6 +343,20 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const mostReactedDrop = mostReacted && reactionsOf(mostReacted) > 0 ? drops.filter((d) => d.submissionId === mostReacted.id).sort(byGp)[0] : undefined;
   const rarest = drops.filter((d) => d.luckOneIn !== null).sort(byLuck)[0];
 
+  // Raids and bosses: every Player's Wise Old Man kill-count gains over the Bingo, for the Team they played for (a
+  // removed Player's, the Team they were taken off), measured as the Player section's are.
+  const timelines = loadTimelines(db, bingoId);
+  const bingoTeamIds = new Set(teamRows.map((t) => t.id));
+  const womTeamOf = new Map([...removedTeamOf].filter(([, teamId]) => bingoTeamIds.has(teamId)));
+  for (const c of contributions) womTeamOf.set(c.userId, c.teamId);
+  for (const m of memberRows) womTeamOf.set(m.userId, m.teamId);
+  const bossGains = liveAt
+    ? [...womTeamOf].flatMap(([userId, teamId]) => {
+        const timeline = timelines.get(userId);
+        return timeline ? [{ userId, teamId, bosses: bossGainsOf(timeline, liveAt, finishedAt) }] : [];
+      })
+    : [];
+
   const bingoData: BingoWrapped = {
     bingoName: bingo.name,
     totalSubmissions: approvedSubs.length,
@@ -308,6 +367,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     teams: wrappedTeams,
     biggestSteal,
     moderation: reviewStats(reviews, userById),
+    bossLeaders: bossLeadersOf(parseWrappedBosses(bingo.wrappedBossesJson), bossGains, userById, wrappedTeams.map((t) => t.teamId)),
   };
 
   // Players: everyone on a Team.
@@ -315,7 +375,6 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const averageSubmissions = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.approvedSubmissions ?? 0), 0) / playerIds.length : 0;
   const averagePointsShare = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.pointsShare ?? 0), 0) / playerIds.length : 0;
   const achievements = getEarnedAchievements(db, bingo);
-  const timelines = loadTimelines(db, bingoId);
   const teamOfUser = new Map(memberRows.map((m) => [m.userId, m.teamId]));
   const pairs = getAcceptedPairs(db, bingoId).filter((p) => teamOfUser.has(p.userIds[0]) && teamOfUser.get(p.userIds[0]) === teamOfUser.get(p.userIds[1]));
   const shareOf = (id: string) => contributionOf.get(id)?.pointsShare ?? 0;

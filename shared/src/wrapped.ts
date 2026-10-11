@@ -200,6 +200,18 @@ export interface WrappedReviewStats {
   reviewers: (WrappedModerator & { user: AvatarUser; rejected: number })[];
 }
 
+/**
+ * One raid or boss of the Bingo's list (Bingo.wrappedBosses) and the Team or Teams that killed it the most: each Team's
+ * kills are the kill counts its Players gained at it during the Bingo (Wise Old Man), added up, Players removed from it
+ * included. A group raid counts once for each Player in it. Tied Teams are all listed, and so are a Team's tied top Players.
+ */
+export interface WrappedBossLeader {
+  /** The Wise Old Man boss metric, and what it's called. */
+  metric: string;
+  name: string;
+  teams: { teamId: string; kills: number; topPlayers: { player: AvatarUser; kills: number }[] }[];
+}
+
 /** A Steal (CONTEXT.md): a late pick who finished near the top. Only Steals are named. */
 export interface WrappedSteal {
   /** One Player, or a Duo's higher scorer. */
@@ -231,6 +243,11 @@ export interface BingoWrapped {
   /** The draft's biggest Steal; null without a Draft or when nobody beat their position. */
   biggestSteal: WrappedSteal | null;
   moderation: WrappedReviewStats;
+  /**
+   * Who killed each raid and boss of the Bingo's list the most, in the list's order; a boss nobody gained kills at is
+   * left out. Missing from Wrapped published before it was stored.
+   */
+  bossLeaders?: WrappedBossLeader[];
 }
 
 export interface WrappedState {

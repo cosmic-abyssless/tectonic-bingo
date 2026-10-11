@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `wrapped_bosses_json` text;

@@ -198,7 +198,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
   drop are drawn from its real drop rate, capped by how much that player could kill in the time
   since (they play part of the day), so most drops land near the odds and some come in lucky. Some
   players keep going at a Board boss after their last drop, or at one they've had nothing from,
-  for as long as a real dry streak would last: that's Dry. EHB follows the time they play, not
+  for as long as a real dry streak would last: that's Dry. About a third of the players also run
+  each of the raids and bosses Wrapped looks at (the Bingo's list), a few kills a day, so Wrapped
+  shows who killed each the most. EHB follows the time they play, not
   the kills. Snapshots come every few hours plus one shortly after each drop, from a baseline
   before the start. The simulation hands out rare drops more often than real play would, so
   Spoon's luckiest players read luckier than a real bingo's.

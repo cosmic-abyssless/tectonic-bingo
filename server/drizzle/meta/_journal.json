@@ -470,6 +470,13 @@
       "when": 1791714386351,
       "tag": "0068_notification_discord_kinds",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1791738778133,
+      "tag": "0069_wrapped_bosses",
+      "breakpoints": true
     }
   ]
 }

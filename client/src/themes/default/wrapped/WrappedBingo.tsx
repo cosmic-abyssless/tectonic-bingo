@@ -66,6 +66,44 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         </WrappedScene>
       )}
 
+      {b.bossLeaders.length > 0 && (
+        <WrappedScene steps={2}>
+          <div className="w-full max-w-2xl">
+            <Reveal step={0}>
+              <WrappedHeading kicker="Raids and bosses">Who killed it the most</WrappedHeading>
+              {/* Wise Old Man can't tell which runs were done together, so this never calls them runs. */}
+              <p className="mt-3 text-center text-on-surface-muted">Kill counts each Team's Players gained, added up. A group raid counts once for every Player in it.</p>
+            </Reveal>
+            <Reveal step={1} className="mt-8">
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {b.bossLeaders.map((boss) => (
+                  <li key={boss.metric} className="rounded-xl border border-outline bg-surface px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">{boss.name}</p>
+                    {boss.teams.map((t) => (
+                      <div key={t.teamId} className="mt-2">
+                        <p className="flex items-center gap-2">
+                          {t.color && <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />}
+                          <span className="min-w-0 flex-1 truncate font-semibold">
+                            {t.name}
+                            {t.isMine && <span className="ml-2 text-xs font-normal text-on-surface-muted">your Team</span>}
+                          </span>
+                          <span className="num shrink-0">{t.killsLabel}</span>
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                          {t.topPlayers.map((p) => (
+                            <WrappedPerson key={p.person.id} person={p.person} size="sm" detail={`Top: ${p.killsLabel}`} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </div>
+        </WrappedScene>
+      )}
+
       {b.steal && (
         <WrappedScene steps={2} className="text-center">
           <Reveal step={0}>

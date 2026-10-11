@@ -7,7 +7,8 @@
 // odds and a few come in lucky. Some Players keep going at a Board boss after their last drop, or go at one with
 // nothing to show for it, for as many kills as a real dry streak would last (again geometric, on the Board's drops
 // from that boss), which is where Dry comes from. Snapshots come every few hours, plus one shortly after each drop,
-// as if the Player updated on logout.
+// as if the Player updated on logout. Some Players also run a few of the raids and bosses Wrapped looks at (the Bingo's
+// list), drops or not, so a generated Wrapped shows who killed each the most.
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../../db/schema";
@@ -23,6 +24,7 @@ import { getDropRates, type DropRateTable } from "../../services/luck/dropRates"
 import type { BossMetric } from "../../services/luck/bossSources";
 import type { WomSnapshot } from "../../services/womService";
 import * as achievementService from "../../services/achievementService";
+import { parseWrappedBosses } from "../../services/wrappedBossesService";
 import { Rng } from "./rng";
 import { HOUR, MINUTE } from "./timeline";
 
@@ -39,6 +41,8 @@ export interface FakeTimelineInput {
   /** Every Item name on the Board. */
   boardItems: string[];
   rates: DropRateTable;
+  /** The raids and bosses Wrapped looks at (Bingo.wrappedBosses): some of them get kills, with or without a drop. */
+  wrappedBosses?: string[];
 }
 
 /** Kills up to and including the next drop, at `rate` drops a kill: 1 + Geometric(rate). */
@@ -88,6 +92,16 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
     const prev = killsNow(m);
     const kills = Math.min(killsUntilDrop(rng, boardRate.get(m)!) - 1, killsIn(end.getTime() - prev.at));
     if (kills > 0) reach(m, end.getTime(), prev.kills + kills);
+  }
+
+  // A few of Wrapped's raids and bosses, a steady few kills a day, on a fork of their own so the rest stays as it was.
+  const raids = rng.fork("wrapped-bosses");
+  const days = (end.getTime() - start.getTime()) / (24 * HOUR);
+  for (const m of (input.wrappedBosses ?? []) as BossMetric[]) {
+    if (!raids.chance(0.3)) continue;
+    const kills = Math.max(1, Math.round(days * raids.between(0.5, 4)));
+    if (!base.has(m)) base.set(m, raids.chance(0.85) ? raids.int(5, 300) : 0);
+    reach(m, end.getTime(), killsNow(m).kills + kills);
   }
 
   const killsAt = (m: BossMetric, at: number) => {
@@ -156,6 +170,7 @@ export function fillFakeWomSnapshots(db: Db, slug: string, seed: number): { play
   const members = teamIds.length ? db.select({ userId: teamMembers.userId, discordId: schema.users.discordId }).from(teamMembers).innerJoin(schema.users, eq(teamMembers.userId, schema.users.id)).where(inArray(teamMembers.teamId, teamIds)).all() : [];
   const rsns = rsnsInBingo(db, bingo.id, members.map((m) => m.userId));
   const rng = new Rng(seed);
+  const wrappedBosses = parseWrappedBosses(bingo.wrappedBossesJson);
 
   let snapshots = 0;
   db.transaction((tx) => {
@@ -163,7 +178,7 @@ export function fillFakeWomSnapshots(db: Db, slug: string, seed: number): { play
     tx.delete(womReads).where(eq(womReads.bingoId, bingo.id)).run();
     for (const m of members) {
       // Forked by Discord ID, which the seed fixes (unlike the user's id), so each Player's timeline is repeatable.
-      const timeline = fakeTimeline(rng.fork(m.discordId), { start, end, drops: dropsByUser.get(m.userId) ?? [], boardItems, rates });
+      const timeline = fakeTimeline(rng.fork(m.discordId), { start, end, drops: dropsByUser.get(m.userId) ?? [], boardItems, rates, wrappedBosses });
       for (const s of timeline) {
         tx.insert(womSnapshots).values({ bingoId: bingo.id, userId: m.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills) }).run();
       }

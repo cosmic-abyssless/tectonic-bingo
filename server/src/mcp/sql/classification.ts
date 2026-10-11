@@ -105,6 +105,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       publish_wrapped_on_finish: "",
       wrapped_credits_json: "Unused",
       wrapped_art_credits_json: "",
+      wrapped_bosses_json: "JSON array of Wise Old Man boss metrics Wrapped names a top Team for, in order; null: the default list",
       historical: "1 for a Historical Bingo: run on another site before this one and imported, read-only",
       discord_enabled: "Discord team sync on (a role and private channels per Team)",
       discord_guild_id: "Dev servers only: a Discord server to try the sync on instead of the clan's",

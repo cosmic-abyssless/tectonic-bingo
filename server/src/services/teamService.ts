@@ -593,6 +593,30 @@ export function removedFromTeamName(db: Db, bingoId: string, userId: string): st
   return db.select({ name: teams.name }).from(teams).where(eq(teams.id, removal.teamId)).get()?.name ?? null;
 }
 
+/**
+ * Every Player taken off a Team of the Bingo by Remove from Team, and the Team they were taken off (the latest, if more
+ * than once). Their Team membership is gone, so the audit log is what still says which Team it was. A Player since put
+ * back on a Team is in it too: their membership is what to go by for them.
+ */
+export function removedPlayerTeams(db: Db, bingoId: string): Map<string, string> {
+  const rows = db
+    .select({ userId: auditLog.entityId, teamId: auditLog.teamId })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.bingoId, bingoId),
+        eq(auditLog.action, "team.member_removed"),
+        eq(auditLog.entityType, "user"),
+        sql`json_extract(${auditLog.details}, '$.removedFromTeam') = 1`,
+      ),
+    )
+    .orderBy(auditLog.id)
+    .all();
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.userId && r.teamId) out.set(r.userId, r.teamId);
+  return out;
+}
+
 // Only teams without game history can go: once a team has draft picks,
 // submissions or point adjustments, removing it would orphan that record.
 export function deleteTeam(db: Db, teamId: string): void {

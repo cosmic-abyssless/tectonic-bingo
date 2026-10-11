@@ -18,6 +18,21 @@ const drops = [
 ];
 
 describe("fakeTimeline", () => {
+  it("gives some Players kills at Wrapped's raids and bosses, and leaves the rest of their timeline as it was", () => {
+    const wrappedBosses = ["chambers_of_xeric", "nex"];
+    let raiders = 0;
+    for (let seed = 0; seed < 50; seed++) {
+      const plain = fakeTimeline(new Rng(seed), input(drops));
+      const timeline = fakeTimeline(new Rng(seed), { ...input(drops), wrappedBosses });
+      const gained = wrappedBosses.some((m) => (timeline.at(-1)!.bossKills[m] ?? 0) > (timeline[0]!.bossKills[m] ?? 0));
+      if (gained) raiders++;
+      const without = (t: typeof timeline) => t.map((s) => ({ ...s, bossKills: Object.fromEntries(Object.entries(s.bossKills).filter(([m]) => !wrappedBosses.includes(m))) }));
+      expect(without(timeline)).toEqual(without(plain));
+    }
+    expect(raiders).toBeGreaterThan(10);
+    expect(raiders).toBeLessThan(40);
+  });
+
   it("is the same for the same seed", () => {
     expect(fakeTimeline(new Rng(7), input(drops))).toEqual(fakeTimeline(new Rng(7), input(drops)));
   });

@@ -125,6 +125,7 @@ export interface AuditDetailsMap {
       hideRules: boolean;
       showScreenshotsWhenFinished: boolean;
       publishWrappedOnFinish: boolean;
+      wrappedBossesJson: string | null;
     }>;
   };
 
@@ -602,7 +603,7 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Settings updated",
     label: (i) =>
-      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k === "wrappedCreditsJson" ? "credits" : k)).join(", ") || "no changes"})`,
+      `${actor(i)} updated bingo settings (${Object.keys(i.details.changes.after).map((k) => (k === "exclusivityRulesJson" ? "exclusive items" : k === "wrappedCreditsJson" ? "credits" : k === "wrappedBossesJson" ? "Wrapped raids and bosses" : k)).join(", ") || "no changes"})`,
   },
   "moderator.added": {
     category: "moderation",

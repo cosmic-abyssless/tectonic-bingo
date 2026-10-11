@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { achievementDef } from "@bingo/shared";
 import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
-import type { WrappedOutroModel, WrappedShareCardModel, WrappedTeamModel } from "./types";
+import type { WrappedBingoModel, WrappedOutroModel, WrappedShareCardModel, WrappedTeamModel } from "./types";
 import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rankedArt, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
 
 const T0 = Date.UTC(2026, 0, 3, 12);
@@ -236,6 +236,51 @@ describe("buildWrappedStory", () => {
     const old = story(response(null)).sections.find((s) => s.id === "bingo")!.section;
     if (old.kind !== "bingo") throw new Error("not bingo");
     expect(old.race?.series[0]!.points.every((p) => p.event === null)).toBe(true);
+  });
+
+  describe("who killed each raid and boss the most", () => {
+    const bossesOf = (data: MyWrappedResponse) => (story(data).sections.find((s) => s.id === "bingo")!.section as WrappedBingoModel).bossLeaders;
+
+    it("names each boss's leading Teams with their kills and top Players, the viewer's Team marked", () => {
+      const data = response(player());
+      data.bingo.bossLeaders = [
+        {
+          metric: "chambers_of_xeric",
+          name: "Chambers of Xeric",
+          teams: [
+            { teamId: "b", kills: 25, topPlayers: [{ player: u("bob"), kills: 25 }] },
+            { teamId: "a", kills: 25, topPlayers: [{ player: u("me"), kills: 1 }, { player: u("al"), kills: 1 }] },
+          ],
+        },
+      ];
+      expect(bossesOf(data)).toEqual([
+        {
+          metric: "chambers_of_xeric",
+          name: "Chambers of Xeric",
+          teams: [
+            { teamId: "b", name: "Blue", color: "#f00", isMine: false, killsLabel: "25 kills", topPlayers: [{ person: expect.objectContaining({ name: "bob rsn", isYou: false }), killsLabel: "25 kills" }] },
+            {
+              teamId: "a",
+              name: "Red",
+              color: "#f00",
+              isMine: true,
+              killsLabel: "25 kills",
+              topPlayers: [
+                { person: expect.objectContaining({ name: "me rsn", isYou: true }), killsLabel: "1 kill" },
+                { person: expect.objectContaining({ name: "al rsn" }), killsLabel: "1 kill" },
+              ],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("is empty with no bosses, and on a Wrapped published before they were stored", () => {
+      const none = response(player());
+      none.bingo.bossLeaders = [];
+      expect(bossesOf(none)).toEqual([]);
+      expect(bossesOf(response(player()))).toEqual([]);
+    });
   });
 
   it("labels a Moderator's preview", () => {
