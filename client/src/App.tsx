@@ -31,7 +31,7 @@ const StatsPage = lazy(() => awaitModule(import("./pages/StatsPage")).then((m) =
 const RewindPage = lazy(() => awaitModule(import("./pages/RewindPage")).then((m) => ({ default: m.RewindPage })));
 const WrappedPage = lazy(() => awaitModule(import("./pages/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
 const FeedbackPage = lazy(() => awaitModule(import("./pages/FeedbackPage")).then((m) => ({ default: m.FeedbackPage })));
-const NotificationSettingsPage = lazy(() => awaitModule(import("./pages/NotificationSettingsPage")).then((m) => ({ default: m.NotificationSettingsPage })));
+const UserSettingsPage = lazy(() => awaitModule(import("./pages/UserSettingsPage")).then((m) => ({ default: m.UserSettingsPage })));
 const SiteAdminPage = lazy(() => awaitModule(import("./pages/SiteAdminPage")).then((m) => ({ default: m.SiteAdminPage })));
 const TermsPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.TermsPage })));
 const PrivacyPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.PrivacyPage })));
@@ -169,13 +169,15 @@ export default function App() {
             />
             <Route path="/b/:slug/admin" element={<AdminRedirect />} />
             <Route
-              path="/settings/notifications"
+              path="/settings"
               element={
                 <ProtectedRoute>
-                  <NotificationSettingsPage />
+                  <UserSettingsPage />
                 </ProtectedRoute>
               }
             />
+            {/* Notifications had a page of their own before User settings; old links and Discord DMs still point there. */}
+            <Route path="/settings/notifications" element={<Navigate to="/settings" replace />} />
             <Route
               path="/admin"
               element={

@@ -1210,10 +1210,10 @@ function FlyingBook({
   return (
     // Focus stays inside while the book is open, and goes back to what opened it once it has flown home.
     <Overlay shouldContainFocus isExiting={!isPresent}>
-    // A top layer (react-aria's mark) only when opened from inside another modal (the board editor's preview): it's
-    // kept out of what that modal hides from the page, focus may go into it, and a click in it isn't a click off that
-    // modal. Not on the board itself: react-aria never counts a click on a top layer as outside, so a popover opened
-    // over the book (who's interested, a reaction) wouldn't close on a click on the book.
+    {/* A top layer (react-aria's mark) only when opened from inside another modal (the board editor's preview): it's
+        kept out of what that modal hides from the page, focus may go into it, and a click in it isn't a click off that
+        modal. Not on the board itself: react-aria never counts a click on a top layer as outside, so a popover opened
+        over the book (who's interested, a reaction) wouldn't close on a click on the book. */}
     <div
       ref={overlayRef}
       data-react-aria-top-layer={topLayer ? "true" : undefined}

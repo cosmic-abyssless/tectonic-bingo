@@ -194,8 +194,8 @@ export interface ThemeSlots {
   InboxBellButton: ComponentType<InboxBellButtonProps>;
   // The header's ☰ menu (AppHeader), at its far right: its button (with a dot while hasUnseen) and the menu it opens,
   // the viewer's row on top, then each group in order with a divider before it. An entry marked current is the page
-  // you're on: a check mark, not clickable. The colour-scheme item is drawn with core's ColorSchemeRadios. Read with
-  // useOptionalSlot: pages outside any ThemeProvider fall back to core's PlainHeaderMenu.
+  // you're on: a check mark, not clickable. Read with useOptionalSlot: pages outside any ThemeProvider fall back to core's
+  // PlainHeaderMenu.
   HeaderMenu: ComponentType<HeaderMenuProps>;
 
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
@@ -219,8 +219,10 @@ export interface ThemeSlots {
   // so a theme can visually tie the two together.
   // tileOverlay (Rewind's All Teams view) draws something over a Tile's cell, above TileCell, in the same box; a
   // BoardGrid must render it when it's given. Each Tile's box carries data-tile-id={tile.id}: Rewind finds a Tile's cell
-  // by it to place popups beside it.
-  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null; tileOverlay?: (tile: TileModel) => ReactNode }>;
+  // by it to place popups beside it. fillsPage: the Board page's own Board, the last thing on its page: drawn at the
+  // viewer's Board size (shared userSettings.ts), and the only thing on the page that scrolls, so everything above it
+  // stays put (a theme may ignore it). Everywhere else (Rewind, the Draft board's preview) it fits its column.
+  BoardGrid: ComponentType<{ board: BoardModel; onOpenTile: (tileId: string) => void; highlightedTileId?: string | null; tileOverlay?: (tile: TileModel) => ReactNode; fillsPage?: boolean }>;
   RowLabel: ComponentType<{ category: CategoryModel | null }>;
   EmptyCell: ComponentType<{ row: number; col: number }>;
   // onOpen takes the tile id (rather than being pre-bound) so the default

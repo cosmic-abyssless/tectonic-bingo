@@ -7,6 +7,7 @@ import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { AchievementsProvider } from "../core/achievements/AchievementsProvider";
 import { useRememberTheme } from "../themes/rememberedTheme";
 import { TutorialOverlay } from "../core/tutorial/TutorialOverlay";
+import { BoardSizePreviewPanel } from "../core/settings/BoardSizePreviewPanel";
 
 export function BingoPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -39,6 +40,8 @@ function ThemedSurface({ slug }: { slug: string }) {
           <BoardPageSlot />
           {/* The Tutorial (CONTEXT.md), over the Board and its dialogs while it runs. */}
           <TutorialOverlay />
+          {/* Settings' Board size Change: the panel over the Board, to see each change on it. */}
+          <BoardSizePreviewPanel slug={slug} />
         </PlayerProfileProvider>
       </AchievementsProvider>
     </ThemeProvider>

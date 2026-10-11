@@ -1174,6 +1174,17 @@ export const notificationSettings = sqliteTable('notification_settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+// One user's User settings (shared userSettings.ts), the ones kept on the account rather than in a browser. No row:
+// every default. Each kind of device has its own Board size: its mode, and Custom's width as a percentage of the window's.
+export const userSettings = sqliteTable('user_settings', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  boardDesktopMode: text('board_desktop_mode', { enum: ['fit', 'maximize', 'custom'] }).notNull().default('fit'),
+  boardDesktopWidthPercent: integer('board_desktop_width_percent').notNull().default(100),
+  boardPhoneMode: text('board_phone_mode', { enum: ['fit', 'maximize', 'custom'] }).notNull().default('fit'),
+  boardPhoneWidthPercent: integer('board_phone_width_percent').notNull().default(100),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 // A user's Inbox: one row per Notification, only ever for a user who had them on. Kept 30 days. bingoId has no FK, like
 // the audit log's, and deleteBingo removes a Bingo's. dataJson is what a folded Discord DM is built from
 // (NotificationData). dedupeKey: set by the scheduler's kinds (Queue waiting long, the Superlative reminder), so one

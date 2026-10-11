@@ -248,6 +248,13 @@ A short, skippable walk through the Board for a Player: their Team, opening a Ti
 - **Steps:** Some wait for the Player to click the real thing (open a Tile, open Submit, open the ☰ menu), which then opens as usual; the rest only point things out. Nothing is ever Submitted: the Tutorial shows the Submit flow's inputs and every way into it, then closes it itself. Only those opens are asked for: marking Task interest and the ☰ menu's entries are shown, never required, so an Achievement they lead to stays a reward for choosing to. What's opened during the Tutorial counts like any other open. A Player who has already marked Task interest (so has opened a Tile) skips the Tile's steps: opening one, its Parts, Task interest and Submitting from it.
 - **Avoid:** Tour, onboarding.
 
+### Board size
+How big a user's Board is drawn, one of their User settings (the Settings page, behind the account menu).
+- **Modes:** Fit screen, the default, as big as fits the window without scrolling (never smaller than the Tiles stay legible at, so a short window still scrolls). Maximize, as big as the window's longer side, so it scrolls the other way. Custom, a width from 50% to 300% of the window's, scrolling sideways past 100%.
+- **Scrolling:** Only the Board scrolls, in its own box from where it starts to the bottom of the window; everything above it stays put. On a touch screen it pans both ways with a finger.
+- **Rules:** Kept on the account, so it follows the user to every browser, with one for Desktop and one for Phone (the site's phone layout). Changing the one for the device you're on opens the Board with the Board size panel over it, so each change shows on the real thing; the other is changed on the Settings page.
+- **Not:** The colour scheme (Light, Dark, System), the other thing on the Settings page, which each browser keeps for itself.
+
 ---
 
 ## Submissions & Scoring

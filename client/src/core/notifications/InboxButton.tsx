@@ -11,7 +11,8 @@ import { timeAgo } from "../ui/time";
 import { toast } from "../ui/Toast";
 import { useOptionalSlot } from "../../themes/context";
 
-export const NOTIFICATION_SETTINGS_PATH = "/settings/notifications";
+/** The User settings page: Appearance and Notifications. */
+export const USER_SETTINGS_PATH = "/settings";
 
 function InboxRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: (link: string | null) => void }) {
   const navigate = useNavigate();
@@ -35,10 +36,10 @@ function InboxRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: (link: 
             if (key === "off") {
               update.mutate(
                 { kinds: { [entry.kind]: false } },
-                { onSuccess: () => toast({ title: `Turned off: ${NOTIFICATION_CATALOGUE[entry.kind].label}`, action: { label: "Settings", onPress: () => navigate(NOTIFICATION_SETTINGS_PATH) } }) },
+                { onSuccess: () => toast({ title: `Turned off: ${NOTIFICATION_CATALOGUE[entry.kind].label}`, action: { label: "Settings", onPress: () => navigate(USER_SETTINGS_PATH) } }) },
               );
             }
-            if (key === "settings") navigate(NOTIFICATION_SETTINGS_PATH);
+            if (key === "settings") navigate(USER_SETTINGS_PATH);
           }}
         >
           <MenuItem id="off">Turn off this kind</MenuItem>
@@ -117,7 +118,7 @@ export function InboxButton() {
                   Clear all
                 </button>
               )}
-              <Link to={NOTIFICATION_SETTINGS_PATH} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline">
+              <Link to={USER_SETTINGS_PATH} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline">
                 Settings
               </Link>
             </span>
@@ -139,7 +140,7 @@ export function InboxButton() {
           ) : (
             <div className="space-y-2 p-4 text-sm text-on-surface-muted">
               <p>Nothing yet. What you've turned on shows up here as it happens.</p>
-              <Button size="sm" variant="secondary" onPress={() => { setOpen(false); navigate(NOTIFICATION_SETTINGS_PATH); }}>
+              <Button size="sm" variant="secondary" onPress={() => { setOpen(false); navigate(USER_SETTINGS_PATH); }}>
                 Choose what you hear about
               </Button>
             </div>

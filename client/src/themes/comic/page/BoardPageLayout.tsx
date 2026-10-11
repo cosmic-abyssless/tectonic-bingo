@@ -124,7 +124,7 @@ export function BoardPageLayout() {
                 )}
               </div>
 
-              <BoardGrid board={board} onOpenTile={page.openTile.open} />
+              <BoardGrid board={board} onOpenTile={page.openTile.open} fillsPage />
             </>
           )}
         </main>
