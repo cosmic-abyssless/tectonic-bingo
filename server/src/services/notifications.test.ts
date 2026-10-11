@@ -9,6 +9,12 @@ import * as schema from "../db/schema";
 import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 
+// The screenshot itself is dmScreenshot.test.ts's: here, only which DMs ask for one.
+vi.mock("./dmScreenshot", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./dmScreenshot")>()),
+  dmScreenshot: vi.fn(async (_db: unknown, submissionId: string) => ({ name: "screenshot.webp", data: Buffer.from(`shot:${submissionId}`) })),
+}));
+
 const presence = vi.hoisted(() => ({ byUser: new Map<string, { open: boolean; visible: boolean; hiddenWithPermission: boolean; hiddenWithoutPermission: boolean }>() }));
 const sent = vi.hoisted(() => [] as { userId: string; msg: ServerSocketMessage | null }[]);
 vi.mock("../ws", () => ({
@@ -246,6 +252,38 @@ describe("Discord DMs", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a DM about one drop of their own Team carries its screenshot; a fold of several doesn't", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      updateFoldingWindows(db, { team_drop_approved: 15 }, mod.id);
+      const t0 = new Date("2026-10-11T12:00:00Z");
+      approveAt(0, t0);
+      expect(await runDmRound(db, new Date(t0.getTime() + 16 * 60_000))).toBe(1);
+      const [single] = vi.mocked(api.send).mock.calls;
+      expect(single![2]?.data.toString()).toMatch(/^shot:/);
+
+      const t1 = new Date(t0.getTime() + 60 * 60_000);
+      approveAt(1, t1);
+      approveAt(2, new Date(t1.getTime() + 60_000));
+      vi.mocked(api.send).mockClear();
+      await runDmRound(db, new Date(t1.getTime() + 16 * 60_000));
+      const folded = vi.mocked(api.send).mock.calls.find(([, content]) => content.includes("drops approved"))!;
+      expect(folded[2]).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a rejected drop's DM carries its screenshot, to the Player who posted it", async () => {
+    updateSettings(db, alice.id, { level: "discord" });
+    rejectSubmission(db, { submissionId: submit(teamA, alice.id, taskIds[0]!, "Item 1").id, reviewedByUserId: mod.id, reviewerNotes: "Wrong item" });
+    drainAuditLog(db);
+    await runDmRound(db, new Date(Date.now() + 1000));
+    const call = vi.mocked(api.send).mock.calls.find(([discordId]) => discordId === "d-alice")!;
+    expect(call[1]).toContain("was rejected");
+    expect(call[2]?.name).toBe("screenshot.webp");
   });
 
   it("a kind kept off Discord still reaches the Inbox, but isn't DMed", () => {

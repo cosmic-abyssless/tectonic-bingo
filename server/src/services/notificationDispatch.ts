@@ -150,6 +150,7 @@ export function notificationsFor(db: Queryable, entry: Entry, bingoCache = new M
         title: `Your ${what}${d.tileName ? ` on "${d.tileName}"` : ""} was rejected`,
         body: d.reviewerNotes ? `"${d.reviewerNotes}"` : "No note was left.",
         link: boardLink(bingo),
+        data: { submissionId: entry.entityId ?? undefined },
       }));
     }
     case "pairing.requested": {
@@ -277,7 +278,7 @@ function submissionApproved(db: Queryable, entry: Entry, bingo: Bingo): NewNotif
         title: userId === d.submittedByUserId ? "Your drop was approved" : `${name}'s drop was approved`,
         body: `${d.tileName ? `"${d.tileName}"` : "A drop"}${d.taskLabels.length ? ` (${d.taskLabels.join(", ")})` : ""}${d.pointsDelta ? `, +${d.pointsDelta} points` : ""}`,
         link: boardLink(bingo),
-        data: { name, points: d.pointsDelta },
+        data: { name, points: d.pointsDelta, submissionId: entry.entityId ?? undefined },
       })),
     );
   }
