@@ -1,6 +1,7 @@
 import { lazy } from "react";
 import type { ThemeDefinition } from "../registry";
 import { BugReportButton } from "../../core/ui/BugReportButton";
+import { InboxBellButton } from "../../core/notifications/InboxButton";
 import { PlainButton } from "../../core/ui/Button";
 import { PlainMenu, PlainMenuItem } from "../../core/ui/Menu";
 import { PlainHeaderMenu } from "../../core/ui/headerMenu";
@@ -143,6 +144,7 @@ export const defaultTheme: ThemeDefinition = {
     DialogHeader,
     PickerFrame: Picker,
     BugReportButton,
+    InboxBellButton,
     HeaderMenu: PlainHeaderMenu,
     Button: PlainButton,
     Menu: PlainMenu,

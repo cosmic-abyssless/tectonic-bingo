@@ -6,6 +6,7 @@ import type { NoticeProps } from "../core/ui/Card";
 import type { PanelProps } from "../core/ui/Panel";
 import type { TeamRosterProps } from "../core/draft/TeamRoster";
 import type { ReactionBarProps } from "../core/submissions/ReactionBar";
+import type { InboxBellButtonProps } from "../core/notifications/InboxButton";
 import type { TitleChipProps, TitleGroupBoxProps } from "../core/stats/TitleChrome";
 import type { SuperlativeGroupBoxProps } from "../core/superlatives/SuperlativeChrome";
 import type { MyAchievement, Stage, StageMilestone } from "@bingo/shared";
@@ -187,6 +188,10 @@ export interface ThemeSlots {
   // The header's report-a-bug button (AppHeader). Read with useOptionalSlot: the header also shows on pages outside
   // any ThemeProvider, which fall back to core's BugReportButton.
   BugReportButton: ComponentType<{ onPress: () => void; hasUnseen: boolean }>;
+  // The header's bell (core/notifications/InboxButton), the trigger of the Inbox popover: a react-aria button with its
+  // own "Notifications" tooltip, named with inboxBellLabel and badged with the unread count while there is one. Read
+  // with useOptionalSlot: pages outside any ThemeProvider fall back to core's InboxBellButton.
+  InboxBellButton: ComponentType<InboxBellButtonProps>;
   // The header's ☰ menu (AppHeader), at its far right: its button (with a dot while hasUnseen) and the menu it opens,
   // the viewer's row on top, then each group in order with a divider before it. An entry marked current is the page
   // you're on: a check mark, not clickable. The colour-scheme item is drawn with core's ColorSchemeRadios. Read with
