@@ -174,6 +174,10 @@ export const bingos = sqliteTable('bingos', {
   // Credits (CONTEXT.md): each Wrapped art category's additional credits (ones with no image), a JSON object of
   // WrappedCredit arrays keyed by section. Parsed by wrappedArtService.parseAdditionalCredits.
   wrappedArtCreditsJson: text('wrapped_art_credits_json').notNull().default('{}'),
+  // The raids and bosses Wrapped's "Who killed it the most" part looks at (CONTEXT.md "Wrapped"): a JSON array of Wise Old
+  // Man boss metrics, in display order. Null is the default list (DEFAULT_WRAPPED_BOSSES). A new Bingo copies the previous
+  // Bingo's. Parsed by wrappedBossesService.
+  wrappedBossesJson: text('wrapped_bosses_json'),
   // Historical Bingo (CONTEXT.md, docs/historical-bingos-plan.md): a past Bingo run on another website, imported so its
   // history lives here. Always Finished and read-only (requireBingo refuses every write to it); what it never recorded
   // shows as not recorded (historicalService.getRecorded). Set only by the historical importer.

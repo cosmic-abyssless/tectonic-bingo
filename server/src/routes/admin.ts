@@ -145,6 +145,8 @@ router.patch(
       if (typeof body.publishWrappedOnFinish !== "boolean") throw new ServiceError(400, "publishWrappedOnFinish must be a boolean");
       params.publishWrappedOnFinish = body.publishWrappedOnFinish;
     }
+    // Validated by the service (normalizeWrappedBosses).
+    if ("wrappedBosses" in body) params.wrappedBosses = body.wrappedBosses;
     if ("achievementsEnabled" in body) {
       if (typeof body.achievementsEnabled !== "boolean") throw new ServiceError(400, "achievementsEnabled must be a boolean");
       params.achievementsEnabled = body.achievementsEnabled;

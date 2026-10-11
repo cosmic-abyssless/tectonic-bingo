@@ -9,6 +9,7 @@ import { avatarUrl, displayName } from "../core/ui/user";
 import { formatOneIn } from "./rewindModel";
 import type {
   WrappedBingoModel,
+  WrappedBossLeaderModel,
   WrappedCaptainModel,
   WrappedChartModel,
   WrappedDropModel,
@@ -435,6 +436,19 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
         color: t.color,
         superlatives: t.superlatives!.map((s) => ({ category: s.category, winners: s.winners.map(person) })),
       })),
+    bossLeaders: (bingo.bossLeaders ?? [])
+      .map(
+        (boss): WrappedBossLeaderModel => ({
+          metric: boss.metric,
+          name: boss.name,
+          teams: boss.teams.flatMap((t) => {
+            const team = teamById.get(t.teamId);
+            if (!team) return [];
+            return [{ teamId: t.teamId, name: team.name, color: team.color, isMine: t.teamId === myTeamId, killsLabel: plural(t.kills, "kill"), topPlayers: t.topPlayers.map((p) => ({ person: person(p.player), killsLabel: plural(p.kills, "kill") })) }];
+          }),
+        }),
+      )
+      .filter((boss) => boss.teams.length > 0),
   };
   sections.push(b);
 

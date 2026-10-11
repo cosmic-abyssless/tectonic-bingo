@@ -64,6 +64,7 @@ import { rsnsInBingo } from "./playerNames";
 import { PUBLIC_USER_COLS } from "./userService";
 import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
+import * as wrappedBossesService from "./wrappedBossesService";
 import { assertCutReviewSatisfied } from "./cutReviewService";
 import { assertTeamsLedByPairs } from "./teamService";
 import { assertNotHistorical, deleteHistoricalRows } from "./historicalService";
@@ -102,12 +103,12 @@ export function getBingoBySlug(db: Db, slug: string) {
 // sends a bingo (or a list of them) to a client goes through this first;
 // routes that only need the row server-side (requireBingo, stage/board
 // checks, the WOM sync itself) use the raw row from getBingoBySlug instead.
-export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; draftOrderLockedUntil?: Date | null; discordChannelsJson: string }>(
+export function toPublicBingo<T extends { womGroupVerificationCode: string | null; exclusivityRulesJson: string; wrappedCreditsJson: string; wrappedArtCreditsJson?: string; wrappedBossesJson?: string | null; draftOrderLockedUntil?: Date | null; discordChannelsJson: string }>(
   bingo: T,
-): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "draftOrderLockedUntil" | "discordChannelsJson"> & { exclusivityRules: ExclusivityRule[]; discordChannels: DiscordChannelTemplate[] } {
+): Omit<T, "womGroupVerificationCode" | "exclusivityRulesJson" | "wrappedCreditsJson" | "wrappedArtCreditsJson" | "wrappedBossesJson" | "draftOrderLockedUntil" | "discordChannelsJson"> & { exclusivityRules: ExclusivityRule[]; discordChannels: DiscordChannelTemplate[]; wrappedBosses: string[] } {
   // wrappedCreditsJson is unused (#281), and a category's additional credits go out with the Wrapped art instead.
-  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, discordChannelsJson, ...rest } = bingo;
-  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), discordChannels: parseDiscordChannels(discordChannelsJson) };
+  const { womGroupVerificationCode: _womGroupVerificationCode, draftOrderLockedUntil: _draftOrderLockedUntil, exclusivityRulesJson, wrappedCreditsJson: _wrappedCreditsJson, wrappedArtCreditsJson: _wrappedArtCreditsJson, wrappedBossesJson, discordChannelsJson, ...rest } = bingo;
+  return { ...rest, exclusivityRules: parseExclusivityRules(exclusivityRulesJson), discordChannels: parseDiscordChannels(discordChannelsJson), wrappedBosses: wrappedBossesService.parseWrappedBosses(wrappedBossesJson ?? null) };
 }
 
 /** The channels every Team gets (Settings > Discord). Tolerant like parseExclusivityRules: what's stored was validated. */
@@ -317,13 +318,16 @@ export function createBingo(db: Db, params: CreateBingoParams) {
     achievementService.initializeAchievementSettings(tx, bingo.id, clockNow());
     // Wrapped art (#262) carries over from the previous Bingo; Admins replace what they want.
     wrappedArtService.copyFromPreviousBingo(tx, bingo.id);
+    // So does the list of raids and bosses Wrapped looks at.
+    wrappedBossesService.copyFromPreviousBingo(tx, bingo.id);
     audit(tx, {
       action: "bingo.created",
       bingoId: bingo.id,
       entity: { type: "bingo", id: bingo.id, label: bingo.name },
       details: { slug: bingo.slug, name: bingo.name, theme: bingo.theme, boardRows: bingo.boardRows, boardCols: bingo.boardCols, source: source ?? "form" },
     });
-    return bingo;
+    // As stored, with what it copied from the previous Bingo.
+    return tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
   });
 }
 
@@ -690,6 +694,7 @@ export interface UpdateBingoSettingsParams {
   achievements?: Partial<Record<AchievementKey, boolean>>;
   showScreenshotsWhenFinished?: boolean;
   publishWrappedOnFinish?: boolean;
+  wrappedBosses?: unknown;
 }
 
 export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingoSettingsParams) {
@@ -736,10 +741,15 @@ export function updateBingoSettings(db: Db, bingoId: string, params: UpdateBingo
     if (params.discordCategoryName != null && params.discordCategoryName.length > DISCORD_NAME_MAX) {
       throw new ServiceError(400, `The Discord category name is at most ${DISCORD_NAME_MAX} characters`);
     }
-    const { exclusivityRules, achievements: _achievements, discordChannels, ...columns } = params;
+    const { exclusivityRules, achievements: _achievements, discordChannels, wrappedBosses, ...columns } = params;
     const set: Partial<typeof bingos.$inferInsert> = { ...columns };
     if (exclusivityRules !== undefined) set.exclusivityRulesJson = JSON.stringify(normalizeExclusivityRules(exclusivityRules));
     if (discordChannels !== undefined) set.discordChannelsJson = JSON.stringify(normalizeDiscordChannels(discordChannels));
+    // The list as it reads now (the default, for a Bingo that never set one) sent back untouched is no change.
+    if (wrappedBosses !== undefined) {
+      const list = wrappedBossesService.normalizeWrappedBosses(wrappedBosses);
+      if (JSON.stringify(list) !== JSON.stringify(wrappedBossesService.parseWrappedBosses(existing.wrappedBossesJson))) set.wrappedBossesJson = JSON.stringify(list);
+    }
 
     // Saving the form untouched writes and records nothing (#456). The Achievement switches aren't audited, so a change
     // to only them is written but recorded as nothing to audit, not as unchanged.

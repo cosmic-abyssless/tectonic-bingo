@@ -12,6 +12,7 @@ import {
   CUT_MODES,
   isWrappedArtGroup,
   isWrappedArtSection,
+  isWomBossMetric,
   MAX_SUPERLATIVE_CATEGORIES,
   type BingoExportDocument,
   type ExportNode,
@@ -32,6 +33,7 @@ import * as signupService from "./signupService";
 import * as superlativeService from "./superlativeService";
 import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
+import { parseWrappedBosses } from "./wrappedBossesService";
 import * as tagService from "./tagService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
@@ -207,6 +209,7 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
       hideRules: bingo.hideRules,
       showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
       publishWrappedOnFinish: bingo.publishWrappedOnFinish,
+      wrappedBosses: parseWrappedBosses(bingo.wrappedBossesJson),
     },
     categories: categoryRows.map((c) => ({ localId: categoryLocalByReal.get(c.id)!, label: c.label, colorHex: c.colorHex, sortOrder: c.sortOrder })),
     tiles,
@@ -424,6 +427,8 @@ export function importBingo(
       ...(doc.bingo.hideRules !== undefined ? { hideRules: doc.bingo.hideRules } : {}),
       ...(doc.bingo.showScreenshotsWhenFinished !== undefined ? { showScreenshotsWhenFinished: doc.bingo.showScreenshotsWhenFinished === true } : {}),
       ...(doc.bingo.publishWrappedOnFinish !== undefined ? { publishWrappedOnFinish: doc.bingo.publishWrappedOnFinish === true } : {}),
+      // A boss this app doesn't know (a file from a newer one) is dropped rather than refusing the import.
+      ...(Array.isArray(doc.bingo.wrappedBosses) ? { wrappedBosses: doc.bingo.wrappedBosses.filter(isWomBossMetric) } : {}),
     });
 
     const categoryIdByLocal = new Map<number, string>();

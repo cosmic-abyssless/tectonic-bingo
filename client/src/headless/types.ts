@@ -969,6 +969,26 @@ export interface WrappedTeamSuperlativesModel {
   superlatives: { category: string; winners: WrappedPersonModel[] }[];
 }
 
+/**
+ * One raid or boss of the Bingo's list and the Team or Teams that killed it the most (CONTEXT.md "Wrapped"): the kill counts
+ * a Team's Players gained at it, added up, so a group raid counts once for each Player in it. Tied Teams are all listed,
+ * each with its top Player or Players.
+ */
+export interface WrappedBossLeaderModel {
+  metric: string;
+  /** "Chambers of Xeric", "the Colosseum". */
+  name: string;
+  teams: {
+    teamId: string;
+    name: string;
+    color: string | null;
+    isMine: boolean;
+    /** "412 kills" */
+    killsLabel: string;
+    topPlayers: { person: WrappedPersonModel; killsLabel: string }[];
+  }[];
+}
+
 export interface WrappedBingoModel {
   kind: "bingo";
   art: WrappedSectionArtModel;
@@ -1009,6 +1029,11 @@ export interface WrappedBingoModel {
   } | null;
   /** Every Team's Superlative winners; a Team with none is left out. */
   teamSuperlatives: WrappedTeamSuperlativesModel[];
+  /**
+   * Who killed each raid and boss the most, in the Bingo's list's order. Empty when nobody gained kills at any, and on a
+   * Wrapped published before it was stored.
+   */
+  bossLeaders: WrappedBossLeaderModel[];
 }
 
 export interface WrappedOutroModel {

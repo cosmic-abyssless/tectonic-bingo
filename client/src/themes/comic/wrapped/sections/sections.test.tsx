@@ -73,6 +73,22 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
     art: art(2),
   },
   teamSuperlatives: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ teamId: `t${n}`, teamName: `Team ${n}`, color: null, superlatives: [{ category: "Team MVP", winners: [person(n)] }] })),
+  bossLeaders: [
+    // A tie between two Teams, and a tie for one Team's top Player.
+    {
+      metric: "chambers_of_xeric",
+      name: "Chambers of Xeric",
+      teams: [
+        { teamId: "t1", name: "Red Team", color: "#ff0000", isMine: true, killsLabel: "25 kills", topPlayers: [{ person: person(1, true), killsLabel: "15 kills" }] },
+        { teamId: "t2", name: "Blue Team", color: "#0000ff", isMine: false, killsLabel: "25 kills", topPlayers: [{ person: person(2), killsLabel: "9 kills" }, { person: person(3), killsLabel: "9 kills" }] },
+      ],
+    },
+    ...["Theatre of Blood", "Nex", "the Colosseum", "the Nightmare"].map((name, i) => ({
+      metric: `boss${i}`,
+      name,
+      teams: [{ teamId: "t2", name: "Blue Team", color: "#0000ff", isMine: false, killsLabel: `${i + 1} kills`, topPlayers: [{ person: person(4), killsLabel: `${i + 1} kills` }] }],
+    })),
+  ],
   ...over,
 });
 
@@ -136,7 +152,9 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
     ["moderation with no wait stats or banter", bingo({ moderation: { ...bingo().moderation!, medianLabel: null, fastestLabel: null, withinHourLabel: null, busiestHourLabel: null, banter: null, topReviewer: null } })],
     ["moderation with no reviewers", bingo({ moderation: { ...bingo().moderation!, reviewers: [], banter: null, topReviewer: null } })],
     ["no Superlatives", bingo({ teamSuperlatives: [] })],
-    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [] })],
+    ["no raids or bosses", bingo({ bossLeaders: [] })],
+    ["one boss", bingo({ bossLeaders: bingo().bossLeaders.slice(1, 2) })],
+    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [] })],
   ];
   for (const [name, model] of cases) {
     it(name, () => {
@@ -170,9 +188,9 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
       </WrappedProgressProvider>,
     );
     const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
-    // Everyone; the rain of drops; the highlights; the Steal and Behind the scenes; the reviewers and the first two Teams; the
-    // other five Teams over two pages.
-    expect(scenes.length).toBe(7);
+    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the Steal and Behind the scenes;
+    // the reviewers and the first two Teams; the other five Teams over two pages.
+    expect(scenes.length).toBe(9);
     for (const scene of scenes) {
       const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
       expect(steps.length).toBeGreaterThan(0);

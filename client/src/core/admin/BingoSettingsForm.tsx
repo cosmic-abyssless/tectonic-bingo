@@ -16,6 +16,7 @@ import { ExternalLink } from "../ui/ExternalLink";
 import { DiscordSyncPanel } from "./DiscordSyncPanel";
 import { useAuth } from "../../context/AuthContext";
 import { DiscordChannelsEditor, discordChannelsDeleted } from "./DiscordChannelsEditor";
+import { WrappedBossesEditor } from "./WrappedBossesEditor";
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -61,6 +62,7 @@ export function BingoSettingsForm({
     bonusPotAmount: bingo.bonusPotAmount.toString(),
     showScreenshotsWhenFinished: bingo.showScreenshotsWhenFinished,
     publishWrappedOnFinish: bingo.publishWrappedOnFinish,
+    wrappedBosses: bingo.wrappedBosses,
     sealedTiles: bingo.sealedTiles,
     hideRules: bingo.hideRules,
     signupOpensAt: toLocalInput(bingo.signupOpensAt),
@@ -125,6 +127,7 @@ export function BingoSettingsForm({
         bonusPotAmount: Number(form.bonusPotAmount) || 0,
         showScreenshotsWhenFinished: form.showScreenshotsWhenFinished,
         publishWrappedOnFinish: form.publishWrappedOnFinish,
+        wrappedBosses: form.wrappedBosses,
         sealedTiles: form.sealedTiles,
         hideRules: form.hideRules,
         signupOpensAt: fromLocalInput(form.signupOpensAt) as never,
@@ -339,6 +342,7 @@ export function BingoSettingsForm({
         <p className="text-sm text-on-surface-muted">
           On, Wrapped publishes itself once the bingo is finished and no submission is pending (as the last one is reviewed). Off, it stays hidden until a mod publishes it from the mod panel.
         </p>
+        <WrappedBossesEditor bosses={form.wrappedBosses} onChange={(wrappedBosses) => setForm({ ...form, wrappedBosses })} />
       </Section>
 
       <Section title="Export">

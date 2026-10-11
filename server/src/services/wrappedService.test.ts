@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { Role, WrappedDrop } from "@bingo/shared";
+import { DEFAULT_WRAPPED_BOSSES, type Role, type WrappedDrop } from "@bingo/shared";
 import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { auditLog, bingos, claims, stageTransitions, submissions } from "../db/schema";
@@ -12,6 +12,8 @@ import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
 import { computeWrapped, duoMoments, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { createBingo, toPublicBingo, updateBingoSettings } from "./bingoService";
+import { removeTeamMember } from "./teamService";
 import { createCategory as createSuperlativeCategory, setVote as setSuperlativeVote } from "./superlativeService";
 
 let sqlite: Database.Database;
@@ -418,5 +420,94 @@ describe("duoMoments", () => {
     const moments = duoMoments([drop("m1", "2026-01-03T10:00:00Z", 1, "Scales"), drop("m1", "2026-01-03T10:00:00Z", 9, "Onyx")], [drop("t1", "2026-01-03T12:00:00Z", 5)], tileOf);
     expect(moments[0]!.mine.itemName).toBe("Onyx");
     expect(duoMoments([drop("m4", "2026-01-03T10:00:00Z", 1)], [drop("t4", "2026-01-09T10:00:00Z", 1)], tileOf)).toEqual([]);
+  });
+});
+
+describe("who killed each raid and boss the most", () => {
+  /** A Wise Old Man snapshot of a Player's kill counts, `at` minutes into the Bingo. */
+  function snapshot(fx: Fx, userId: string, at: number, bossKills: Record<string, number>) {
+    db.insert(schema.womSnapshots).values({ bingoId: fx.bingo.id, userId, takenAt: t(at), ehb: 0, ehp: 0, clues: 0, bossKillsJson: JSON.stringify(bossKills) }).run();
+  }
+  const gained = (fx: Fx, userId: string, from: Record<string, number>, to: Record<string, number>) => {
+    snapshot(fx, userId, -10, from);
+    snapshot(fx, userId, 500, to);
+  };
+
+  it("adds up each Team's Players' gains, removed Players included, and lists tied Teams and tied top Players", () => {
+    const fx = seed();
+    gained(fx, fx.alice.id, { chambers_of_xeric: 100, nex: 5 }, { chambers_of_xeric: 110, nex: 8 });
+    gained(fx, fx.carol.id, { chambers_of_xeric: 0 }, { chambers_of_xeric: 15 });
+    gained(fx, fx.dave.id, { nex: 0 }, { nex: 3 });
+    gained(fx, fx.bob.id, { chambers_of_xeric: 50 }, { chambers_of_xeric: 75 });
+    gained(fx, fx.erin.id, { theatre_of_blood: 1 }, { theatre_of_blood: 6 });
+    // Kills after the finish don't count.
+    snapshot(fx, fx.erin.id, 700, { theatre_of_blood: 60 });
+    // Carol is taken off Team A mid-Bingo: her kills still count for it.
+    removeTeamMember(db, fx.teamA.id, fx.carol.id, { bingoId: fx.bingo.id });
+    const bingo = finish(fx);
+
+    const leaders = computeWrapped(db, bingo).bingo.bossLeaders!;
+    const view = leaders.map((l) => ({ metric: l.metric, name: l.name, teams: l.teams.map((tm) => ({ teamId: tm.teamId, kills: tm.kills, top: tm.topPlayers.map((p) => [p.player.discordUsername, p.kills]) })) }));
+    // In the list's order, bosses nobody gained kills at left out.
+    expect(view).toEqual([
+      {
+        metric: "chambers_of_xeric",
+        name: "Chambers of Xeric",
+        teams: [
+          { teamId: fx.teamA.id, kills: 25, top: [["carol", 15]] },
+          { teamId: fx.teamB.id, kills: 25, top: [["bob", 25]] },
+        ],
+      },
+      { metric: "theatre_of_blood", name: "Theatre of Blood", teams: [{ teamId: fx.teamB.id, kills: 5, top: [["erin", 5]] }] },
+      { metric: "nex", name: "Nex", teams: [{ teamId: fx.teamA.id, kills: 6, top: [["alice", 3], ["dave", 3]] }] },
+    ]);
+  });
+
+  it("is empty without any kills at the list's bosses", () => {
+    const fx = seed();
+    gained(fx, fx.alice.id, { vorkath: 0 }, { vorkath: 40 });
+    const bingo = finish(fx);
+    expect(computeWrapped(db, bingo).bingo.bossLeaders).toEqual([]);
+  });
+
+  it("follows the Bingo's own list, and a published Wrapped only picks a change up when published again", () => {
+    const fx = seed();
+    gained(fx, fx.alice.id, { vorkath: 0, chambers_of_xeric: 0 }, { vorkath: 40, chambers_of_xeric: 2 });
+    let bingo = finish(fx);
+    publishWrapped(db, bingo, fx.mod.id);
+    const published = () => readBingoWrapped(db, bingo, viewer(fx.mod.id, true)).bingo.bossLeaders!.map((l) => l.metric);
+    expect(published()).toEqual(["chambers_of_xeric"]);
+
+    bingo = updateBingoSettings(db, bingo.id, { wrappedBosses: ["vorkath", "chambers_of_xeric"] });
+    expect(published()).toEqual(["chambers_of_xeric"]);
+    expect(computeWrapped(db, bingo).bingo.bossLeaders!.map((l) => l.metric)).toEqual(["vorkath", "chambers_of_xeric"]);
+    publishWrapped(db, bingo, fx.mod.id);
+    expect(published()).toEqual(["vorkath", "chambers_of_xeric"]);
+  });
+});
+
+describe("the Bingo's list of raids and bosses", () => {
+  it("starts as the default, and saving it unchanged changes nothing", () => {
+    const fx = seed();
+    expect(toPublicBingo(fx.bingo).wrappedBosses).toEqual(DEFAULT_WRAPPED_BOSSES);
+    const saved = updateBingoSettings(db, fx.bingo.id, { wrappedBosses: [...DEFAULT_WRAPPED_BOSSES] });
+    expect(saved.wrappedBossesJson).toBeNull();
+    expect(db.select().from(auditLog).where(eq(auditLog.action, "settings.updated")).all()).toHaveLength(0);
+  });
+
+  it("only takes Wise Old Man bosses the app knows, each once, and audits a change", () => {
+    const fx = seed();
+    expect(() => updateBingoSettings(db, fx.bingo.id, { wrappedBosses: ["nex", "not_a_boss"] })).toThrow(/Unknown Wise Old Man boss/);
+    expect(() => updateBingoSettings(db, fx.bingo.id, { wrappedBosses: "nex" })).toThrow(ServiceError);
+    const saved = updateBingoSettings(db, fx.bingo.id, { wrappedBosses: ["nex", "sol_heredit", "nex"] });
+    expect(toPublicBingo(saved).wrappedBosses).toEqual(["nex", "sol_heredit"]);
+    expect(db.select().from(auditLog).where(eq(auditLog.action, "settings.updated")).all()).toHaveLength(1);
+  });
+
+  it("is copied from the previous Bingo into a new one", () => {
+    const fx = seed();
+    updateBingoSettings(db, fx.bingo.id, { wrappedBosses: ["nex"] });
+    const next = createBingo(db, { slug: "next", name: "Next", boardRows: 1, boardCols: 1, createdByUserId: fx.mod.id });
+    expect(toPublicBingo(next).wrappedBosses).toEqual(["nex"]);
   });
 });

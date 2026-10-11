@@ -660,8 +660,8 @@ describe("every column is accounted for", () => {
   it("bingo settings", () => {
     const { bingo } = seedFullBingo();
     const doc = exportBingo(db, bingo.id);
-    // exclusivityRules is the column exclusivityRulesJson, parsed.
-    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson" };
+    // exclusivityRules and wrappedBosses are the columns exclusivityRulesJson and wrappedBossesJson, parsed.
+    const renamed: Record<string, string> = { exclusivityRules: "exclusivityRulesJson", wrappedBosses: "wrappedBossesJson" };
     accounted(
       schema.bingos,
       Object.keys(doc.bingo).map((k) => renamed[k] ?? k),

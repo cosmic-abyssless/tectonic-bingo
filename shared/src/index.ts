@@ -176,6 +176,11 @@ export interface Bingo {
   showScreenshotsWhenFinished: boolean;
   /** "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): off by default. */
   publishWrappedOnFinish: boolean;
+  /**
+   * The raids and bosses Wrapped's "Who killed it the most" part looks at (CONTEXT.md "Wrapped"): Wise Old Man boss
+   * metrics, in display order. A new Bingo starts with the previous Bingo's list.
+   */
+  wrappedBosses: string[];
   /** Sealed Tiles (CONTEXT.md): during Board revealed, Players and Captains can't open Tiles. See areTilesSealed. */
   sealedTiles: boolean;
   /** During Board revealed, the rules text is held back from Players and Captains. See areRulesHidden. */
@@ -1686,3 +1691,4 @@ export * from "./testData.ts";
 export * from "./themes.ts";
 export * from "./timezone.ts";
 export * from "./titles.ts";
+export * from "./womBosses.ts";

@@ -11,11 +11,12 @@ import { DropRain } from "./DropRain";
 
 /**
  * The comic Bingo section (#421): the Bingo-wide story, and for some viewers (a Moderator who didn't play) the only section,
- * so its first page reads on its own straight after the contents page. Up to four pages, each Reveal one panel, in the
+ * so its first page reads on its own straight after the contents page. Its pages, each Reveal one panel, in the
  * default section's order:
  *   1. Everyone, together: the splash, the totals, the leaderboard.
  *   1½. It rained loot: every drop of the Bingo, its icon raining down into a pile filling the page.
  *   2. The highlights: the race, the rarest drop, the crowd favourite.
+ *   2½. Raids and bosses: who killed each the most, a few to a page, dealt evenly over as many pages as they need.
  *   3. The draft's Steal, then Behind the scenes: who moderated (the Moderators category's art and credits), the wait times.
  *   4. The reviewers, then every Team's Superlatives, a few Teams to a page, dealt evenly over as many pages as they need.
  * A part the Bingo has nothing for leaves its panel out, and a page left with none is not drawn.
@@ -34,6 +35,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
   const perPage = rest.length ? Math.ceil(rest.length / Math.ceil(rest.length / 4)) : 4;
   for (let i = 0; i < rest.length; i += perPage) pickPages.push(rest.slice(i, i + perPage));
   if (pickPages[0]!.length === 0 && !(m && m.reviewers.length > 0)) pickPages.length = 0;
+  const bossPages = dealt(b.bossLeaders, 4);
   const count = (panels: boolean[]) => panels.filter(Boolean).length;
   const at = (panels: boolean[], i: number) => count(panels.slice(0, i));
 
@@ -123,6 +125,34 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         </WrappedScene>
       )}
 
+      {bossPages.map((bosses, page) => (
+        <WrappedScene key={`bosses-${page}`} steps={1}>
+          <div className="flex flex-1 flex-col gap-3">
+            {/* The title is lettered on the first page itself, over the bosses' panels. */}
+            {page === 0 && (
+              <div className="pt-1">
+                <Kicker>Raids and bosses</Kicker>
+                <PanelHeading className="mt-2" size={32}>
+                  Who killed it the most
+                </PanelHeading>
+                {/* Wise Old Man can't tell which runs were done together, so this never calls them runs. */}
+                <CaptionBox tone="paper" tilt={-0.5} className="mt-2 text-[13px]">
+                  Kill counts each Team's Players gained, added up. A group raid counts once for every Player in it.
+                </CaptionBox>
+              </div>
+            )}
+            {/* Each boss a panel of its own, all at one step: the camera takes them in together. */}
+            <div className={`grid flex-1 auto-rows-fr gap-3 ${bosses.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+              {bosses.map((boss, i) => (
+                <Reveal key={boss.metric} step={0} className={`${PADDED_PANEL} ${bosses.length > 1 && bosses.length % 2 === 1 && i === bosses.length - 1 ? "col-span-2" : ""}`}>
+                  <BossLeader boss={boss} />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </WrappedScene>
+      ))}
+
       {count(backstage) > 0 && (
         <WrappedScene steps={count(backstage)}>
           <div className="flex flex-1 flex-col justify-center gap-3">
@@ -184,6 +214,53 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         );
       })}
     </>
+  );
+}
+
+/** A long list dealt over pages of at most `most` each, as evenly as it goes: 5 is 3 and 2, not 4 and 1. */
+function dealt<T>(items: T[], most: number): T[][] {
+  if (items.length === 0) return [];
+  const perPage = Math.ceil(items.length / Math.ceil(items.length / most));
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
+  return pages;
+}
+
+/** One raid or boss: its name lettered at the head, then the Team (or tied Teams) that killed it the most, its kills stamped, and its top Players. */
+function BossLeader({ boss }: { boss: WrappedBingoModel["bossLeaders"][number] }) {
+  const { colors } = useComic();
+  const lead = boss.teams[0]!;
+  return (
+    <PanelBody tone={boss.teams.length === 1 && lead.color ? { color: lead.color } : "yellow"} align="start" gap={0}>
+      <h3 data-beat="slam" className={`${LETTERED} min-w-0 break-words leading-none`} style={{ ...display(18), color: colors.INK }}>
+        {boss.name}
+      </h3>
+      <div className="mt-2 flex flex-col gap-2.5">
+        {boss.teams.map((t) => (
+          <div key={t.teamId}>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {t.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: t.color, borderColor: colors.LINE }} />}
+              <span className="min-w-0 break-words font-bold leading-tight" style={{ color: colors.INK }}>
+                {t.name}
+                {t.isMine && (
+                  <span className="ml-2 inline-block text-[11px] font-semibold uppercase tracking-wide" style={{ color: colors.INK_SUBTLE }}>
+                    your Team
+                  </span>
+                )}
+              </span>
+              <StampLabel color={colors.INK} size={14} tilt={-4}>
+                <span className="num">{t.killsLabel}</span>
+              </StampLabel>
+            </p>
+            <div className="mt-1 flex flex-col gap-0.5">
+              {t.topPlayers.map((p) => (
+                <ComicPerson key={p.person.id} person={p.person} size={20} nameSize={12} detail={`Top: ${p.killsLabel}`} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </PanelBody>
   );
 }
 

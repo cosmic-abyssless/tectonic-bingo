@@ -189,6 +189,8 @@ export interface BingoExportDocument {
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
     publishWrappedOnFinish?: boolean;
+    /** The raids and bosses Wrapped looks at (Bingo.wrappedBosses). Absent in older files: the new Bingo's own (the previous Bingo's). */
+    wrappedBosses?: string[];
     /**
      * Older files only (before #281): the Bingo-wide Credits, in order. The first ones caption the Outro's imported
      * art in order; the rest (all of them, without imported art) become the Outro's additional credits.
