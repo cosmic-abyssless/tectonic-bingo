@@ -74,9 +74,7 @@ function ago(from: Date, now: Date): string {
 /** The viewer's Catch-up of `bingo` at `now`. */
 export function getCatchUp(db: Db, bingo: Bingo, user: User, now: Date): CatchUpResponse {
   const enabled = getSettings(db, user.id).catchUpEnabled;
-  const catchUp = buildCatchUp(db, bingo, user, now, enabled);
-  // Off: only whether there'd be one, for the offer to turn it on.
-  return enabled ? catchUp : { enabled, wouldShow: catchUp.sections.length > 0, since: null, summary: null, sections: [] };
+  return enabled ? buildCatchUp(db, bingo, user, now, enabled) : { enabled, since: null, summary: null, sections: [] };
 }
 
 function buildCatchUp(db: Db, bingo: Bingo, user: User, now: Date, enabled: boolean): CatchUpResponse {

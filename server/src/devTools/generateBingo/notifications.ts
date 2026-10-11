@@ -1,8 +1,8 @@
 // Notifications and Catch-up (CONTEXT.md): some generated Players turn Notifications on (most with the defaults, some
 // with extra kinds, some up to + Discord, whose DMs land in the dev server's fake sink), and every Moderator turns on
 // Submissions waiting, all through the real settings endpoint once they've signed up. Their Inboxes then fill from the
-// seeded play itself, at its spoofed times. A few Players also turn Catch-up on, and are seen on the Bingo about a day
-// before the run ends, so logging in as one of them shows a Catch-up.
+// seeded play itself, at its spoofed times. Catch-up is on by default and a few Players turn it off; the rest are seen
+// on the Bingo about a day before the run ends, so logging in as one of them shows a Catch-up.
 import type { NotificationKind, NotificationLevel } from "@bingo/shared";
 import type { Player } from "./people";
 import type { Ctx } from "./setup";
@@ -14,15 +14,15 @@ const DISCORD = 0.3;
 /** Of those who opt in, how many turn on extra kinds beyond the defaults. */
 const EXTRAS = 0.35;
 const EXTRA_KINDS: NotificationKind[] = ["team_drop_approved", "team_part_completed", "superlative_reminder"];
-/** Of the Players, how many turn Catch-up on. */
-const CATCH_UP = 0.3;
+/** Of the Players, how many turn Catch-up off. */
+const CATCH_UP_OFF = 0.15;
 
 export interface NotificationSetup {
   optedIn: Player[];
   catchUp: Player[];
 }
 
-/** Turns Notifications (and Catch-up) on for some Players, and Submissions waiting for every Moderator, at `at`. */
+/** Turns Notifications on (and Catch-up off) for some Players, and Submissions waiting for every Moderator, at `at`. */
 export async function runNotificationSettings(ctx: Ctx, players: Player[], mods: Player[], at: Date): Promise<NotificationSetup> {
   const rng = ctx.rng.fork("notifications");
   const out: NotificationSetup = { optedIn: [], catchUp: [] };
@@ -31,15 +31,15 @@ export async function runNotificationSettings(ctx: Ctx, players: Player[], mods:
     if (p.isMe || !p.userId) continue;
     const isMod = mods.includes(p);
     const optIn = isMod || rng.chance(OPT_IN);
-    const catchUp = rng.chance(CATCH_UP);
-    if (!optIn && !catchUp) continue;
+    const catchUpOff = rng.chance(CATCH_UP_OFF);
+    if (!catchUpOff) out.catchUp.push(p);
+    if (!optIn && !catchUpOff) continue;
     const level: NotificationLevel = optIn ? (rng.chance(DISCORD) ? "discord" : "app") : "off";
     const kinds: Partial<Record<NotificationKind, boolean>> = {};
     if (optIn && rng.chance(EXTRAS)) for (const kind of EXTRA_KINDS) if (rng.chance(0.6)) kinds[kind] = true;
     if (isMod) kinds.submissions_waiting = true;
-    await ctx.api.as(p.discordId).put("/api/me/notifications/settings", { level, kinds, catchUpEnabled: catchUp }, { at });
+    await ctx.api.as(p.discordId).put("/api/me/notifications/settings", { level, kinds, ...(catchUpOff && { catchUpEnabled: false }) }, { at });
     if (optIn) out.optedIn.push(p);
-    if (catchUp) out.catchUp.push(p);
   }
   return out;
 }
