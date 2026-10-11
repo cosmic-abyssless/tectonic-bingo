@@ -7,7 +7,6 @@ import type { Stage } from "@bingo/shared";
 import { useBingo, usePendingCount } from "../api/queries";
 import { useBoardDraftStatus } from "../api/adminQueries";
 import { useCan, usePageAccess } from "../headless/permissions";
-import { useWebSocketEvent } from "../context/WebSocketContext";
 import { AuditLog } from "../core/mod/AuditLog";
 import { AUDIT_FILTER_PARAMS } from "../core/mod/auditFilters";
 import { ReviewQueue, SUBMISSION_FILTER_PARAMS } from "../core/mod/ReviewQueue";
@@ -26,11 +25,11 @@ import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
+import { ModAlertsMigration, hadOldAlerts } from "../core/notifications/ModAlertsMigration";
+import { NotificationOffer } from "../core/notifications/NotificationOffer";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
-import { Button } from "../core/ui/Button";
 import { Badge, Notice } from "../core/ui/Card";
 import { InfoIcon } from "../core/ui/icons";
-import { Dialog, DialogHeader } from "../core/ui/Dialog";
 import { usePreference } from "../core/ui/preferences";
 import { Tab, TabList, TabPanel, Tabs } from "../core/ui/Tabs";
 import { useSetUrlParams, useUrlParam } from "../core/ui/useUrlParam";
@@ -142,32 +141,13 @@ export function ModPage() {
     if (key !== tab) setUrl({ tab: key, ...Object.fromEntries([...SUBMISSION_FILTER_PARAMS, ...AUDIT_FILTER_PARAMS].map((p) => [p, null])) });
   };
 
-  const [showNotifPrompt, setShowNotifPrompt] = useState(
-    () => "Notification" in window && Notification.permission === "default" && !localStorage.getItem("mod_notif_prompted"),
-  );
+  // A new Submission reaches the Moderators who want to hear of it as a Notification (CONTEXT.md): the panel asks for
+  // nothing by itself. A Moderator whose browser had its old alerts on is told once where they went.
+  const [oldAlerts] = useState(hadOldAlerts);
 
   useEscapeBack(`/b/${slug}`);
 
-  // Clicking the notification brings this tab forward on the Submissions tab (keeping its filters, dropping the Audit
-  // log's; not setTab, whose `tab` would be the one from when the notification was raised).
-  useWebSocketEvent((event) => {
-    if (event.type !== "submission_created" || event.bingoId !== shell?.bingo.id) return;
-    if ("Notification" in window && Notification.permission === "granted") {
-      const notification = new Notification("New bingo submission", { body: "A new submission is pending review" });
-      notification.onclick = () => {
-        window.focus();
-        setUrl({ tab: "submissions", ...Object.fromEntries(AUDIT_FILTER_PARAMS.map((p) => [p, null])) });
-        notification.close();
-      };
-    }
-  });
-
   if (!shell || !mayModerate || !slug) return null;
-
-  const dismissNotifPrompt = () => {
-    localStorage.setItem("mod_notif_prompted", "true");
-    setShowNotifPrompt(false);
-  };
 
   return (
     // Around the header too: its account menu opens the viewer's own profile.
@@ -233,7 +213,16 @@ export function ModPage() {
                 </TabList>
               </div>
               <TabPanel id="submissions">
-                <div className={NARROW}>
+                <div className={`${NARROW} space-y-4`}>
+                  {/* Nothing new ever arrives for a Historical Bingo. */}
+                  {!historical &&
+                    (oldAlerts ? (
+                      <ModAlertsMigration />
+                    ) : (
+                      <NotificationOffer bingoId={shell.bingo.id} offer="mod_panel">
+                        Want to hear when Submissions are waiting?
+                      </NotificationOffer>
+                    ))}
                   <ReviewQueue slug={slug} />
                 </div>
               </TabPanel>
@@ -331,29 +320,6 @@ export function ModPage() {
           )}
         </main>
 
-        {/* Nothing new ever arrives for a Historical Bingo. */}
-        <Dialog isOpen={showNotifPrompt && !historical} onClose={dismissNotifPrompt}>
-          <DialogHeader title="Enable notifications?" onClose={dismissNotifPrompt} />
-          <div className="space-y-4 p-5">
-            <p className="text-sm leading-relaxed text-on-surface-muted">
-              Get a browser notification whenever a new submission arrives for review, even if this tab is in the background.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onPress={dismissNotifPrompt}>
-                No thanks
-              </Button>
-              <Button
-                variant="primary"
-                onPress={async () => {
-                  dismissNotifPrompt();
-                  await Notification.requestPermission();
-                }}
-              >
-                Enable
-              </Button>
-            </div>
-          </div>
-        </Dialog>
       </div>
     </PlayerProfileProvider>
   );

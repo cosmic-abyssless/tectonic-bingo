@@ -1,15 +1,28 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type { BroadcastEvent, ClientSocketMessage, ServerSocketMessage } from "@bingo/shared";
+import type { BingoShellResponse, BroadcastEvent, ClientSocketMessage, NotificationSocketMessage, ServerSocketMessage } from "@bingo/shared";
+import { matchPath, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { keyMentions, otherBingoSlugs, unwatchedBingoSlugs, watchedBingoIds } from "../api/bingoScope";
 import { reconnectDelayMs } from "./reconnectDelay";
 import { noteServerBuild } from "../api/serverBuild";
 
 type Listener = (event: BroadcastEvent) => void;
+type NotificationListener = (msg: NotificationSocketMessage) => void;
+
+/** What this tab tells the server of itself (ClientSocketMessage "presence"), minus the Bingo, which comes from the route. */
+function notificationPermission(): Extract<ClientSocketMessage, { type: "presence" }>["notifications"] {
+  return "Notification" in window ? Notification.permission : "unsupported";
+}
+
+/** How often a tab in view on a Bingo's page says so again, for the Catch-up's "last had it open". */
+const PRESENCE_EVERY_MS = 60_000;
 
 const WebSocketContext = createContext<{
   subscribe: (fn: Listener) => () => void;
+  subscribeNotifications: (fn: NotificationListener) => () => void;
+  /** Tells the server this tab's presence again now (after the browser's notification permission changed). */
+  refreshPresence: () => void;
   statsRefreshingSignupIds: ReadonlySet<string>;
   statsRefreshingUserIds: ReadonlySet<string>;
   markStatsRefreshing: (signupId: string, refreshing: boolean) => void;
@@ -243,10 +256,17 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
 // One WebSocket connection for the whole app (v1 opened a separate one per
 // component that used it), while someone is logged in. Drives query-cache
 // invalidation on every broadcast; useWebSocketEvent lets a component also
-// react directly (e.g. the mod page's browser-notification prompt).
+// react directly (e.g. a toast on a stage change).
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const listenersRef = useRef<Set<Listener>>(new Set());
+  const notificationListenersRef = useRef<Set<NotificationListener>>(new Set());
+  // The Bingo whose pages this tab is on (by the route's slug and its cached shell), for presence.
+  const location = useLocation();
+  const slug = matchPath("/b/:slug/*", location.pathname)?.params.slug ?? null;
+  const slugRef = useRef<string | null>(slug);
+  slugRef.current = slug;
+  const sendPresenceRef = useRef<() => void>(() => {});
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -338,8 +358,34 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       ws.send(JSON.stringify(msg));
     }
     const stopWatchingCache = queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey[0] === "bingo") sendWatch();
+      if (event.query.queryKey[0] !== "bingo") return;
+      sendWatch();
+      // The route's Bingo, once its shell has loaded: presence names it.
+      if (event.query.queryKey[1] === slugRef.current) sendPresence();
     });
+
+    // Whether this tab is in view, whether its browser allows notifications, and which Bingo it's on: how the server
+    // picks a toast, a browser notification or a DM for a new Notification, and when it last had that Bingo open.
+    let lastPresence: string | null = null;
+    let lastPresenceAt = 0;
+    function sendPresence(force = false) {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      // The Bingo whose pages this tab is on, by the route's slug and its cached shell.
+      const bingoId = (slugRef.current ? queryClient.getQueryData<BingoShellResponse>(["bingo", slugRef.current])?.bingo.id : null) ?? null;
+      const msg: ClientSocketMessage = { type: "presence", visible: document.visibilityState === "visible", notifications: notificationPermission(), bingoId };
+      const key = JSON.stringify(msg);
+      const now = Date.now();
+      // Unchanged: only again once a minute, while a Bingo's page is in view (for the Catch-up).
+      if (!force && key === lastPresence && !(msg.visible && msg.bingoId && now - lastPresenceAt >= PRESENCE_EVERY_MS)) return;
+      lastPresence = key;
+      lastPresenceAt = now;
+      ws.send(key);
+    }
+    sendPresenceRef.current = () => sendPresence(true);
+    const onVisibility = () => sendPresence();
+    document.addEventListener("visibilitychange", onVisibility);
+    const presenceTimer = setInterval(() => sendPresence(), PRESENCE_EVERY_MS);
 
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -356,6 +402,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         // A new connection hears every Bingo until told.
         lastWatch = null;
         sendWatch();
+        sendPresence(true);
       };
       ws.onmessage = (event) => {
         try {
@@ -363,6 +410,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           // Not a broadcast: the build the server serves (core/ui/NewVersionNotice).
           if (msg.type === "hello") {
             noteServerBuild({ buildId: msg.buildId, forceReload: msg.forceReload });
+            return;
+          }
+          // Not a broadcast: this user's Inbox changed (core/notifications/NotificationDelivery).
+          if (msg.type === "notifications") {
+            for (const listener of notificationListenersRef.current) listener(msg);
             return;
           }
           applyStatsRefreshing(msg);
@@ -385,19 +437,32 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     return () => {
       closed = true;
       stopWatchingCache();
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(presenceTimer);
+      sendPresenceRef.current = () => {};
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (refetchTimer.current) clearTimeout(refetchTimer.current);
       wsRef.current?.close();
     };
   }, [queryClient, applyStatsRefreshing, socketUserId]);
 
+  // A new route may be on another Bingo (or none): say so.
+  useEffect(() => {
+    sendPresenceRef.current();
+  }, [slug]);
+
   const subscribe = (fn: Listener) => {
     listenersRef.current.add(fn);
     return () => listenersRef.current.delete(fn);
   };
+  const subscribeNotifications = (fn: NotificationListener) => {
+    notificationListenersRef.current.add(fn);
+    return () => notificationListenersRef.current.delete(fn);
+  };
+  const refreshPresence = () => sendPresenceRef.current();
 
   return (
-    <WebSocketContext.Provider value={{ subscribe, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing, statsResults, markStatsResult }}>
+    <WebSocketContext.Provider value={{ subscribe, subscribeNotifications, refreshPresence, statsRefreshingSignupIds, statsRefreshingUserIds, markStatsRefreshing, statsResults, markStatsResult }}>
       {children}
     </WebSocketContext.Provider>
   );
@@ -409,6 +474,22 @@ export function useWebSocketEvent(listener: Listener): void {
   const listenerRef = useRef(listener);
   listenerRef.current = listener;
   useEffect(() => ctx.subscribe((e) => listenerRef.current(e)), [ctx]);
+}
+
+/** Hears this user's Inbox changing (the server's "notifications" message). */
+export function useNotificationMessages(listener: NotificationListener): void {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useNotificationMessages must be used within WebSocketProvider");
+  const listenerRef = useRef(listener);
+  listenerRef.current = listener;
+  useEffect(() => ctx.subscribeNotifications((m) => listenerRef.current(m)), [ctx]);
+}
+
+/** Tells the server this tab's presence again, e.g. once the browser's notification permission has changed. */
+export function useRefreshPresence(): () => void {
+  const ctx = useContext(WebSocketContext);
+  if (!ctx) throw new Error("useRefreshPresence must be used within WebSocketProvider");
+  return ctx.refreshPresence;
 }
 
 export function useStatsRefreshingSignupIds(): ReadonlySet<string> {

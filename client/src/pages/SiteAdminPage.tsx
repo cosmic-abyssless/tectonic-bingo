@@ -12,6 +12,7 @@ import { optimisticUpdate } from "../api/optimistic";
 import { UserSearchInput } from "../core/admin/UserSearchInput";
 import { ItemGroupsPanel } from "../core/admin/ItemGroupsPanel";
 import { PieceValuesPanel } from "../core/admin/PieceValuesPanel";
+import { NotificationFoldingPanel } from "../core/admin/NotificationFoldingPanel";
 import { TitleSettingsPanel } from "../core/admin/TitleSettingsPanel";
 import { PastWomCompetitionsPanel } from "../core/admin/PastWomCompetitionsPanel";
 import { TestDataPanel } from "../core/admin/TestDataPanel";
@@ -314,7 +315,7 @@ export function SiteAdminPage() {
   const mayAdminister = useSitePageAccess("administer_site");
   const seesAllConnections = useSiteCan("manage_claude_connections").allowed;
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "items", "titles", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "items", "titles", "notifications", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs", [...SITE_AUDIT_FILTER_PARAMS, "section"]);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -349,6 +350,7 @@ export function SiteAdminPage() {
               <Tab id="audit">Site-wide audit log</Tab>
               <Tab id="items">Items</Tab>
               <Tab id="titles">Titles</Tab>
+              <Tab id="notifications">Notifications</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               <Tab id="site-admins">Site admins</Tab>
               {seesAllConnections && <Tab id="claude">Claude connections</Tab>}
@@ -378,6 +380,11 @@ export function SiteAdminPage() {
           <TabPanel id="titles">
             <div className={NARROW}>
               <TitleSettingsPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="notifications">
+            <div className={NARROW}>
+              <NotificationFoldingPanel />
             </div>
           </TabPanel>
           <TabPanel id="past-wom">

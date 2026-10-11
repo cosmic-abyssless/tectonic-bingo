@@ -168,7 +168,7 @@ export function BingoPageProvider({
   // while it was rendered, just expressed via TanStack Query's `enabled`.
   const { data: draftState, isLoading: draftLoading } = useDraftState(shell?.bingo.stage === "draft" && canSee ? slug : undefined);
 
-  usePageEvents(shell, canModerate);
+  usePageEvents(shell);
   // Mirrors the server's submission gate: nothing can be submitted before startsAt.
   const hasStarted = useHasPassed(shell?.bingo.effectiveStartsAt);
 

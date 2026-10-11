@@ -280,6 +280,22 @@ export const BugIcon = (p: IconProps) => (
   </Svg>
 );
 
+// Notifications (CONTEXT.md): the header's Inbox.
+export const BellIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 11.5V7.2a4 4 0 018 0v4.3l1.2 1.3H2.8L4 11.5z" />
+    <path d="M6.6 14.2a1.5 1.5 0 002.8 0" />
+  </Svg>
+);
+
+export const MoreIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="3.5" cy="8" r="0.6" fill="currentColor" />
+    <circle cx="8" cy="8" r="0.6" fill="currentColor" />
+    <circle cx="12.5" cy="8" r="0.6" fill="currentColor" />
+  </Svg>
+);
+
 // Moderator-only entry points (the mod panel).
 export const ShieldIcon = (p: IconProps) => (
   <Svg {...p}>

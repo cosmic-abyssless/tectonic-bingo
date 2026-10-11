@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { RULES_COME_LATER, useBingoPage, useBoardModel, useTileModel, useTileSearchModel } from "../../../headless";
 import type { TileSearchModel } from "../../../headless/types";
 import { SubmissionFlowHost } from "../../../headless/SubmissionFlowHost";
+import { BoardNotices } from "../../../core/notifications/BoardNotices";
 import { useScreenshotCapture } from "../../../headless/useScreenshotCapture";
 import { ScreenshotDropOverlay } from "../../../core/ui/ScreenshotDropOverlay";
 import { SealedTilesNotice } from "../../../core/board/SealedTilesNotice";
@@ -47,6 +48,7 @@ export function BoardPageLayout() {
         <PageHeader page={page} />
 
         <main className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
+          <BoardNotices slug={page.slug} />
           {page.canScout && <ScoutBanner onOpen={page.actions.goToDraft} canRate={page.canRatePicks} />}
           {page.wrapped.canOpen && <WrappedBanner preview={page.wrapped.preview} onOpen={page.actions.goToWrapped} />}
           {page.feedback.canOpen && <FeedbackBanner responded={page.feedback.responded} onOpen={page.actions.goToFeedback} />}

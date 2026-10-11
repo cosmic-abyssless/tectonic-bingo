@@ -35,6 +35,9 @@ import { refreshPricesAndFill } from "./services/gpValueService";
 import { fillAuditSearchText } from "./audit/searchText";
 import { startWomReads } from "./services/womReadService";
 import { startBingoStarts } from "./services/bingoStartService";
+import { startNotificationRounds } from "./services/notificationScheduler";
+import { installDmHandoff } from "./services/notificationDm";
+import { installPresenceListener } from "./services/notificationPresence";
 import { UPLOADS_DIR, WIKI_ICONS_DIR, getAdminDiscordIds, sessionCookieSecure } from "./config";
 import { warmOcr } from "./ocr";
 import { shouldWarmOcr } from "./ocrConfig";
@@ -273,6 +276,11 @@ server.listen(PORT, () => {
   startWomReads(db);
   // Each Bingo goes Live by itself at its start date, checked every few seconds.
   startBingoStarts(db);
+  // Notifications (CONTEXT.md): the audit log's entries no request drained, Discord DMs that are due, and the kinds no
+  // request makes (Queue waiting long, the Superlative reminder). A new install starts reading the log at its end.
+  installDmHandoff();
+  installPresenceListener(db);
+  startNotificationRounds(db);
   // The admin MCP server's SQL tool reads a copy of the database with secrets removed, rebuilt every 5 minutes.
   if (mcpEnabled) startReplicaJob(DB_PATH);
   if (loadWarnings) stopEventLoopMonitor = startEventLoopMonitor(loadWarnings);

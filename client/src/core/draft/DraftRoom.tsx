@@ -28,6 +28,7 @@ import { useIsPhone, useMediaQuery } from "../ui/useMediaQuery";
 import { useElementHeight } from "../ui/useElementHeight";
 import { describeShares } from "./cutModes";
 import { HEADING_LETTERED } from "../../themes/lettering";
+import { NotificationOffer } from "../notifications/NotificationOffer";
 
 // Themeable via --font-heading/--font-heading-weight (set by ThemeProvider
 // from tokens.chrome.headingFont/headingWeight); both fall back to a no-op
@@ -462,10 +463,20 @@ export function DraftRoom({ slug }: { slug: string }) {
     </>
   );
 
+  // A Captain with Notifications off, once the pick order is set: the one-time offer to hear when they're on the clock.
+  const statusWithOffer = (
+    <>
+      <NotificationOffer bingoId={shell.bingo.id} offer="draft_room" when={!!myTeam && state.orderReady && shell.bingo.stage === "draft"}>
+        Want to hear when your Team is on the clock?
+      </NotificationOffer>
+      {status}
+    </>
+  );
+
   if (phone) {
     return (
       <DraftRoomPhone
-        status={status}
+        status={statusWithOffer}
         banner={banner}
         rosters={rosters}
         noTeams={state.teams.length === 0}
@@ -556,7 +567,7 @@ export function DraftRoom({ slug }: { slug: string }) {
         {/* Stretched to the row, which is at least the pool's height, with the teams panel filling it: it ends where
             the pool does. */}
         <div className="flex min-w-0 flex-col gap-6">
-          {status}
+          {statusWithOffer}
           {teamsPanel(true)}
           {extras}
         </div>
@@ -575,7 +586,7 @@ export function DraftRoom({ slug }: { slug: string }) {
     // negative-margin breakout trick.
     <div>
       <div className="mx-auto w-full max-w-5xl space-y-6 px-6 pt-6">
-        {status}
+        {statusWithOffer}
         {teamsPanel(false)}
         {extras}
       </div>

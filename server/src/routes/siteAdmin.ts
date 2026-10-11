@@ -10,6 +10,7 @@ import * as historicalImportService from "../services/historicalImportService";
 import * as itemGroupService from "../services/itemGroupService";
 import * as pieceValueService from "../services/pieceValueService";
 import * as titleSettingsService from "../services/titleSettingsService";
+import * as notificationDm from "../services/notificationDm";
 import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
@@ -265,6 +266,23 @@ router.put(
   "/title-settings",
   asyncHandler(async (req, res) => {
     res.json({ settings: titleSettingsService.updateTitleSettings(db, req.body, req.user!.id) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Notification folding — global: how long Discord DMs of a kind wait to fold a burst into one (CONTEXT.md "Notification")
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/notification-folding",
+  asyncHandler(async (_req, res) => {
+    res.json({ windows: notificationDm.getFoldingWindows(db) });
+  }),
+);
+router.put(
+  "/notification-folding",
+  asyncHandler(async (req, res) => {
+    res.json({ windows: notificationDm.updateFoldingWindows(db, req.body, req.user!.id) });
   }),
 );
 

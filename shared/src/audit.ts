@@ -85,6 +85,8 @@ export interface AuditDetailsMap {
   "piece_value.item_restored": { itemName: string };
 
   "title_settings.updated": { changes: FieldChanges<Record<string, number | string | boolean>> };
+  /** A Site admin changed how long Discord DMs of a kind wait to fold a burst into one (CONTEXT.md "Notification"), in minutes. */
+  "notification_folding.updated": { changes: FieldChanges<Record<string, number>> };
 
   "wom_past_competition.added": { womId: number; title: string; participantCount: number; source: "manual" | "auto" };
   "wom_past_competition.renamed": { womId: number; from: string; to: string };
@@ -518,6 +520,16 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
       const keys = Object.keys(i.details.changes.after);
       const shown = keys.slice(0, 3).map((k) => `${k} ${settingValue(i.details.changes.before[k])} → ${settingValue(i.details.changes.after[k])}`);
       return `${actor(i)} changed the Title settings: ${shown.join(", ")}${keys.length > 3 ? ` and ${keys.length - 3} more` : ""}`;
+    },
+  },
+  "notification_folding.updated": {
+    category: "settings",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Notification folding changed",
+    label: (i) => {
+      const keys = Object.keys(i.details.changes.after);
+      return `${actor(i)} changed how long Discord DMs wait to fold: ${keys.map((k) => `${k} ${i.details.changes.before[k] ?? 0} → ${i.details.changes.after[k]} min`).join(", ")}`;
     },
   },
   "piece_value.created": {

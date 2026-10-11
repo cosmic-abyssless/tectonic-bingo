@@ -5,7 +5,7 @@ import { THEME_KEYS, TEST_DATA_STAGES, TEST_DATA_STAGE_LABEL, STAGE_LABEL, type 
 import { useAuth } from "../../context/AuthContext";
 import { queryKeys, useBingos } from "../../api/queries";
 import * as devApi from "../../api/devApi";
-import { devQueryKeys, useGenerateJob, useTestBingos } from "../../api/devApi";
+import { devQueryKeys, useDmSink, useGenerateJob, useTestBingos } from "../../api/devApi";
 import { Button } from "../ui/Button";
 import { Badge, Notice } from "../ui/Card";
 import { Field, Input } from "../ui/Field";
@@ -247,6 +247,44 @@ export function TestDataPanel() {
           </ul>
         )}
       </section>
+      <DmSink />
     </div>
+  );
+}
+
+/** The Discord DMs (CONTEXT.md "Notification") this dev server would have sent: they never reach Discord from here. */
+function DmSink() {
+  const [open, setOpen] = useState(false);
+  const { data } = useDmSink(open);
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-on-surface">Discord DMs (fake sink)</h3>
+        <Button size="sm" variant="secondary" onPress={() => setOpen((o) => !o)}>
+          {open ? "Hide" : "Show"}
+        </Button>
+      </div>
+      {open &&
+        (!data ? (
+          <p className="text-sm text-on-surface-muted">Loading…</p>
+        ) : data.dms.length === 0 ? (
+          <p className="text-sm text-on-surface-subtle">None yet. Players at + Discord who aren't on the site get them.</p>
+        ) : (
+          <ul className="max-h-96 divide-y divide-outline overflow-y-auto rounded-md border border-outline">
+            {data.dms.map((dm) => (
+              <li key={dm.id} className="space-y-0.5 px-4 py-2 text-sm">
+                <div className="flex justify-between gap-2 text-xs text-on-surface-subtle">
+                  <span>
+                    To {dm.userName} · {dm.kind}
+                    {dm.count > 1 ? ` · ${dm.count} folded` : ""}
+                  </span>
+                  <span>{new Date(dm.sentAt).toLocaleString()}</span>
+                </div>
+                <p className="whitespace-pre-wrap text-on-surface">{dm.text}</p>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </section>
   );
 }

@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { bingoRoles } from "./permissions";
+import { deleteForBingo as deleteNotificationsForBingo } from "./notificationService";
 import {
   achievementActivity,
   achievementEarned,
@@ -529,6 +530,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     // independent of the bingo it came from (issue #128) — it should outlive
     // the bingo the same way the audit log does, not get swept up with it.
     tx.update(womPastCompetitions).set({ bingoId: null }).where(eq(womPastCompetitions.bingoId, bingoId)).run();
+    deleteNotificationsForBingo(tx, bingoId);
     tx.delete(bingos).where(eq(bingos.id, bingoId)).run();
     return { files: unreferencedUploads(tx, urls) };
   });

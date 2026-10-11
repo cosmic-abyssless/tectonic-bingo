@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { TestDataBingo, TestDataJob, TestDataOptions } from "@bingo/shared";
+import type { DevDmSinkEntry, TestDataBingo, TestDataJob, TestDataOptions } from "@bingo/shared";
 import { api } from "./client";
 
 // The dev-only test data routes (server/src/routes/dev.ts): mounted only while the server is in dev mode (local
@@ -8,6 +8,7 @@ import { api } from "./client";
 export const devQueryKeys = {
   generateJob: ["devGenerateJob"] as const,
   testBingos: ["devTestBingos"] as const,
+  dmSink: ["devDmSink"] as const,
 };
 
 /** Starts a generator run on the server. `from` is the bingo whose board to copy. */
@@ -36,4 +37,9 @@ export function useGenerateJob(enabled: boolean) {
 
 export function useTestBingos(enabled: boolean) {
   return useQuery({ queryKey: devQueryKeys.testBingos, queryFn: listTestBingos, enabled });
+}
+
+/** The Discord DMs this dev server would have sent (its fake sink), newest first. Polls while shown. */
+export function useDmSink(enabled: boolean) {
+  return useQuery({ queryKey: devQueryKeys.dmSink, queryFn: () => api.get<{ dms: DevDmSinkEntry[] }>("/api/dev/dm-sink"), enabled, refetchInterval: 10_000 });
 }

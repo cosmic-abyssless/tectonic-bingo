@@ -90,6 +90,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
 
   // routes/siteAdmin.ts, mounted at /api/admin
   "POST /api/admin/bingos": ["bingo.created"],
+  "PUT /api/admin/notification-folding": ["notification_folding.updated"],
   "POST /api/admin/bingos/import": ["bingo.created", "settings.updated", "category.created", "tile.created", "task.created", "line.generated", "line.updated", "question.created"],
   "DELETE /api/admin/bingos/:id": ["bingo.deleted"],
   "POST /api/admin/historical-bingos": ["bingo.historical_imported"],

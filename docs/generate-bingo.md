@@ -123,6 +123,13 @@ target (say `signup`), the later dates are simply scheduled in the future.
    As Signups open the admin makes two **Staff** (CONTEXT.md), who don't sign up. About 80% of players pay
    their Buy-in some hours after signing up: Staff mark most of them on the Buy-ins page as the one who
    collected it, and the admin marks the rest, crediting a Staff member as the collector.
+   Once signed up, about half the players turn **Notifications** on (CONTEXT.md "Notification") through the real
+   settings endpoint (`notifications.ts`): most keep the default kinds, some turn on extra ones, and about a third of
+   them go up to `+ Discord`. Every Moderator turns on Submissions waiting. Their Inboxes fill from the play itself, at
+   its spoofed times; the DMs of those at `+ Discord` (nobody generated has the site open) go to the dev server's fake
+   sink, listed under the Test data tab, folded like real ones. About a third of the players also turn **Catch-up**
+   on; after a Live or Finished run each of them is seen on the Bingo (`POST .../presence`) a day before the run's
+   end, so logging in as one shows a Catch-up of the last day.
 3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
    in a duo bingo only paired players captain, since every Team is led by a pair) create
    the teams. Once the mods are made, a few **Restrictions** (CONTEXT.md) are applied from the mod roster: a
@@ -299,6 +306,8 @@ check for it):
   user, list generated bingos, tear one down completely (bingo, audit rows, uploaded files and
   their variants, and users nothing else uses), give a bingo's signups made-up player stats, and
   give its players made-up Wise Old Man snapshots (seeded by the run, replacing any it had).
+- `GET /api/dev/dm-sink`: the Discord DMs (CONTEXT.md "Notification") the server would have sent. On a dev server
+  DMs never reach Discord, whatever the bot's token: they're written here instead (`notificationDm.ts`).
 
 ## Tuning
 

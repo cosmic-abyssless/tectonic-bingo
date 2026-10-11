@@ -36,6 +36,8 @@ afterAll(() => {
 // Every non-GET route under /api/bingos, as `METHOD mount+path`, and whether it can change anyone's roles.
 const ROUTES: Record<string, boolean> = {
   // routes/bingos.ts
+  "POST /api/bingos/:slug/catch-up/dismiss": false,
+  "POST /api/bingos/:slug/presence": false,
   "PUT /api/bingos/:slug/superlatives/:categoryId": false,
   "DELETE /api/bingos/:slug/superlatives/:categoryId": false,
   "PUT /api/bingos/:slug/feedback": false,

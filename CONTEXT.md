@@ -450,3 +450,25 @@ One Player's anonymous answers to a Feedback form, which they can edit at any ti
 ### Captain response
 A Captain's anonymous answers to the captain-only Feedback questions, kept apart from, and not linked to, their Feedback response, so their general answers stay among every other Player's.
 - **Rules:** Results list Captain responses separately, with their own count and totals. With so few Captains, the form warns that these answers may be recognisable.
+
+---
+
+## Notifications
+
+### Notification
+One message to one user about something that happened in a Bingo (or on the site), shown in their Inbox.
+- **Opt-in:** Nobody gets any until they turn Notifications on. Nothing is collected for them before that, so turning it on starts with an empty Inbox.
+- **Rules:** It only ever says what its recipient could already see in the app under the same rules, and is never about something the recipient did themselves.
+- **Delivery:** Always to the Inbox, plus the first of these that applies: a toast if the user has the site open and in view; a browser notification if the site is open but not in view and they enabled those on that browser; a Discord DM from the bot if they enabled those. Toasts need no enabling; the other two are each opted into.
+- **Level:** One setting per user: Off, In the app (Inbox and toasts), + Browser, + Discord. Each step includes the ones before it, so Discord DMs are only ever the last fallback (ADR 0003).
+- **Folding:** Only Discord DMs wait and fold a burst into one ("4 drops approved"); the Inbox, toasts and browser notifications get each one as it happens.
+- **Settings:** Each kind is simply on or off for the user, across every Bingo. There is no per-Bingo mute and no snooze.
+- **Avoid:** Alert (Site admin alerting uses that word), digest.
+
+### Inbox
+A user's list of Notifications, behind the bell in the header, read or unread. It exists only once they have turned Notifications on.
+
+### Catch-up
+A summary of what happened in a Bingo since a user last had it open, from their point of view, shown at the top of its page when they come back, if anything happened.
+- **Opt-in:** Off until the user turns it on, like Notifications.
+- **Avoid:** Recap (Bingo Recap is the look back at a Finished Bingo; a Catch-up is for one returning user, mid-Bingo), "while you were gone" except as UI copy.

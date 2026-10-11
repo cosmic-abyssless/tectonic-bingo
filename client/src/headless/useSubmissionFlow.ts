@@ -10,6 +10,7 @@ import { deriveBoardNodeStatuses, getFreezeUnlockAt } from "../core/board/tilePr
 import { getAvailableTasks } from "./submissionFlowLogic";
 import { useBingoPageRaw } from "./BingoPageProvider";
 import type { SubmissionFlowModel } from "./types";
+import { markSubmitted } from "../core/notifications/BoardNotices";
 
 // How long a screenshot's analysis may hold up submitting. Past this the
 // submit button is freed and the analysis carries on in the background (its
@@ -317,6 +318,7 @@ export function useSubmissionFlow({
 
     try {
       await createSubmission.mutateAsync(formData);
+      markSubmitted(slug);
       onSuccess();
       onClose();
     } catch (e: unknown) {

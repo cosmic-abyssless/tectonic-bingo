@@ -456,6 +456,13 @@
       "when": 1791226925122,
       "tag": "0066_achievements_to_credited",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "6",
+      "when": 1791705393985,
+      "tag": "0067_notifications",
+      "breakpoints": true
     }
   ]
 }
