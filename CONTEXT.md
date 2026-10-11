@@ -257,7 +257,7 @@ How big a user's Board is drawn, one of their User settings (the Settings page, 
 
 ### Animations
 How much of the site moves, one of a user's User settings, kept on the account for every device.
-- **Settings:** All, the default: everything moves, apart from what the device's own reduced-motion setting already stills. Reduced: the spinning backgrounds (the rays behind an open Tile or a dialog) stand still. Off: nothing animates at all.
+- **Settings:** All, the default: everything moves, apart from what the device's own reduced-motion setting already stills. Reduced: spinning backgrounds stand still, and everything else still moves. Off: nothing animates at all.
 
 ---
 

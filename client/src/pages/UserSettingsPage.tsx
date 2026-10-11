@@ -172,8 +172,8 @@ function AppearanceCard() {
 
 const ANIMATIONS_HINTS: Record<AnimationsSetting, string> = {
   all: "Everything moves, apart from what your device's own reduced-motion setting already stills.",
-  reduced: "The spinning backgrounds stand still. Everything else still moves.",
-  off: "Nothing moves: no spinning backgrounds, page turns, pop-ins or hover lifts.",
+  reduced: "Spinning backgrounds stand still. Everything else still moves.",
+  off: "Nothing moves at all: no spinning backgrounds, transitions or other effects.",
 };
 
 /** How much of the site moves (shared userSettings.ts): one for every device, saved at once. */

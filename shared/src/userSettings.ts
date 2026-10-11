@@ -27,7 +27,7 @@ export const DEFAULT_BOARD_SIZE: BoardSize = { mode: "fit", widthPercent: 100 };
 
 /**
  * How much of the site moves. All: everything (still less where the device asks for reduced motion, as before there
- * was a setting). Reduced: the spinning backgrounds stand still. Off: nothing animates at all.
+ * was a setting). Reduced: spinning backgrounds stand still. Off: nothing animates at all.
  */
 export type AnimationsSetting = "all" | "reduced" | "off";
 export const ANIMATIONS_SETTINGS: readonly AnimationsSetting[] = ["all", "reduced", "off"];
