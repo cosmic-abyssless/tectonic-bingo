@@ -2,13 +2,13 @@ import { devAdminOff, isDevModeActive } from "../devMode";
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { noStore } from "../middleware/cacheControl";
-import { isOwner } from "../services/permissions";
+import { isOwner, siteRoles } from "../services/permissions";
 import { auditSkip } from "../audit/middleware";
 import { db } from "../db";
 import { markTutorialSeen } from "../services/userService";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ServiceError } from "../services/errors";
-import type { NotificationInboxResponse, NotificationSettingsResponse } from "@bingo/shared";
+import { can, type NotificationInboxResponse, type NotificationSettingsResponse } from "@bingo/shared";
 import * as notificationService from "../services/notificationService";
 import { answerOffer, assertOffer, claimOffer } from "../services/notificationOffers";
 import { discordDmsAvailable, sendTestDm } from "../services/notificationDm";
@@ -86,6 +86,10 @@ router.post(
   requireAuth,
   auditSkip("a test DM to the account itself: nothing to audit"),
   asyncHandler(async (req, res) => {
+    // Anyone Discord refused may try again; anyone else only as a Site admin, checking that DMs go out at all.
+    if (!notificationService.discordUnreachableSince(db, req.user!.id) && !can(siteRoles(req.user!), null, "administer_site").ok) {
+      throw new ServiceError(403, "Only Site admins can send a test DM");
+    }
     const result = await sendTestDm(db, req.user!);
     res.json({ ...result, ...settingsResponse(req.user!) });
   }),

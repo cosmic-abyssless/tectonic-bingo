@@ -13,6 +13,7 @@ import {
 } from "@bingo/shared";
 import { useDiscordTestDm, useNotificationSettings, useUpdateNotificationSettings } from "../api/notificationsApi";
 import { useRefreshPresence } from "../context/WebSocketContext";
+import { useSiteCan } from "../headless/permissions";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
 import { TextButton } from "../core/ui/TextButton";
@@ -92,14 +93,28 @@ function BrowserPermission() {
 
 function DiscordStatus({ unreachableSince }: { unreachableSince: string | null }) {
   const testDm = useDiscordTestDm();
-  if (!unreachableSince) return <p className="text-sm text-on-surface-muted">When the site isn't open, the clan's bot DMs you on Discord. Bursts wait a few minutes and arrive as one message.</p>;
+  // A Site admin can check that DMs go out at all: the message says what Discord answered if they don't.
+  const siteAdmin = useSiteCan("administer_site").allowed;
+  const sendTest = () => testDm.mutate(undefined, { onSuccess: (r) => toast({ title: r.message, tone: r.ok ? "success" : "warning" }) });
+  if (!unreachableSince) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-on-surface-muted">When the site isn't open, the clan's bot DMs you on Discord. Bursts wait a few minutes and arrive as one message.</p>
+        {siteAdmin && (
+          <Button size="sm" variant="secondary" isDisabled={testDm.isPending} onPress={sendTest}>
+            Send a test DM
+          </Button>
+        )}
+      </div>
+    );
+  }
   return (
     <Notice tone="danger" icon={<AlertIcon size={14} />}>
       <strong className="block">Can't reach you on Discord.</strong>
       <span className="block">
         The bot can't DM you: you've turned off DMs from server members, or left the server. In Discord, open the clan server's Privacy Settings and allow Direct Messages, then try again.
       </span>
-      <Button size="sm" variant="secondary" className="mt-2" isDisabled={testDm.isPending} onPress={() => testDm.mutate(undefined, { onSuccess: (r) => toast({ title: r.message, tone: r.ok ? "success" : "warning" }) })}>
+      <Button size="sm" variant="secondary" className="mt-2" isDisabled={testDm.isPending} onPress={sendTest}>
         Try again
       </Button>
     </Notice>

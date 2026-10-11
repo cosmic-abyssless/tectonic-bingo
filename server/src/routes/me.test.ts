@@ -87,3 +87,37 @@ describe("POST /api/me/tutorial-seen", () => {
     expect((await call("POST", "/api/me/tutorial-seen")).status).toBe(401);
   });
 });
+
+describe("POST /api/me/notifications/discord-test", () => {
+  const sentTo: string[] = [];
+  beforeEach(async () => {
+    sentTo.length = 0;
+    const { setDiscordDmApiForTests } = await import("../services/notificationDm");
+    setDiscordDmApiForTests({ send: async (discordId) => void sentTo.push(discordId) });
+  });
+  afterEach(async () => {
+    const { setDiscordDmApiForTests } = await import("../services/notificationDm");
+    setDiscordDmApiForTests(undefined);
+  });
+
+  it("is a Site admin's, to check that DMs go out at all", async () => {
+    viewerId = db.insert(schema.users).values({ discordId: "a-id", discordUsername: "a", isAdmin: true }).returning().get().id;
+    const res = await call("POST", "/api/me/notifications/discord-test");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    expect(sentTo).toEqual(["a-id"]);
+  });
+
+  it("is refused to anyone else Discord hasn't refused, and is their Try again once it has", async () => {
+    const p = player();
+    viewerId = p.id;
+    expect((await call("POST", "/api/me/notifications/discord-test")).status).toBe(403);
+    expect(sentTo).toEqual([]);
+
+    const { setDiscordUnreachable, updateSettings } = await import("../services/notificationService");
+    updateSettings(db, p.id, { level: "discord" });
+    setDiscordUnreachable(db, p.id, new Date());
+    expect((await call("POST", "/api/me/notifications/discord-test")).status).toBe(200);
+    expect(sentTo).toEqual(["p-id"]);
+  });
+});
