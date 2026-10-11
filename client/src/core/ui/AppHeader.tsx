@@ -140,7 +140,7 @@ export function AppHeader({
                 id: "notifications",
                 text: "Notifications",
                 label: "Notifications",
-                wikiIcon: "Notifications icon",
+                wikiIcon: "Butler's bell",
                 current: onNotificationSettings,
                 badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{notificationLevel && notificationLevel !== "off" ? "On" : "Off"}</span>,
                 onAction: () => navigate(NOTIFICATION_SETTINGS_PATH),
