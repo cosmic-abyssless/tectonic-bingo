@@ -238,20 +238,23 @@ function BossLeader({ boss }: { boss: WrappedBingoModel["bossLeaders"][number] }
       <div className="mt-2 flex flex-col gap-2.5">
         {boss.teams.map((t) => (
           <div key={t.teamId}>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {t.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: t.color, borderColor: colors.LINE }} />}
-              <span className="min-w-0 break-words font-bold leading-tight" style={{ color: colors.INK }}>
-                {t.name}
-                {t.isMine && (
-                  <span className="ml-2 inline-block text-[11px] font-semibold uppercase tracking-wide" style={{ color: colors.INK_SUBTLE }}>
-                    your Team
-                  </span>
-                )}
-              </span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {/* The dot stays beside the name: a long name wraps under itself, never off the dot. */}
+              <p className="flex min-w-0 items-baseline gap-2">
+                {t.color && <span aria-hidden className="size-3 shrink-0 translate-y-px self-center rounded-full border-2" style={{ background: t.color, borderColor: colors.LINE }} />}
+                <span className="min-w-0 break-words font-bold leading-tight" style={{ color: colors.INK }}>
+                  {t.name}
+                  {t.isMine && (
+                    <span className="ml-2 inline-block text-[11px] font-semibold uppercase tracking-wide" style={{ color: colors.INK_SUBTLE }}>
+                      your Team
+                    </span>
+                  )}
+                </span>
+              </p>
               <StampLabel color={colors.INK} size={14} tilt={-4}>
                 <span className="num">{t.killsLabel}</span>
               </StampLabel>
-            </p>
+            </div>
             <div className="mt-1 flex flex-col gap-0.5">
               {t.topPlayers.map((p) => (
                 <ComicPerson key={p.person.id} person={p.person} size={20} nameSize={12} detail={`Top: ${p.killsLabel}`} />

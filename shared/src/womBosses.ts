@@ -90,7 +90,6 @@ export const DEFAULT_WRAPPED_BOSSES: readonly string[] = [
   "chambers_of_xeric_challenge_mode",
   "theatre_of_blood",
   "theatre_of_blood_hard_mode",
-  "tombs_of_amascut",
   "tombs_of_amascut_expert",
   "nex",
   "doom_of_mokhaiotl",
