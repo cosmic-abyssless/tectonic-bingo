@@ -9,6 +9,7 @@ import { BellIcon, MoreIcon } from "../ui/icons";
 import { TextTooltip } from "../ui/Tooltip";
 import { timeAgo } from "../ui/time";
 import { toast } from "../ui/Toast";
+import { useOptionalSlot } from "../../themes/context";
 
 export const NOTIFICATION_SETTINGS_PATH = "/settings/notifications";
 
@@ -48,6 +49,39 @@ function InboxRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: (link: 
   );
 }
 
+export interface InboxBellButtonProps {
+  /** How many of the Inbox's Notifications are unread: a count badge on the bell while there are any. */
+  unread: number;
+}
+
+/** "Notifications, 3 unread": the bell's accessible name. */
+export function inboxBellLabel(unread: number) {
+  return unread ? `Notifications, ${unread} unread` : "Notifications";
+}
+
+/** The unread count as the badge shows it. */
+export function inboxBadgeText(unread: number) {
+  return unread > 99 ? "99+" : String(unread);
+}
+
+/**
+ * The bell that opens the Inbox, with its "Notifications" tooltip. Themes can replace it (the InboxBellButton slot); a
+ * theme's must bring the tooltip too, round the button itself, and the button must be a react-aria one: it's the
+ * Inbox popover's trigger.
+ */
+export function InboxBellButton({ unread }: InboxBellButtonProps) {
+  return (
+    <TextTooltip text="Notifications">
+      <IconButton label={inboxBellLabel(unread)} size="sm" className="relative">
+        <BellIcon />
+        {unread > 0 && (
+          <span className="num absolute -right-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-on-accent">{inboxBadgeText(unread)}</span>
+        )}
+      </IconButton>
+    </TextTooltip>
+  );
+}
+
 /**
  * The header's bell (CONTEXT.md "Inbox"), only once the viewer has turned Notifications on: their unread count, and the
  * Inbox behind it. Opening it marks everything read; Clear empties it.
@@ -59,6 +93,8 @@ export function InboxButton() {
   const clear = useClearInbox();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  // A theme can draw its own bell (the InboxBellButton slot); pages outside a theme get core's.
+  const Bell = useOptionalSlot("InboxBellButton") ?? InboxBellButton;
   if (!on) return null;
   const unread = data?.unread ?? 0;
   return (
@@ -70,14 +106,7 @@ export function InboxButton() {
         if (!next && unread > 0) markRead.mutate();
       }}
     >
-      <TextTooltip text="Notifications">
-        <IconButton label={unread ? `Notifications, ${unread} unread` : "Notifications"} size="sm" className="relative">
-          <BellIcon />
-          {unread > 0 && (
-            <span className="num absolute -right-1 -top-1 min-w-4 rounded-full bg-danger px-1 text-center text-[10px] font-semibold leading-4 text-on-accent">{unread > 99 ? "99+" : unread}</span>
-          )}
-        </IconButton>
-      </TextTooltip>
+      <Bell unread={unread} />
       <Popover placement="bottom end" offset={6} className="overlay-panel w-96 max-w-[calc(100vw-2rem)] rounded-md border border-outline bg-surface-raised shadow-pop outline-none">
         <AriaDialog aria-label="Notifications" className="outline-none">
           <div className="flex items-center justify-between border-b border-outline px-3 py-2">

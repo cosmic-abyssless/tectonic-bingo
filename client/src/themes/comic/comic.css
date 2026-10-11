@@ -226,6 +226,22 @@
   }
 }
 
+/* The header bell (InboxBellButton) while anything is unread: a quick ring, then a long rest. */
+@keyframes comic-bell-ring {
+  0%, 100% { transform: rotate(0); }
+  2% { transform: rotate(16deg); }
+  4% { transform: rotate(-14deg); }
+  6% { transform: rotate(10deg); }
+  8% { transform: rotate(-6deg); }
+  10% { transform: rotate(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .comic-bell-ring {
+    animation: comic-bell-ring 6s ease-in-out infinite;
+    transform-origin: 50% 10%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .comic-rays-spin {
     animation: none;

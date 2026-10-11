@@ -32,6 +32,7 @@ import { ScoutBanner } from "./page/ScoutBanner";
 import { ComicPreStartBanner } from "./board/ComicPreStartBanner";
 import { CodewordBanner } from "./page/CodewordBanner";
 import { BugReportButton } from "./page/BugReportButton";
+import { InboxBellButton } from "./page/InboxBellButton";
 import { HeaderMenu } from "./page/HeaderMenu";
 import { ThemedButton } from "./ui/ThemedButton";
 import { ComicMenu, ComicMenuItem } from "./ui/ComicMenu";
@@ -191,6 +192,7 @@ const comicTheme: ThemeDefinition = {
     CodewordBanner,
     SignupStage,
     BugReportButton,
+    InboxBellButton,
     HeaderMenu,
     Button: ThemedButton,
     Menu: ComicMenu,
