@@ -49,6 +49,7 @@ describe("mod panel tabs with sub-tabs", () => {
       ["Captains", "administer_bingo"],
       ["Extras: Achievements", "administer_bingo"],
       ["Extras: Wrapped art", "administer_bingo"],
+      ["Extras: Wrapped bosses", "administer_bingo"],
     ]);
   });
 });
