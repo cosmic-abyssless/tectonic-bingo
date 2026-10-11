@@ -468,6 +468,8 @@ One message to one user about something that happened in a Bingo (or on the site
 
 ### Inbox
 A user's list of Notifications, behind the bell in the header, read or unread. It exists only once they have turned Notifications on.
+- **Read:** Opening the Inbox marks everything in it read. A Submission waiting is read for every Moderator once that Submission is reviewed, and a Moderator's Notifications about a Bingo's queue are read while they have its Mod panel's Submissions tab open and in view.
+- **Clear:** Empties the Inbox.
 
 ### Catch-up
 A summary of what happened in a Bingo since a user last had it open, from their point of view, shown at the top of its page when they come back, if anything happened.

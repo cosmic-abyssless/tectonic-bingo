@@ -27,6 +27,7 @@ import { WrappedArtManager } from "../core/admin/WrappedArtManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { ModAlertsMigration, hadOldAlerts } from "../core/notifications/ModAlertsMigration";
 import { NotificationOffer } from "../core/notifications/NotificationOffer";
+import { useModQueueSeen } from "../core/notifications/useModQueueSeen";
 import { PlayerProfileProvider } from "../core/tectonic/PlayerName";
 import { Badge, Notice } from "../core/ui/Card";
 import { InfoIcon } from "../core/ui/icons";
@@ -144,6 +145,8 @@ export function ModPage() {
   // A new Submission reaches the Moderators who want to hear of it as a Notification (CONTEXT.md): the panel asks for
   // nothing by itself. A Moderator whose browser had its old alerts on is told once where they went.
   const [oldAlerts] = useState(hadOldAlerts);
+  // With the queue in front of them, its Notifications are seen.
+  useModQueueSeen(shell?.bingo.id, tab === "submissions" && mayModerate);
 
   useEscapeBack(`/b/${slug}`);
 

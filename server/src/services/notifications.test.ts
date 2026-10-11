@@ -30,7 +30,7 @@ vi.mock("../ws", () => ({
 import { createTask, createTile } from "./boardService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 import { drainAuditLog, initAuditCursor } from "./notificationDispatch";
-import { updateSettings } from "./notificationService";
+import { MOD_QUEUE_KINDS, clearInbox, markReadInBingo, updateSettings } from "./notificationService";
 import { audit } from "../audit/record";
 import { cancelPendingDms, installDmHandoff, runDmRound, sendTestDm, setDiscordDmApiForTests, updateFoldingWindows, DmError, type DiscordDmApi } from "./notificationDm";
 
@@ -174,6 +174,56 @@ describe("who hears of what", () => {
     drainAuditLog(db);
     expect(inbox(mod).map((n) => [n.kind, n.body])).toEqual([["submissions_waiting", 'Team A: 1 Item 1 on "Vorkath"']]);
     expect(kindsOf(carol)).toEqual(["bingo_open"]);
+  });
+});
+
+describe("seen and cleared", () => {
+  const waiting = (submissionId: string) =>
+    audit(db, { action: "submission.created", bingoId: bingo.id, teamId: teamA, entity: { type: "submission", id: submissionId }, details: { tileId, tileName: "Vorkath", taskLabels: [], claims: [{ nodeId: taskIds[0]!, itemName: "Item 1", quantity: 1 }], screenshotUrl: "/x.png" }, actor: { userId: alice.id } });
+  const unread = (u: User) => inbox(u).filter((n) => !n.readAt).map((n) => n.kind);
+
+  it("a reviewed Submission's Submission waiting is read for every Moderator, and their tabs are told", () => {
+    const mod2 = user("mod2", true);
+    updateSettings(db, mod.id, { level: "app" });
+    updateSettings(db, mod2.id, { level: "app" });
+    presence.byUser.set(mod2.id, { open: true, visible: false, hiddenWithPermission: false, hiddenWithoutPermission: true });
+    const approved = submit(teamA, alice.id, taskIds[0]!, "Item 1");
+    const rejected = submit(teamA, alice.id, taskIds[1]!, "Item 2");
+    const pending = submit(teamA, alice.id, taskIds[2]!, "Item 3");
+    for (const s of [approved, rejected, pending]) waiting(s.id);
+    drainAuditLog(db);
+    expect(unread(mod2)).toHaveLength(3);
+
+    sent.length = 0;
+    approveSubmission(db, { submissionId: approved.id, reviewedByUserId: mod.id });
+    rejectSubmission(db, { submissionId: rejected.id, reviewedByUserId: mod.id });
+    drainAuditLog(db);
+    expect(unread(mod2)).toEqual(["submissions_waiting"]);
+    expect(unread(mod)).toEqual(["submissions_waiting"]);
+    expect(sent).toContainEqual({ userId: mod2.id, msg: { type: "notifications", ids: [], deliver: "none" } });
+  });
+
+  it("one made and reviewed in the same pass is read already", () => {
+    const mod2 = user("mod2", true);
+    updateSettings(db, mod2.id, { level: "app" });
+    const s = submit(teamA, alice.id, taskIds[0]!, "Item 1");
+    waiting(s.id);
+    approveSubmission(db, { submissionId: s.id, reviewedByUserId: mod.id });
+    drainAuditLog(db);
+    expect(inbox(mod2).map((n) => [n.kind, !!n.readAt])).toEqual([["submissions_waiting", true]]);
+  });
+
+  it("the Mod panel's queue, seen, marks only that Bingo's queue kinds read; Clear empties the Inbox", () => {
+    updateSettings(db, mod.id, { level: "app", kinds: { new_signups: true } });
+    waiting(submit(teamA, alice.id, taskIds[0]!, "Item 1").id);
+    audit(db, { action: "signup.created", bingoId: bingo.id, entity: { type: "signup", id: null }, details: { rsn: "Dave", rsnVerified: false, answerCount: 0, reactivated: false }, actor: { userId: alice.id } });
+    drainAuditLog(db);
+    expect(unread(mod).sort()).toEqual(["new_signups", "submissions_waiting"]);
+    expect(markReadInBingo(db, mod.id, "other-bingo", MOD_QUEUE_KINDS)).toBe(0);
+    expect(markReadInBingo(db, mod.id, bingo.id, MOD_QUEUE_KINDS)).toBe(1);
+    expect(unread(mod)).toEqual(["new_signups"]);
+    expect(clearInbox(db, mod.id)).toBe(2);
+    expect(inbox(mod)).toEqual([]);
   });
 });
 

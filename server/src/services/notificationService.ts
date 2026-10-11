@@ -346,6 +346,43 @@ export function markAllRead(db: Queryable, userId: string): number {
   return db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.userId, userId), isNull(notifications.readAt))).run().changes;
 }
 
+/** The kinds about a Bingo's review queue: seen once the Moderator has the Mod panel's Submissions tab open. */
+export const MOD_QUEUE_KINDS: NotificationKind[] = ["submissions_waiting", "queue_waiting_long"];
+
+/** Marks one user's unread Notifications of `kinds` about one Bingo read (the Mod panel's queue, seen). */
+export function markReadInBingo(db: Queryable, userId: string, bingoId: string, kinds: NotificationKind[]): number {
+  return db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.userId, userId), eq(notifications.bingoId, bingoId), inArray(notifications.kind, kinds), isNull(notifications.readAt)))
+    .run().changes;
+}
+
+/**
+ * Once a Submission is reviewed, every Moderator's unread "Submission waiting" about it is old news: marks them read.
+ * Returns whose Inbox changed.
+ */
+export function markReviewedRead(db: Queryable, submissionIds: string[]): string[] {
+  if (submissionIds.length === 0) return [];
+  const rows = db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.kind, "submissions_waiting"), isNull(notifications.readAt), inArray(sql`json_extract(${notifications.dataJson}, '$.submissionId')`, submissionIds)))
+    .returning({ userId: notifications.userId })
+    .all();
+  return [...new Set(rows.map((r) => r.userId))];
+}
+
+/** Empties a user's Inbox (its Clear button). */
+export function clearInbox(db: Queryable, userId: string): number {
+  return db.delete(notifications).where(eq(notifications.userId, userId)).run().changes;
+}
+
+/** Tells each of these users' tabs their Inbox changed with nothing new to show, so its unread count follows. */
+export function inboxChanged(userIds: Iterable<string>): void {
+  for (const userId of new Set(userIds)) sendToUser(userId, () => ({ type: "notifications", ids: [], deliver: "none" }));
+}
+
 export function getNotificationsByIds(db: Queryable, userId: string, ids: string[]): NotificationEntry[] {
   if (ids.length === 0) return [];
   return db.select().from(notifications).where(and(eq(notifications.userId, userId), inArray(notifications.id, ids))).all().map(toEntry);

@@ -64,7 +64,7 @@ export interface NotificationData {
   since?: string;
   /** What a pending DM checks is still true before it's sent: a Pairing request's pairing id, On the clock's "teamId:pickNumber". */
   ref?: string;
-  /** The Submission it's about, for the screenshot a DM about one drop carries. */
+  /** The Submission it's about: for the screenshot a DM about one drop carries, and to mark a Submission waiting read once it's reviewed. */
   submissionId?: string;
 }
 

@@ -23,6 +23,8 @@ import {
   bingoPlayerIds,
   deliver,
   everyoneOptedIn,
+  inboxChanged,
+  markReviewedRead,
   moderatorIds,
   optedIn,
   siteAdminIds,
@@ -52,15 +54,15 @@ const BATCH = 500;
 export function drainAuditLog(db: Db, { devClock = false }: { devClock?: boolean } = {}): number {
   let made = 0;
   for (;;) {
-    const { stored, more } = db.transaction((tx) => {
+    const { stored, seenBy, more } = db.transaction((tx) => {
       const cursor = tx.select().from(notificationCursor).where(eq(notificationCursor.key, CURSOR_KEY)).get();
       if (!cursor) {
         const last = tx.select({ id: max(auditLog.id) }).from(auditLog).get()?.id ?? 0;
         tx.insert(notificationCursor).values({ key: CURSOR_KEY, lastAuditId: last }).run();
-        return { stored: [] as StoredNotification[], more: false };
+        return { stored: [] as StoredNotification[], seenBy: [] as string[], more: false };
       }
       const entries = tx.select().from(auditLog).where(gt(auditLog.id, cursor.lastAuditId)).orderBy(asc(auditLog.id)).limit(BATCH).all();
-      if (entries.length === 0) return { stored: [] as StoredNotification[], more: false };
+      if (entries.length === 0) return { stored: [] as StoredNotification[], seenBy: [] as string[], more: false };
       const items: NewNotification[] = [];
       const bingoCache = new Map<string, Bingo | null>();
       for (const entry of entries) {
@@ -72,10 +74,15 @@ export function drainAuditLog(db: Db, { devClock = false }: { devClock?: boolean
         }
       }
       const stored = storeNotifications(tx, items);
+      // A reviewed Submission is no longer waiting: every Moderator's Notification of it is read (after storing, so
+      // one made and reviewed within this batch is too).
+      const reviewed = entries.filter((e) => (e.action === "submission.approved" || e.action === "submission.rejected") && e.entityId).map((e) => e.entityId!);
+      const seenBy = markReviewedRead(tx, reviewed);
       tx.update(notificationCursor).set({ lastAuditId: entries[entries.length - 1]!.id }).where(eq(notificationCursor.key, CURSOR_KEY)).run();
-      return { stored, more: entries.length === BATCH };
+      return { stored, seenBy, more: entries.length === BATCH };
     });
     deliver(db, stored, { devClock });
+    inboxChanged(seenBy);
     made += stored.length;
     if (!more) return made;
   }
@@ -227,7 +234,7 @@ function submissionCreated(db: Queryable, entry: Entry, bingo: Bingo): NewNotifi
     title: "Submission waiting",
     body: `${team ? `${team}: ` : ""}${d.kind === "proof" ? "a Proof screenshot" : describeClaims(d)} on "${d.tileName}"`,
     link: `/b/${bingo.slug}/mod?tab=submissions`,
-    data: { since: entry.createdAt.toISOString() },
+    data: { since: entry.createdAt.toISOString(), submissionId: entry.entityId ?? undefined },
   }));
   // A drop flagged for a missing Proof screenshot tells the Player it's credited to (unless they posted it themselves).
   if (d.kind !== "proof" && entry.entityId) {

@@ -72,6 +72,20 @@ export function useMarkInboxRead() {
   });
 }
 
+/** Empties the Inbox. */
+export function useClearInbox() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<NotificationInboxResponse>("/api/me/notifications"),
+    onSuccess: (data) => queryClient.setQueryData(notificationKeys.inbox(), data),
+  });
+}
+
+/** The Mod panel's Submissions tab is open: the viewer's Notifications about this Bingo's queue are seen. */
+export function markModQueueRead(bingoId: string): Promise<NotificationInboxResponse> {
+  return api.post<NotificationInboxResponse>("/api/me/notifications/read-mod-queue", { bingoId });
+}
+
 export function claimOffer(bingoId: string, offer: NotificationOffer): Promise<{ show: boolean }> {
   return api.post<{ show: boolean }>("/api/me/notifications/offers/claim", { bingoId, offer });
 }
