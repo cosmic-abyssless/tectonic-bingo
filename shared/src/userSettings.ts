@@ -25,15 +25,25 @@ export const BOARD_SIZE_MODE_LABELS: Record<BoardSizeMode, string> = { fit: "Fit
 export const BOARD_WIDTH_PERCENT = { min: 50, max: 300, step: 5 } as const;
 export const DEFAULT_BOARD_SIZE: BoardSize = { mode: "fit", widthPercent: 100 };
 
+/**
+ * How much of the site moves. All: everything (still less where the device asks for reduced motion, as before there
+ * was a setting). Reduced: the spinning backgrounds stand still. Off: nothing animates at all.
+ */
+export type AnimationsSetting = "all" | "reduced" | "off";
+export const ANIMATIONS_SETTINGS: readonly AnimationsSetting[] = ["all", "reduced", "off"];
+export const ANIMATIONS_LABELS: Record<AnimationsSetting, string> = { all: "All", reduced: "Reduced", off: "Off" };
+
 export interface UserSettings {
   boardSize: Record<BoardSizeDevice, BoardSize>;
+  animations: AnimationsSetting;
 }
 
-export const DEFAULT_USER_SETTINGS: UserSettings = { boardSize: { desktop: DEFAULT_BOARD_SIZE, phone: DEFAULT_BOARD_SIZE } };
+export const DEFAULT_USER_SETTINGS: UserSettings = { boardSize: { desktop: DEFAULT_BOARD_SIZE, phone: DEFAULT_BOARD_SIZE }, animations: "all" };
 
 /** PUT /api/me/settings: only what changes. */
 export interface UserSettingsPatch {
   boardSize?: Partial<Record<BoardSizeDevice, Partial<BoardSize>>>;
+  animations?: AnimationsSetting;
 }
 
 /** "Fit screen", "Maximize", or "Custom · 140%". */

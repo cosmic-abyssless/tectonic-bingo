@@ -484,6 +484,13 @@
       "when": 1791754366438,
       "tag": "0070_user_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "6",
+      "when": 1791761155421,
+      "tag": "0071_user_settings_animations",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { Dialog as AriaDialog, Heading, Modal as AriaModal, ModalOverlay } from "react-aria-components";
 import type { CSSProperties, ReactNode } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { useThemeTokens } from "../../context";
 import { tokensToCssVars } from "../../tokens";
 import { XIcon } from "../../../core/ui/icons";

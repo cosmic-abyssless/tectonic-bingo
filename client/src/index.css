@@ -264,6 +264,22 @@
   }
 }
 
+/* Animations Off (User settings, core/settings/animations.ts): nothing moves. Every CSS animation and transition
+   finishes at once, so whatever waits for one to end (an overlay's exit) still hears it, and smooth scrolling jumps.
+   Rules that would hold a still frame instead (the completed-line wash) say so where they live. */
+:root[data-animations="off"] *,
+:root[data-animations="off"] *::before,
+:root[data-animations="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+:root[data-animations="off"] {
+  scroll-behavior: auto !important;
+}
+
 /* Enter/exit for react-aria overlays (respects prefers-reduced-motion). */
 @media (prefers-reduced-motion: no-preference) {
   [data-entering].overlay-backdrop { animation: fade-in 150ms ease-out; }

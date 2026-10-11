@@ -41,7 +41,8 @@ export function useUserSettings(): UserSettings {
     placeholderData: user ? remembered(user.id) : undefined,
     staleTime: 5 * 60_000,
   });
-  return data ?? DEFAULT_USER_SETTINGS;
+  // Settings remembered before one existed (Animations) don't have it: the default until the server's arrive.
+  return data ? { ...DEFAULT_USER_SETTINGS, ...data } : DEFAULT_USER_SETTINGS;
 }
 
 /** The patch applied to `settings`, as the server applies it. */

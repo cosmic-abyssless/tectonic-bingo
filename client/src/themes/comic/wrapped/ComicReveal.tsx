@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import type { WrappedRevealProps } from "../../../core/wrapped/sceneProgress";
 
 // A Reveal drawn as a comic panel. Until the camera reaches it, it is a frame pencilled in on the page and nothing more.

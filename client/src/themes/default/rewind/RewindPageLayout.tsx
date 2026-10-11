@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { AnimatePresence, useReducedMotion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import * as m from "motion/react-m";
 import { useBingoHeader, useBingoMenuEntries, useBoardModel, useRewindModel } from "../../../headless";
 import type { RewindPopupModel, TileModel } from "../../../headless/types";

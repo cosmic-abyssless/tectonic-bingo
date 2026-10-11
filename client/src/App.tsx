@@ -18,6 +18,7 @@ import { PageLoading } from "./themes/default/page/PageStates";
 import { useBingoGoneRedirect } from "./headless/useBingoGoneRedirect";
 import { useAccessWatch } from "./headless/permissions";
 import { usePendingTabTitle } from "./headless/usePendingTabTitle";
+import { useSyncAnimations } from "./core/settings/animations";
 import { awaitModule } from "./core/chunkReload";
 
 // The board page and the way to it load up front; every other page is its own
@@ -60,6 +61,12 @@ function AccessWatch() {
 
 function PendingTabTitle() {
   usePendingTabTitle();
+  return null;
+}
+
+// The viewer's Animations setting, applied to every page (it's on their account, so it needs auth and queries).
+function AnimationsSync() {
+  useSyncAnimations();
   return null;
 }
 
@@ -191,6 +198,7 @@ export default function App() {
           </Suspense>
           <BingoGoneRedirect />
           <PendingTabTitle />
+          <AnimationsSync />
           <AccessWatch />
           <SlowDownNotice />
           <NewVersionNotice />

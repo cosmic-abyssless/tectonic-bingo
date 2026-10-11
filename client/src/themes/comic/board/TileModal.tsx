@@ -1,14 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import {
-  AnimatePresence,
-  animate as animateValue,
-  stagger,
-  useAnimate,
-  usePresence,
-  useReducedMotion,
-  type AnimationPlaybackControls,
-  type AnimationSequence,
-} from "motion/react";
+import { AnimatePresence, animate as animateValue, stagger, useAnimate, usePresence, type AnimationPlaybackControls, type AnimationSequence } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { Button as AriaButton } from "react-aria-components";
 import { Overlay } from "react-aria";
 import type { SubmissionModel, TaskModel, TileModel } from "../../../headless/types";

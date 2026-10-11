@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../settings/animations";
 
 // OSRS unrolls its unlock popups at a deliberate pace, and so does this: a dot, a line fanning out, a slow scan down.
 // Nothing fades: the dot is simply there, and everything else is uncovered by the line and the scan.

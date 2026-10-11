@@ -12,6 +12,9 @@ import {
   type NotificationGroup,
   type NotificationKind,
   type NotificationLevel,
+  ANIMATIONS_LABELS,
+  ANIMATIONS_SETTINGS,
+  type AnimationsSetting,
   BOARD_SIZE_DEVICE_LABELS,
   BOARD_SIZE_DEVICES,
   boardSizeSummary,
@@ -27,7 +30,8 @@ import { Card, CardHeader, Notice } from "../core/ui/Card";
 import { AlertIcon, InfoIcon, MonitorIcon, MoonIcon, SunIcon } from "../core/ui/icons";
 import { useColorSchemePreference } from "../core/ui/colorScheme";
 import { useBingos } from "../api/queries";
-import { useUserSettings } from "../api/userSettingsApi";
+import { useUpdateUserSettings, useUserSettings } from "../api/userSettingsApi";
+import { Checkbox } from "../core/ui/Checkbox";
 import { BoardSizeControls } from "../core/settings/BoardSizeControls";
 import { BOARD_SIZE_PREVIEW_PARAM } from "../core/settings/BoardSizePreviewPanel";
 import { useBoardSizeDevice } from "../core/settings/boardSize";
@@ -161,6 +165,31 @@ function AppearanceCard() {
           value={colorScheme}
           onChange={setColorScheme}
         />
+      </div>
+    </Card>
+  );
+}
+
+const ANIMATIONS_HINTS: Record<AnimationsSetting, string> = {
+  all: "Everything moves, apart from what your device's own reduced-motion setting already stills.",
+  reduced: "The spinning backgrounds stand still. Everything else still moves.",
+  off: "Nothing moves: no spinning backgrounds, page turns, pop-ins or hover lifts.",
+};
+
+/** How much of the site moves (shared userSettings.ts): one for every device, saved at once. */
+function AnimationsCard() {
+  const { animations } = useUserSettings();
+  const update = useUpdateUserSettings();
+  return (
+    <Card>
+      <CardHeader title="Animations" description="How much of the site moves, on every device you use." />
+      <div role="radiogroup" aria-label="Animations" className="space-y-3 p-4">
+        {ANIMATIONS_SETTINGS.map((setting) => (
+          <Checkbox key={setting} type="radio" name="animations" checked={animations === setting} onChange={() => update.mutate({ animations: setting })} hint={ANIMATIONS_HINTS[setting]}>
+            {ANIMATIONS_LABELS[setting]}
+            {setting === "all" && <span className="text-on-surface-subtle"> (default)</span>}
+          </Checkbox>
+        ))}
       </div>
     </Card>
   );
@@ -326,6 +355,7 @@ export function UserSettingsPage() {
       <AppHeader title="Settings" back={{ to: "/", label: "Back" }} />
       <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 sm:px-6">
         <AppearanceCard />
+        <AnimationsCard />
         <BoardSizeCard />
         <NotificationSettings />
       </main>

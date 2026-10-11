@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import type { RewindStandoutModel } from "../../../headless/types";
 import { COMIC_FONT } from "../font";
 import { burstPoints } from "../ui/Burst";

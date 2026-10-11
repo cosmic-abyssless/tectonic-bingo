@@ -1,4 +1,4 @@
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import * as m from "motion/react-m";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { inkOn } from "../../../core/draft/teamColor";
