@@ -208,8 +208,12 @@ export const BoardGrid = memo(function BoardGrid({
                 const tile = board.grid[row]?.[col];
                 if (!tile) return <EmptyCell key={`empty-${row}-${col}`} row={row} col={col} />;
                 const stops = stopsByTileId.get(tile.id);
+                // min-h-0: an aspect-ratio box grows to its content's height, and a completed Tile's "Completed by"
+                // list is a few pixels taller than its square. The whole row grew with it, so Fit screen's board (sized
+                // as square tiles) ran a few pixels past the window, enough to scroll. Kept square, the list is
+                // clipped as it already was.
                 return (
-                  <TileSearchSlot key={tile.id} tileId={tile.id} className="relative aspect-square w-full" dimmedClassName="pointer-events-none opacity-20 saturate-0">
+                  <TileSearchSlot key={tile.id} tileId={tile.id} className="relative aspect-square min-h-0 w-full" dimmedClassName="pointer-events-none opacity-20 saturate-0">
                     {stops && <UndimmedWash tileId={tile.id} stops={stops} boostedLineIds={boostedLineIds} />}
                     <TileCell tile={tile} onOpen={onOpenTile} isSearchHighlighted={tile.id === highlightedTileId} />
                     {tileOverlay?.(tile)}
