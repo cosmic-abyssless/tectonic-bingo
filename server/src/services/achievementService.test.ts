@@ -350,7 +350,7 @@ describe("Hypeman / Cheerleader / Superfan / Main character", () => {
     expect(myAchievements(bingo, alice.id).achievements.find((a) => a.key === "cheerleader")!.progress).toEqual({ current: 10, target: 10 });
   });
 
-  it("Superfan (hidden) needs a reaction to a submission from every OTHER current team member", () => {
+  it("Superfan (hidden) needs a reaction to submissions from most OTHER current team members", () => {
     const { bingo, team, alice, bob, captain } = seed();
     const bobsTile = tileWithLeaf(bingo.id, 0, 0);
     const bobSub = submit(bingo, team.id, bob.id, bobsTile.leafId, bobsTile.itemName);
@@ -361,6 +361,24 @@ describe("Hypeman / Cheerleader / Superfan / Main character", () => {
     const captainSub = submit(bingo, team.id, captain.id, captainsTile.leafId, captainsTile.itemName);
     at(STARTS_AT, "UTC", () => setSubmissionReaction(db, captainSub.id, alice.id, "🔥", true));
     expect(earned(bingo, alice.id, "superfan")).toBe(true);
+  });
+
+  it("Superfan needs only 80% of teammates (rounded up), not every one", () => {
+    const { bingo, team, alice, bob, captain } = seed();
+    const extras = ["dave", "erin", "frank"].map((name) => db.insert(schema.users).values({ discordId: name, discordUsername: name }).returning().get());
+    db.insert(schema.teamMembers)
+      .values(extras.map((u) => ({ teamId: team.id, userId: u.id })))
+      .run();
+    // Alice has 5 teammates: captain, bob, dave, erin, frank — 4 of them is 80%.
+    const [first, ...rest] = [captain, bob, ...extras].slice(0, 4).map((u, i) => {
+      const t = tileWithLeaf(bingo.id, 0, i);
+      return submit(bingo, team.id, u.id, t.leafId, t.itemName);
+    });
+    rest.forEach((s) => at(STARTS_AT, "UTC", () => setSubmissionReaction(db, s.id, alice.id, "🔥", true)));
+    expect(earned(bingo, alice.id, "superfan")).toBe(false); // 3/5
+
+    at(STARTS_AT, "UTC", () => setSubmissionReaction(db, first!.id, alice.id, "🔥", true));
+    expect(earned(bingo, alice.id, "superfan")).toBe(true); // 4/5
   });
 });
 
