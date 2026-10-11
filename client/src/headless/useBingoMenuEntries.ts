@@ -63,7 +63,7 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   const achievementsStarted = header.stage === "reveal" || header.stage === "live" || header.stage === "complete";
   if (achievementsEligible && openAchievements && achievementsStarted) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
   // Notifications (CONTEXT.md): reachable from every Bingo's ☰ as well as the account menu and the bell.
-  entries.push({ id: "notifications", text: "Notifications", label: "Notifications", wikiIcon: "Notifications icon", onAction: () => navigate("/settings/notifications") });
+  entries.push({ id: "notifications", text: "Notifications", label: "Notifications", wikiIcon: "Butler's bell", onAction: () => navigate("/settings/notifications") });
   if (replayTutorial) entries.push({ id: "tutorial", text: "Tutorial", label: "Tutorial", wikiIcon: "Quest point icon", onAction: replayTutorial, tutorial: "menu-tutorial" });
   return entries;
 }
