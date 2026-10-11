@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import type { BingoShellResponse } from "@bingo/shared";
 import { useCatchUp, useDismissCatchUp, useNotificationSettings } from "../../api/notificationsApi";
 import { Button } from "../ui/Button";
 import { ChevronDownIcon, ChevronUpIcon } from "../ui/icons";
-import { NotificationOffer } from "./NotificationOffer";
 
 /** Stayed on the page this long, and the card goes by itself. */
 const READ_AFTER_MS = 4 * 60_000;
@@ -22,9 +20,9 @@ function since(iso: string): string {
 /**
  * Catch-up (CONTEXT.md): what happened in this Bingo since the viewer last had it open, at the top of the Board, never a
  * modal. One line collapsed, the sections expanded, each line linking to what it's about. Got it hides it until the next
- * visit, and so does staying a few minutes. With Catch-up off, coming back to a Live Bingo may offer it instead, once.
+ * visit, and so does staying a few minutes. On unless the viewer turned it off.
  */
-export function CatchUpCard({ slug, shell }: { slug: string; shell: BingoShellResponse }) {
+export function CatchUpCard({ slug }: { slug: string }) {
   const settings = useNotificationSettings().data?.settings;
   const enabled = !!settings?.catchUpEnabled;
   const { data } = useCatchUp(slug, !!settings);
@@ -38,14 +36,6 @@ export function CatchUpCard({ slug, shell }: { slug: string; shell: BingoShellRe
     return () => clearTimeout(timer);
   }, [hasCard]);
 
-  if (settings && !settings.catchUpEnabled) {
-    // The offer: coming back to a Live Bingo with Catch-up off and something to show. Accepting shows it at once.
-    return (
-      <NotificationOffer bingoId={shell.bingo.id} offer="catch_up" when={shell.bingo.stage === "live" && !!data?.wouldShow}>
-        Show a catch-up when you come back?
-      </NotificationOffer>
-    );
-  }
   if (!hasCard || hidden || !data?.since) return null;
 
   return (

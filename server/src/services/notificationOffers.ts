@@ -1,4 +1,4 @@
-// The one-time offers to turn Notifications or Catch-up on (shared NOTIFICATION_OFFERS): single inline lines at the
+// The one-time offers to turn Notifications on (shared NOTIFICATION_OFFERS): single inline lines at the
 // moments they're useful, never a dialog or the browser's prompt. A user gets at most one per Bingo (the first one shown
 // takes the Bingo's slot), and an offer they dismissed never shows again, in any Bingo, on any device.
 import { and, count, eq, or } from "drizzle-orm";
@@ -20,10 +20,9 @@ export function assertOffer(value: unknown): NotificationOffer {
   return value as NotificationOffer;
 }
 
-/** Whether what the offer would turn on is still off: Notifications, or for catch_up the Catch-up. */
-function stillOff(db: Db, userId: string, offer: NotificationOffer): boolean {
-  const settings = getSettings(db, userId);
-  return offer === "catch_up" ? !settings.catchUpEnabled : settings.level === "off";
+/** Whether Notifications, what every offer would turn on, are still off. */
+function stillOff(db: Db, userId: string): boolean {
+  return getSettings(db, userId).level === "off";
 }
 
 /**
@@ -33,7 +32,7 @@ function stillOff(db: Db, userId: string, offer: NotificationOffer): boolean {
  */
 export function claimOffer(db: Db, userId: string, bingoId: string, offer: NotificationOffer): boolean {
   return db.transaction((tx) => {
-    if (!stillOff(tx as unknown as Db, userId, offer)) return false;
+    if (!stillOff(tx as unknown as Db, userId)) return false;
     if (tx.select({ id: notificationOffers.id }).from(notificationOffers).where(and(eq(notificationOffers.userId, userId), eq(notificationOffers.offer, offer), eq(notificationOffers.status, "dismissed"))).get()) return false;
     const taken = tx.select().from(notificationOffers).where(and(eq(notificationOffers.userId, userId), eq(notificationOffers.bingoId, bingoId))).get();
     const now = clockNow();
@@ -53,8 +52,8 @@ export function claimOffer(db: Db, userId: string, bingoId: string, offer: Notif
 }
 
 /**
- * The user's answer to an offer shown in this Bingo: Turn on (Notifications at In the app with the kinds they had, or
- * Catch-up on), or No thanks / ✕, which keeps that offer from ever showing again.
+ * The user's answer to an offer shown in this Bingo: Turn on (Notifications at In the app with the kinds they had), or
+ * No thanks / ✕, which keeps that offer from ever showing again.
  */
 export function answerOffer(db: Db, userId: string, bingoId: string, offer: NotificationOffer, accepted: boolean): void {
   db.transaction((tx) => {
@@ -64,7 +63,6 @@ export function answerOffer(db: Db, userId: string, bingoId: string, offer: Noti
     if (row) tx.update(notificationOffers).set({ status, answeredAt: now }).where(eq(notificationOffers.id, row.id)).run();
     else tx.insert(notificationOffers).values({ userId, bingoId, offer, status, createdAt: now, answeredAt: now }).run();
     if (!accepted) return;
-    if (offer === "catch_up") updateSettings(tx, userId, { catchUpEnabled: true });
-    else if (getSettings(tx, userId).level === "off") updateSettings(tx, userId, { level: "app" });
+    if (getSettings(tx, userId).level === "off") updateSettings(tx, userId, { level: "app" });
   });
 }

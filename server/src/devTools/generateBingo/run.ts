@@ -140,7 +140,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const staff = await grantStaff(ctx);
   await runSignups(ctx, players, pairs);
   const notified = await runNotificationSettings(ctx, players, mods, new Date(tl.captainsAt.getTime() - 30 * 60_000));
-  log(`notifications: ${notified.optedIn.length} players turned them on, ${notified.catchUp.length} turned Catch-up on`);
+  log(`notifications: ${notified.optedIn.length} players turned them on, ${notified.catchUp.length} kept Catch-up on`);
   await runBuyins(ctx, players, staff);
   const { signups: filled } = await api.as(adminDiscordId).post<{ signups: number }>(`/api/dev/bingos/${slug}/fake-stats`, undefined, { at: tl.captainsAt });
   log(`made-up WOM, RuneProfile and combat achievement stats on ${filled} signups`);

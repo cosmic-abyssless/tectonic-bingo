@@ -5,10 +5,10 @@ import { Button, IconButton } from "../ui/Button";
 import { BellIcon, XIcon } from "../ui/icons";
 
 /**
- * One of the one-time offers to turn Notifications (or Catch-up) on: a single dismissible line in the page, never a
+ * One of the one-time offers to turn Notifications on: a single dismissible line in the page, never a
  * dialog and never the browser's prompt. The server decides whether it shows (at most one offer per user per Bingo, and
  * never again once dismissed); `when` is the page's own condition (a first Submission, a Captain with the order set).
- * Turn on sets Notifications to In the app with the kinds they had, or turns Catch-up on.
+ * Turn on sets Notifications to In the app with the kinds they had.
  */
 export function NotificationOffer({ bingoId, offer, when = true, children, acceptLabel = "Turn on", onAccepted }: { bingoId: string | undefined; offer: Offer; when?: boolean; children: ReactNode; acceptLabel?: string; onAccepted?: () => void }) {
   const [show, setShow] = useState(false);

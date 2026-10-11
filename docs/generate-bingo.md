@@ -127,8 +127,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
    settings endpoint (`notifications.ts`): most keep the default kinds, some turn on extra ones, and about a third of
    them go up to `+ Discord`. Every Moderator turns on Submissions waiting. Their Inboxes fill from the play itself, at
    its spoofed times; the DMs of those at `+ Discord` (nobody generated has the site open) go to the dev server's fake
-   sink, listed under the Test data tab, folded like real ones. About a third of the players also turn **Catch-up**
-   on; after a Live or Finished run each of them is seen on the Bingo (`POST .../presence`) a day before the run's
+   sink, listed under the Test data tab, folded like real ones. **Catch-up** is on by default and about one in seven
+   players turns it off; after a Live or Finished run each of the rest is seen on the Bingo (`POST .../presence`) a day before the run's
    end, so logging in as one shows a Catch-up of the last day.
 3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
    in a duo bingo only paired players captain, since every Team is led by a pair) create

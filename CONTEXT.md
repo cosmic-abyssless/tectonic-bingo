@@ -470,5 +470,5 @@ A user's list of Notifications, behind the bell in the header, read or unread. I
 
 ### Catch-up
 A summary of what happened in a Bingo since a user last had it open, from their point of view, shown at the top of its page when they come back, if anything happened.
-- **Opt-in:** Off until the user turns it on, like Notifications.
+- **On by default:** Unlike Notifications, which are opt-in; a user can turn it off.
 - **Avoid:** Recap (Bingo Recap is the look back at a Finished Bingo; a Catch-up is for one returning user, mid-Bingo), "while you were gone" except as UI copy.

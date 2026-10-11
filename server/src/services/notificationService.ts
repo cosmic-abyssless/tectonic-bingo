@@ -33,7 +33,7 @@ type Queryable = Db | Tx;
 export const INBOX_DAYS = 30;
 const INBOX_PAGE = 50;
 
-const DEFAULT_SETTINGS: NotificationSettings = { level: "off", kinds: {}, queueThresholdMinutes: DEFAULT_QUEUE_THRESHOLD, catchUpEnabled: false };
+const DEFAULT_SETTINGS: NotificationSettings = { level: "off", kinds: {}, queueThresholdMinutes: DEFAULT_QUEUE_THRESHOLD, catchUpEnabled: true };
 
 type SettingsRow = typeof notificationSettings.$inferSelect;
 

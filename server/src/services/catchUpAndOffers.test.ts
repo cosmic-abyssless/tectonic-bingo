@@ -1,6 +1,5 @@
 // Catch-up (CONTEXT.md) and the one-time offers: real services over a real in-memory DB.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -61,7 +60,12 @@ function approveAt(teamId: string, userId: string, nodeId: string, item: string,
 }
 
 describe("Catch-up", () => {
+  it("on by default", () => {
+    expect(getSettings(db, bob.id).catchUpEnabled).toBe(true);
+  });
+
   it("off: no card ever", () => {
+    updateSettings(db, bob.id, { catchUpEnabled: false });
     recordBingoPresence(db, bob.id, bingo.id, t0);
     approveAt(teamA, alice.id, tasks[0]!, "Item 1", new Date(t0.getTime() + HOUR));
     expect(getCatchUp(db, bingo, bob, new Date(t0.getTime() + 5 * HOUR))).toMatchObject({ enabled: false, sections: [] });
@@ -121,12 +125,5 @@ describe("offers", () => {
     // Already on: nothing more is offered.
     const third = db.insert(schema.bingos).values({ slug: "b3", name: "Spring", boardRows: 3, boardCols: 3, createdByUserId: mod.id }).returning().get();
     expect(claimOffer(db, bob.id, third.id, "first_submission")).toBe(false);
-  });
-
-  it("the Catch-up offer turns Catch-up on, Notifications or not", () => {
-    expect(claimOffer(db, bob.id, bingo.id, "catch_up")).toBe(true);
-    answerOffer(db, bob.id, bingo.id, "catch_up", true);
-    expect(getSettings(db, bob.id)).toMatchObject({ catchUpEnabled: true, level: "off" });
-    expect(db.select().from(schema.notificationOffers).where(eq(schema.notificationOffers.userId, bob.id)).get()!.status).toBe("accepted");
   });
 });

@@ -3507,7 +3507,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": false
+          "default": true
         },
         "discord_unreachable_since": {
           "name": "discord_unreachable_since",

@@ -26,7 +26,7 @@ function useSubmitted(slug: string): boolean {
 }
 
 /**
- * What the Board shows above itself for the viewer alone, in either theme: their Catch-up (or the offer of one), and
+ * What the Board shows above itself for the viewer alone, in either theme: their Catch-up, and
  * after their first Submission in this Bingo the offer to hear when it's reviewed.
  */
 export function BoardNotices({ slug }: { slug: string }) {
@@ -35,7 +35,7 @@ export function BoardNotices({ slug }: { slug: string }) {
   if (!shell || shell.historical) return null;
   return (
     <div className="mb-4 space-y-2 empty:hidden">
-      <CatchUpCard slug={slug} shell={shell} />
+      <CatchUpCard slug={slug} />
       <NotificationOffer bingoId={shell.bingo.id} offer="first_submission" when={submitted}>
         Submitted. Want to hear when it's reviewed?
       </NotificationOffer>
