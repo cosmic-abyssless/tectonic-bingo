@@ -8,7 +8,7 @@
 // The rules every case keeps: a Notification only says what its recipient could already see in the app (Team kinds go
 // to that Team only; nothing is said of a Tile before the Board is Live), never tells someone what they did themselves
 // (the entry's actor is left out), a Finished Bingo sends only "went Finished", and a Historical one nothing.
-import { and, asc, eq, gt, inArray, max, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, like, max, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { NOTIFICATION_CATALOGUE, STAGE_LABEL, describeClaims, type AuditAction, type AuditDetailsMap, type NotificationKind } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -19,6 +19,7 @@ import { lineLabel } from "./scoringService";
 import { getDraftState } from "./draftService";
 import { getCutReviewPreview } from "./cutReviewService";
 import { getAllSubmissionsForBingo } from "./submissionService";
+import { TESTDATA_PREFIX } from "./devTestDataService";
 import {
   bingoPlayerIds,
   deliver,
@@ -144,6 +145,31 @@ export function notificationsFor(db: Queryable, entry: Entry, bingoCache = new M
   // A Finished Bingo sends only that it went Finished.
   if (bingo.stage === "complete" && !(action === "stage.changed" && details(entry, "stage.changed").to === "complete")) return [];
 
+  return ownPeopleOnly(db, bingo, bingoNotificationsFor(db, entry, action, bingo));
+}
+
+/**
+ * A test data Bingo (devTestDataService.ts) is news only to its own people: its fake users, and whoever plays on it (a
+ * run's --me). A real site admin (a Moderator of every Bingo) or clan member hears nothing of it.
+ */
+function ownPeopleOnly(db: Queryable, bingo: Bingo, items: NewNotification[]): NewNotification[] {
+  if (!bingo.slug.startsWith(TESTDATA_PREFIX) || items.length === 0) return items;
+  const players = new Set(bingoPlayerIds(db, bingo.id));
+  const others = [...new Set(items.map((n) => n.userId))].filter((id) => !players.has(id));
+  const fake = new Set(
+    others.length === 0
+      ? []
+      : db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(inArray(users.id, others), like(users.discordId, `${TESTDATA_PREFIX}%`)))
+          .all()
+          .map((r) => r.id),
+  );
+  return items.filter((n) => players.has(n.userId) || fake.has(n.userId));
+}
+
+function bingoNotificationsFor(db: Queryable, entry: Entry, action: AuditAction, bingo: Bingo): NewNotification[] {
   switch (action) {
     case "submission.created":
       return submissionCreated(db, entry, bingo);

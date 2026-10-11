@@ -175,6 +175,22 @@ describe("who hears of what", () => {
     expect(inbox(mod).map((n) => [n.kind, n.body])).toEqual([["submissions_waiting", 'Team A: 1 Item 1 on "Vorkath"']]);
     expect(kindsOf(carol)).toEqual(["bingo_open"]);
   });
+
+  it("a test data Bingo is news only to its fake users and its Players, never a real site admin or clan member", () => {
+    db.update(schema.bingos).set({ slug: "testdata-b1" }).where(eq(schema.bingos.id, bingo.id)).run();
+    const fakeMod = db.insert(schema.users).values({ discordId: "testdata-mod", discordUsername: "fakemod" }).returning().get();
+    db.insert(schema.bingoModerators).values({ bingoId: bingo.id, userId: fakeMod.id }).run();
+    const outsider = user("dave");
+    for (const u of [mod, fakeMod, outsider]) updateSettings(db, u.id, { level: "app", kinds: { bingo_open: true } });
+    updateSettings(db, carol.id, { level: "app", kinds: { bingo_open: true } });
+    audit(db, { action: "submission.created", bingoId: bingo.id, teamId: teamA, entity: { type: "submission", id: null }, details: { tileId, tileName: "Vorkath", taskLabels: [], claims: [{ nodeId: taskIds[0]!, itemName: "Item 1", quantity: 1 }], screenshotUrl: "/x.png" }, actor: { userId: alice.id } });
+    audit(db, { action: "stage.changed", bingoId: bingo.id, entity: { type: "bingo", id: bingo.id }, details: { from: "planning", to: "signup" }, actor: { userId: fakeMod.id } });
+    drainAuditLog(db);
+    expect(inbox(mod)).toEqual([]);
+    expect(inbox(outsider)).toEqual([]);
+    expect(kindsOf(fakeMod)).toEqual(["submissions_waiting"]);
+    expect(kindsOf(carol)).toEqual(["bingo_open"]);
+  });
 });
 
 describe("seen and cleared", () => {
@@ -257,6 +273,15 @@ describe("delivery", () => {
     rejectFor(alice);
     expect(sent.map((s) => s.msg && "deliver" in s.msg && s.msg.deliver)).toEqual(["none"]);
     expect(db.select().from(schema.notificationDmQueue).all()).toHaveLength(1);
+  });
+
+  it("made on a spoofed clock (the test data generator), it reaches the Inbox without a toast", () => {
+    updateSettings(db, alice.id, { level: "app" });
+    presence.byUser.set(alice.id, { open: true, visible: true, hiddenWithPermission: false, hiddenWithoutPermission: false });
+    rejectSubmission(db, { submissionId: submit(teamA, alice.id, taskIds[0]!, "Item 1").id, reviewedByUserId: mod.id });
+    drainAuditLog(db, { devClock: true });
+    expect(kindsOf(alice)).toEqual(["drop_rejected"]);
+    expect(sent.map((s) => s.msg && "deliver" in s.msg && s.msg.deliver)).toEqual(["none"]);
   });
 
   it("In the app never DMs", () => {

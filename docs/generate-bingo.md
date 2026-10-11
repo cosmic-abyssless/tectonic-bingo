@@ -129,7 +129,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    its spoofed times; the DMs of those at `+ Discord` (nobody generated has the site open) go to the dev server's fake
    sink, listed under the Test data tab, folded like real ones (one about a single drop notes the screenshot it would carry). **Catch-up** is on by default and about one in seven
    players turns it off; after a Live or Finished run each of the rest is seen on the Bingo (`POST .../presence`) a day before the run's
-   end, so logging in as one shows a Catch-up of the last day.
+   end, so logging in as one shows a Catch-up of the last day. A `testdata-` Bingo's Notifications reach only its fake
+   users and its Players (`--me`), never a real site admin or clan member, and none made on the spoofed clock toasts
+   or pops a browser notification (`notificationDispatch.ts`, `notificationService.ts`).
 3. **Captains** (the best players; a duo captain brings their partner as co-captain, and
    in a duo bingo only paired players captain, since every Team is led by a pair) create
    the teams. Once the mods are made, a few **Restrictions** (CONTEXT.md) are applied from the mod roster: a
