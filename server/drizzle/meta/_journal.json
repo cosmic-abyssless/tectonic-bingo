@@ -463,6 +463,13 @@
       "when": 1791705393985,
       "tag": "0067_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1791714386351,
+      "tag": "0068_notification_discord_kinds",
+      "breakpoints": true
     }
   ]
 }

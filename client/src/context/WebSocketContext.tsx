@@ -373,7 +373,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       // The Bingo whose pages this tab is on, by the route's slug and its cached shell.
       const bingoId = (slugRef.current ? queryClient.getQueryData<BingoShellResponse>(["bingo", slugRef.current])?.bingo.id : null) ?? null;
-      const msg: ClientSocketMessage = { type: "presence", visible: document.visibilityState === "visible", notifications: notificationPermission(), bingoId };
+      // In view: shown and focused. A browser calls a tab "visible" whenever its window isn't minimized, even behind other
+      // windows or on another screen, where a toast goes unseen; a browser notification or a DM reaches them there.
+      const visible = document.visibilityState === "visible" && document.hasFocus();
+      const msg: ClientSocketMessage = { type: "presence", visible, notifications: notificationPermission(), bingoId };
       const key = JSON.stringify(msg);
       const now = Date.now();
       // Unchanged: only again once a minute, while a Bingo's page is in view (for the Catch-up).
@@ -385,6 +388,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     sendPresenceRef.current = () => sendPresence(true);
     const onVisibility = () => sendPresence();
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onVisibility);
+    window.addEventListener("blur", onVisibility);
     const presenceTimer = setInterval(() => sendPresence(), PRESENCE_EVERY_MS);
 
     function connect() {
@@ -438,6 +443,8 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       closed = true;
       stopWatchingCache();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+      window.removeEventListener("blur", onVisibility);
       clearInterval(presenceTimer);
       sendPresenceRef.current = () => {};
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);

@@ -7,6 +7,7 @@ import {
   DEFAULT_QUEUE_THRESHOLD,
   NOTIFICATION_KINDS,
   QUEUE_THRESHOLDS,
+  isDiscordKindOn,
   isKindOn,
   isNotificationKind,
   levelAtLeast,
@@ -33,11 +34,11 @@ type Queryable = Db | Tx;
 export const INBOX_DAYS = 30;
 const INBOX_PAGE = 50;
 
-const DEFAULT_SETTINGS: NotificationSettings = { level: "off", kinds: {}, queueThresholdMinutes: DEFAULT_QUEUE_THRESHOLD, catchUpEnabled: true };
+const DEFAULT_SETTINGS: NotificationSettings = { level: "off", kinds: {}, discordKinds: {}, queueThresholdMinutes: DEFAULT_QUEUE_THRESHOLD, catchUpEnabled: true };
 
 type SettingsRow = typeof notificationSettings.$inferSelect;
 
-function parseKinds(json: string): NotificationSettings["kinds"] {
+function parseKinds(json: string): Partial<Record<NotificationKind, boolean>> {
   try {
     const raw = JSON.parse(json) as Record<string, unknown>;
     return Object.fromEntries(Object.entries(raw).filter(([k, v]) => isNotificationKind(k) && typeof v === "boolean")) as NotificationSettings["kinds"];
@@ -49,7 +50,7 @@ function parseKinds(json: string): NotificationSettings["kinds"] {
 function toSettings(row: SettingsRow | undefined): NotificationSettings {
   if (!row) return { ...DEFAULT_SETTINGS };
   const threshold = (QUEUE_THRESHOLDS as readonly number[]).includes(row.queueThresholdMinutes) ? (row.queueThresholdMinutes as QueueThreshold) : DEFAULT_QUEUE_THRESHOLD;
-  return { level: row.level, kinds: parseKinds(row.kindsJson), queueThresholdMinutes: threshold, catchUpEnabled: row.catchUpEnabled };
+  return { level: row.level, kinds: parseKinds(row.kindsJson), discordKinds: parseKinds(row.discordKindsJson), queueThresholdMinutes: threshold, catchUpEnabled: row.catchUpEnabled };
 }
 
 export function getSettings(db: Queryable, userId: string): NotificationSettings {
@@ -64,6 +65,7 @@ function storedKinds(kinds: NotificationSettings["kinds"]): NotificationSettings
 export interface SettingsPatch {
   level?: unknown;
   kinds?: unknown;
+  discordKinds?: unknown;
   queueThresholdMinutes?: unknown;
   catchUpEnabled?: unknown;
 }
@@ -71,7 +73,7 @@ export interface SettingsPatch {
 /** Changes what's given; the kinds given are merged over the stored ones. Throws a 400 for anything malformed. */
 export function updateSettings(db: Queryable, userId: string, patch: SettingsPatch): NotificationSettings {
   const current = getSettings(db, userId);
-  const next: NotificationSettings = { ...current, kinds: { ...current.kinds } };
+  const next: NotificationSettings = { ...current, kinds: { ...current.kinds }, discordKinds: { ...current.discordKinds } };
   if (patch.level !== undefined) {
     if (!["off", "app", "browser", "discord"].includes(patch.level as string)) throw new ServiceError(400, "level must be off, app, browser or discord");
     next.level = patch.level as NotificationLevel;
@@ -83,6 +85,13 @@ export function updateSettings(db: Queryable, userId: string, patch: SettingsPat
       next.kinds[kind] = on;
     }
   }
+  if (patch.discordKinds !== undefined) {
+    if (typeof patch.discordKinds !== "object" || patch.discordKinds === null) throw new ServiceError(400, "discordKinds must be an object");
+    for (const [kind, on] of Object.entries(patch.discordKinds)) {
+      if (!isNotificationKind(kind) || typeof on !== "boolean") throw new ServiceError(400, `Unknown notification kind or value: ${kind}`);
+      next.discordKinds[kind] = on;
+    }
+  }
   if (patch.queueThresholdMinutes !== undefined) {
     if (!(QUEUE_THRESHOLDS as readonly unknown[]).includes(patch.queueThresholdMinutes)) throw new ServiceError(400, `queueThresholdMinutes must be one of ${QUEUE_THRESHOLDS.join(", ")}`);
     next.queueThresholdMinutes = patch.queueThresholdMinutes as QueueThreshold;
@@ -92,9 +101,12 @@ export function updateSettings(db: Queryable, userId: string, patch: SettingsPat
     next.catchUpEnabled = patch.catchUpEnabled;
   }
   next.kinds = storedKinds(next.kinds);
+  // Only the kinds kept off Discord: on is the default.
+  next.discordKinds = Object.fromEntries(Object.entries(next.discordKinds).filter(([, on]) => on === false));
   const values = {
     level: next.level,
     kindsJson: JSON.stringify(next.kinds),
+    discordKindsJson: JSON.stringify(next.discordKinds),
     queueThresholdMinutes: next.queueThresholdMinutes,
     catchUpEnabled: next.catchUpEnabled,
     updatedAt: clockNow(),
@@ -282,7 +294,8 @@ export function deliver(db: Db, stored: StoredNotification[], { devClock = !!get
   const byUser = new Map<string, StoredNotification[]>();
   for (const n of stored) byUser.set(n.userId, [...(byUser.get(n.userId) ?? []), n]);
   for (const [userId, list] of byUser) {
-    const level = getSettings(db, userId).level;
+    const settings = getSettings(db, userId);
+    const level = settings.level;
     const ids = list.map((n) => n.id);
     const presence = userPresence(userId);
     if (presence.visible) {
@@ -294,7 +307,7 @@ export function deliver(db: Db, stored: StoredNotification[], { devClock = !!get
       continue;
     }
     sendToUser(userId, () => ({ type: "notifications", ids, deliver: "none" }));
-    if (level === "discord" && dmHandoff) for (const n of list) dmHandoff(db, n, devClock);
+    if (level === "discord" && dmHandoff) for (const n of list) if (isDiscordKindOn(n.kind as NotificationKind, settings.discordKinds)) dmHandoff(db, n, devClock);
   }
 }
 

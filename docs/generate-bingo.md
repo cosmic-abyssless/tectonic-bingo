@@ -125,7 +125,7 @@ target (say `signup`), the later dates are simply scheduled in the future.
    collected it, and the admin marks the rest, crediting a Staff member as the collector.
    Once signed up, about half the players turn **Notifications** on (CONTEXT.md "Notification") through the real
    settings endpoint (`notifications.ts`): most keep the default kinds, some turn on extra ones, and about a third of
-   them go up to `+ Discord`. Every Moderator turns on Submissions waiting. Their Inboxes fill from the play itself, at
+   them go up to `+ Discord` (some of those keep Submissions waiting and Team drop approved off Discord). Every Moderator turns on Submissions waiting. Their Inboxes fill from the play itself, at
    its spoofed times; the DMs of those at `+ Discord` (nobody generated has the site open) go to the dev server's fake
    sink, listed under the Test data tab, folded like real ones. **Catch-up** is on by default and about one in seven
    players turns it off; after a Live or Finished run each of the rest is seen on the Bingo (`POST .../presence`) a day before the run's

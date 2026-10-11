@@ -5,6 +5,7 @@ import {
   NOTIFICATION_KINDS,
   NOTIFICATION_LEVEL_LABELS,
   QUEUE_THRESHOLDS,
+  isDiscordKindOn,
   isKindOn,
   levelAtLeast,
   type NotificationGroup,
@@ -13,6 +14,7 @@ import {
 } from "@bingo/shared";
 import { useDiscordTestDm, useNotificationSettings, useUpdateNotificationSettings } from "../api/notificationsApi";
 import { useRefreshPresence } from "../context/WebSocketContext";
+import { useSiteCan } from "../headless/permissions";
 import { AppHeader } from "../core/ui/AppHeader";
 import { Button } from "../core/ui/Button";
 import { TextButton } from "../core/ui/TextButton";
@@ -92,14 +94,28 @@ function BrowserPermission() {
 
 function DiscordStatus({ unreachableSince }: { unreachableSince: string | null }) {
   const testDm = useDiscordTestDm();
-  if (!unreachableSince) return <p className="text-sm text-on-surface-muted">When the site isn't open, the clan's bot DMs you on Discord. Bursts wait a few minutes and arrive as one message.</p>;
+  // A Site admin can check that DMs go out at all: the message says what Discord answered if they don't.
+  const siteAdmin = useSiteCan("administer_site").allowed;
+  const sendTest = () => testDm.mutate(undefined, { onSuccess: (r) => toast({ title: r.message, tone: r.ok ? "success" : "warning" }) });
+  if (!unreachableSince) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-on-surface-muted">When the site isn't open, the clan's bot DMs you on Discord. Bursts wait a few minutes and arrive as one message.</p>
+        {siteAdmin && (
+          <Button size="sm" variant="secondary" isDisabled={testDm.isPending} onPress={sendTest}>
+            Send a test DM
+          </Button>
+        )}
+      </div>
+    );
+  }
   return (
     <Notice tone="danger" icon={<AlertIcon size={14} />}>
       <strong className="block">Can't reach you on Discord.</strong>
       <span className="block">
         The bot can't DM you: you've turned off DMs from server members, or left the server. In Discord, open the clan server's Privacy Settings and allow Direct Messages, then try again.
       </span>
-      <Button size="sm" variant="secondary" className="mt-2" isDisabled={testDm.isPending} onPress={() => testDm.mutate(undefined, { onSuccess: (r) => toast({ title: r.message, tone: r.ok ? "success" : "warning" }) })}>
+      <Button size="sm" variant="secondary" className="mt-2" isDisabled={testDm.isPending} onPress={sendTest}>
         Try again
       </Button>
     </Notice>
@@ -167,17 +183,29 @@ export function NotificationSettingsPage() {
                             <span className="block text-xs text-on-surface-subtle">{NOTIFICATION_CATALOGUE[kind].description}</span>
                           </span>
                         </Switch>
-                        {kind === "queue_waiting_long" && (
-                          <div className="w-28">
-                          <Select
-                            size="sm"
-                            aria-label="Waiting longer than"
-                            value={String(settings.queueThresholdMinutes)}
-                            onChange={(v) => update.mutate({ queueThresholdMinutes: Number(v) as (typeof QUEUE_THRESHOLDS)[number] })}
-                            options={QUEUE_THRESHOLDS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` }))}
-                          />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {kind === "queue_waiting_long" && (
+                            <div className="w-28">
+                            <Select
+                              size="sm"
+                              aria-label="Waiting longer than"
+                              value={String(settings.queueThresholdMinutes)}
+                              onChange={(v) => update.mutate({ queueThresholdMinutes: Number(v) as (typeof QUEUE_THRESHOLDS)[number] })}
+                              options={QUEUE_THRESHOLDS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` }))}
+                            />
+                            </div>
+                          )}
+                          {/* At + Discord, each kind that's on can be kept off Discord: in the Inbox and on the site only. */}
+                          {settings.level === "discord" && isKindOn(kind, settings.kinds) && (
+                            <Switch
+                              aria-label={`${NOTIFICATION_CATALOGUE[kind].label} on Discord`}
+                              isSelected={isDiscordKindOn(kind, settings.discordKinds)}
+                              onChange={(on) => update.mutate({ discordKinds: { [kind]: on } })}
+                            >
+                              Discord
+                            </Switch>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

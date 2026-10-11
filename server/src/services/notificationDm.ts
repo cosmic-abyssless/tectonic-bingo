@@ -11,6 +11,7 @@ import { Routes } from "discord-api-types/v10";
 import {
   DEFAULT_FOLDING_WINDOWS,
   NOTIFICATION_CATALOGUE,
+  isDiscordKindOn,
   isNotificationKind,
   type DevDmSinkEntry,
   type FoldingWindows,
@@ -178,28 +179,32 @@ export function dmText(rows: StoredNotification[], bingoName: string | null): st
   return link ? `${text}\n${link}` : text;
 }
 
-/** Sends (or, on a dev server, sinks) one DM and logs it. A 50007 marks the user unreachable; returns whether it went. */
-async function sendDm(db: Db, user: { id: string; discordId: string }, kind: NotificationKind, bingoId: string | null, text: string, count: number): Promise<boolean> {
+/** Sends (or, on a dev server, sinks) one DM and logs it. A 50007 marks the user unreachable. Null if it went, else why not. */
+async function sendDm(db: Db, user: { id: string; discordId: string }, kind: NotificationKind, bingoId: string | null, text: string, count: number): Promise<string | null> {
   const sentAt = new Date();
   if (usesSink()) {
     db.insert(notificationDmLog).values({ userId: user.id, bingoId, kind, text, count, sink: true, sentAt }).run();
-    return true;
+    return null;
   }
   const api = discordDmApi();
-  if (!api) return false;
+  if (!api) return "Discord DMs aren't set up on this server";
   try {
     await api.send(user.discordId, text);
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     if (err instanceof DmError && err.code === DISCORD_CANNOT_DM) {
       setDiscordUnreachable(db, user.id, sentAt);
       log.info("discord dm refused: marked unreachable", { userId: user.id });
-      return false;
+      return reason;
     }
-    log.warn("discord dm failed", { err, userId: user.id });
-    return false;
+    // Discord refusing for another reason (a bad token, missing permissions, rate limits) is the bot's problem, not the
+    // user's, and stops everyone's DMs: Sentry hears of it. Not reaching Discord at all is usually a blip.
+    if (err instanceof DmError && err.code !== null) log.error("discord dm refused", { err, code: err.code, userId: user.id });
+    else log.warn("discord dm failed", { err, userId: user.id });
+    return reason;
   }
   db.insert(notificationDmLog).values({ userId: user.id, bingoId, kind, text, count, sink: false, sentAt }).run();
-  return true;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +259,8 @@ export async function runDmRound(db: Db, now = new Date()): Promise<number> {
     if (db.delete(notificationDmQueue).where(eq(notificationDmQueue.id, item.id)).run().changes === 0) continue;
     if (!item.devClock && now.getTime() - item.sendAt.getTime() > DM_STALE_MS) continue;
     const settings = getSettings(db, item.userId);
-    if (settings.level !== "discord" || discordUnreachableSince(db, item.userId)) continue;
+    // Turned down meanwhile: not at + Discord any more, or this kind kept off Discord.
+    if (settings.level !== "discord" || !isDiscordKindOn(item.kind as NotificationKind, settings.discordKinds) || discordUnreachableSince(db, item.userId)) continue;
     if (!item.devClock && userPresence(item.userId).visible) continue;
     const ids = JSON.parse(item.notificationIdsJson) as string[];
     const rows = ids.length ? db.select().from(notifications).where(inArray(notifications.id, ids)).orderBy(asc(notifications.createdAt)).all() : [];
@@ -264,19 +270,23 @@ export async function runDmRound(db: Db, now = new Date()): Promise<number> {
     const user = db.select({ id: users.id, discordId: users.discordId }).from(users).where(eq(users.id, item.userId)).get();
     if (!user) continue;
     const bingoName = item.bingoId ? (db.select({ name: bingos.name }).from(bingos).where(eq(bingos.id, item.bingoId)).get()?.name ?? null) : null;
-    if (await sendDm(db, user, kind, item.bingoId, dmText(live, bingoName), live.length)) sent++;
+    if ((await sendDm(db, user, kind, item.bingoId, dmText(live, bingoName), live.length)) === null) sent++;
   }
   return sent;
 }
 
-/** Try again (settings): a test DM. Sent, the user is reachable again; refused (50007), they stay unreachable. */
+/**
+ * A test DM: Try again (settings) for a user Discord refused, and Send a test DM for a Site admin checking that DMs go
+ * out at all. Sent, the user is reachable again; refused (50007), they're (still) unreachable. A failure says what
+ * Discord said, so a Site admin sees a bot-side problem (a bad token, missing access) at once.
+ */
 export async function sendTestDm(db: Db, user: { id: string; discordId: string }): Promise<{ ok: boolean; message: string }> {
   if (!discordDmsAvailable()) throw new ServiceError(400, "Discord DMs aren't set up on this server");
   setDiscordUnreachable(db, user.id, null);
-  const ok = await sendDm(db, user, "bingo_open", null, `**Test from Tectonic Bingo**\nNotifications will reach you here.${siteUrl(null) ? `\n${siteUrl("/settings/notifications")}` : ""}`, 1);
-  return ok
-    ? { ok, message: "Sent. Check your Discord DMs." }
-    : { ok, message: discordUnreachableSince(db, user.id) ? "Discord still won't let the bot DM you. Allow DMs from server members and try again." : "Couldn't reach Discord. Try again in a minute." };
+  const failed = await sendDm(db, user, "bingo_open", null, `**Test from Tectonic Bingo**\nNotifications will reach you here.${siteUrl(null) ? `\n${siteUrl("/settings/notifications")}` : ""}`, 1);
+  if (failed === null) return { ok: true, message: usesSink() ? "Sent to the fake sink (this is a dev server): see Site admin > Test data." : "Sent. Check your Discord DMs." };
+  if (discordUnreachableSince(db, user.id)) return { ok: false, message: "Discord won't let the bot DM you. Allow DMs from server members and try again." };
+  return { ok: false, message: `Couldn't send it: ${failed}` };
 }
 
 /** Drops DM log entries past the Inbox's age. */
