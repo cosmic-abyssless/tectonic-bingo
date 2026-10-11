@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog as AriaDialog, DialogTrigger, Popover } from "react-aria-components";
 import { Link, useNavigate } from "react-router-dom";
 import { NOTIFICATION_CATALOGUE, type NotificationEntry } from "@bingo/shared";
-import { useInbox, useMarkInboxRead, useNotificationsOn, useUpdateNotificationSettings } from "../../api/notificationsApi";
+import { useClearInbox, useInbox, useMarkInboxRead, useNotificationsOn, useUpdateNotificationSettings } from "../../api/notificationsApi";
 import { Button, IconButton } from "../ui/Button";
 import { Menu, MenuItem, MenuTrigger } from "../ui/Menu";
 import { BellIcon, MoreIcon } from "../ui/icons";
@@ -50,12 +50,13 @@ function InboxRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: (link: 
 
 /**
  * The header's bell (CONTEXT.md "Inbox"), only once the viewer has turned Notifications on: their unread count, and the
- * Inbox behind it. Opening it marks everything read.
+ * Inbox behind it. Opening it marks everything read; Clear empties it.
  */
 export function InboxButton() {
   const on = useNotificationsOn();
   const { data } = useInbox(on);
   const markRead = useMarkInboxRead();
+  const clear = useClearInbox();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   if (!on) return null;
@@ -81,9 +82,16 @@ export function InboxButton() {
         <AriaDialog aria-label="Notifications" className="outline-none">
           <div className="flex items-center justify-between border-b border-outline px-3 py-2">
             <span className="text-sm font-semibold text-on-surface">Notifications</span>
-            <Link to={NOTIFICATION_SETTINGS_PATH} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline">
-              Settings
-            </Link>
+            <span className="flex items-center gap-3">
+              {data && data.notifications.length > 0 && (
+                <button type="button" disabled={clear.isPending} onClick={() => clear.mutate()} className="text-xs text-accent hover:underline disabled:opacity-50">
+                  Clear all
+                </button>
+              )}
+              <Link to={NOTIFICATION_SETTINGS_PATH} onClick={() => setOpen(false)} className="text-xs text-accent hover:underline">
+                Settings
+              </Link>
+            </span>
           </div>
           {data && data.notifications.length > 0 ? (
             <ul className="max-h-[min(28rem,70vh)] overflow-y-auto p-1">

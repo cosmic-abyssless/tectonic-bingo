@@ -106,7 +106,31 @@ router.post(
   requireAuth,
   auditSkip("the Inbox was opened: UI state, nothing to audit"),
   (req, res) => {
-    notificationService.markAllRead(db, req.user!.id);
+    if (notificationService.markAllRead(db, req.user!.id) > 0) notificationService.inboxChanged([req.user!.id]);
+    res.json(notificationService.getInbox(db, req.user!.id));
+  },
+);
+
+router.post(
+  "/notifications/read-mod-queue",
+  noStore,
+  requireAuth,
+  auditSkip("the Mod panel's Submissions tab was opened: UI state, nothing to audit"),
+  (req, res) => {
+    const { bingoId } = (req.body ?? {}) as { bingoId?: unknown };
+    if (typeof bingoId !== "string" || !bingoId) throw new ServiceError(400, "bingoId is required");
+    if (notificationService.markReadInBingo(db, req.user!.id, bingoId, notificationService.MOD_QUEUE_KINDS) > 0) notificationService.inboxChanged([req.user!.id]);
+    res.json(notificationService.getInbox(db, req.user!.id));
+  },
+);
+
+router.delete(
+  "/notifications",
+  noStore,
+  requireAuth,
+  auditSkip("the account's own Inbox was cleared: UI state, nothing to audit"),
+  (req, res) => {
+    if (notificationService.clearInbox(db, req.user!.id) > 0) notificationService.inboxChanged([req.user!.id]);
     res.json(notificationService.getInbox(db, req.user!.id));
   },
 );

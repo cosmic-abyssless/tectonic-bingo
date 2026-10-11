@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import type { Server } from "http";
-import type { MeResponse } from "@bingo/shared";
+import type { MeResponse, NotificationInboxResponse } from "@bingo/shared";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -24,9 +24,9 @@ vi.mock("../db", () => ({
 let viewerId: string | null;
 let server: Server;
 
-async function call(method: "GET" | "POST", path: string) {
+async function call(method: "GET" | "POST" | "DELETE", path: string, body?: unknown) {
   const port = (server.address() as { port: number }).port;
-  return fetch(`http://localhost:${port}${path}`, { method });
+  return fetch(`http://localhost:${port}${path}`, body === undefined ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 
 beforeEach(async () => {
@@ -35,6 +35,7 @@ beforeEach(async () => {
   const { default: meRouter } = await import("./me");
   const { auditContext } = await import("../audit/middleware");
   const app = express();
+  app.use(express.json());
   // Stands in for passport: the session user is the full row, as deserializeUser loads it.
   app.use((req, _res, next) => {
     req.user = viewerId ? db.select().from(schema.users).where(eq(schema.users.id, viewerId)).get() : undefined;
@@ -119,5 +120,31 @@ describe("POST /api/me/notifications/discord-test", () => {
     setDiscordUnreachable(db, p.id, new Date());
     expect((await call("POST", "/api/me/notifications/discord-test")).status).toBe(200);
     expect(sentTo).toEqual(["p-id"]);
+  });
+});
+
+describe("the Inbox: the Mod panel's queue seen, and Clear", () => {
+  it("marks only that Bingo's queue Notifications read, then Clear empties the Inbox, with nothing audited", async () => {
+    const p = player();
+    viewerId = p.id;
+    const { updateSettings } = await import("../services/notificationService");
+    updateSettings(db, p.id, { level: "app" });
+    const at = new Date();
+    db.insert(schema.notifications)
+      .values([
+        { userId: p.id, bingoId: "b1", kind: "submissions_waiting", title: "Submission waiting", createdAt: at },
+        { userId: p.id, bingoId: "b2", kind: "submissions_waiting", title: "Submission waiting", createdAt: at },
+        { userId: p.id, bingoId: "b1", kind: "drop_rejected", title: "Your drop was rejected", createdAt: at },
+      ])
+      .run();
+
+    expect((await call("POST", "/api/me/notifications/read-mod-queue", {})).status).toBe(400);
+    const seen = (await (await call("POST", "/api/me/notifications/read-mod-queue", { bingoId: "b1" })).json()) as NotificationInboxResponse;
+    expect(seen.unread).toBe(2);
+    expect(seen.notifications.filter((n) => n.readAt).map((n) => [n.bingoId, n.kind])).toEqual([["b1", "submissions_waiting"]]);
+
+    const cleared = (await (await call("DELETE", "/api/me/notifications")).json()) as NotificationInboxResponse;
+    expect(cleared).toEqual({ notifications: [], unread: 0 });
+    expect(db.select().from(schema.auditLog).all()).toEqual([]);
   });
 });
