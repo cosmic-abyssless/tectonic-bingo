@@ -213,3 +213,42 @@ describe("logging out", () => {
     someoneElse.close();
   });
 });
+
+describe("presence", () => {
+  const sent = (socket: WebSocket, msg: object) =>
+    new Promise<void>((resolve) => {
+      socket.send(JSON.stringify(msg));
+      // Let the server read it.
+      setTimeout(resolve, 50);
+    });
+
+  it("counts a socket that hasn't said as hidden, not in view, so its user still gets a browser notification or a DM", async () => {
+    const socket = await connect(await login("admin"));
+    expect(ws.userPresence("admin")).toMatchObject({ open: true, visible: false, hiddenWithoutPermission: true });
+    await sent(socket, { type: "presence", visible: true, notifications: "granted", bingoId: null });
+    expect(ws.userPresence("admin")).toMatchObject({ visible: true });
+    await sent(socket, { type: "presence", visible: false, notifications: "granted", bingoId: null });
+    expect(ws.userPresence("admin")).toMatchObject({ visible: false, hiddenWithPermission: true });
+    socket.close();
+    await closed(socket);
+  });
+});
+
+describe("the heartbeat", () => {
+  it("keeps a socket that answers pings, and drops one that doesn't (a tab gone without closing)", async () => {
+    const cookie = await login("member");
+    const answers = await connect(cookie);
+    const silent = await new Promise<WebSocket>((resolve, reject) => {
+      const socket = new WebSocket(`ws://${base}/ws`, { headers: { cookie }, autoPong: false });
+      socket.once("open", () => resolve(socket));
+      socket.once("error", reject);
+    });
+    const silentClosed = closed(silent);
+    ws.sweepDeadSockets(); // pings both
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    ws.sweepDeadSockets(); // drops the one that didn't answer
+    expect(await silentClosed).toBe(1006);
+    expect(answers.readyState).toBe(WebSocket.OPEN);
+    answers.close();
+  });
+});

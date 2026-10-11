@@ -195,7 +195,10 @@ async function sendDm(db: Db, user: { id: string; discordId: string }, kind: Not
       log.info("discord dm refused: marked unreachable", { userId: user.id });
       return false;
     }
-    log.warn("discord dm failed", { err, userId: user.id });
+    // Discord refusing for another reason (a bad token, missing permissions, rate limits) is the bot's problem, not the
+    // user's, and stops everyone's DMs: Sentry hears of it. Not reaching Discord at all is usually a blip.
+    if (err instanceof DmError && err.code !== null) log.error("discord dm refused", { err, code: err.code, userId: user.id });
+    else log.warn("discord dm failed", { err, userId: user.id });
     return false;
   }
   db.insert(notificationDmLog).values({ userId: user.id, bingoId, kind, text, count, sink: false, sentAt }).run();

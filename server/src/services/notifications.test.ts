@@ -279,6 +279,19 @@ describe("Discord DMs", () => {
     expect(settings().discordUnreachableSince).toBeNull();
   });
 
+  it("Discord refusing for the bot's own reasons goes to Sentry (log.error), and leaves the user reachable", async () => {
+    const { log } = await import("../log");
+    const error = vi.spyOn(log, "error").mockImplementation(() => {});
+    vi.mocked(api.send).mockRejectedValue(new DmError("Missing Access", 50001));
+    const t0 = new Date();
+    updateFoldingWindows(db, { team_drop_approved: 0 }, mod.id);
+    approveAt(0, t0);
+    await runDmRound(db, new Date(t0.getTime() + 1000));
+    expect(error).toHaveBeenCalledWith("discord dm refused", expect.objectContaining({ code: 50001, userId: bob.id }));
+    expect(db.select().from(schema.notificationSettings).where(eq(schema.notificationSettings.userId, bob.id)).get()!.discordUnreachableSince).toBeNull();
+    error.mockRestore();
+  });
+
   it("drops a Pairing request DM once it's been answered", async () => {
     updateSettings(db, carol.id, { level: "discord" });
     const pairing = db.insert(schema.signupPairings).values({ bingoId: bingo.id, requesterUserId: alice.id, targetDiscordId: carol.discordId, createdByUserId: alice.id }).returning().get();

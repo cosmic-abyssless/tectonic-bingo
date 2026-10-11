@@ -132,10 +132,37 @@ function parseWatch(msg: { type?: unknown } | null): string[] | null {
   return bingoIds.every((id): id is string => typeof id === "string" && id.length <= 64) ? bingoIds : null;
 }
 
+/** How often every socket is pinged; one that hasn't answered the last ping by the next is dropped. */
+export const HEARTBEAT_MS = 30_000;
+/** Sockets that answered since the last sweep. */
+const alive = new WeakSet<WebSocket>();
+let heartbeat: NodeJS.Timeout | null = null;
+
+/**
+ * Drops each socket that hasn't answered the last ping, and pings the rest. A tab that went away without closing (a
+ * phone asleep, a laptop shut, a lost network) would otherwise stay open here for a long time, and keep counting as a
+ * tab in view: its user would get toasts nobody sees instead of a browser notification or a DM.
+ */
+export function sweepDeadSockets(): void {
+  if (!wss) return;
+  for (const client of wss.clients) {
+    if (!alive.has(client)) {
+      client.terminate();
+      continue;
+    }
+    alive.delete(client);
+    client.ping();
+  }
+}
+
 export function initWebSocketServer(server: Server, authorize: AuthorizeUpgrade): void {
   const created = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
   wss = created;
+  heartbeat = setInterval(sweepDeadSockets, HEARTBEAT_MS);
+  heartbeat.unref();
   created.on("connection", (socket: WebSocket) => {
+    alive.add(socket);
+    socket.on("pong", () => alive.add(socket));
     // Any logged-in clan member may watch any Bingo: payloads carry only IDs (v1 leaked team names to every connected
     // client), and each client refetches under its own auth.
     log.info("ws connect", { clients: created.clients.size });
@@ -214,7 +241,9 @@ export function userPresence(userId: string): UserPresence {
     const info = sockets.get(client);
     if (client.readyState !== WebSocket.OPEN || info?.userId !== userId) continue;
     out.open = true;
-    if (!info.presence || info.presence.visible) out.visible = true;
+    // A socket that hasn't said (a tab from before presence, or one just connecting) can't show a toast: counted hidden.
+    if (info.presence?.visible) out.visible = true;
+    else if (!info.presence) out.hiddenWithoutPermission = true;
     else if (info.presence.notifications === "granted") out.hiddenWithPermission = true;
     else out.hiddenWithoutPermission = true;
   }
@@ -244,6 +273,8 @@ export function closeWebSocketServer(): void {
   if (!wss) return;
   detach?.();
   detach = null;
+  if (heartbeat) clearInterval(heartbeat);
+  heartbeat = null;
   coalescer.clear();
   for (const client of wss.clients) client.terminate();
   wss.close();
