@@ -39,6 +39,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
   draft_tags: { denied: "The Draft board's unpublished Tags." },
   // Notifications (CONTEXT.md): one user's own settings, Inbox, offers, presence and Discord DMs. Personal, not balancing data.
   notification_settings: { denied: "A user's own Notification settings." },
+  user_settings: { denied: "A user's own User settings (their Board size)." },
   notifications: { denied: "Users' Inboxes: each Notification's words are only for its recipient." },
   notification_offers: { denied: "Which offers to turn Notifications on a user saw and answered." },
   notification_cursor: { denied: "How far the Notification dispatcher has read the audit log." },

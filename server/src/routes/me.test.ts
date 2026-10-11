@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import type { Server } from "http";
-import type { MeResponse, NotificationInboxResponse } from "@bingo/shared";
+import { DEFAULT_USER_SETTINGS, type MeResponse, type NotificationInboxResponse, type UserSettings } from "@bingo/shared";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
@@ -24,7 +24,7 @@ vi.mock("../db", () => ({
 let viewerId: string | null;
 let server: Server;
 
-async function call(method: "GET" | "POST" | "DELETE", path: string, body?: unknown) {
+async function call(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown) {
   const port = (server.address() as { port: number }).port;
   return fetch(`http://localhost:${port}${path}`, body === undefined ? { method } : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 }
@@ -86,6 +86,38 @@ describe("POST /api/me/tutorial-seen", () => {
   it("needs a signed-in account", async () => {
     viewerId = null;
     expect((await call("POST", "/api/me/tutorial-seen")).status).toBe(401);
+  });
+});
+
+describe("/api/me/settings (User settings)", () => {
+  it("starts at every default, and keeps each device's Board size apart", async () => {
+    viewerId = player().id;
+    expect(await (await call("GET", "/api/me/settings")).json()).toEqual(DEFAULT_USER_SETTINGS);
+
+    let res = await call("PUT", "/api/me/settings", { boardSize: { phone: { mode: "custom", widthPercent: 140 } } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ boardSize: { desktop: { mode: "fit", widthPercent: 100 }, phone: { mode: "custom", widthPercent: 140 } } });
+
+    // Only what the patch names changes: Custom's width is kept while another mode is picked.
+    res = await call("PUT", "/api/me/settings", { boardSize: { desktop: { mode: "maximize" }, phone: { mode: "fit" } } });
+    const expected: UserSettings = { boardSize: { desktop: { mode: "maximize", widthPercent: 100 }, phone: { mode: "fit", widthPercent: 140 } } };
+    expect(await res.json()).toEqual(expected);
+    expect(await (await call("GET", "/api/me/settings")).json()).toEqual(expected);
+    expect(db.select().from(schema.auditLog).all()).toEqual([]);
+  });
+
+  it("refuses a mode or width it doesn't know, changing nothing", async () => {
+    viewerId = player().id;
+    for (const boardSize of [{ desktop: { mode: "huge" } }, { desktop: { widthPercent: 49 } }, { phone: { widthPercent: 301 } }, { phone: { widthPercent: 120.5 } }, "big"]) {
+      expect((await call("PUT", "/api/me/settings", { boardSize })).status).toBe(400);
+    }
+    expect(db.select().from(schema.userSettings).all()).toEqual([]);
+  });
+
+  it("needs a signed-in account", async () => {
+    viewerId = null;
+    expect((await call("GET", "/api/me/settings")).status).toBe(401);
+    expect((await call("PUT", "/api/me/settings", { boardSize: {} })).status).toBe(401);
   });
 });
 

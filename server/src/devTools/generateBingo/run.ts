@@ -18,6 +18,7 @@ import { runRestrictions } from "./restrictions";
 import { runBorrowedAccount } from "./borrowedAccount";
 import { uploadWrappedArt } from "./wrappedArt";
 import { runNotificationSettings, seedCatchUpPresence } from "./notifications";
+import { runBoardSizeSettings } from "./boardSize";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
 export type BoardSource = { kind: "bingo"; slug: string } | { kind: "document"; document: BingoExportDocument };
@@ -141,6 +142,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   await runSignups(ctx, players, pairs);
   const notified = await runNotificationSettings(ctx, players, mods, new Date(tl.captainsAt.getTime() - 30 * 60_000));
   log(`notifications: ${notified.optedIn.length} players turned them on, ${notified.catchUp.length} kept Catch-up on`);
+  const resized = await runBoardSizeSettings(ctx, players, new Date(tl.captainsAt.getTime() - 25 * 60_000));
+  log(`board size: ${resized} players picked their own`);
   await runBuyins(ctx, players, staff);
   const { signups: filled } = await api.as(adminDiscordId).post<{ signups: number }>(`/api/dev/bingos/${slug}/fake-stats`, undefined, { at: tl.captainsAt });
   log(`made-up WOM, RuneProfile and combat achievement stats on ${filled} signups`);

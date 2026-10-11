@@ -8,10 +8,11 @@ import { db } from "../db";
 import { markTutorialSeen } from "../services/userService";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ServiceError } from "../services/errors";
-import { can, type NotificationInboxResponse, type NotificationSettingsResponse } from "@bingo/shared";
+import { can, type NotificationInboxResponse, type NotificationSettingsResponse, type UserSettingsPatch } from "@bingo/shared";
 import * as notificationService from "../services/notificationService";
 import { answerOffer, assertOffer, claimOffer } from "../services/notificationOffers";
 import { discordDmsAvailable, sendTestDm } from "../services/notificationDm";
+import * as userSettingsService from "../services/userSettingsService";
 
 const router = Router();
 
@@ -33,6 +34,22 @@ router.post(
   auditSkip("the account has seen the Tutorial: UI state, like account-level actions, nothing to audit"),
   (req, res) => {
     res.json({ user: markTutorialSeen(db, req.user!.id) });
+  },
+);
+
+// The viewer's User settings (shared userSettings.ts): the Settings page's, kept on the account. UI state, like the
+// Tutorial's: nothing to audit.
+router.get("/settings", noStore, requireAuth, (req, res) => {
+  res.json(userSettingsService.getSettings(db, req.user!.id));
+});
+
+router.put(
+  "/settings",
+  noStore,
+  requireAuth,
+  auditSkip("the account's own User settings: UI state, nothing to audit"),
+  (req, res) => {
+    res.json(userSettingsService.updateSettings(db, req.user!.id, (req.body ?? {}) as UserSettingsPatch));
   },
 );
 

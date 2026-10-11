@@ -128,7 +128,7 @@ export function AppHeader({
       label: "Account",
       items: [
         ...(user && openProfile ? [{ id: "profile", text: "Profile", label: "Profile", wikiIcon: "Worn Equipment", onAction: () => openProfile(user.id) }] : []),
-        { id: "settings", text: "Settings", label: "Settings", wikiIcon: "Account Management", current: onUserSettings, onAction: () => navigate(USER_SETTINGS_PATH) },
+        { id: "settings", text: "Settings", label: "Settings", wikiIcon: "Account Management", current: onUserSettings, onAction: () => navigate(USER_SETTINGS_PATH, { state: bingoSlug ? { bingoSlug } : undefined }) },
         ...(siteAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [

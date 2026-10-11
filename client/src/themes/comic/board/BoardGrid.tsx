@@ -1,45 +1,80 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { BoardSize } from "@bingo/shared";
 import type { BoardModel, TileModel } from "../../../headless/types";
 import { useSlot } from "../../context";
 import { LineCompletionWash } from "./LineCompletionWash";
 import { TileSearchSlot, useTileDimmed } from "../../../headless/TileSearchProvider";
 import { BOOST_MS, buildStopsByTileId } from "./linePulse";
+import { useMyBoardSize } from "../../../core/settings/boardSize";
 
 // Smallest a tile is allowed to get when the board shrinks to fit the
 // screen's height — below this the books stop being legible, so a short
 // window scrolls instead.
 const MIN_TILE_PX = 104;
+// The grid's own floor (its columns' minmax): Custom never goes narrower.
+const GRID_MIN_TILE_PX = 65;
 // Air kept under the board (the page's own bottom padding).
 const BOTTOM_AIR_PX = 24;
+// The page's side padding from `sm` up, kept beside a Maximized or Custom
+// board too; under `sm` the board runs edge to edge.
+const SIDE_AIR_PX = 24;
+const SM_PX = 640;
 
 /**
- * The widest the board may be so that all of its rows fit between where the
- * grid starts and the bottom of the window: tiles are square and sized off
- * the board's width, so height is capped by capping width. Measured (not a
- * magic offset) because what sits above the grid — the header, the search
- * row, a wrapped banner — changes with screen size. Null until measured.
+ * The board's size, as the style of its wrapper, for the viewer's Board size
+ * (shared userSettings.ts). Tiles are square and sized off the board's
+ * width, so every mode sets a width.
+ *
+ * Fit screen: the widest the board may be so that all of its rows fit
+ * between where the grid starts and the bottom of the window, so height is
+ * capped by capping width. Measured (not a magic offset) because what sits
+ * above the grid — the header, the search row, a wrapped banner — changes
+ * with screen size. Inside the page's own column, like everything else.
+ *
+ * Maximize and Custom leave that column: Maximize is as big as the
+ * window's larger side (its width, or the width at which the rows fill its
+ * height), Custom a percentage of its width. Either is centered while it
+ * fits, and otherwise starts at the window's left and scrolls the page
+ * sideways (the left of a centered board would be out of reach).
  */
-function useFitWidth(gridRef: React.RefObject<HTMLDivElement | null>, rows: number, cols: number, minTile = MIN_TILE_PX) {
-  const [maxWidth, setMaxWidth] = useState<number | null>(null);
+function useBoardWidth(gridRef: React.RefObject<HTMLDivElement | null>, rows: number, cols: number, size: BoardSize): CSSProperties | undefined {
+  const [style, setStyle] = useState<CSSProperties | undefined>(undefined);
   useLayoutEffect(() => {
     const grid = gridRef.current;
-    if (!grid) return;
+    const wrapper = grid?.parentElement;
+    const column = wrapper?.parentElement;
+    if (!grid || !wrapper || !column) return;
+    // A new style object only when something changed: each one re-renders the whole grid.
+    const apply = (next: CSSProperties) => setStyle((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
     const measure = () => {
-      const style = getComputedStyle(grid);
-      const gap = parseFloat(style.rowGap) || 0;
+      const gridStyle = getComputedStyle(grid);
+      const gap = parseFloat(gridStyle.rowGap) || 0;
       // With row labels the first track is theirs; it's `auto`, so read it.
-      const tracks = style.gridTemplateColumns.split(" ").map(parseFloat);
+      const tracks = gridStyle.gridTemplateColumns.split(" ").map(parseFloat);
       const labelW = tracks.length > cols ? (tracks[0] ?? 0) + gap : 0;
       const top = grid.getBoundingClientRect().top + window.scrollY;
-      const avail = window.innerHeight - top - BOTTOM_AIR_PX;
+      // clientWidth/Height leave out the window's own scrollbars.
+      const root = document.documentElement;
+      const availH = root.clientHeight - top - BOTTOM_AIR_PX;
       const widthFor = (tile: number) => cols * tile + (cols - 1) * gap + labelW;
       // Rounded DOWN, minus a couple of pixels of slack per tile: rounding
       // up (or fractional zoom levels) makes the grid a pixel or two too
       // tall, and that sliver is enough to summon a scrollbar — which then
       // narrows the window and re-triggers the whole thing. The minimum
       // tile is applied after, so the slack never eats into it.
-      const fit = Math.floor(widthFor((avail - (rows - 1) * gap) / rows)) - 2 * cols;
-      setMaxWidth(Math.max(Math.ceil(widthFor(minTile)), fit));
+      const heightFit = Math.floor(widthFor((availH - (rows - 1) * gap) / rows)) - 2 * cols;
+      if (size.mode === "fit") {
+        apply({ maxWidth: Math.max(Math.ceil(widthFor(MIN_TILE_PX)), heightFit) });
+        return;
+      }
+      const side = root.clientWidth < SM_PX ? 0 : SIDE_AIR_PX;
+      const availW = root.clientWidth - 2 * side;
+      const wanted = size.mode === "maximize" ? Math.max(availW, heightFit) : Math.floor((availW * size.widthPercent) / 100);
+      const width = Math.max(Math.ceil(widthFor(GRID_MIN_TILE_PX)), wanted);
+      // Where the column's content starts on the page, and where the board should.
+      const columnLeft = column.getBoundingClientRect().left + window.scrollX + parseFloat(getComputedStyle(column).paddingLeft);
+      const left = side + Math.max(0, (availW - width) / 2);
+      apply({ width, maxWidth: "none", marginLeft: left - columnLeft, marginRight: 0 });
     };
     measure();
     window.addEventListener("resize", measure);
@@ -50,8 +85,8 @@ function useFitWidth(gridRef: React.RefObject<HTMLDivElement | null>, rows: numb
       window.removeEventListener("resize", measure);
       ro.disconnect();
     };
-  }, [gridRef, rows, cols, minTile]);
-  return maxWidth;
+  }, [gridRef, rows, cols, size.mode, size.widthPercent]);
+  return style;
 }
 
 // Memoised: the page above re-renders as a Tile opens and closes, and the grid has nothing new to draw then (#470).
@@ -71,7 +106,8 @@ export const BoardGrid = memo(function BoardGrid({
   const EmptyCell = useSlot("EmptyCell");
   const PreStartBanner = useSlot("PreStartBanner");
   const gridRef = useRef<HTMLDivElement>(null);
-  const fitWidth = useFitWidth(gridRef, board.rows, board.cols);
+  const boardSize = useMyBoardSize();
+  const sizeStyle = useBoardWidth(gridRef, board.rows, board.cols, boardSize);
   const linePulseKey = board.lines.map((line) => `${line.id}:${Number(line.complete)}:${line.tileIds.join(",")}`).join("|");
   const stopsByTileId = useMemo(() => {
     const posById = new Map(board.tiles.map((tile) => [tile.id, { row: tile.row, col: tile.col }]));
@@ -126,9 +162,10 @@ export const BoardGrid = memo(function BoardGrid({
   return (
     // On a phone the board runs edge to edge (cancelling the page's own
     // side padding) with no gaps between tiles, so the books get every pixel
-    // there is. From `sm` up it's centered and no wider than fits the window
-    // (see useFitWidth), so the whole board is on screen without scrolling.
-    <div data-tutorial="board" className="relative w-full max-sm:-mx-3 max-sm:w-auto sm:mx-auto" style={{ maxWidth: fitWidth ?? undefined }}>
+    // there is. From `sm` up it's centered and, at Fit screen, no wider than
+    // fits the window, so the whole board is on screen without scrolling;
+    // the other Board sizes set their own width (see useBoardWidth).
+    <div data-tutorial="board" className="relative w-full max-sm:-mx-3 max-sm:w-auto sm:mx-auto" style={sizeStyle}>
       {/* Fades the page's halftone dots out toward the board's own center —
           a circle behind the grid, painted in the page's own background
           color and masked out toward the edges. `closest-side` sizes the

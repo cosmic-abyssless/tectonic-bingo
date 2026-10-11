@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   NOTIFICATION_CATALOGUE,
   NOTIFICATION_GROUP_LABELS,
@@ -11,6 +12,10 @@ import {
   type NotificationGroup,
   type NotificationKind,
   type NotificationLevel,
+  BOARD_SIZE_DEVICE_LABELS,
+  BOARD_SIZE_DEVICES,
+  boardSizeSummary,
+  type BoardSizeDevice,
 } from "@bingo/shared";
 import { useDiscordTestDm, useNotificationSettings, useUpdateNotificationSettings } from "../api/notificationsApi";
 import { useRefreshPresence } from "../context/WebSocketContext";
@@ -21,6 +26,11 @@ import { TextButton } from "../core/ui/TextButton";
 import { Card, CardHeader, Notice } from "../core/ui/Card";
 import { AlertIcon, InfoIcon, MonitorIcon, MoonIcon, SunIcon } from "../core/ui/icons";
 import { useColorSchemePreference } from "../core/ui/colorScheme";
+import { useBingos } from "../api/queries";
+import { useUserSettings } from "../api/userSettingsApi";
+import { BoardSizeControls } from "../core/settings/BoardSizeControls";
+import { BOARD_SIZE_PREVIEW_PARAM } from "../core/settings/BoardSizePreviewPanel";
+import { useBoardSizeDevice } from "../core/settings/boardSize";
 import { SegmentedControl } from "../core/ui/SegmentedControl";
 import { Select } from "../core/ui/Select";
 import { Switch } from "../core/ui/Switch";
@@ -157,6 +167,52 @@ function AppearanceCard() {
 }
 
 /**
+ * The Board size for each kind of device (shared userSettings.ts). Change on the device you're on opens the Board with
+ * the panel over it (BoardSizePreviewPanel), to see each change on the real thing: the Bingo you came here from, else
+ * the latest. The other device's is changed here, since this window can't show it; so is this one's with no Bingo to
+ * open.
+ */
+function BoardSizeCard() {
+  const { boardSize } = useUserSettings();
+  const here = useBoardSizeDevice();
+  const navigate = useNavigate();
+  const fromSlug = (useLocation().state as { bingoSlug?: string } | null)?.bingoSlug;
+  const latestSlug = useBingos().data?.bingos.find((b) => !b.historical)?.slug;
+  const previewSlug = fromSlug ?? latestSlug;
+  const [editing, setEditing] = useState<BoardSizeDevice | null>(null);
+  return (
+    <Card>
+      <CardHeader title="Board size" description="How big the Board is drawn. Your computer and your phone each have their own." />
+      <ul className="divide-y divide-outline">
+        {BOARD_SIZE_DEVICES.map((device) => {
+          const preview = device === here && previewSlug;
+          return (
+            <li key={device} className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="w-20 text-sm font-medium text-on-surface">
+                  {BOARD_SIZE_DEVICE_LABELS[device]}
+                  {device === here && <span className="block text-xs font-normal text-on-surface-subtle">This device</span>}
+                </span>
+                <span className="text-sm text-on-surface-muted">{boardSizeSummary(boardSize[device])}</span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="ml-auto"
+                  onPress={() => (preview ? navigate(`/b/${previewSlug}?${BOARD_SIZE_PREVIEW_PARAM}=preview`) : setEditing(editing === device ? null : device))}
+                >
+                  {preview ? "Change" : editing === device ? "Done" : "Change"}
+                </Button>
+              </div>
+              {editing === device && !preview && <BoardSizeControls device={device} />}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+/**
  * Their Notification settings (CONTEXT.md "Notification", "Catch-up"): the one Level, each kind on or off across every
  * Bingo (only the groups of roles they hold), and Catch-up. No per-Bingo mute, snooze or quiet hours.
  */
@@ -270,6 +326,7 @@ export function UserSettingsPage() {
       <AppHeader title="Settings" back={{ to: "/", label: "Back" }} />
       <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 sm:px-6">
         <AppearanceCard />
+        <BoardSizeCard />
         <NotificationSettings />
       </main>
     </div>
