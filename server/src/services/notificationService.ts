@@ -288,7 +288,8 @@ export function setDmHandoff(handoff: DmHandoff | null): void {
  * The delivery chain (CONTEXT.md "Notification"): every Notification is in the Inbox already; on top, the first that
  * applies: a toast on each tab in view; else, at + Browser, a browser notification on the hidden tabs whose browser
  * allowed them; else, at + Discord, a DM. Each of the user's tabs is told its Inbox changed either way. `devClock`: they
- * were made on a dev server's spoofed clock (the test data generator), which the DM queue's staleness rule leaves out.
+ * were made on a dev server's spoofed clock (the test data generator), which the DM queue's staleness rule leaves out;
+ * and they aren't news as they're made, so they never toast or pop a browser notification.
  */
 export function deliver(db: Db, stored: StoredNotification[], { devClock = !!getAuditContext()?.now }: { devClock?: boolean } = {}): void {
   const byUser = new Map<string, StoredNotification[]>();
@@ -298,11 +299,11 @@ export function deliver(db: Db, stored: StoredNotification[], { devClock = !!get
     const level = settings.level;
     const ids = list.map((n) => n.id);
     const presence = userPresence(userId);
-    if (presence.visible) {
+    if (presence.visible && !devClock) {
       sendToUser(userId, (p) => ({ type: "notifications", ids, deliver: !p || p.visible ? "toast" : "none" }));
       continue;
     }
-    if (levelAtLeast(level, "browser") && presence.hiddenWithPermission) {
+    if (!devClock && levelAtLeast(level, "browser") && presence.hiddenWithPermission) {
       sendToUser(userId, (p) => ({ type: "notifications", ids, deliver: p && !p.visible && p.notifications === "granted" ? "browser" : "none" }));
       continue;
     }
