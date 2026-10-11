@@ -58,7 +58,7 @@ CREATE TABLE `notification_settings` (
 	`level` text DEFAULT 'off' NOT NULL,
 	`kinds_json` text DEFAULT '{}' NOT NULL,
 	`queue_threshold_minutes` integer DEFAULT 60 NOT NULL,
-	`catch_up_enabled` integer DEFAULT false NOT NULL,
+	`catch_up_enabled` integer DEFAULT true NOT NULL,
 	`discord_unreachable_since` integer,
 	`updated_at` integer NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE cascade

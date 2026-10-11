@@ -170,8 +170,8 @@ export const QUEUE_THRESHOLDS = [30, 60, 120] as const;
 export type QueueThreshold = (typeof QUEUE_THRESHOLDS)[number];
 export const DEFAULT_QUEUE_THRESHOLD: QueueThreshold = 60;
 
-/** The one-time inline offers to turn Notifications (or Catch-up) on. At most one per user per Bingo. */
-export const NOTIFICATION_OFFERS = ["first_submission", "mod_panel", "draft_room", "catch_up"] as const;
+/** The one-time inline offers to turn Notifications on. At most one per user per Bingo. */
+export const NOTIFICATION_OFFERS = ["first_submission", "mod_panel", "draft_room"] as const;
 export type NotificationOffer = (typeof NOTIFICATION_OFFERS)[number];
 
 /** Discord DM folding windows (Site admin settings), in minutes. A kind not listed is sent at once. */
@@ -236,10 +236,8 @@ export interface CatchUpSection {
 }
 
 export interface CatchUpResponse {
-  /** Off: no card (the Board's offer may still show). */
+  /** Off: no card. */
   enabled: boolean;
-  /** With Catch-up off: whether there would be a card now, for the offer to turn it on. */
-  wouldShow?: boolean;
   /** The window: from when they last had it open (ISO). Null when there's no card to show. */
   since: string | null;
   /** The collapsed one-line summary ("+120 points, 2 Tiles, your Vorkath drop was approved"). */

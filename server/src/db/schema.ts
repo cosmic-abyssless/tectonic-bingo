@@ -1154,7 +1154,7 @@ export const wrappedArt = sqliteTable('wrapped_art', {
 // NOTIFICATIONS (CONTEXT.md "Notification", "Inbox", "Catch-up"; docs/adr/0003-discord-dms-not-web-push.md)
 // ---------------------------------------------------------------------------
 
-// One user's Notification settings. No row: Off, with every kind at its default and Catch-up off. kindsJson holds only
+// One user's Notification settings. No row: Off, with every kind at its default and Catch-up on. kindsJson holds only
 // the kinds that differ from their default (shared/notifications.ts), and is kept while the Level is Off, so turning it
 // back on restores the user's choices. discordUnreachableSince: a DM failed with Discord error 50007 (they don't take
 // DMs from server members, or left the server); no DMs are tried until they press Try again.
@@ -1163,7 +1163,7 @@ export const notificationSettings = sqliteTable('notification_settings', {
   level: text('level', { enum: ['off', 'app', 'browser', 'discord'] }).notNull().default('off'),
   kindsJson: text('kinds_json').notNull().default('{}'),
   queueThresholdMinutes: integer('queue_threshold_minutes').notNull().default(60),
-  catchUpEnabled: integer('catch_up_enabled', { mode: 'boolean' }).notNull().default(false),
+  catchUpEnabled: integer('catch_up_enabled', { mode: 'boolean' }).notNull().default(true),
   discordUnreachableSince: integer('discord_unreachable_since', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
@@ -1190,7 +1190,7 @@ export const notifications = sqliteTable('notifications', {
   index('notifications_created_idx').on(t.createdAt),
 ]);
 
-// The one-time offers to turn Notifications or Catch-up on (shared NOTIFICATION_OFFERS). One row per offer shown: a
+// The one-time offers to turn Notifications on (shared NOTIFICATION_OFFERS). One row per offer shown: a
 // user gets at most one per Bingo, and an offer they dismissed (status 'dismissed') never shows again, on any device.
 export const notificationOffers = sqliteTable('notification_offers', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
