@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { Menu as AriaMenu, MenuItem as AriaMenuItem, MenuSection, MenuTrigger, Popover, Separator } from "react-aria-components";
 import { PulseDot } from "../../../core/ui/Card";
-import { AccountMenuButton, ColorSchemeRadios, isColorSchemeItem, useColorSchemeRowFocus, type HeaderMenuColorScheme, type HeaderMenuProps } from "../../../core/ui/headerMenu";
+import { AccountMenuButton, type HeaderMenuProps } from "../../../core/ui/headerMenu";
 import { CheckIcon, MenuIcon } from "../../../core/ui/icons";
 import { WikiIcon } from "../../../core/ui/ItemIcon";
 import { COMIC_FONT } from "../font";
@@ -43,51 +43,30 @@ export function HeaderMenu({ trigger, groups, isOpen, onOpenChange }: HeaderMenu
             <Fragment key={group.id}>
               {i > 0 && <Separator className="h-[3px] border-none" style={{ background: colors.LINE }} />}
               <MenuSection aria-label={group.label} className="divide-y-2" style={{ borderColor: colors.RULE }}>
-                {group.items.map((item) =>
-                  isColorSchemeItem(item) ? (
-                    <ColorSchemeRow key={item.id} item={item} />
-                  ) : (
-                    <AriaMenuItem
-                      key={item.id}
-                      id={item.id}
-                      textValue={item.text}
-                      isDisabled={item.current}
-                      onAction={item.onAction}
-                      data-tutorial={item.tutorial}
-                      className={`${LETTERED} ${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-not-allowed focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
-                      // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
-                      // ink is light, and would sit on the yellow unreadably).
-                      style={{ borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}
-                    >
-                      {item.wikiIcon && <WikiIcon name={item.wikiIcon} className="size-6" />}
-                      {item.label}
-                      {item.badge}
-                      {item.current && <CheckIcon className="ml-auto" />}
-                    </AriaMenuItem>
-                  ),
-                )}
+                {group.items.map((item) => (
+                  <AriaMenuItem
+                    key={item.id}
+                    id={item.id}
+                    textValue={item.text}
+                    isDisabled={item.current}
+                    onAction={item.onAction}
+                    data-tutorial={item.tutorial}
+                    className={`${LETTERED} ${ROW} cursor-pointer text-[var(--comic-ink)] disabled:cursor-not-allowed focus:bg-[var(--comic-yellow)] hovered:bg-[var(--comic-yellow)] focus:text-[var(--comic-on-yellow)] hovered:text-[var(--comic-on-yellow)]`}
+                    // The ink colour is a class, not inline, so the highlight's on-yellow text can win over it (in dark mode the
+                    // ink is light, and would sit on the yellow unreadably).
+                    style={{ borderColor: colors.RULE, fontFamily: COMIC_FONT, letterSpacing: "0.04em" }}
+                  >
+                    {item.wikiIcon && <WikiIcon name={item.wikiIcon} className="size-6" />}
+                    {item.label}
+                    {item.badge}
+                    {item.current && <CheckIcon className="ml-auto" />}
+                  </AriaMenuItem>
+                ))}
               </MenuSection>
             </Fragment>
           ))}
         </AriaMenu>
       </Popover>
     </MenuTrigger>
-  );
-}
-
-/** Light/Dark/System as ink-bordered segments, the chosen one yellow like a highlighted row. */
-function ColorSchemeRow({ item }: { item: HeaderMenuColorScheme }) {
-  const { colors } = useComic();
-  const { groupRef, onFocus } = useColorSchemeRowFocus();
-  return (
-    <AriaMenuItem id={item.id} textValue="Color scheme" shouldCloseOnSelect={false} onFocus={onFocus} className="px-3 py-2.5 outline-none" style={{ borderColor: colors.RULE }}>
-      <ColorSchemeRadios
-        groupRef={groupRef}
-        value={item.value}
-        onChange={item.onChange}
-        className="rounded-md border-2 border-[var(--comic-line)]"
-        segmentClassName="rounded-sm text-[var(--comic-ink)] selected:bg-[var(--comic-yellow)] selected:text-[var(--comic-on-yellow)]"
-      />
-    </AriaMenuItem>
   );
 }

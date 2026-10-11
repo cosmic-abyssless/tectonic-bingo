@@ -4,7 +4,6 @@ import { useBingo, useMyBugReports } from "../../api/queries";
 import { useBugReports } from "../../api/adminQueries";
 import { useAuth } from "../../context/AuthContext";
 import { useSiteCan } from "../../headless/permissions";
-import { useColorSchemePreference } from "./colorScheme";
 import { ADMIN_BUG_REPORTS_SEEN_KEY, useBugReportsUnseen } from "./bugReportsUnseen";
 import { BugReportButton } from "./BugReportButton";
 import { BugReportDialog } from "./BugReportDialog";
@@ -19,16 +18,15 @@ import { useOptionalSlot } from "../../themes/context";
 import { useOpenProfile } from "../tectonic/PlayerName";
 import { avatarUrl, displayName } from "./user";
 import { HEADING_LETTERED } from "../../themes/lettering";
-import { useNotificationSettings } from "../../api/notificationsApi";
 import { InboxButton, USER_SETTINGS_PATH } from "../notifications/InboxButton";
 
 /**
  * Top bar shared by every page: the ☰ menu and the title/subtitle at the left, then at the right the page's controls,
  * the dev account switcher, the page's actions (`children`: Mod panel, Submit), the bug report button and the account
  * menu (the viewer's avatar and name). The ☰ holds the navigation: the page's own entries (`menuEntries`, a bingo
- * page's "This Bingo" group) and the site's pages. The account menu holds the colour scheme, the viewer's Profile
- * (inside a bingo), Notifications, Connected apps (admins), Log in on your phone and Log out. The bell (the Inbox) sits
- * before the bug report button once the viewer has turned Notifications on.
+ * page's "This Bingo" group) and the site's pages. The account menu holds the viewer's Profile (inside a bingo),
+ * Settings (the User settings page: the colour scheme and Notifications), Connected apps (admins), Log in on your phone
+ * and Log out. The bell (the Inbox) sits before the bug report button once the viewer has turned Notifications on.
  */
 export function AppHeader({
   back,
@@ -75,7 +73,6 @@ export function AppHeader({
   // Admins: the Claude apps they've connected to the admin MCP server (#293).
   const [connectedAppsOpen, setConnectedAppsOpen] = useState(false);
   const phone = useIsPhone();
-  const [colorScheme, setColorScheme] = useColorSchemePreference();
   // The viewer's own player profile, on the pages of a bingo that can show one (under PlayerProfileProvider).
   const openProfile = useOpenProfile();
   // Fetched here (not gated on the dialog being open) so the pulse dot can show without opening it —
@@ -93,9 +90,7 @@ export function AppHeader({
   // A Bingo page holds the ☰'s open state (its Tutorial opens and closes it with the Player); elsewhere it's the menu's own.
   const navMenuControl = useContext(NavMenuControlContext);
   const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(siteAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
-  // Notifications (CONTEXT.md): the bell once they're on; before that, the account menu says they're off.
-  const notificationLevel = useNotificationSettings().data?.settings.level;
-  const onNotificationSettings = !!useMatch(USER_SETTINGS_PATH);
+  const onUserSettings = !!useMatch(USER_SETTINGS_PATH);
 
   // The ☰, at the left: getting around.
   const navGroups: HeaderMenuGroup[] = [
@@ -132,21 +127,8 @@ export function AppHeader({
       id: "account",
       label: "Account",
       items: [
-        { kind: "colorScheme", id: "color-scheme", value: colorScheme, onChange: setColorScheme },
         ...(user && openProfile ? [{ id: "profile", text: "Profile", label: "Profile", wikiIcon: "Worn Equipment", onAction: () => openProfile(user.id) }] : []),
-        ...(user
-          ? [
-              {
-                id: "notifications",
-                text: "Notifications",
-                label: "Notifications",
-                wikiIcon: "Butler's bell",
-                current: onNotificationSettings,
-                badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{notificationLevel && notificationLevel !== "off" ? "On" : "Off"}</span>,
-                onAction: () => navigate(USER_SETTINGS_PATH),
-              },
-            ]
-          : []),
+        { id: "settings", text: "Settings", label: "Settings", wikiIcon: "Account Management", current: onUserSettings, onAction: () => navigate(USER_SETTINGS_PATH) },
         ...(siteAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [

@@ -194,8 +194,8 @@ export interface ThemeSlots {
   InboxBellButton: ComponentType<InboxBellButtonProps>;
   // The header's ☰ menu (AppHeader), at its far right: its button (with a dot while hasUnseen) and the menu it opens,
   // the viewer's row on top, then each group in order with a divider before it. An entry marked current is the page
-  // you're on: a check mark, not clickable. The colour-scheme item is drawn with core's ColorSchemeRadios. Read with
-  // useOptionalSlot: pages outside any ThemeProvider fall back to core's PlainHeaderMenu.
+  // you're on: a check mark, not clickable. Read with useOptionalSlot: pages outside any ThemeProvider fall back to core's
+  // PlainHeaderMenu.
   HeaderMenu: ComponentType<HeaderMenuProps>;
 
   // Menu chrome for ColumnPicker / MultiSelect / SingleSelect. Props are
