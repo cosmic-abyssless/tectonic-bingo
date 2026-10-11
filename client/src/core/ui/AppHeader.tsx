@@ -20,7 +20,7 @@ import { useOpenProfile } from "../tectonic/PlayerName";
 import { avatarUrl, displayName } from "./user";
 import { HEADING_LETTERED } from "../../themes/lettering";
 import { useNotificationSettings } from "../../api/notificationsApi";
-import { InboxButton, NOTIFICATION_SETTINGS_PATH } from "../notifications/InboxButton";
+import { InboxButton, USER_SETTINGS_PATH } from "../notifications/InboxButton";
 
 /**
  * Top bar shared by every page: the ☰ menu and the title/subtitle at the left, then at the right the page's controls,
@@ -95,7 +95,7 @@ export function AppHeader({
   const { hasUnseen: hasNewReportsForAdmin } = useBugReportsUnseen(siteAdmin ? allReports?.bugReports : undefined, ADMIN_BUG_REPORTS_SEEN_KEY, { newOnly: true });
   // Notifications (CONTEXT.md): the bell once they're on; before that, the account menu says they're off.
   const notificationLevel = useNotificationSettings().data?.settings.level;
-  const onNotificationSettings = !!useMatch(NOTIFICATION_SETTINGS_PATH);
+  const onNotificationSettings = !!useMatch(USER_SETTINGS_PATH);
 
   // The ☰, at the left: getting around.
   const navGroups: HeaderMenuGroup[] = [
@@ -143,7 +143,7 @@ export function AppHeader({
                 wikiIcon: "Butler's bell",
                 current: onNotificationSettings,
                 badge: <span className="ml-auto pl-3 text-xs text-on-surface-subtle">{notificationLevel && notificationLevel !== "off" ? "On" : "Off"}</span>,
-                onAction: () => navigate(NOTIFICATION_SETTINGS_PATH),
+                onAction: () => navigate(USER_SETTINGS_PATH),
               },
             ]
           : []),

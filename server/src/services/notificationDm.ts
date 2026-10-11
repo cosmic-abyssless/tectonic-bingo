@@ -290,7 +290,7 @@ export async function runDmRound(db: Db, now = new Date()): Promise<number> {
 export async function sendTestDm(db: Db, user: { id: string; discordId: string }): Promise<{ ok: boolean; message: string }> {
   if (!discordDmsAvailable()) throw new ServiceError(400, "Discord DMs aren't set up on this server");
   setDiscordUnreachable(db, user.id, null);
-  const failed = await sendDm(db, user, "bingo_open", null, `**Test from Tectonic Bingo**\nNotifications will reach you here.${siteUrl(null) ? `\n${siteUrl("/settings/notifications")}` : ""}`, 1);
+  const failed = await sendDm(db, user, "bingo_open", null, `**Test from Tectonic Bingo**\nNotifications will reach you here.${siteUrl(null) ? `\n${siteUrl("/settings")}` : ""}`, 1);
   if (failed === null) return { ok: true, message: usesSink() ? "Sent to the fake sink (this is a dev server): see Site admin > Test data." : "Sent. Check your Discord DMs." };
   if (discordUnreachableSince(db, user.id)) return { ok: false, message: "Discord won't let the bot DM you. Allow DMs from server members and try again." };
   return { ok: false, message: `Couldn't send it: ${failed}` };

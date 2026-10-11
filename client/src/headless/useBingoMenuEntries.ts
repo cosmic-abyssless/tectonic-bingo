@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 import { useAchievementsEligible, useOpenAchievements } from "../core/achievements/AchievementsProvider";
 import type { HeaderMenuEntry } from "../core/ui/headerMenu";
+import { USER_SETTINGS_PATH } from "../core/notifications/InboxButton";
 import type { BingoHeaderModel } from "./useBingoHeader";
 import { useTutorial } from "./useTutorial";
 
@@ -63,7 +64,7 @@ export function useBingoMenuEntries(slug: string, header: BingoHeaderModel | nul
   const achievementsStarted = header.stage === "reveal" || header.stage === "live" || header.stage === "complete";
   if (achievementsEligible && openAchievements && achievementsStarted) entries.push({ id: "achievements", text: "Achievements", label: "Achievements", wikiIcon: "Achievement Diaries icon", onAction: openAchievements });
   // Notifications (CONTEXT.md): reachable from every Bingo's ☰ as well as the account menu and the bell.
-  entries.push({ id: "notifications", text: "Notifications", label: "Notifications", wikiIcon: "Butler's bell", onAction: () => navigate("/settings/notifications") });
+  entries.push({ id: "notifications", text: "Notifications", label: "Notifications", wikiIcon: "Butler's bell", onAction: () => navigate(USER_SETTINGS_PATH) });
   if (replayTutorial) entries.push({ id: "tutorial", text: "Tutorial", label: "Tutorial", wikiIcon: "Quest point icon", onAction: replayTutorial, tutorial: "menu-tutorial" });
   return entries;
 }
