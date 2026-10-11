@@ -1,5 +1,5 @@
 // The raids and bosses Wrapped's "Who killed it the most" part looks at (CONTEXT.md "Wrapped"): a per-Bingo list of Wise
-// Old Man boss metrics, in display order, that Admins edit with the Bingo's settings. Stored as JSON on the Bingo; null
+// Old Man boss metrics, in display order, that Admins edit in the mod panel (Extras, Wrapped bosses). Stored as JSON on the Bingo; null
 // is the default list. A new Bingo starts with the previous Bingo's list, as it does with its Wrapped art.
 import { and, desc, eq, like, not, sql } from "drizzle-orm";
 import { DEFAULT_WRAPPED_BOSSES, MAX_WRAPPED_BOSSES, isWomBossMetric } from "@bingo/shared";

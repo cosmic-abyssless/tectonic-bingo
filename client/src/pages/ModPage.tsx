@@ -24,6 +24,7 @@ import { FeedbackResults } from "../core/feedback/FeedbackResults";
 import { SuperlativesManager } from "../core/admin/SuperlativesManager";
 import { TeamManager } from "../core/admin/TeamManager";
 import { WrappedArtManager } from "../core/admin/WrappedArtManager";
+import { WrappedBossesManager } from "../core/admin/WrappedBossesManager";
 import { AppHeader } from "../core/ui/AppHeader";
 import { ModAlertsMigration, hadOldAlerts } from "../core/notifications/ModAlertsMigration";
 import { NotificationOffer } from "../core/notifications/NotificationOffer";
@@ -313,7 +314,11 @@ export function ModPage() {
                         tab={MOD_TABS.find((t) => t.key === "extras")!}
                         stage={shell.bingo.stage}
                         canAdminister={canAdminister}
-                        panels={{ achievements: <AchievementsManager slug={slug} bingo={shell.bingo} />, "wrapped-art": <WrappedArtManager slug={slug} /> }}
+                        panels={{
+                          achievements: <AchievementsManager slug={slug} bingo={shell.bingo} />,
+                          "wrapped-art": <WrappedArtManager slug={slug} />,
+                          "wrapped-bosses": <WrappedBossesManager slug={slug} bingo={shell.bingo} />,
+                        }}
                       />
                     </div>
                   </TabPanel>

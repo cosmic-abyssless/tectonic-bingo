@@ -64,6 +64,7 @@ export const MOD_TABS: ({ key: string; label: string } & ((ModTabAccess & { sect
     sections: [
       { key: "achievements", label: "Achievements", action: "administer_bingo" },
       { key: "wrapped-art", label: "Wrapped art", action: "administer_bingo" },
+      { key: "wrapped-bosses", label: "Wrapped bosses", action: "administer_bingo" },
     ],
   },
 ];
