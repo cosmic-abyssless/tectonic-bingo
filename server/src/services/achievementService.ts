@@ -309,6 +309,9 @@ export interface ReactionAddedEvent {
   occurredAt: Date;
 }
 
+/** Superfan's goal: the share of one's other team members (rounded up) whose submissions one has reacted to. */
+const SUPERFAN_TEAMMATE_SHARE = 0.8;
+
 /** A Reaction was ADDED (not removed, not a no-op toggle): Hypeman, Cheerleader, Superfan, Main character — and Popular, for the Player it was credited to. */
 export function recordReactionAdded(db: Db, event: ReactionAddedEvent): void {
   safely(() => {
@@ -391,7 +394,8 @@ export function recordReactionAdded(db: Db, event: ReactionAddedEvent): void {
             .all()
             .map((r) => r.creditedUserId),
         );
-        return teammates.every((id) => reactedToCredited.has(id));
+        const reactedTeammates = teammates.filter((id) => reactedToCredited.has(id)).length;
+        return reactedTeammates >= Math.ceil(teammates.length * SUPERFAN_TEAMMATE_SHARE);
       });
     });
   });
