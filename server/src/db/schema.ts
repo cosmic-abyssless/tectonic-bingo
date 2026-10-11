@@ -1149,3 +1149,102 @@ export const wrappedArt = sqliteTable('wrapped_art', {
 }, (t) => [
   index('wrapped_art_bingo_section_idx').on(t.bingoId, t.section),
 ]);
+
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS (CONTEXT.md "Notification", "Inbox", "Catch-up"; docs/adr/0003-discord-dms-not-web-push.md)
+// ---------------------------------------------------------------------------
+
+// One user's Notification settings. No row: Off, with every kind at its default and Catch-up off. kindsJson holds only
+// the kinds that differ from their default (shared/notifications.ts), and is kept while the Level is Off, so turning it
+// back on restores the user's choices. discordUnreachableSince: a DM failed with Discord error 50007 (they don't take
+// DMs from server members, or left the server); no DMs are tried until they press Try again.
+export const notificationSettings = sqliteTable('notification_settings', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  level: text('level', { enum: ['off', 'app', 'browser', 'discord'] }).notNull().default('off'),
+  kindsJson: text('kinds_json').notNull().default('{}'),
+  queueThresholdMinutes: integer('queue_threshold_minutes').notNull().default(60),
+  catchUpEnabled: integer('catch_up_enabled', { mode: 'boolean' }).notNull().default(false),
+  discordUnreachableSince: integer('discord_unreachable_since', { mode: 'timestamp' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+// A user's Inbox: one row per Notification, only ever for a user who had them on. Kept 30 days. bingoId has no FK, like
+// the audit log's, and deleteBingo removes a Bingo's. dataJson is what a folded Discord DM is built from
+// (NotificationData). dedupeKey: set by the scheduler's kinds (Queue waiting long, the Superlative reminder), so one
+// thing is told once.
+export const notifications = sqliteTable('notifications', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bingoId: text('bingo_id'),
+  kind: text('kind').notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  link: text('link'),
+  dataJson: text('data_json').notNull().default('{}'),
+  dedupeKey: text('dedupe_key'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  readAt: integer('read_at', { mode: 'timestamp_ms' }),
+}, (t) => [
+  index('notifications_user_created_idx').on(t.userId, t.createdAt),
+  uniqueIndex('notifications_user_dedupe_unq').on(t.userId, t.dedupeKey),
+  index('notifications_created_idx').on(t.createdAt),
+]);
+
+// The one-time offers to turn Notifications or Catch-up on (shared NOTIFICATION_OFFERS). One row per offer shown: a
+// user gets at most one per Bingo, and an offer they dismissed (status 'dismissed') never shows again, on any device.
+export const notificationOffers = sqliteTable('notification_offers', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bingoId: text('bingo_id'),
+  offer: text('offer').notNull(),
+  status: text('status', { enum: ['shown', 'accepted', 'dismissed'] }).notNull().default('shown'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  answeredAt: integer('answered_at', { mode: 'timestamp' }),
+}, (t) => [index('notification_offers_user_idx').on(t.userId, t.bingoId)]);
+
+// How far the dispatcher has read the audit log (notificationDispatch.ts): every entry past it is still to be turned
+// into Notifications. One row, key 'audit'. Started at the log's end, so nothing from before Notifications existed is sent.
+export const notificationCursor = sqliteTable('notification_cursor', {
+  key: text('key').primaryKey(),
+  lastAuditId: integer('last_audit_id').notNull(),
+});
+
+// Discord DMs waiting for their folding window to end (CONTEXT.md "Folding"): one per (user, Bingo, kind), gathering
+// that kind's Notifications until sendAt. Survives a restart; the DM round sends what's due. devClock: queued from a
+// request on a dev server's spoofed clock (the test data generator), whose event times are in the past, so the
+// two-hour staleness rule is left out for it.
+export const notificationDmQueue = sqliteTable('notification_dm_queue', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bingoId: text('bingo_id'),
+  kind: text('kind').notNull(),
+  notificationIdsJson: text('notification_ids_json').notNull(),
+  firstEventAt: integer('first_event_at', { mode: 'timestamp_ms' }).notNull(),
+  sendAt: integer('send_at', { mode: 'timestamp_ms' }).notNull(),
+  devClock: integer('dev_clock', { mode: 'boolean' }).notNull().default(false),
+}, (t) => [index('notification_dm_queue_send_idx').on(t.sendAt), index('notification_dm_queue_user_idx').on(t.userId)]);
+
+// Every Discord DM sent, or on a dev server written to its fake sink instead (sink true), for the dev tools and to see
+// what went out. Kept 30 days, like the Inbox.
+export const notificationDmLog = sqliteTable('notification_dm_log', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bingoId: text('bingo_id'),
+  kind: text('kind').notNull(),
+  text: text('text').notNull(),
+  count: integer('count').notNull().default(1),
+  sink: integer('sink', { mode: 'boolean' }).notNull().default(false),
+  sentAt: integer('sent_at', { mode: 'timestamp_ms' }).notNull(),
+}, (t) => [index('notification_dm_log_sent_idx').on(t.sentAt)]);
+
+// When a user last had a Bingo open (any of its pages, in view), for their Catch-up (CONTEXT.md). A visit starts when
+// they come back after a gap: windowFrom then takes the previous lastSeenAt, and the Catch-up covers windowFrom to now.
+// catchUpDismissedAt: Got it, which hides the card until the next visit.
+export const bingoPresence = sqliteTable('bingo_presence', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bingoId: text('bingo_id').notNull(),
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+  visitStartedAt: integer('visit_started_at', { mode: 'timestamp_ms' }).notNull(),
+  windowFrom: integer('window_from', { mode: 'timestamp_ms' }),
+  catchUpDismissedAt: integer('catch_up_dismissed_at', { mode: 'timestamp_ms' }),
+}, (t) => [uniqueIndex('bingo_presence_user_bingo_unq').on(t.userId, t.bingoId)]);

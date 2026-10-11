@@ -17,6 +17,7 @@ import { runHistorical } from "./historical";
 import { runRestrictions } from "./restrictions";
 import { runBorrowedAccount } from "./borrowedAccount";
 import { uploadWrappedArt } from "./wrappedArt";
+import { runNotificationSettings, seedCatchUpPresence } from "./notifications";
 
 /** The board to build the bingo from: another bingo on the same server (exported through the real endpoint), or a document. */
 export type BoardSource = { kind: "bingo"; slug: string } | { kind: "document"; document: BingoExportDocument };
@@ -138,6 +139,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   await setStage(ctx, "signup", tl.signupOpensAt);
   const staff = await grantStaff(ctx);
   await runSignups(ctx, players, pairs);
+  const notified = await runNotificationSettings(ctx, players, mods, new Date(tl.captainsAt.getTime() - 30 * 60_000));
+  log(`notifications: ${notified.optedIn.length} players turned them on, ${notified.catchUp.length} turned Catch-up on`);
   await runBuyins(ctx, players, staff);
   const { signups: filled } = await api.as(adminDiscordId).post<{ signups: number }>(`/api/dev/bingos/${slug}/fake-stats`, undefined, { at: tl.captainsAt });
   log(`made-up WOM, RuneProfile and combat achievement stats on ${filled} signups`);
@@ -259,6 +262,7 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
     .as(adminDiscordId)
     .post<{ players: number; snapshots: number }>(`/api/dev/bingos/${slug}/fake-wom-snapshots`, { seed: rng.fork("wom").int(0, 2 ** 31 - 1) }, { at: ctx.limit });
   log(`made-up Wise Old Man snapshots: ${wom.snapshots} for ${wom.players} players`);
+  log(`catch-up: ${await seedCatchUpPresence(ctx, notified.catchUp)} players last seen a day before the end`);
   log(`superlative votes: ${voting.cast} cast by ${voting.voters.size} players${voting.refused ? `, ${voting.refused} refused` : ""}`);
   if (voting.refused > 0) result.problems.push(`${voting.refused} superlative votes were refused`);
   // A Finished Bingo's Players answer its Feedback form (anonymously: the run only counts what it sent).

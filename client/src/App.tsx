@@ -7,6 +7,7 @@ import { WebSocketProvider } from "./context/WebSocketContext";
 import { ProtectedRoute } from "./core/ui/ProtectedRoute";
 import { ToastRegion, toastOnce } from "./core/ui/Toast";
 import { NewVersionNotice } from "./core/ui/NewVersionNotice";
+import { NotificationDelivery } from "./core/notifications/NotificationDelivery";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
 import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
@@ -30,6 +31,7 @@ const StatsPage = lazy(() => awaitModule(import("./pages/StatsPage")).then((m) =
 const RewindPage = lazy(() => awaitModule(import("./pages/RewindPage")).then((m) => ({ default: m.RewindPage })));
 const WrappedPage = lazy(() => awaitModule(import("./pages/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
 const FeedbackPage = lazy(() => awaitModule(import("./pages/FeedbackPage")).then((m) => ({ default: m.FeedbackPage })));
+const NotificationSettingsPage = lazy(() => awaitModule(import("./pages/NotificationSettingsPage")).then((m) => ({ default: m.NotificationSettingsPage })));
 const SiteAdminPage = lazy(() => awaitModule(import("./pages/SiteAdminPage")).then((m) => ({ default: m.SiteAdminPage })));
 const TermsPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.TermsPage })));
 const PrivacyPage = lazy(() => awaitModule(import("./pages/legal/LegalPage")).then((m) => ({ default: m.PrivacyPage })));
@@ -167,6 +169,14 @@ export default function App() {
             />
             <Route path="/b/:slug/admin" element={<AdminRedirect />} />
             <Route
+              path="/settings/notifications"
+              element={
+                <ProtectedRoute>
+                  <NotificationSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin"
               element={
                 <ProtectedRoute>
@@ -182,6 +192,7 @@ export default function App() {
           <AccessWatch />
           <SlowDownNotice />
           <NewVersionNotice />
+          <NotificationDelivery />
           <ToastRegion />
         </WebSocketProvider>
       </AuthProvider>

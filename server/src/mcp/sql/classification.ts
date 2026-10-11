@@ -37,6 +37,14 @@ export const SQL_TABLES: Record<string, TableClass> = {
   draft_tile_categories: { denied: "The Draft board's unpublished Categories." },
   draft_bingo_lines: { denied: "The Draft board's unpublished Lines." },
   draft_tags: { denied: "The Draft board's unpublished Tags." },
+  // Notifications (CONTEXT.md): one user's own settings, Inbox, offers, presence and Discord DMs. Personal, not balancing data.
+  notification_settings: { denied: "A user's own Notification settings." },
+  notifications: { denied: "Users' Inboxes: each Notification's words are only for its recipient." },
+  notification_offers: { denied: "Which offers to turn Notifications on a user saw and answered." },
+  notification_cursor: { denied: "How far the Notification dispatcher has read the audit log." },
+  notification_dm_queue: { denied: "Discord DMs waiting to be sent." },
+  notification_dm_log: { denied: "Discord DMs sent to users, with their words." },
+  bingo_presence: { denied: "When each user last had a Bingo open (for their Catch-up)." },
 
   // ---- identity & platform ---------------------------------------------------------------------------------------
   users: {

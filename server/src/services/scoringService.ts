@@ -37,7 +37,7 @@ export function describeSubmissionTarget(
   return { tileName, taskLabels: leafRows.map((n) => n.label).filter((l): l is string => !!l), label: tileName, proof: {} };
 }
 
-function lineLabel(line: { lineType: string; lineIndex: number }): string {
+export function lineLabel(line: { lineType: string; lineIndex: number }): string {
   if (line.lineType === "row") return `Row ${line.lineIndex + 1}`;
   if (line.lineType === "column") return `Column ${line.lineIndex + 1}`;
   if (line.lineType === "diagonal") return `Diagonal ${line.lineIndex + 1}`;

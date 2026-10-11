@@ -7,6 +7,7 @@ import { devSkipsIntegrations, isDevModeActive } from "../devMode";
 import { runWithAuditContext, type AuditContext } from "./context";
 import { audit, redactBody } from "./record";
 import { log } from "../log";
+import { drainAuditLog } from "../services/notificationDispatch";
 import { normalizeTimezone } from "../localTime";
 import * as Sentry from "@sentry/node";
 
@@ -44,7 +45,16 @@ export function auditContext(req: Request, res: Response, next: NextFunction): v
   // wrapped the handler, so the ambient store would already be gone.
   res.on("finish", () => {
     const isMutation = req.method !== "GET" && req.originalUrl.startsWith("/api/");
-    if (!isMutation || res.statusCode >= 400 || ctx.recorded > 0 || ctx.skip) return;
+    if (!isMutation || res.statusCode >= 400) return;
+    // What the request recorded becomes Notifications for whoever should hear of it (notificationDispatch.ts).
+    if (ctx.recorded > 0) {
+      try {
+        drainAuditLog(db, { devClock: !!ctx.now });
+      } catch (err) {
+        log.warn("notification drain failed", { err });
+      }
+    }
+    if (ctx.recorded > 0 || ctx.skip) return;
 
     audit(db, {
       now: ctx.now,

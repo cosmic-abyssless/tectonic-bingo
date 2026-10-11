@@ -49,6 +49,7 @@ import { broadcastChange } from "../broadcastChange";
 import { anonymous, auditSkip } from "../audit/middleware";
 import { queryTeamActivity } from "../audit/query";
 import { changedNothing } from "../audit/record";
+import { dismissCatchUp, getCatchUp, recordBingoPresence } from "../services/catchUpService";
 
 const upload = imageUpload(UPLOADS_DIR, { variants: true });
 // Separate instance for analysis — memory only, nothing saved to disk.
@@ -69,6 +70,47 @@ function viewerCan(req: Request, action: Action): boolean {
 // (requireBingo). Everyone else gets the shell's landing data (name, stage, dates, buy-in: the signup form while
 // signups are open, a "not part of this bingo" notice after), and every content route below carries
 // requireBingoViewer (see bingoAccess.test.ts).
+// Catch-up (CONTEXT.md): what happened since the viewer last had this Bingo open, as they may see it.
+router.get(
+  "/:slug/catch-up",
+  noStore,
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  asyncHandler(async (req, res) => {
+    res.json(getCatchUp(db, req.bingo!, req.user!, clockNow()));
+  }),
+);
+
+// Got it: the Catch-up is hidden until the next visit.
+router.post(
+  "/:slug/catch-up/dismiss",
+  noStore,
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("the viewer's own Catch-up was dismissed: UI state, nothing to audit"),
+  asyncHandler(async (req, res) => {
+    dismissCatchUp(db, req.user!.id, req.bingo!.id, clockNow());
+    res.status(204).end();
+  }),
+);
+
+// That the viewer has this Bingo open, for their Catch-up. Tabs say so over their socket (notificationPresence.ts);
+// this is the same for a client without one, like the test data generator's players.
+router.post(
+  "/:slug/presence",
+  noStore,
+  requireAuth,
+  requireBingo,
+  requireBingoViewer,
+  auditSkip("the viewer has the Bingo open: presence, nothing to audit"),
+  asyncHandler(async (req, res) => {
+    recordBingoPresence(db, req.user!.id, req.bingo!.id, clockNow());
+    res.status(204).end();
+  }),
+);
+
 router.get(
   "/",
   requireAuth,

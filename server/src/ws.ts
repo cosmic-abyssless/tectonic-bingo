@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { ServerResponse, type IncomingMessage, type Server } from "http";
 import type { Duplex } from "stream";
 import type { Request, RequestHandler, Response } from "express";
-import { MAX_WATCHED_BINGOS, type BroadcastEvent } from "@bingo/shared";
+import { MAX_WATCHED_BINGOS, type BroadcastEvent, type ClientSocketMessage, type ServerSocketMessage } from "@bingo/shared";
 import { passesGuildGate } from "./middleware/requireGuildMember";
 import { createCoalescer, type Outgoing } from "./broadcastCoalescing";
 import { helloMessage } from "./buildInfo";
@@ -25,7 +25,16 @@ let detach: (() => void) | null = null;
 // Whose each socket is (so logging out can close that session's sockets, and an event for some users reaches only
 // theirs), and which Bingos it watches: null until it says, when it gets every Bingo's events (a tab from before
 // watching existed).
-const sockets = new WeakMap<WebSocket, SocketOwner & { watching: ReadonlySet<string> | null }>();
+const sockets = new WeakMap<WebSocket, SocketOwner & { watching: ReadonlySet<string> | null; presence: SocketPresence | null }>();
+
+/** What a socket last said of its tab (ClientSocketMessage "presence"); null until it says (an older tab). */
+export type SocketPresence = Omit<Extract<ClientSocketMessage, { type: "presence" }>, "type">;
+
+/** Told of every presence message, with whose socket sent it (notificationPresence.ts records it). */
+let presenceListener: ((owner: SocketOwner, presence: SocketPresence) => void) | null = null;
+export function onPresence(listener: ((owner: SocketOwner, presence: SocketPresence) => void) | null): void {
+  presenceListener = listener;
+}
 
 /**
  * An upgrade request never passes through Express, so this runs the app's own session and Passport middleware on it by
@@ -90,20 +99,34 @@ async function onUpgrade(authorize: AuthorizeUpgrade, req: IncomingMessage, sock
   }
   socket.off("error", onError);
   server.handleUpgrade(req, socket, head, (ws) => {
-    sockets.set(ws, { ...owner, watching: null });
+    sockets.set(ws, { ...owner, watching: null, presence: null });
     server.emit("connection", ws, req);
   });
 }
 
-/** The Bingo ids of a valid watch message, or null for anything else (ignored). */
-function parseWatch(data: unknown): string[] | null {
-  let msg: unknown;
+function parseMessage(data: unknown): { type?: unknown } | null {
   try {
-    msg = JSON.parse(String(data));
+    const msg: unknown = JSON.parse(String(data));
+    return typeof msg === "object" && msg !== null ? (msg as { type?: unknown }) : null;
   } catch {
     return null;
   }
-  if (typeof msg !== "object" || msg === null || (msg as { type?: unknown }).type !== "watch") return null;
+}
+
+const PERMISSIONS = new Set(["granted", "denied", "default", "unsupported"]);
+
+/** A valid presence message's contents, or null for anything else (ignored). */
+function parsePresence(msg: { type?: unknown } | null): SocketPresence | null {
+  if (msg?.type !== "presence") return null;
+  const { visible, notifications, bingoId } = msg as { visible?: unknown; notifications?: unknown; bingoId?: unknown };
+  if (typeof visible !== "boolean" || typeof notifications !== "string" || !PERMISSIONS.has(notifications)) return null;
+  if (bingoId !== null && (typeof bingoId !== "string" || bingoId.length > 64)) return null;
+  return { visible, notifications: notifications as SocketPresence["notifications"], bingoId };
+}
+
+/** The Bingo ids of a valid watch message, or null for anything else (ignored). */
+function parseWatch(msg: { type?: unknown } | null): string[] | null {
+  if (msg?.type !== "watch") return null;
   const { bingoIds } = msg as { bingoIds?: unknown };
   if (!Array.isArray(bingoIds) || bingoIds.length > MAX_WATCHED_BINGOS) return null;
   return bingoIds.every((id): id is string => typeof id === "string" && id.length <= 64) ? bingoIds : null;
@@ -120,9 +143,20 @@ export function initWebSocketServer(server: Server, authorize: AuthorizeUpgrade)
     const hello = helloMessage();
     if (hello) socket.send(JSON.stringify(hello));
     socket.on("message", (data) => {
-      const bingoIds = parseWatch(data);
+      const msg = parseMessage(data);
       const info = sockets.get(socket);
-      if (bingoIds && info) info.watching = new Set(bingoIds);
+      if (!info) return;
+      const bingoIds = parseWatch(msg);
+      if (bingoIds) info.watching = new Set(bingoIds);
+      const presence = parsePresence(msg);
+      if (presence) {
+        info.presence = presence;
+        try {
+          presenceListener?.({ sessionId: info.sessionId, userId: info.userId }, presence);
+        } catch (err) {
+          log.warn("presence listener failed", { err });
+        }
+      }
     });
     socket.on("close", () => log.info("ws close", { clients: created.clients.size }));
     socket.on("error", (err) => log.warn("ws error", { err }));
@@ -159,6 +193,43 @@ const coalescer = createCoalescer(deliver);
 export function broadcast(event: BroadcastEvent, options: { to?: readonly string[] } = {}): void {
   if (!wss) return;
   coalescer.push({ event, ...(options.to ? { to: options.to } : {}) });
+}
+
+/**
+ * Where a user has the site open, from their sockets on this server: any tab at all, any in view, and any hidden one
+ * in a browser that allowed notifications. A tab that hasn't said (an older page) counts as open and in view.
+ */
+export interface UserPresence {
+  open: boolean;
+  visible: boolean;
+  hiddenWithPermission: boolean;
+  /** Hidden tabs in browsers that didn't allow notifications. */
+  hiddenWithoutPermission: boolean;
+}
+
+export function userPresence(userId: string): UserPresence {
+  const out: UserPresence = { open: false, visible: false, hiddenWithPermission: false, hiddenWithoutPermission: false };
+  if (!wss) return out;
+  for (const client of wss.clients) {
+    const info = sockets.get(client);
+    if (client.readyState !== WebSocket.OPEN || info?.userId !== userId) continue;
+    out.open = true;
+    if (!info.presence || info.presence.visible) out.visible = true;
+    else if (info.presence.notifications === "granted") out.hiddenWithPermission = true;
+    else out.hiddenWithoutPermission = true;
+  }
+  return out;
+}
+
+/** Sends each of a user's open sockets what `pick` makes for it from its presence (nothing, for null). Not coalesced. */
+export function sendToUser(userId: string, pick: (presence: SocketPresence | null) => ServerSocketMessage | null): void {
+  if (!wss) return;
+  for (const client of wss.clients) {
+    const info = sockets.get(client);
+    if (client.readyState !== WebSocket.OPEN || info?.userId !== userId) continue;
+    const msg = pick(info.presence);
+    if (msg) client.send(JSON.stringify(msg));
+  }
 }
 
 /** Closes every socket opened under this session (on logout; a session that merely expires is caught at the next reconnect). */

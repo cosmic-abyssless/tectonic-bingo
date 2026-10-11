@@ -21,6 +21,7 @@ import { fillFakeWomSnapshots } from "../devTools/generateBingo/womSnapshots";
 import { getGenerateJob, isGenerateJobRunning, jobView, startGenerateJob } from "../devTools/generateBingo/job";
 import type { BoardSource } from "../devTools/generateBingo/run";
 import type { BingoExportDocument } from "@bingo/shared";
+import { listDmSink } from "../services/notificationDm";
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -33,6 +34,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const user = devTestDataService.createTestUser(db, req.body as devTestDataService.CreateTestUserParams);
     res.status(201).json({ user });
+  }),
+);
+
+// The Discord DMs this dev server would have sent (CONTEXT.md "Notification"): its fake sink, newest first.
+router.get(
+  "/dm-sink",
+  asyncHandler(async (_req, res) => {
+    res.json({ dms: listDmSink(db) });
   }),
 );
 

@@ -18,6 +18,7 @@ import type { TimeZoneRegion } from "./timezone.ts";
 import type { ProofCheck, SubmissionKind } from "./proof.ts";
 import type { HistoricalRecorded } from "./historical.ts";
 import type { PlayerAccess, RestrictionEntry } from "./permissions.ts";
+import type { NotificationSocketMessage } from "./notifications.ts";
 
 export type Stage = "planning" | "signup" | "captains" | "draft" | "reveal" | "live" | "complete";
 export const STAGE_ORDER: Stage[] = ["planning", "signup", "captains", "draft", "reveal", "live", "complete"];
@@ -1648,13 +1649,19 @@ export type BroadcastEvent =
  * and whenever that set changes. From then on it gets only those Bingos' events (and the site-wide ones); a socket that
  * never sends one gets everything. At most MAX_WATCHED_BINGOS ids, or the message is ignored.
  */
-export type ClientSocketMessage = { type: "watch"; bingoIds: string[] };
+export type ClientSocketMessage =
+  | { type: "watch"; bingoIds: string[] }
+  // Whether this tab is in view, whether its browser allows notifications, and which Bingo's pages it's on: sent on
+  // connect and whenever one changes, and again at most once a minute while a Bingo's page is in view. The server
+  // picks how a Notification reaches the user by it (CONTEXT.md "Notification"), and records when they last had that
+  // Bingo open, for their Catch-up.
+  | { type: "presence"; visible: boolean; notifications: "granted" | "denied" | "default" | "unsupported"; bingoId: string | null };
 
 /**
  * What the server sends a socket of its own accord, not a broadcast. `hello`, once on connect: the build it serves, so
  * an open page from an older build offers a reload (or, with forceReload, reloads). Not sent without a build id.
  */
-export type ServerSocketMessage = { type: "hello"; buildId: string; forceReload: boolean };
+export type ServerSocketMessage = { type: "hello"; buildId: string; forceReload: boolean } | NotificationSocketMessage;
 export const MAX_WATCHED_BINGOS = 50;
 
 export * from "./achievements.ts";
@@ -1667,6 +1674,7 @@ export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";
 export * from "./names.ts";
+export * from "./notifications.ts";
 export * from "./permissions.ts";
 export * from "./proof.ts";
 export * from "./rewind.ts";
