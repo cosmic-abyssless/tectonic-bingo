@@ -5,6 +5,7 @@ import {
   NOTIFICATION_KINDS,
   NOTIFICATION_LEVEL_LABELS,
   QUEUE_THRESHOLDS,
+  isDiscordKindOn,
   isKindOn,
   levelAtLeast,
   type NotificationGroup,
@@ -182,17 +183,29 @@ export function NotificationSettingsPage() {
                             <span className="block text-xs text-on-surface-subtle">{NOTIFICATION_CATALOGUE[kind].description}</span>
                           </span>
                         </Switch>
-                        {kind === "queue_waiting_long" && (
-                          <div className="w-28">
-                          <Select
-                            size="sm"
-                            aria-label="Waiting longer than"
-                            value={String(settings.queueThresholdMinutes)}
-                            onChange={(v) => update.mutate({ queueThresholdMinutes: Number(v) as (typeof QUEUE_THRESHOLDS)[number] })}
-                            options={QUEUE_THRESHOLDS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` }))}
-                          />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {kind === "queue_waiting_long" && (
+                            <div className="w-28">
+                            <Select
+                              size="sm"
+                              aria-label="Waiting longer than"
+                              value={String(settings.queueThresholdMinutes)}
+                              onChange={(v) => update.mutate({ queueThresholdMinutes: Number(v) as (typeof QUEUE_THRESHOLDS)[number] })}
+                              options={QUEUE_THRESHOLDS.map((m) => ({ value: String(m), label: m < 60 ? `${m} min` : `${m / 60} h` }))}
+                            />
+                            </div>
+                          )}
+                          {/* At + Discord, each kind that's on can be kept off Discord: in the Inbox and on the site only. */}
+                          {settings.level === "discord" && isKindOn(kind, settings.kinds) && (
+                            <Switch
+                              aria-label={`${NOTIFICATION_CATALOGUE[kind].label} on Discord`}
+                              isSelected={isDiscordKindOn(kind, settings.discordKinds)}
+                              onChange={(on) => update.mutate({ discordKinds: { [kind]: on } })}
+                            >
+                              Discord
+                            </Switch>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

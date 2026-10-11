@@ -11,6 +11,7 @@ import { Routes } from "discord-api-types/v10";
 import {
   DEFAULT_FOLDING_WINDOWS,
   NOTIFICATION_CATALOGUE,
+  isDiscordKindOn,
   isNotificationKind,
   type DevDmSinkEntry,
   type FoldingWindows,
@@ -258,7 +259,8 @@ export async function runDmRound(db: Db, now = new Date()): Promise<number> {
     if (db.delete(notificationDmQueue).where(eq(notificationDmQueue.id, item.id)).run().changes === 0) continue;
     if (!item.devClock && now.getTime() - item.sendAt.getTime() > DM_STALE_MS) continue;
     const settings = getSettings(db, item.userId);
-    if (settings.level !== "discord" || discordUnreachableSince(db, item.userId)) continue;
+    // Turned down meanwhile: not at + Discord any more, or this kind kept off Discord.
+    if (settings.level !== "discord" || !isDiscordKindOn(item.kind as NotificationKind, settings.discordKinds) || discordUnreachableSince(db, item.userId)) continue;
     if (!item.devClock && userPresence(item.userId).visible) continue;
     const ids = JSON.parse(item.notificationIdsJson) as string[];
     const rows = ids.length ? db.select().from(notifications).where(inArray(notifications.id, ids)).orderBy(asc(notifications.createdAt)).all() : [];

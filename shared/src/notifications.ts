@@ -161,6 +161,11 @@ export function isKindOn(kind: NotificationKind, overrides: Partial<Record<Notif
   return overrides[kind] ?? NOTIFICATION_CATALOGUE[kind].defaultOn;
 }
 
+/** Whether a kind that's on also goes to Discord at + Discord: yes unless the user kept it off. */
+export function isDiscordKindOn(kind: NotificationKind, overrides: Partial<Record<NotificationKind, boolean>>): boolean {
+  return overrides[kind] ?? true;
+}
+
 export function isNotificationKind(value: unknown): value is NotificationKind {
   return typeof value === "string" && (NOTIFICATION_KINDS as readonly string[]).includes(value);
 }
@@ -183,6 +188,8 @@ export interface NotificationSettings {
   level: NotificationLevel;
   /** Only the kinds that differ from their default. */
   kinds: Partial<Record<NotificationKind, boolean>>;
+  /** At + Discord, the kinds kept off Discord (false); every other kind that's on is DMed too. */
+  discordKinds: Partial<Record<NotificationKind, boolean>>;
   queueThresholdMinutes: QueueThreshold;
   catchUpEnabled: boolean;
 }

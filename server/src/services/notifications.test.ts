@@ -248,6 +248,26 @@ describe("Discord DMs", () => {
     }
   });
 
+  it("a kind kept off Discord still reaches the Inbox, but isn't DMed", () => {
+    updateSettings(db, bob.id, { discordKinds: { team_drop_approved: false } });
+    approveAt(0, new Date());
+    expect(inbox(bob).filter((n) => n.kind === "team_drop_approved")).toHaveLength(1);
+    expect(db.select().from(schema.notificationDmQueue).where(eq(schema.notificationDmQueue.kind, "team_drop_approved")).all()).toEqual([]);
+    // Back on, the next one is.
+    updateSettings(db, bob.id, { discordKinds: { team_drop_approved: true } });
+    approveAt(1, new Date());
+    expect(db.select().from(schema.notificationDmQueue).where(eq(schema.notificationDmQueue.kind, "team_drop_approved")).all()).toHaveLength(1);
+  });
+
+  it("keeping a kind off Discord drops the DM already waiting for it", async () => {
+    updateFoldingWindows(db, { team_drop_approved: 15 }, mod.id);
+    const t0 = new Date();
+    approveAt(0, t0);
+    updateSettings(db, bob.id, { discordKinds: { team_drop_approved: false } });
+    expect(await runDmRound(db, new Date(t0.getTime() + 16 * 60_000))).toBe(0);
+    expect(dms).toEqual([]);
+  });
+
   it("opening the site before the window ends drops the pending DM", async () => {
     const t0 = new Date();
     approveAt(0, t0);

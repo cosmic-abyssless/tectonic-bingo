@@ -1,0 +1,1 @@
+ALTER TABLE `notification_settings` ADD `discord_kinds_json` text DEFAULT '{}' NOT NULL;

@@ -1162,6 +1162,8 @@ export const notificationSettings = sqliteTable('notification_settings', {
   userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   level: text('level', { enum: ['off', 'app', 'browser', 'discord'] }).notNull().default('off'),
   kindsJson: text('kinds_json').notNull().default('{}'),
+  // The kinds kept off Discord at + Discord ({ kind: false }); every other kind that's on is DMed too.
+  discordKindsJson: text('discord_kinds_json').notNull().default('{}'),
   queueThresholdMinutes: integer('queue_threshold_minutes').notNull().default(60),
   catchUpEnabled: integer('catch_up_enabled', { mode: 'boolean' }).notNull().default(true),
   discordUnreachableSince: integer('discord_unreachable_since', { mode: 'timestamp' }),

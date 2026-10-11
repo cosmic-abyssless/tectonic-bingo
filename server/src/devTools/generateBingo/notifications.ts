@@ -11,6 +11,9 @@ import { HOUR } from "./timeline";
 /** Of the Players, how many turn Notifications on at all, and of those how many go up to + Discord. */
 const OPT_IN = 0.45;
 const DISCORD = 0.3;
+/** Of those at + Discord, how many keep their busiest kinds off Discord (Inbox and site only). */
+const DISCORD_QUIET = 0.4;
+const DISCORD_QUIET_KINDS: NotificationKind[] = ["submissions_waiting", "team_drop_approved"];
 /** Of those who opt in, how many turn on extra kinds beyond the defaults. */
 const EXTRAS = 0.35;
 const EXTRA_KINDS: NotificationKind[] = ["team_drop_approved", "team_part_completed", "superlative_reminder"];
@@ -38,7 +41,8 @@ export async function runNotificationSettings(ctx: Ctx, players: Player[], mods:
     const kinds: Partial<Record<NotificationKind, boolean>> = {};
     if (optIn && rng.chance(EXTRAS)) for (const kind of EXTRA_KINDS) if (rng.chance(0.6)) kinds[kind] = true;
     if (isMod) kinds.submissions_waiting = true;
-    await ctx.api.as(p.discordId).put("/api/me/notifications/settings", { level, kinds, ...(catchUpOff && { catchUpEnabled: false }) }, { at });
+    const discordKinds = level === "discord" && rng.chance(DISCORD_QUIET) ? Object.fromEntries(DISCORD_QUIET_KINDS.map((k) => [k, false])) : undefined;
+    await ctx.api.as(p.discordId).put("/api/me/notifications/settings", { level, kinds, discordKinds, ...(catchUpOff && { catchUpEnabled: false }) }, { at });
     if (optIn) out.optedIn.push(p);
   }
   return out;
