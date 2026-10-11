@@ -251,6 +251,7 @@ A short, skippable walk through the Board for a Player: their Team, opening a Ti
 ### Board size
 How big a user's Board is drawn, one of their User settings (the Settings page, behind the account menu).
 - **Modes:** Fit screen, the default, as big as fits the window without scrolling (never smaller than the Tiles stay legible at, so a short window still scrolls). Maximize, as big as the window's longer side, so it scrolls the other way. Custom, a width from 50% to 300% of the window's, scrolling sideways past 100%.
+- **Scrolling:** Only the Board scrolls, in its own box from where it starts to the bottom of the window; everything above it stays put. On a touch screen it pans both ways with a finger.
 - **Rules:** Kept on the account, so it follows the user to every browser, with one for Desktop and one for Phone (the site's phone layout). Changing the one for the device you're on opens the Board with the Board size panel over it, so each change shows on the real thing; the other is changed on the Settings page.
 - **Not:** The colour scheme (Light, Dark, System), the other thing on the Settings page, which each browser keeps for itself.
 
