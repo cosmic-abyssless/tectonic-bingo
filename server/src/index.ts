@@ -55,7 +55,7 @@ import { createMcpRouter } from "./mcp/router";
 import { startReplicaJob } from "./mcp/sql/replica";
 import { LoadWarnings, loadWarningSettings, loadWarningsEnabled, startEventLoopMonitor } from "./loadWarnings";
 import { loadWarningsMiddleware } from "./middleware/loadWarnings";
-import { WriteLimit, writeLimitMiddleware, writeLimitPerWindow } from "./middleware/writeLimit";
+import { REACTION_PATH, REACTIONS_PER_WINDOW, WriteLimit, writeLimitMiddleware, writeLimitPerWindow, type WriteLimitHit } from "./middleware/writeLimit";
 import { buildHeaders, readBuildId, setBuildId } from "./buildInfo";
 
 const REQUIRED_ENV = [
@@ -194,7 +194,11 @@ setBuildId(readBuildId(CLIENT_DIST));
 app.use("/api", buildHeaders);
 // One user's API writes are capped, so one page (or an old tab) can't flood the server (middleware/writeLimit.ts).
 const writesPerWindow = writeLimitPerWindow();
-if (writesPerWindow) app.use(writeLimitMiddleware(new WriteLimit(writesPerWindow), loadWarnings ? (hit) => loadWarnings.recordWriteLimited(hit) : undefined));
+if (writesPerWindow) {
+  const onLimited = loadWarnings ? (hit: WriteLimitHit) => loadWarnings.recordWriteLimited(hit) : undefined;
+  app.use(writeLimitMiddleware(new WriteLimit(writesPerWindow), onLimited));
+  app.use(writeLimitMiddleware(new WriteLimit(REACTIONS_PER_WINDOW), onLimited, { only: REACTION_PATH }));
+}
 
 // Uploads — serve screenshots and tile images stored locally, to logged-in clan members only.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });

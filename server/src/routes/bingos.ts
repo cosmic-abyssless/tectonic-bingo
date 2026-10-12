@@ -12,7 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireBingo } from "../middleware/requireBingo";
 import { requireBingoViewer } from "../middleware/requireBingoViewer";
 import { getBingoAccess, isPartOfBingo } from "../services/bingoAccess";
-import { assertCan, assertUserCan, bingoRoles, restrictionsOf, unavailable } from "../services/permissions";
+import { assertCan, assertUserCan, bingoRoles, restrictionsOf, teamHistoryViewerIds, unavailable } from "../services/permissions";
 import { asyncHandler } from "../middleware/errorHandler";
 import { db } from "../db";
 import * as bingoService from "../services/bingoService";
@@ -902,8 +902,10 @@ router.put(
   }),
 );
 
-// A teammate puts an emoji on one of their team's submissions, or takes it off (audited for the team); teammates
-// refetch the team's submissions from the broadcast.
+// A teammate puts an emoji on one of their team's submissions, or takes it off (audited for the team). The broadcast
+// carries the submission's reactions, to whoever may see the Team's submissions, so their pages update without
+// refetching the Team's whole list: a Player going down the list reacting to each used to have every open page refetch
+// it every time (event loop lag, 2026-10-11).
 router.put(
   "/:slug/submissions/:id/reactions",
   requireAuth,
@@ -917,8 +919,10 @@ router.put(
     // Refuses for a Restriction; who is on the submission's team is the service's to say.
     assertUserCan(db, req.bingo!, req.user!, "react", { role: new ServiceError(403, "Only the submission's team can react to it") });
     const { teamId } = submissionService.setSubmissionReaction(db, submissionId, req.user!.id, emoji, reacted === true);
-    broadcastChange({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, submissionId } });
-    res.json({ reactions: submissionService.getSubmissionDetails(db, submissionId)?.reactions ?? [] });
+    const reactions = submissionService.getSubmissionDetails(db, submissionId)?.reactions ?? [];
+    const to = teamHistoryViewerIds(db, req.bingo!, teamId);
+    broadcastChange({ type: "submission_reactions_changed", bingoId: req.bingo!.id, payload: { teamId, changes: [{ submissionId, reactions }] } }, to ? { to } : {});
+    res.json({ reactions });
   }),
 );
 

@@ -6,13 +6,13 @@ import type {
   ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
 } from "@bingo/shared";
-import { SUBMISSION_REACTIONS } from "@bingo/shared";
 import { useAuth } from "../context/AuthContext";
 import { useMarkStatsRefreshing, useMarkStatsResult } from "../context/WebSocketContext";
 import { api, ApiError } from "./client";
 import * as bugReportsApi from "./bugReportsApi";
 import { readBoardCache, scheduleBoardCacheWrite } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
+import { REACTION_MUTATION_KEY, reactionsOnTheirWay, toggleReaction, withReactions } from "./reactionsCache";
 import { asMinimalUser, pendingCountChange, withReviewsInFlight, type ReviewAction, type ReviewInFlight } from "./reviewOptimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
@@ -191,31 +191,34 @@ export function useSetTileInterest(slug: string) {
   });
 }
 
-// A teammate's emoji on one of the team's submissions, on or off. Shows at once; rolls back if the server refuses it.
+// A teammate's emoji on one of the team's submissions, on or off. Shows at once, and the server's answer puts the
+// submission's reactions in as they stand (reactionsCache.ts): nothing refetches the Team's list, so reacting to one
+// submission after another costs the server one small write each. A refused one goes back to what the server has.
 export function useSetSubmissionReaction(slug: string) {
   const queryClient = useQueryClient();
+  type Params = { teamId: string; submissionId: string; emoji: SubmissionReaction; user: MinimalUser; reacted: boolean };
+  const setReactions = (teamId: string, submissionId: string, reactions: (prev: SubmissionReactionGroup[]) => SubmissionReactionGroup[]) =>
+    queryClient.setQueryData<TeamSubmissionsResponse>(queryKeys.teamSubmissions(slug, teamId), (list) =>
+      list && withReactions(list, list.submissions.filter((s) => s.submission.id === submissionId).map((s) => ({ submissionId, reactions: reactions(s.reactions ?? []) }))),
+    );
   return useMutation({
-    mutationFn: ({ teamId, submissionId, emoji, user, reacted }: { teamId: string; submissionId: string; emoji: SubmissionReaction; user: MinimalUser; reacted: boolean }) =>
-      optimisticUpdate<TeamSubmissionsResponse>(
-        queryClient,
-        queryKeys.teamSubmissions(slug, teamId),
-        (prev) => ({
-          ...prev,
-          submissions: prev.submissions.map((s) => (s.submission.id === submissionId ? { ...s, reactions: toggleReaction(s.reactions ?? [], emoji, user, reacted) } : s)),
-        }),
-        () => api.put(`/api/bingos/${slug}/submissions/${submissionId}/reactions`, { emoji, reacted }),
-      ),
-    // Hypeman/Cheerleader/Superfan/Main character can be earned by reacting — refetch so its popup shows right away.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.myAchievements(slug) }),
+    mutationKey: REACTION_MUTATION_KEY,
+    mutationFn: ({ submissionId, emoji, reacted }: Params) =>
+      api.put<{ reactions: SubmissionReactionGroup[] }>(`/api/bingos/${slug}/submissions/${submissionId}/reactions`, { emoji, reacted }),
+    onMutate: ({ teamId, submissionId, emoji, user, reacted }) => {
+      // A refetch already on its way could land with the reactions from before this one.
+      void queryClient.cancelQueries({ queryKey: queryKeys.teamSubmissions(slug, teamId) });
+      setReactions(teamId, submissionId, (prev) => toggleReaction(prev, emoji, user, reacted));
+    },
+    // This one still counts as on its way: any more means a later click on the submission, whose answer is the one to show.
+    onSuccess: ({ reactions }, { teamId, submissionId }) => {
+      if (reactionsOnTheirWay(queryClient, submissionId) <= 1) setReactions(teamId, submissionId, () => reactions);
+    },
+    onError: (_error, { teamId, submissionId }) => {
+      if (reactionsOnTheirWay(queryClient, submissionId) <= 1) void queryClient.invalidateQueries({ queryKey: queryKeys.teamSubmissions(slug, teamId) });
+    },
+    // An Achievement reacting earns (Hypeman, Cheerleader...) pops up from its own achievements_changed broadcast.
   });
-}
-
-function toggleReaction(groups: SubmissionReactionGroup[], emoji: SubmissionReaction, user: MinimalUser, reacted: boolean): SubmissionReactionGroup[] {
-  const users = (groups.find((g) => g.emoji === emoji)?.users ?? []).filter((u) => u.id !== user.id);
-  const next = reacted ? [...users, user] : users;
-  const others = groups.filter((g) => g.emoji !== emoji);
-  const all = next.length > 0 ? [...others, { emoji, users: next }] : others;
-  return SUBMISSION_REACTIONS.flatMap((e) => all.filter((g) => g.emoji === e));
 }
 
 export function useTeamSubmissions(slug: string | undefined, teamId: string | undefined) {

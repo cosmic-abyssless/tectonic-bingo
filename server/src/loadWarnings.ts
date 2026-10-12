@@ -115,6 +115,10 @@ const UNTIMED = new Set(["POST /mcp"]);
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+// Writes that never count towards a write flood: a Player going down the list reacting to each Submission is normal,
+// and each is one small write (middleware/writeLimit.ts REACTION_PATH has their own cap, which still warns).
+const NOT_A_FLOOD = new Set(["PUT /api/bingos/:slug/submissions/:id/reactions"]);
+
 /** A request as the counters see it, once it's done. */
 export interface FinishedRequest {
   method: string;
@@ -242,7 +246,7 @@ export class LoadWarnings {
       }));
     }
 
-    if (!READ_METHODS.has(method) && request.userId && !request.generator) this.recordWrite(now, request.userId, label, request.bingoId);
+    if (!READ_METHODS.has(method) && request.userId && !request.generator && !NOT_A_FLOOD.has(label)) this.recordWrite(now, request.userId, label, request.bingoId);
     this.sweep(now);
   }
 

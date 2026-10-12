@@ -4,10 +4,11 @@ import type { AddressInfo } from "net";
 import type { Server } from "http";
 import type { AuditContext } from "../audit/context";
 import type { SessionUser } from "../types";
-import { WRITE_LIMIT_MESSAGE, WriteLimit, apiArea, writeLimitMiddleware, writeLimitPerWindow, type WriteLimitHit } from "./writeLimit";
+import { REACTION_PATH, WRITE_LIMIT_MESSAGE, WriteLimit, apiArea, writeLimitMiddleware, writeLimitPerWindow, type WriteLimitHit } from "./writeLimit";
 
 let t = 1_000_000;
 let limit: WriteLimit;
+let reactionLimit: WriteLimit;
 let hits: WriteLimitHit[];
 let server: Server;
 let base: string;
@@ -22,6 +23,7 @@ beforeAll(() => {
     next();
   });
   app.use((req, res, next) => writeLimitMiddleware(limit, (hit) => hits.push(hit))(req, res, next));
+  app.use((req, res, next) => writeLimitMiddleware(reactionLimit, (hit) => hits.push(hit), { only: REACTION_PATH })(req, res, next));
   app.use((_req, res) => {
     res.json({ ok: true });
   });
@@ -36,6 +38,7 @@ afterAll(() => {
 beforeEach(() => {
   t = 1_000_000;
   limit = new WriteLimit(30, () => t);
+  reactionLimit = new WriteLimit(100, () => t);
   hits = [];
 });
 
@@ -111,5 +114,24 @@ describe("apiArea", () => {
     expect(apiArea("/api/bingos/my-bingo/admin/teams/abc")).toBe("/api/bingos/:slug/admin");
     expect(apiArea("/api/bingos/my-bingo")).toBe("/api/bingos/:slug");
     expect(apiArea("/api/me/tutorial-seen")).toBe("/api/me");
+  });
+});
+
+describe("reactions", () => {
+  const reaction = (i: number) => `/api/bingos/b1/submissions/s${i}/reactions`;
+
+  it("aren't counted towards the limit on every other write: going down the list reacting to each is normal", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 60; i++) statuses.push((await send("PUT", reaction(i))).status);
+    expect(statuses).toEqual(Array(60).fill(200));
+    expect(await writes(30)).toEqual(Array(30).fill(200));
+    expect(hits).toEqual([]);
+  });
+
+  it("have a cap of their own, for a page stuck in a loop", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 101; i++) statuses.push((await send("PUT", reaction(i))).status);
+    expect(statuses).toEqual([...Array(100).fill(200), 429]);
+    expect(hits).toEqual([{ userId: "u1", method: "PUT", area: "/api/bingos/:slug/submissions", perWindow: 100 }]);
   });
 });
