@@ -2,7 +2,7 @@
 // burst of writes is a refetch or two on each open page, not one per write. Events whose payload a listener uses as
 // data are never held or merged.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { BroadcastEvent } from "@bingo/shared";
+import type { BroadcastEvent, SubmissionReactionGroup } from "@bingo/shared";
 import { COALESCE_WINDOW_MS, createCoalescer, type Outgoing } from "./broadcastCoalescing";
 
 let sent: Outgoing[];
@@ -113,6 +113,23 @@ describe("merging what the client reads", () => {
     push(reviewed(["n2", "n1"]));
     vi.advanceTimersByTime(COALESCE_WINDOW_MS);
     expect(sent.at(-1)!.event).toEqual(reviewed(["n1", "n2"]));
+  });
+
+  it("adds up a Team's reaction changes, the latest of each submission winning, and keeps Teams (and who hears them) apart", () => {
+    const fire: SubmissionReactionGroup[] = [{ emoji: "🔥", users: [] }];
+    const party: SubmissionReactionGroup[] = [{ emoji: "🎉", users: [] }];
+    const reacted = (teamId: string, changes: { submissionId: string; reactions: SubmissionReactionGroup[] }[]): BroadcastEvent => ({ type: "submission_reactions_changed", bingoId: "b1", payload: { teamId, changes } });
+    push(reacted("t1", [{ submissionId: "s0", reactions: fire }]), ["a"]);
+    push(reacted("t1", [{ submissionId: "s1", reactions: fire }]), ["a"]);
+    push(reacted("t2", [{ submissionId: "s9", reactions: fire }]), ["b"]);
+    push(reacted("t1", [{ submissionId: "s2", reactions: fire }]), ["a"]);
+    push(reacted("t1", [{ submissionId: "s1", reactions: party }]), ["a"]);
+    vi.advanceTimersByTime(COALESCE_WINDOW_MS);
+    expect(sent).toEqual([
+      { event: reacted("t1", [{ submissionId: "s0", reactions: fire }]), to: ["a"] },
+      { event: reacted("t2", [{ submissionId: "s9", reactions: fire }]), to: ["b"] },
+      { event: reacted("t1", [{ submissionId: "s2", reactions: fire }, { submissionId: "s1", reactions: party }]), to: ["a"] },
+    ]);
   });
 
   it("sends a merge of events for some users to all of them, and to everyone if one was for everyone", () => {

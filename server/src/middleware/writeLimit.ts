@@ -12,8 +12,17 @@ const DEFAULT_PER_WINDOW = 30;
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+/**
+ * A Reaction (routes/bingos.ts). A Player going down the list reacting to each Submission is normal, and each is one
+ * small write that sends nothing to refetch, so reactions have a cap of their own (REACTIONS_PER_WINDOW, far above
+ * anyone's clicking: it's for a page stuck in a loop) instead of sharing the one for every other write.
+ */
+export const REACTION_PATH = /^\/api\/bingos\/[^/]+\/submissions\/[^/]+\/reactions$/;
+export const REACTIONS_PER_WINDOW = 100;
+
 // API writes that aren't capped, by path (the route isn't matched yet when this runs).
 const EXEMPT_PATHS = [
+  REACTION_PATH, // capped on their own
   /^\/api\/client-errors(\/|$)/, // has its own limit (routes/clientErrors.ts)
   /^\/api\/bingos\/[^/]+\/achievements\/opened$/, // the Achievements' page-open signal, sent on every Tile opened
   /^\/api\/bingos\/[^/]+\/feedback(\/|$)/, // anonymous end to end (ADR 0002): nothing may tie a request there to its user
@@ -89,11 +98,13 @@ function isGenerator(req: Request, path: string): boolean {
  * Reads, anonymous requests, logins (/auth), the MCP server and the generator aren't counted, and nor is a refused write.
  * Mount after auditContext (whose context says whether the request is the generator's).
  */
-export function writeLimitMiddleware(limit: WriteLimit, onLimited?: (hit: WriteLimitHit) => void): RequestHandler {
+export function writeLimitMiddleware(limit: WriteLimit, onLimited?: (hit: WriteLimitHit) => void, options: { only?: RegExp } = {}): RequestHandler {
+  // `only`: a cap of its own for those paths alone (REACTION_PATH), where the default is every write not exempt.
+  const skips = (path: string) => (options.only ? !options.only.test(path) : !path.startsWith("/api/") || EXEMPT_PATHS.some((p) => p.test(path)));
   return (req: Request, res: Response, next: NextFunction) => {
     const path = requestPath(req.originalUrl || req.url);
     const userId = req.user?.id;
-    if (!userId || READ_METHODS.has(req.method) || !path.startsWith("/api/") || EXEMPT_PATHS.some((p) => p.test(path)) || isGenerator(req, path)) {
+    if (!userId || READ_METHODS.has(req.method) || skips(path) || isGenerator(req, path)) {
       next();
       return;
     }

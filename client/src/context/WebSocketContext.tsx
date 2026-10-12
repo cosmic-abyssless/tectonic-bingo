@@ -6,6 +6,7 @@ import { useAuth } from "./AuthContext";
 import { keyMentions, otherBingoSlugs, unwatchedBingoSlugs, watchedBingoIds } from "../api/bingoScope";
 import { reconnectDelayMs } from "./reconnectDelay";
 import { noteServerBuild } from "../api/serverBuild";
+import { applyReactionChanges } from "../api/reactionsCache";
 
 type Listener = (event: BroadcastEvent) => void;
 type NotificationListener = (msg: NotificationSocketMessage) => void;
@@ -187,7 +188,8 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["teamProgress"]);
       break;
     case "submission_reactions_changed":
-      invalidate(["teamSubmissions"]);
+      // The reactions themselves, put straight into the Team's list (its id is its own, whichever Bingo): nothing refetches.
+      applyReactionChanges(queryClient, event.payload.teamId, event.payload.changes);
       break;
     case "signup_changed":
       // Signups, pairings, and who is eligible to captain all move together.

@@ -45,7 +45,15 @@ export const COALESCE_RULES: { [T in BroadcastEvent["type"]]: Rule<EventOf<T>> }
   // Sent only to the Team's leads, so one Team's are never folded into another's.
   draft_rating_changed: { key: (event) => event.payload.teamId },
   tile_interest_changed: {},
-  submission_reactions_changed: {},
+  // One Team's reactions are sent only to who may see them, so Teams are held apart; the changes add up, the latest of
+  // each submission winning.
+  submission_reactions_changed: {
+    key: (event) => event.payload.teamId,
+    merge: (held, next) => ({
+      ...next,
+      payload: { ...next.payload, changes: [...held.payload.changes.filter((h) => !next.payload.changes.some((n) => n.submissionId === h.submissionId)), ...next.payload.changes] },
+    }),
+  },
   team_updated: {},
   // A stats refresh starting or ending shows on that signup's row.
   signup_changed: { each: (event) => event.payload.statsRefreshing !== undefined },

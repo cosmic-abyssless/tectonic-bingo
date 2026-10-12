@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { can, restrictedReason, siteRoles, unavailableReason, type Action, type PermissionBingo, type PermissionDenial, type Restriction, type RestrictionTarget, type Role } from "@bingo/shared";
 import { isAdminDiscordId } from "../config";
 import * as schema from "../db/schema";
-import { bingoModerators, bingoRestrictions, bingoStaff, signups, teamMembers, teams } from "../db/schema";
+import { bingoModerators, bingoRestrictions, bingoStaff, signups, teamMembers, teams, users } from "../db/schema";
 import { isPlayerOf, playerStandingFrom } from "./bingoAccess";
 import { isBingoMod, isBingoStaff } from "./bingoService";
 import { getCutUserIds } from "./draftService";
@@ -81,6 +81,22 @@ export function bingoRolesOfEveryone(db: Db, bingo: Bingo): Map<string, Role[]> 
     if (roles.length > 0) everyone.set(userId, roles);
   }
   return everyone;
+}
+
+/**
+ * Who may see one Team's Submissions right now, as its routes decide it viewer by viewer (routes/bingos.ts
+ * teamHistoryAccess): its own Players, and whoever may view_other_teams (Moderators who aren't playing, Admins). For
+ * sending something only they may see. Null when everyone may (the Bingo is over).
+ */
+export function teamHistoryViewerIds(db: Db, bingo: Bingo, teamId: string): string[] | null {
+  if (can([], bingo, "view_other_teams").ok) return null;
+  const viewers = new Set(db.select({ userId: teamMembers.userId }).from(teamMembers).where(eq(teamMembers.teamId, teamId)).all().map((r) => r.userId));
+  const everyone = bingoRolesOfEveryone(db, bingo);
+  for (const [userId, roles] of everyone) if (can(roles, bingo, "view_other_teams").ok) viewers.add(userId);
+  for (const admin of db.select({ id: users.id, discordId: users.discordId }).from(users).where(eq(users.isAdmin, true)).all()) {
+    if (can([...userSiteRoles({ isAdmin: true, discordId: admin.discordId }), ...(everyone.get(admin.id) ?? [])], bingo, "view_other_teams").ok) viewers.add(admin.id);
+  }
+  return [...viewers];
 }
 
 /** The users whose roles differ between two bingoRolesOfEveryone answers. */

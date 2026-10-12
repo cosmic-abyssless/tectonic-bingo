@@ -179,6 +179,12 @@ describe("user_write_flood", () => {
     times(200, () => write({ generator: true }));
     expect(reported).toEqual([]);
   });
+
+  it("leaves out reactions: going down the list reacting to each is normal", () => {
+    const { write, reported } = setup();
+    times(200, () => write({ method: "PUT", route: "/api/bingos/:slug/submissions/:id/reactions" }));
+    expect(reported).toEqual([]);
+  });
 });
 
 describe("request_spike", () => {

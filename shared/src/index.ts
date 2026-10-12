@@ -1598,8 +1598,9 @@ export type BroadcastEvent =
   // Someone on a team raised or lowered a hand for a tile; teammates refetch
   // progress so the board shows who's on what.
   | { type: "tile_interest_changed"; bingoId: string; payload: { teamId: string } }
-  // A teammate reacted to (or took a reaction off) one of the team's submissions; teammates refetch its submissions.
-  | { type: "submission_reactions_changed"; bingoId: string; payload: { teamId: string; submissionId: string } }
+  // Teammates reacted to (or took reactions off) the team's submissions: each changed submission's reactions now, which
+  // pages put straight into the team's list instead of refetching it. Sent only to whoever may see the team's submissions.
+  | { type: "submission_reactions_changed"; bingoId: string; payload: { teamId: string; changes: { submissionId: string; reactions: SubmissionReactionGroup[] }[] } }
   // A Team was created, renamed, recoloured or deleted, or its members changed: what shows Teams refetches (not the board).
   | { type: "team_updated"; bingoId: string; payload: { teamId: string } }
   // A duo pairing request was created, answered, cancelled, or dissolved, or a
