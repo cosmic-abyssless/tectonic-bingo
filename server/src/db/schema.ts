@@ -1105,7 +1105,8 @@ export const achievementActivity = sqliteTable('achievement_activity', {
   tileId: text('tile_id'),
   creditedUserId: text('credited_user_id'),
   teamId: text('team_id').notNull().references(() => teams.id),
-  // Device-local (CONTEXT.md "Achievement" > time of day), from the request's X-Client-Timezone header.
+  // Local (CONTEXT.md "Achievement" > time of day): a drop's in the credited Player's Signup time zone, anything else
+  // (and a drop whose Player's Signup has none) on the device, from the request's X-Client-Timezone header.
   localDate: text('local_date').notNull(), // YYYY-MM-DD
   localHour: integer('local_hour').notNull(), // 0-23
   occurredAt: integer('occurred_at', { mode: 'timestamp' }).notNull(),

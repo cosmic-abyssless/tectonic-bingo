@@ -33,6 +33,7 @@ import { authorizeWithSession, closeWebSocketServer, initWebSocketServer } from 
 import { DB_PATH, db, sqlite } from "./db";
 import { refreshPricesAndFill } from "./services/gpValueService";
 import { fillAuditSearchText } from "./audit/searchText";
+import { redateDropsToSignupTimezones } from "./services/achievementService";
 import { startWomReads } from "./services/womReadService";
 import { startBingoStarts } from "./services/bingoStartService";
 import { startNotificationRounds } from "./services/notificationScheduler";
@@ -275,6 +276,13 @@ server.listen(PORT, () => {
     if (filled) log.info("audit search text filled", { rows: filled });
   } catch (err) {
     log.error("audit search text fill failed", { err });
+  }
+  // Drops dated on the poster's device before their time of day was the credited Player's Signup time zone.
+  try {
+    const redated = redateDropsToSignupTimezones(db);
+    if (redated) log.info("drops re-dated to signup time zones", { rows: redated });
+  } catch (err) {
+    log.error("re-dating drops to signup time zones failed", { err });
   }
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);
