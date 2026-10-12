@@ -359,6 +359,16 @@ export function BookBackArt({
       >
         Complete!
       </span>
+      {/* What the Tile paid out, all told. A sealed Tile's points are held back (CONTEXT.md "Sealed Tiles"). */}
+      {!tile.sealed && (
+        <span
+          className={`${LETTERED} absolute right-[11cqw] top-[30cqw] whitespace-nowrap leading-none`}
+          style={{ fontFamily: COMIC_FONT, fontSize: "16cqw", color: colors.YELLOW, textShadow: inkOutline(colors.SHADOW) }}
+        >
+          +{tile.progress.pointsAwarded}
+          <span style={{ fontSize: "0.7em", marginLeft: "0.04em" }}>¢</span>
+        </span>
+      )}
       <div
         className="absolute inset-x-[6cqw] top-[51cqw] border-[0.9cqw] px-[4cqw] py-[2.6cqw]"
         style={{ borderColor: colors.SHADOW, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.4cqw 1.4cqw 0 ${colors.SHADOW}` }}
