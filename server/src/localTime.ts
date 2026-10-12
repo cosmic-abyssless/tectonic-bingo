@@ -1,6 +1,7 @@
 // A request's device-local time (CONTEXT.md "Achievement" > time of day): the client sends its IANA time zone in
 // the X-Client-Timezone header (see audit/middleware.ts, which stores it on the request's AuditContext); a missing
-// or invalid one falls back to UTC. Spoofable, and that's fine — it only ever decides an Achievement.
+// or invalid one falls back to UTC. Spoofable, and that's fine — it only ever decides an Achievement. A drop's time of
+// day goes by the credited Player's Signup time zone instead, when it has one (achievementService.dropTimezone).
 const DEFAULT_TIMEZONE = "UTC";
 
 /** A bad or missing zone name reads as UTC — never throws. */

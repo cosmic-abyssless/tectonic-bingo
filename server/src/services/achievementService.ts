@@ -22,10 +22,10 @@ import {
   type MyAchievementsResponse,
 } from "@bingo/shared";
 import * as schema from "../db/schema";
-import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, submissionReactions, submissions, teamMembers, teams, tileInterests, tiles, womSnapshots } from "../db/schema";
+import { achievementActivity, achievementEarned, bingoAchievementSettings, bingos, nodeEdges, signups, submissionReactions, submissions, teamMembers, teams, tileInterests, tiles, womSnapshots } from "../db/schema";
 import { now as clockNow } from "../clock";
 import { getTimezone } from "../audit/context";
-import { localTimeOf } from "../localTime";
+import { localTimeOf, normalizeTimezone } from "../localTime";
 import { audit } from "../audit/record";
 import { broadcast } from "../ws";
 import { findAncestorIds } from "./graphService";
@@ -147,6 +147,36 @@ function tryEarn(tx: Tx, bingoId: string, userId: string, key: AchievementKey, a
   broadcast({ type: "achievements_changed", bingoId, payload: { userId } });
 }
 
+/**
+ * The zone a drop's time of day is read in (CONTEXT.md "Achievement" > time of day): the credited Player's, from their
+ * Signup, so it's the same whoever posts it and from wherever; the poster's device's when their Signup has none.
+ */
+function dropTimezone(db: Queryable, bingoId: string, creditedUserId: string): string {
+  const signup = db.select({ timezone: signups.timezone }).from(signups).where(and(eq(signups.bingoId, bingoId), eq(signups.userId, creditedUserId))).get();
+  return signup?.timezone ? normalizeTimezone(signup.timezone) : getTimezone();
+}
+
+/** Night owl 02:00-05:59, Early bird 06:00-08:59 (see the catalogue's descriptions). */
+function timeOfDayKey(hour: number): AchievementKey | null {
+  if (hour >= 2 && hour <= 5) return "night_owl";
+  if (hour >= 6 && hour <= 8) return "early_bird";
+  return null;
+}
+
+/** Regular: drops posted on 5 different days, counted since it was switched on. */
+function isRegular(tx: Tx, bingoId: string, userId: string, settings: SettingsMap): boolean {
+  const cutoff = settings.get("regular")!.firstSwitchedOnAt;
+  const dates = distinct(
+    tx
+      .select({ localDate: achievementActivity.localDate })
+      .from(achievementActivity)
+      .where(and(eq(achievementActivity.bingoId, bingoId), eq(achievementActivity.userId, userId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
+      .all()
+      .map((r) => r.localDate),
+  );
+  return dates.size >= 5;
+}
+
 function distinct(rows: (string | null)[]): Set<string> {
   return new Set(rows.filter((v): v is string => v !== null));
 }
@@ -173,7 +203,7 @@ export interface SubmissionPostedEvent {
 /**
  * A Submission was posted. Its Achievements (Strong start, Night owl, Early bird, Regular, Globetrotter, Called it) go
  * to the Player it's credited to, whoever uploaded it; Partner slayer goes to a teammate who posted it for them. The
- * time of day is the poster's device's, as the drop was sent.
+ * time of day is in the credited Player's own time zone (dropTimezone).
  */
 export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): void {
   safely(() => {
@@ -187,7 +217,7 @@ export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): vo
 
       const userId = event.creditedUserId;
       if (!isTeamMember(tx, event.teamId, userId)) return;
-      const { date, hour } = localTimeOf(event.occurredAt, getTimezone());
+      const { date, hour } = localTimeOf(event.occurredAt, dropTimezone(tx, event.bingoId, userId));
 
       upsertActivity(tx, {
         bingoId: event.bingoId,
@@ -204,22 +234,10 @@ export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): vo
 
       tryEarn(tx, event.bingoId, userId, "strong_start", event.occurredAt, settings, () => true);
 
-      // Night owl 02:00-05:59, Early bird 06:00-08:59, device-local (see the catalogue's descriptions).
-      if (hour >= 2 && hour <= 5) tryEarn(tx, event.bingoId, userId, "night_owl", event.occurredAt, settings, () => true);
-      else if (hour >= 6 && hour <= 8) tryEarn(tx, event.bingoId, userId, "early_bird", event.occurredAt, settings, () => true);
+      const timeOfDay = timeOfDayKey(hour);
+      if (timeOfDay) tryEarn(tx, event.bingoId, userId, timeOfDay, event.occurredAt, settings, () => true);
 
-      tryEarn(tx, event.bingoId, userId, "regular", event.occurredAt, settings, () => {
-        const cutoff = settings.get("regular")!.firstSwitchedOnAt;
-        const dates = distinct(
-          tx
-            .select({ localDate: achievementActivity.localDate })
-            .from(achievementActivity)
-            .where(and(eq(achievementActivity.bingoId, event.bingoId), eq(achievementActivity.userId, userId), eq(achievementActivity.kind, "posted"), gte(achievementActivity.occurredAt, cutoff)))
-            .all()
-            .map((r) => r.localDate),
-        );
-        return dates.size >= 5;
-      });
+      tryEarn(tx, event.bingoId, userId, "regular", event.occurredAt, settings, () => isRegular(tx, event.bingoId, userId, settings));
 
       tryEarn(tx, event.bingoId, userId, "globetrotter", event.occurredAt, settings, () => {
         const cutoff = settings.get("globetrotter")!.firstSwitchedOnAt;
@@ -247,6 +265,52 @@ export function recordSubmissionPosted(db: Db, event: SubmissionPostedEvent): vo
       });
     });
   });
+}
+
+/**
+ * Backfill, run on startup: each Live Bingo's drops, dated in the credited Player's Signup time zone where an older one
+ * was dated on the poster's device (before dropTimezone), or where their Signup's zone has changed since. The
+ * Achievements that earns them (Night owl, Early bird, Regular) are earned now, popup not yet shown; nothing earned
+ * is taken back ("never revisited"). Returns how many drops it re-dated.
+ */
+export function redateDropsToSignupTimezones(db: Db): number {
+  let redated = 0;
+  for (const { id: bingoId } of db.select({ id: bingos.id }).from(bingos).where(eq(bingos.stage, "live")).all()) {
+    db.transaction((tx) => {
+      const rows = tx
+        .select({ id: achievementActivity.id, userId: achievementActivity.userId, teamId: achievementActivity.teamId, localDate: achievementActivity.localDate, localHour: achievementActivity.localHour, occurredAt: achievementActivity.occurredAt, timezone: signups.timezone })
+        .from(achievementActivity)
+        .innerJoin(signups, and(eq(signups.bingoId, achievementActivity.bingoId), eq(signups.userId, achievementActivity.userId)))
+        .where(and(eq(achievementActivity.bingoId, bingoId), eq(achievementActivity.kind, "posted")))
+        .all();
+      // Each re-dated drop, with its new hour, by the Player it's credited to (whose Signup's zone it now is).
+      const redatedBy = new Map<string, { teamId: string; occurredAt: Date; hour: number }[]>();
+      for (const row of rows) {
+        if (!row.timezone) continue;
+        const { date, hour } = localTimeOf(row.occurredAt, normalizeTimezone(row.timezone));
+        if (date === row.localDate && hour === row.localHour) continue;
+        tx.update(achievementActivity).set({ localDate: date, localHour: hour }).where(eq(achievementActivity.id, row.id)).run();
+        redatedBy.set(row.userId, [...(redatedBy.get(row.userId) ?? []), { teamId: row.teamId, occurredAt: row.occurredAt, hour }]);
+        redated++;
+      }
+      if (redatedBy.size === 0) return;
+
+      // As recordSubmissionPosted would have, had each been dated so then; tryEarn skips one already earned or posted
+      // before it was switched on.
+      const settings = loadSettings(tx, bingoId);
+      for (const [userId, drops] of redatedBy) {
+        if (!isTeamMember(tx, drops[0]!.teamId, userId)) continue;
+        for (const drop of drops) {
+          const timeOfDay = timeOfDayKey(drop.hour);
+          if (timeOfDay) tryEarn(tx, bingoId, userId, timeOfDay, drop.occurredAt, settings, () => true);
+        }
+        // Their latest drop, as the one that would have found it due.
+        const latest = rows.filter((r) => r.userId === userId).reduce((a, b) => (b.occurredAt > a.occurredAt ? b : a));
+        tryEarn(tx, bingoId, userId, "regular", latest.occurredAt, settings, () => isRegular(tx, bingoId, userId, settings));
+      }
+    });
+  }
+  return redated;
 }
 
 /** The Part (task) ids containing any of `leafIds`, under one tile's root node — a bare leaf that is itself a direct child of the root is its own Part (CONTEXT.md "Part"). */

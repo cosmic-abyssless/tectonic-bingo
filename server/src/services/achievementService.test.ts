@@ -176,6 +176,88 @@ describe("Night owl / Early bird", () => {
   });
 });
 
+describe("A drop's time of day", () => {
+  const signUp = (bingoId: string, userId: string, timezone: string | null) => db.insert(schema.signups).values({ bingoId, userId, rsn: userId.slice(0, 12), timezone }).run();
+
+  it("is in the credited Player's Signup time zone, whoever posts it and from whatever device", () => {
+    const { bingo, team, alice, bob } = seed();
+    signUp(bingo.id, alice.id, "America/New_York");
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    // 07:30 on bob's UTC device (Early bird there), 03:30 for alice in New York.
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { postedByUserId: bob.id, now: new Date("2026-03-02T07:30:00Z"), tz: "UTC" });
+    expect(earned(bingo, alice.id, "night_owl")).toBe(true);
+    expect(earned(bingo, alice.id, "early_bird")).toBe(false);
+  });
+
+  it("is the poster's device's when the credited Player's Signup has no time zone", () => {
+    const { bingo, team, alice } = seed();
+    signUp(bingo.id, alice.id, null);
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date("2026-03-02T07:30:00Z"), tz: "Asia/Tokyo" }); // 16:30 in Tokyo
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date("2026-03-02T03:30:00Z"), tz: "UTC" });
+    expect(earned(bingo, alice.id, "early_bird")).toBe(false);
+    expect(earned(bingo, alice.id, "night_owl")).toBe(true);
+  });
+});
+
+describe("Re-dating drops to Signup time zones (the startup backfill)", () => {
+  const signUp = (bingoId: string, userId: string, timezone: string | null) => db.insert(schema.signups).values({ bingoId, userId, rsn: userId.slice(0, 12), timezone }).run();
+  const activity = (bingoId: string, userId: string) =>
+    db.select().from(schema.achievementActivity).where(eq(schema.achievementActivity.userId, userId)).all().filter((r) => r.bingoId === bingoId && r.kind === "posted");
+  const popupPending = (bingoId: string, userId: string, key: AchievementKey) =>
+    db.select().from(schema.achievementEarned).where(eq(schema.achievementEarned.userId, userId)).all().find((r) => r.bingoId === bingoId && r.achievementKey === key)?.popupShownAt === null;
+
+  it("re-dates drops dated on the poster's device and earns what that now earns, unseen, keeping what was earned", () => {
+    const { bingo, team, alice } = seed();
+    const tiles = Array.from({ length: 5 }, (_, i) => tileWithLeaf(bingo.id, 0, i));
+    // Posted from a UTC device before there was a Signup zone: 12:00 UTC (nothing), then 07:00 UTC (Early bird).
+    submit(bingo, team.id, alice.id, tiles[0]!.leafId, tiles[0]!.itemName, { now: new Date("2026-03-02T12:00:00Z"), tz: "UTC" });
+    submit(bingo, team.id, alice.id, tiles[1]!.leafId, tiles[1]!.itemName, { now: new Date("2026-03-03T07:00:00Z"), tz: "UTC" });
+    expect(earned(bingo, alice.id, "early_bird")).toBe(true);
+    expect(earned(bingo, alice.id, "night_owl")).toBe(false);
+
+    // In Los Angeles (UTC-8) those are 04:00 (Night owl) and 23:00 the day before.
+    signUp(bingo.id, alice.id, "America/Los_Angeles");
+    expect(achievementService.redateDropsToSignupTimezones(db)).toBe(2);
+    expect(activity(bingo.id, alice.id).map((r) => `${r.localDate} ${r.localHour}`).sort()).toEqual(["2026-03-02 23", "2026-03-02 4"]);
+    expect(earned(bingo, alice.id, "night_owl")).toBe(true);
+    expect(popupPending(bingo.id, alice.id, "night_owl")).toBe(true);
+    expect(earned(bingo, alice.id, "early_bird")).toBe(true); // never taken back
+
+    // Done once: a second run finds nothing to re-date.
+    expect(achievementService.redateDropsToSignupTimezones(db)).toBe(0);
+  });
+
+  it("earns Regular when the Signup zone spreads drops over 5 days", () => {
+    const { bingo, team, alice } = seed();
+    const tiles = Array.from({ length: 5 }, (_, i) => tileWithLeaf(bingo.id, 0, i));
+    // Five drops on four UTC days: two on 2026-03-02, 01:00 and 23:00 UTC.
+    const times = ["2026-03-02T01:00:00Z", "2026-03-02T23:00:00Z", "2026-03-03T23:00:00Z", "2026-03-04T23:00:00Z", "2026-03-05T23:00:00Z"];
+    times.forEach((t, i) => submit(bingo, team.id, alice.id, tiles[i]!.leafId, tiles[i]!.itemName, { now: new Date(t), tz: "UTC" }));
+    expect(earned(bingo, alice.id, "regular")).toBe(false);
+
+    // In New York (UTC-5) the first is 20:00 on 2026-03-01: five different days.
+    signUp(bingo.id, alice.id, "America/New_York");
+    achievementService.redateDropsToSignupTimezones(db);
+    expect(earned(bingo, alice.id, "regular")).toBe(true);
+  });
+
+  it("leaves a Bingo that isn't Live, and a Player whose Signup has no zone, as they were", () => {
+    const { bingo, team, alice, bob } = seed();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date("2026-03-02T12:00:00Z"), tz: "UTC" });
+    submit(bingo, team.id, bob.id, a.leafId, a.itemName, { now: new Date("2026-03-02T12:00:00Z"), tz: "UTC" });
+    signUp(bingo.id, alice.id, "America/Los_Angeles");
+    signUp(bingo.id, bob.id, null);
+    db.update(schema.bingos).set({ stage: "complete" }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(achievementService.redateDropsToSignupTimezones(db)).toBe(0);
+
+    db.update(schema.bingos).set({ stage: "live" }).where(eq(schema.bingos.id, bingo.id)).run();
+    expect(achievementService.redateDropsToSignupTimezones(db)).toBe(1); // alice's; bob's stays on his device's clock
+    expect(activity(bingo.id, bob.id).map((r) => r.localHour)).toEqual([12]);
+  });
+});
+
 describe("Regular", () => {
   it("counts distinct device-local dates, with progress, needing 5", () => {
     const { bingo, team, alice } = seed();
