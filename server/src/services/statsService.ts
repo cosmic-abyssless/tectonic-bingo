@@ -4,7 +4,7 @@ import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TilePro
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
-import { findAncestorIds, getFullGraph } from "./graphService";
+import { getFullGraph } from "./graphService";
 import { applyExclusivity } from "./exclusivityService";
 import { dropsOnly } from "./submissionKinds";
 import { creditAwards, type AwardCredit, type CreditClaim } from "./pointsShare";
@@ -20,6 +20,7 @@ import { BOSS_NAMES } from "./luck/bossSources";
 import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
 import { getBingoTitleSettings } from "./titleSettingsService";
+import { keptStats } from "./statsCache";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -49,6 +50,25 @@ export function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<stri
   const tileByNodeId = new Map(tileRows.map((t) => [t.nodeId, t]));
   const lineRows = db.select().from(bingoLines).where(eq(bingoLines.bingoId, bingoId)).all();
   const lineByNodeId = new Map(lineRows.map((l) => [l.nodeId, l]));
+  // Every edge of the Bingo's tree in one query, walked up in memory: a query per step up from each Task made the
+  // labels most of a Stats load.
+  const parentsOf = new Map<string, string[]>();
+  for (const e of db.select({ parentId: nodeEdges.parentId, childId: nodeEdges.childId }).from(nodeEdges).innerJoin(nodes, eq(nodeEdges.childId, nodes.id)).where(eq(nodes.bingoId, bingoId)).all()) {
+    parentsOf.set(e.childId, [...(parentsOf.get(e.childId) ?? []), e.parentId]);
+  }
+  const ancestorTileOf = (nodeId: string) => {
+    const seen = new Set([nodeId]);
+    for (let frontier = [nodeId]; frontier.length > 0; ) {
+      const next = frontier.flatMap((id) => parentsOf.get(id) ?? []).filter((id) => !seen.has(id));
+      for (const id of next) {
+        seen.add(id);
+        const tile = tileByNodeId.get(id);
+        if (tile) return tile;
+      }
+      frontier = next;
+    }
+    return undefined;
+  };
 
   const labels = new Map<string, NodeLabel>();
   for (const nodeId of nodeIds) {
@@ -63,7 +83,7 @@ export function labelNodes(db: Db, bingoId: string, nodeIds: string[]): Map<stri
       continue;
     }
     const node = nodeById.get(nodeId);
-    const ancestorTile = [...findAncestorIds(db, nodeId)].map((id) => tileByNodeId.get(id)).find((t): t is NonNullable<typeof t> => !!t);
+    const ancestorTile = ancestorTileOf(nodeId);
     labels.set(nodeId, { kind: "task", label: ancestorTile ? `${ancestorTile.name} — ${node?.label ?? "Task"}` : node?.label ?? "Bonus" });
   }
   return labels;
@@ -694,7 +714,8 @@ function withoutFirstCompletions(stats: Stats): Stats {
  * rows, and no first completions.
  */
 export function getStatsForViewer(db: Db, bingoId: string, viewer: { teamId: string | null }): Stats {
-  const stats = getStats(db, bingoId);
+  // Shared by every viewer for a while (statsCache.ts); the filtering below makes new objects, so it stays whole.
+  const stats = keptStats(bingoId, () => getStats(db, bingoId));
   return viewer.teamId ? filterStatsForTeam(withoutFirstCompletions(stats), viewer.teamId) : stats;
 }
 

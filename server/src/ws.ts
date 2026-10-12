@@ -7,6 +7,7 @@ import { passesGuildGate } from "./middleware/requireGuildMember";
 import { createCoalescer, type Outgoing } from "./broadcastCoalescing";
 import { helloMessage } from "./buildInfo";
 import { log } from "./log";
+import { forgetStatsOn } from "./services/statsCache";
 
 /** Who opened a socket: the session it belongs to and its user. */
 export interface SocketOwner {
@@ -218,6 +219,8 @@ const coalescer = createCoalescer(deliver);
  * burst of one type for one Bingo goes out as the first at once and the rest as one shortly after (broadcastCoalescing.ts).
  */
 export function broadcast(event: BroadcastEvent, options: { to?: readonly string[] } = {}): void {
+  // Every change that alters a Bingo's stats comes through here, sockets or not.
+  forgetStatsOn(event);
   if (!wss) return;
   coalescer.push({ event, ...(options.to ? { to: options.to } : {}) });
 }
