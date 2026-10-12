@@ -2,8 +2,9 @@ import type { MinimalUser, ModSubmissionRow } from "@bingo/shared";
 import type { MultiSelectOption } from "../ui/MultiSelect";
 import type { inclusionFilter } from "../ui/inclusionFilter";
 import { displayName } from "../ui/user";
+import { matchesSearch } from "../ui/tableSearch";
 
-// The Mod panel's Submissions view (issue #383): its Submitter and Reviewer filters. It draws the filtered list a page
+// The Mod panel's Submissions view (issue #383): its search and its Submitter and Reviewer filters. It draws the filtered list a page
 // at a time with core/ui/paging.
 
 /** Reviewer filter options that aren't a person. */
@@ -54,18 +55,35 @@ export function reviewerOptions(rows: ModSubmissionRow[]): MultiSelectOption[] {
   ];
 }
 
+/** What the search box looks through: the Tile, Parts, Items, Team, the people on it, the notes and its id. */
+export function searchText(row: ModSubmissionRow): (string | null | undefined)[] {
+  const people = [row.submittedByUser, row.postedByUser, row.reviewedByUser].filter((u): u is MinimalUser => !!u);
+  return [
+    row.submission.id,
+    row.tile?.name,
+    ...row.partLabels,
+    row.proofTaskLabel,
+    ...row.leaves.map((l) => l.label),
+    ...row.claims.map((c) => c.itemName),
+    row.team.name,
+    ...people.flatMap((u) => [displayName(u), u.discordUsername]),
+    row.submission.reviewerNotes,
+  ];
+}
+
 /** A checklist filter, as inclusionFilter gives it. */
 type Filter = Pick<ReturnType<typeof inclusionFilter>, "matches" | "narrowed">;
 
 /** The rows passing every filter at once. */
 export function filterSubmissions(
   rows: ModSubmissionRow[],
-  filters: { status: Filter; team: Filter; submitter: Filter; reviewer: Filter },
+  filters: { status: Filter; team: Filter; submitter: Filter; reviewer: Filter; query?: string },
 ): ModSubmissionRow[] {
   return rows.filter(
     (row) =>
+      matchesSearch(searchText(row), filters.query ?? "") &&
       filters.status.matches(row.submission.status) &&
-      filters.team.matches(row.team.name) &&
+      filters.team.matches(row.team.id) &&
       // Any includes a Submission with no known submitter; a narrowed filter needs one of its people ticked.
       (!filters.submitter.narrowed || submitterKeys(row).some(filters.submitter.matches)) &&
       filters.reviewer.matches(reviewerKey(row)),

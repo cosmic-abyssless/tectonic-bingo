@@ -11,7 +11,8 @@ import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
-import { useUrlSet } from "../ui/useUrlParam";
+import { useUrlParam, useUrlSet } from "../ui/useUrlParam";
+import { TableSearchInput } from "../ui/tableSearch";
 import { ScreenshotLink, ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
 import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
@@ -45,8 +46,8 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
-/** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>`. */
-export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers"] as const;
+/** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>&q=<search>`. */
+export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers", "q"] as const;
 const DEFAULT_STATUSES = ["pending"];
 
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
@@ -110,6 +111,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [selectedTeams, setSelectedTeams] = useUrlSet("teams");
   const [selectedSubmitters, setSelectedSubmitters] = useUrlSet("submitters");
   const [selectedReviewers, setSelectedReviewers] = useUrlSet("reviewers");
+  const [search, setSearch] = useUrlParam("q");
+  const query = search ?? "";
   // How many of the filtered list are drawn (issue #383): a Bingo has 1,000+ Submissions, and drawing every one is
   // what's slow, so Load more adds a page at a time. Changing a filter goes back to the first page.
   const [shown, setShown] = useState(PAGE_SIZE);
@@ -145,7 +148,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const teams = inclusionFilter(selectedTeams, teamOptions);
   const submitters = inclusionFilter(selectedSubmitters, submitterChoices);
   const reviewers = inclusionFilter(selectedReviewers, reviewerChoices);
-  const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers });
+  const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers, query });
   // Newest first, whatever the filters.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
   const visible = [...filtered].sort((a, b) => Date.parse(b.submission.submittedAt) - Date.parse(a.submission.submittedAt));
@@ -262,6 +265,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
           {reviewerChoices.length > 0 && (
             <MultiSelect label="Reviewer" options={reviewerChoices} selected={reviewers.checked} onChange={setFilter(setSelectedReviewers)} />
           )}
+          <TableSearchInput
+            value={query}
+            onChange={(next) => {
+              setSearch(next || null);
+              setShown(PAGE_SIZE);
+            }}
+            placeholder="Search tile, item, player, notes…"
+          />
         </div>
         <div className="flex items-center gap-2 text-xs text-on-surface-subtle">
           <span className="flex items-center gap-1">
@@ -282,7 +293,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
-          {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed ? "New submissions show up here as they come in." : "No submissions match this filter."}
+          {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed && !query.trim() ? "New submissions show up here as they come in." : "No submissions match this filter."}
         </EmptyState>
       ) : (
         <div className="space-y-2">
@@ -334,6 +345,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     </p>
                     <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}
                       {row.postedByUser && <> (posted by <PlayerName userId={row.postedByUser.id}>{displayName(row.postedByUser)}</PlayerName>)</>}
+                      {row.submission.status !== "pending" && row.reviewedByUser && (
+                        <>
+                          {" · "}
+                          {row.submission.status} by {displayName(row.reviewedByUser)}
+                          {row.submission.reviewedAt && <> {timeAgo(row.submission.reviewedAt)}</>}
+                        </>
+                      )}
                     </p>
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
