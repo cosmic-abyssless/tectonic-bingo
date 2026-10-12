@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
+import { eq } from "drizzle-orm";
 import { claims, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 
@@ -85,6 +86,16 @@ describe("Catch-up", () => {
     expect(text).not.toContain("carol");
     // A Player doesn't see the scoreboard while it's Live.
     expect(text).not.toContain("Standing");
+  });
+
+  it("never the standings, even to an Admin on a Team who can see the scoreboard", () => {
+    db.update(schema.users).set({ isAdmin: true }).where(eq(schema.users.id, bob.id)).run();
+    const admin = { ...bob, isAdmin: true };
+    recordBingoPresence(db, admin.id, bingo.id, t0);
+    approveAt(teamA, alice.id, tasks[0]!, "Item 1", new Date(t0.getTime() + HOUR));
+    const text = getCatchUp(db, bingo, admin, new Date(t0.getTime() + 5 * HOUR)).sections.flatMap((s) => s.lines.map((l) => l.text)).join(" | ");
+    expect(text).toContain("+10 points");
+    expect(text).not.toMatch(/standing|of 2/i);
   });
 
   it("nothing new: no card", () => {
