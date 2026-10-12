@@ -78,6 +78,9 @@ function useBoardLayout(
       frame = requestAnimationFrame(measure);
     };
     const measure = () => {
+      // Pinch-zoomed in: kept as it was. Safari gives the zoomed-in part of the page as the window's size (and says
+      // it resized), which squeezed the board's box to its minimum until zoomed back out.
+      if ((window.visualViewport?.scale ?? 1) > 1.01) return;
       const gridStyle = getComputedStyle(grid);
       const gap = parseFloat(gridStyle.rowGap) || 0;
       // With row labels the first track is theirs; it's `auto`, so read it.
@@ -135,14 +138,21 @@ function useBoardLayout(
     };
     measure();
     window.addEventListener("resize", measure);
+    // Zooming back out, which not every browser calls a resize.
+    window.visualViewport?.addEventListener("resize", measure);
     // Fonts and images settling can move the grid's top; the box's own
-    // scrollbars coming and going change the room inside it.
+    // scrollbars coming and going change the room inside it. The page's
+    // column changes height when something above the box comes or goes (a
+    // Catch-up card dismissed), which the body, at least a screen tall,
+    // doesn't.
     const ro = new ResizeObserver(measure);
     ro.observe(document.body);
     if (scroller) ro.observe(scroller);
+    if (main) ro.observe(main);
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
       ro.disconnect();
     };
   }, [gridRef, scrollerRef, rows, cols, size?.mode, size?.widthPercent]);
