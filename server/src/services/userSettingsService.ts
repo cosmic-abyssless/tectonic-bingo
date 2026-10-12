@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { BOARD_SIZE_DEVICES, BOARD_SIZE_MODES, BOARD_WIDTH_PERCENT, DEFAULT_USER_SETTINGS, type BoardSize, type BoardSizeMode, type UserSettings, type UserSettingsPatch } from "@bingo/shared";
+import { ANIMATIONS_SETTINGS, BOARD_SIZE_DEVICES, BOARD_SIZE_MODES, BOARD_WIDTH_PERCENT, DEFAULT_USER_SETTINGS, type BoardSize, type BoardSizeMode, type AnimationsSetting, type UserSettings, type UserSettingsPatch } from "@bingo/shared";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
 import { userSettings } from "../db/schema";
@@ -16,6 +16,7 @@ function toSettings(row: Row | undefined): UserSettings {
       desktop: { mode: row.boardDesktopMode, widthPercent: row.boardDesktopWidthPercent },
       phone: { mode: row.boardPhoneMode, widthPercent: row.boardPhoneWidthPercent },
     },
+    animations: row.animations,
   };
 }
 
@@ -45,13 +46,19 @@ export function updateSettings(q: Queryable, userId: string, patch: UserSettings
       if (change !== undefined) boardSize[device] = { ...boardSize[device], ...checkBoardSize(change) };
     }
   }
+  let animations = current.animations;
+  if (patch.animations !== undefined) {
+    if (!ANIMATIONS_SETTINGS.includes(patch.animations as AnimationsSetting)) throw new ServiceError(400, "Invalid Animations setting");
+    animations = patch.animations;
+  }
   const values = {
     boardDesktopMode: boardSize.desktop.mode,
     boardDesktopWidthPercent: boardSize.desktop.widthPercent,
     boardPhoneMode: boardSize.phone.mode,
     boardPhoneWidthPercent: boardSize.phone.widthPercent,
+    animations,
     updatedAt: now,
   };
   q.insert(userSettings).values({ userId, ...values }).onConflictDoUpdate({ target: userSettings.userId, set: values }).run();
-  return { boardSize };
+  return { boardSize, animations };
 }

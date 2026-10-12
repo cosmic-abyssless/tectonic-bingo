@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
-import { useReducedMotion, useScroll, useTransform, type MotionValue } from "motion/react";
+import { useScroll, useTransform, type MotionValue } from "motion/react";
+import { useReducedMotion } from "../settings/animations";
 import * as m from "motion/react-m";
 import { useWrappedProgressSource, useWrappedRevealComponent, WRAPPED_SCENE_UNREACHED, type WrappedProgressSource, type WrappedRevealEmphasis, type WrappedSceneState } from "./sceneProgress";
 

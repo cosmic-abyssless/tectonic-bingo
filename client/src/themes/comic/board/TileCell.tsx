@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, type CSSProperties } from "react";
-import { animate, motion, useReducedMotion, type Variants } from "motion/react";
+import { animate, motion, type Variants } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { useFocusRing } from "react-aria";
 import type { TileModel } from "../../../headless/types";
 import { useTileSearchHighlighted } from "../../../headless/TileSearchProvider";

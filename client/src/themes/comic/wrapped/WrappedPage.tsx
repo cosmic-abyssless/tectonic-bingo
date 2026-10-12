@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { useBingoHeader, useBingoMenuEntries, useWrappedModel } from "../../../headless";
 import type { WrappedSectionModel } from "../../../headless/types";
 import { AppHeader } from "../../../core/ui/AppHeader";

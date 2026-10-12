@@ -96,14 +96,24 @@ describe("/api/me/settings (User settings)", () => {
 
     let res = await call("PUT", "/api/me/settings", { boardSize: { phone: { mode: "custom", widthPercent: 140 } } });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ boardSize: { desktop: { mode: "fit", widthPercent: 100 }, phone: { mode: "custom", widthPercent: 140 } } });
+    expect(await res.json()).toEqual({ boardSize: { desktop: { mode: "fit", widthPercent: 100 }, phone: { mode: "custom", widthPercent: 140 } }, animations: "all" });
 
     // Only what the patch names changes: Custom's width is kept while another mode is picked.
     res = await call("PUT", "/api/me/settings", { boardSize: { desktop: { mode: "maximize" }, phone: { mode: "fit" } } });
-    const expected: UserSettings = { boardSize: { desktop: { mode: "maximize", widthPercent: 100 }, phone: { mode: "fit", widthPercent: 140 } } };
+    const expected: UserSettings = { boardSize: { desktop: { mode: "maximize", widthPercent: 100 }, phone: { mode: "fit", widthPercent: 140 } }, animations: "all" };
     expect(await res.json()).toEqual(expected);
     expect(await (await call("GET", "/api/me/settings")).json()).toEqual(expected);
     expect(db.select().from(schema.auditLog).all()).toEqual([]);
+  });
+
+  it("keeps Animations, one for every device, apart from the Board size", async () => {
+    viewerId = player().id;
+    await call("PUT", "/api/me/settings", { boardSize: { desktop: { mode: "maximize" } } });
+    const res = await call("PUT", "/api/me/settings", { animations: "reduced" });
+    expect(await res.json()).toEqual({ boardSize: { desktop: { mode: "maximize", widthPercent: 100 }, phone: { mode: "fit", widthPercent: 100 } }, animations: "reduced" });
+    expect(((await (await call("GET", "/api/me/settings")).json()) as UserSettings).animations).toBe("reduced");
+    expect((await call("PUT", "/api/me/settings", { animations: "some" })).status).toBe(400);
+    expect(((await (await call("GET", "/api/me/settings")).json()) as UserSettings).animations).toBe("reduced");
   });
 
   it("refuses a mode or width it doesn't know, changing nothing", async () => {

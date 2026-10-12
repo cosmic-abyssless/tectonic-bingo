@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { CaptainEmblem } from "../../../core/ui/CaptainEmblem";
 import { inkOn } from "../../../core/draft/teamColor";
 import type { OnTheClockProps } from "../../slots";

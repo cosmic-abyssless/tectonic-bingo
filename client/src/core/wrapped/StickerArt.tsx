@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../settings/animations";
 import type { WrappedArtFrames } from "@bingo/shared";
 
 /** How long each "boil" frame stays up: slow, so the sticker looks hand-made and slightly alive rather than busy. */

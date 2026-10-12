@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../settings/animations";
 import type { DraftState } from "@bingo/shared";
 import { useWebSocketEvent } from "../../context/WebSocketContext";
 import { MAX_QUEUED_REVEALS, expiredPicks, readyPick, type PendingPick } from "./revealMath";

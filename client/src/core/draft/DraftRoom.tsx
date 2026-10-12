@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSlot } from "../../themes/context";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../settings/animations";
 import * as m from "motion/react-m";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DraftTeam, PickRating } from "@bingo/shared";

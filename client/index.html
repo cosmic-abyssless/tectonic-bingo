@@ -21,13 +21,13 @@
         if (p === "light" || p === "dark") document.documentElement.setAttribute("data-color-scheme", p);
       } catch (e) {}
     </script>
-    <!-- Comic-lettering display font for the "comic" theme (themes/comic/font.ts).
-         Loaded globally here since it's a build-time asset, same as any other
-         web font — but only the comic theme's own components reference it. -->
+    <!-- The comic theme's other fonts (themes/comic/font.ts; Bangers, its lettering, is our own, in index.css).
+         Loaded globally here since they're build-time assets, same as any other
+         web font — but only the comic theme's own components reference them. -->
     <!-- Loaded with CORS so the page can read its rules: a share card's image embeds the fonts it uses from them. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:wght@100..900&family=Bangers&family=Comic+Neue:wght@700&display=swap" rel="stylesheet" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:wght@100..900&family=Comic+Neue:wght@700&display=swap" rel="stylesheet" crossorigin />
   </head>
   <body>
     <div id="root"></div>

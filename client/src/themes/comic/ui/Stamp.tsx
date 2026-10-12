@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import { COMIC_FONT } from "../font";
 import { useComic } from "./useComic";
 import { LETTERED } from "../../lettering";

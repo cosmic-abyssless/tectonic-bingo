@@ -1,0 +1,1 @@
+ALTER TABLE `user_settings` ADD `animations` text DEFAULT 'all' NOT NULL;

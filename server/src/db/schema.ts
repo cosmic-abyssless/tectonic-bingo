@@ -1176,12 +1176,15 @@ export const notificationSettings = sqliteTable('notification_settings', {
 
 // One user's User settings (shared userSettings.ts), the ones kept on the account rather than in a browser. No row:
 // every default. Each kind of device has its own Board size: its mode, and Custom's width as a percentage of the window's.
+// Animations is one for every device.
 export const userSettings = sqliteTable('user_settings', {
   userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   boardDesktopMode: text('board_desktop_mode', { enum: ['fit', 'maximize', 'custom'] }).notNull().default('fit'),
   boardDesktopWidthPercent: integer('board_desktop_width_percent').notNull().default(100),
   boardPhoneMode: text('board_phone_mode', { enum: ['fit', 'maximize', 'custom'] }).notNull().default('fit'),
   boardPhoneWidthPercent: integer('board_phone_width_percent').notNull().default(100),
+  // How much of the site moves: all, reduced (the spinning backgrounds stand still) or off.
+  animations: text('animations', { enum: ['all', 'reduced', 'off'] }).notNull().default('all'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 

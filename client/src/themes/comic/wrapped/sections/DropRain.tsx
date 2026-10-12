@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "../../../../core/settings/animations";
 import { wikiIconUrl } from "../../../../api/wikiIcons";
 import { useWrappedSceneState } from "../../../../core/wrapped/Scene";
 import { pieceAt, rainPile, type RainPile } from "../dropRain";

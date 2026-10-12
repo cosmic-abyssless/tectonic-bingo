@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useReducedMotion, useScroll } from "motion/react";
+import { useScroll } from "motion/react";
+import { useReducedMotion } from "../../../core/settings/animations";
 import * as m from "motion/react-m";
 import type { WrappedArtFrames } from "@bingo/shared";
 import { useBingoHeader, useBingoMenuEntries, useWrappedModel } from "../../../headless";
