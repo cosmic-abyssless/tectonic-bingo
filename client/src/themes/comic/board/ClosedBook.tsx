@@ -209,7 +209,7 @@ export function ClosedBook({
             transform: `${BACK_STAGGER_CSS} translateZ(${-BACK_DEPTH}px) rotateY(180deg)`,
           }}
         >
-          <BookBackArt tile={tile} colors={page} fallbackColor={coverFallback} variant={coverImageVariant} />
+          <BookBackArt tile={tile} colors={page} variant={coverImageVariant} />
         </div>
       )}
 

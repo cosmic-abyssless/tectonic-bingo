@@ -275,7 +275,7 @@ function FreezeTimer({ colors, remainingMs }: { colors: ComicColors; remainingMs
 }
 
 /** How many names the back cover lists before "+N more". */
-const BACK_COVER_NAMES = 4;
+const BACK_COVER_NAMES = 6;
 
 /**
  * Who got a finished tile over the line: the distinct people behind its
@@ -291,39 +291,43 @@ export function tileContributors(tile: TileModel): string[] {
   return names;
 }
 
-function PointsRow({ label, points }: { label: string; points: number }) {
-  return (
-    <li className="flex items-baseline justify-between gap-[2cqw]">
-      <span className="truncate">{label}</span>
-      <span className="num shrink-0">{points}¢</span>
-    </li>
-  );
+/** A comic starburst's outline in a 100×100 box: `spikes` points out to `outer`, notched in to `inner`. */
+function burstPoints(spikes: number, outer: number, inner: number) {
+  return Array.from({ length: spikes * 2 }, (_, i) => {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = (Math.PI * i) / spikes - Math.PI / 2;
+    return `${(50 + r * Math.cos(a)).toFixed(2)},${(50 + r * Math.sin(a)).toFixed(2)}`;
+  }).join(" ");
+}
+const BURST = burstPoints(14, 50, 39);
+
+/** Display lettering's ink outline and hard drop, in em so it scales with the type. */
+function inkOutline(ink: string) {
+  const w = "0.05em";
+  return [`-${w} -${w} 0 ${ink}`, `${w} -${w} 0 ${ink}`, `-${w} ${w} 0 ${ink}`, `${w} ${w} 0 ${ink}`, `0.09em 0.09em 0 ${ink}`].join(", ");
 }
 
 /**
- * The back of a finished tile's comic book: the same cover color as the
- * front, a "THE END" and a credits box listing everyone who contributed.
- * Interior only, like BookCoverArt — the caller (ClosedBook) owns the
- * bordered, back-facing element it fills — and likewise sized entirely in
- * container-query units of the cover's own width, so it's the same drawing
- * on the tile and in the modal's flying copy.
+ * The back of a finished tile's comic book, there to say "done" from across the board: the whole cover goes green
+ * behind speed lines, the cover art sits in a yellow starburst bursting in from the top-left corner, COMPLETE! is
+ * lettered at an angle beside it, and a credits box lists everyone who got it over the line. Every finished tile pays
+ * the same, so it shows no points. Interior only, like BookCoverArt: the caller (ClosedBook) owns the bordered,
+ * back-facing element it fills. Likewise sized entirely in container-query units of the cover's own width, so it's
+ * the same drawing on the tile and in the modal's flying copy. On the board the cell crops the book about two thirds
+ * of the way down, so the lettering and the first names sit above that.
  */
 export function BookBackArt({
   tile,
   colors,
-  fallbackColor,
   variant = "thumb",
 }: {
   tile: TileModel;
   colors: ComicColors;
-  fallbackColor: string;
   /** Which display variant of the artwork to load — same as the front cover's. */
   variant?: "thumb" | "full";
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const imageUrl = tile.imageUrl && !imgFailed ? tile.imageUrl : null;
-  const dominantColor = useDominantColor(coverColorSource(tile.imageUrl, imgFailed));
-  const textColor = getContrastTextColor(dominantColor ?? fallbackColor);
   const names = tileContributors(tile);
   const shown = names.slice(0, BACK_COVER_NAMES);
   const more = names.length - shown.length;
@@ -331,83 +335,49 @@ export function BookBackArt({
   return (
     // The container is this outer box; the cqw lengths live one level down
     // (a box's own cqw resolve against its ancestor's container, not itself).
-    <div className="absolute inset-0 overflow-hidden [container-type:inline-size]" style={{ backgroundColor: dominantColor ?? fallbackColor, color: textColor }}>
-      <div className="absolute inset-0 flex flex-col items-center gap-[3cqw] px-[6cqw] pb-[6cqw] pt-[6cqw]">
-        {/* The same rubber stamp as a finished part's page (ui/Stamp), drawn in the
-            cover's own units. It keeps a paper-coloured fill: green ink on paper is
-            legible whatever colour the cover is, which lettering straight onto the
-            cover wouldn't be. */}
-        <span
-          className={`${LETTERED} my-[1cqw] shrink-0 -rotate-3 whitespace-nowrap uppercase leading-none`}
-          style={{
-            fontFamily: COMIC_FONT,
-            fontSize: "9cqw",
-            letterSpacing: "0.08em",
-            color: colors.OK,
-            background: colors.PAPER_RAISED,
-            border: `1cqw solid ${colors.OK}`,
-            boxShadow: `0 0 0 0.6cqw ${colors.PAPER_RAISED}, 0 0 0 1.2cqw ${colors.OK}`,
-            padding: "1.3cqw 3cqw",
-          }}
-        >
-          Completed
-        </span>
-        {/* The cover art again, smaller, with a big check stamped on its
-            corner so a finished tile reads as done at a glance — and beside
-            it what the tile paid out, part by part. */}
-        <div className="flex w-full shrink-0 items-center gap-[5cqw] pl-[3cqw]">
-          <div className="relative h-[34cqw] w-[34cqw] shrink-0">
-            {imageUrl && (
-              <CoverImage
-                key={imageUrl}
-                url={imageUrl}
-                variant={variant}
-                alt=""
-                onFail={() => setImgFailed(true)}
-                className="h-full w-full object-contain"
-                style={{ filter: `drop-shadow(1.2cqw 1.2cqw 0 ${colors.SHADOW})` }}
-              />
-            )}
-            <span
-              className="absolute -left-[5cqw] -top-[4cqw] flex h-[14cqw] w-[14cqw] -rotate-[8deg] items-center justify-center rounded-full"
-              style={{ background: colors.GREEN, border: `1cqw solid ${colors.LINE}`, boxShadow: `1.2cqw 1.2cqw 0 ${colors.SHADOW}`, color: colors.ON_LOUD }}
-            >
-              <svg viewBox="0 0 16 16" className="h-[8.5cqw] w-[8.5cqw]" fill="none" stroke="currentColor" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" aria-label="Complete">
-                <path d="M3 8.5l3 3 7-7" />
-              </svg>
-            </span>
+    <div className="absolute inset-0 overflow-hidden [container-type:inline-size]" style={{ backgroundColor: colors.GREEN }}>
+      {/* Speed lines, radiating from the burst. */}
+      <div
+        className="absolute inset-0"
+        style={{ background: `repeating-conic-gradient(from 0deg at 22cqw 22cqw, color-mix(in srgb, ${colors.ON_LOUD} 22%, transparent) 0deg 7deg, transparent 7deg 16deg)` }}
+      />
+      {/* The burst, its centre near the corner so about two thirds of it is on the cover, with the art in it. */}
+      <div className="absolute -left-[12cqw] -top-[12cqw] h-[66cqw] w-[66cqw]">
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+          <polygon points={BURST} fill={colors.SHADOW} transform="translate(2.4 2.4)" />
+          <polygon points={BURST} fill={colors.YELLOW} stroke={colors.SHADOW} strokeWidth={1.6} strokeLinejoin="round" />
+        </svg>
+        {imageUrl && (
+          <div className="absolute left-[33%] top-[33%] h-[46%] w-[46%]">
+            <CoverImage key={imageUrl} url={imageUrl} variant={variant} alt="" onFail={() => setImgFailed(true)} className="h-full w-full object-contain" />
           </div>
-          <ul className={`${LETTERED} flex min-w-0 flex-1 flex-col gap-[1.4cqw] leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "7.4cqw", letterSpacing: "0.02em" }}>
-            {tile.tasks.map((task, i) => (
-              <PointsRow key={task.id} label={task.label || `Part ${i + 1}`} points={task.pointsAwarded} />
-            ))}
-            {tile.progress.bonusAwarded > 0 && <PointsRow label="Bonus" points={tile.progress.bonusAwarded} />}
-            <li className="mt-[1cqw] flex items-baseline justify-between gap-[2cqw] border-t-[0.9cqw] pt-[1.6cqw]" style={{ borderColor: "currentcolor", fontSize: "10cqw" }}>
-              <span>Total</span>
-              <span className="num shrink-0">{tile.progress.pointsAwarded}¢</span>
+        )}
+      </div>
+      <span
+        className={`${LETTERED} absolute right-[4cqw] top-[21cqw] origin-center -rotate-[20deg] whitespace-nowrap uppercase leading-none`}
+        style={{ fontFamily: COMIC_FONT, fontSize: "15cqw", color: colors.ON_LOUD, textShadow: inkOutline(colors.SHADOW) }}
+      >
+        Complete!
+      </span>
+      <div
+        className="absolute inset-x-[6cqw] top-[55cqw] border-[0.9cqw] px-[4cqw] py-[2.6cqw]"
+        style={{ borderColor: colors.SHADOW, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.4cqw 1.4cqw 0 ${colors.SHADOW}` }}
+      >
+        <span className={`${LETTERED} mb-[1.6cqw] block uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "5.6cqw", letterSpacing: "0.05em", color: colors.INK_SUBTLE }}>
+          Completed by
+        </span>
+        <ul className={`${LETTERED} flex flex-col gap-[1cqw] leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "7.6cqw", letterSpacing: "0.02em" }}>
+          {shown.map((name) => (
+            <li key={name} className="truncate">
+              {name}
             </li>
-          </ul>
-        </div>
-        <div
-          className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-[0.9cqw] px-[4cqw] py-[3.5cqw]"
-          style={{ borderColor: colors.LINE, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.6cqw 1.6cqw 0 ${colors.SHADOW}` }}
-        >
-          <span className={`${LETTERED} mb-[2cqw] uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "6.6cqw", letterSpacing: "0.04em", color: colors.INK_SUBTLE }}>
-            Completed by
-          </span>
-          <ul className={`${LETTERED} flex min-h-0 flex-col gap-[1.2cqw] leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "8.4cqw", letterSpacing: "0.02em" }}>
-            {shown.map((name) => (
-              <li key={name} className="truncate">
-                {name}
-              </li>
-            ))}
-            {more > 0 && (
-              <li className="truncate" style={{ color: colors.INK_SUBTLE }}>
-                +{more} more
-              </li>
-            )}
-          </ul>
-        </div>
+          ))}
+          {more > 0 && (
+            <li className="truncate" style={{ color: colors.INK_SUBTLE }}>
+              +{more} more
+            </li>
+          )}
+        </ul>
       </div>
     </div>
   );
