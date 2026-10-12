@@ -1,16 +1,16 @@
 // Catch-up (CONTEXT.md): what happened in a Bingo since a user last had it open, from their point of view, shown at the
 // top of its page when they come back. Presence (when they last had it open) comes from their tabs' socket
 // (notificationPresence.ts) at most once a minute; a gap of VISIT_GAP_MS starts a new visit, whose Catch-up covers the
-// time since the one before. Built per viewer under the same rules as the pages: their own Team only, the standing only
-// once they can see the scoreboard, the queue only for a Moderator.
+// time since the one before. Built per viewer under the same rules as the pages: their own Team only, the queue only for a
+// Moderator. Never the standings, even to an Admin on a Team who could open the scoreboard: no spoilers.
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { can, type AuditDetailsMap, type CatchUpLine, type CatchUpResponse, type CatchUpSection } from "@bingo/shared";
+import { type AuditDetailsMap, type CatchUpLine, type CatchUpResponse, type CatchUpSection } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { auditLog, bingoLines, bingoPresence, nodeEdges, signupPairings, submissions, teams, tiles, users } from "../db/schema";
 import { getBingoAccess } from "./bingoAccess";
 import { getDraftState } from "./draftService";
-import { getLedTeam, getTeamProgress, getUserTeamForBingo } from "./teamService";
+import { getLedTeam, getUserTeamForBingo } from "./teamService";
 import { getAllSubmissionsForBingo, getPendingCount } from "./submissionService";
 import { lineLabel } from "./scoringService";
 import { rsnsInBingo } from "./playerNames";
@@ -97,7 +97,6 @@ function buildCatchUp(db: Db, bingo: Bingo, user: User, now: Date, enabled: bool
 
   const team = getUserTeamForBingo(db, bingo.id, user.id);
   const isMod = access.isMod;
-  const seesScoreboard = can(access.roles, bingo, "view_other_teams").ok;
   const link = (tileId?: string | null) => `/b/${bingo.slug}${tileId ? `?tile=${tileId}` : ""}`;
   const summary: string[] = [];
 
@@ -216,12 +215,6 @@ function buildCatchUp(db: Db, bingo: Bingo, user: User, now: Date, enabled: bool
       const name = biggest.userId === user.id ? "yours" : (rsnsInBingo(db, bingo.id, [biggest.userId]).get(biggest.userId) ?? db.select({ name: users.discordUsername }).from(users).where(eq(users.id, biggest.userId)).get()?.name ?? "a teammate");
       yourTeam.push({ text: `Biggest drop: ${biggest.tileName ? `"${biggest.tileName}" ` : ""}+${biggest.points}, ${name === "yours" ? "yours" : `by ${name}`}`, link: link() });
     }
-    if (seesScoreboard && (yourTeam.length > 0 || bingo.stage === "complete")) {
-      const all = db.select({ id: teams.id, name: teams.name }).from(teams).where(eq(teams.bingoId, bingo.id)).all();
-      const ranked = all.map((t) => ({ ...t, points: getTeamProgress(db, t.id).totalPoints })).sort((a, b) => b.points - a.points);
-      const place = ranked.findIndex((t) => t.id === team.id) + 1;
-      if (place > 0) yourTeam.push({ text: `${bingo.stage === "complete" ? "Final standing" : "Standing"}: ${ordinal(place)} of ${ranked.length}, ${ranked[place - 1]!.points} points`, link: `/b/${bingo.slug}/stats` });
-    }
   }
 
   // 4. Bingo.
@@ -241,11 +234,6 @@ function buildCatchUp(db: Db, bingo: Bingo, user: User, now: Date, enabled: bool
   if (sections.length === 0 || (sections.length === 1 && sections[0]!.key === "bingo" && stageChanges.length === 0)) return empty;
   if (summary.length === 0) summary.push(sections[0]!.lines[0]!.text);
   return { enabled, since: from.toISOString(), summary: summary.slice(0, 3).join(", "), sections };
-}
-
-function ordinal(n: number): string {
-  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
-  return `${n}${suffix}`;
 }
 
 function stageWord(stage: Bingo["stage"]): string {
