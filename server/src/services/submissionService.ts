@@ -231,7 +231,10 @@ function assertNotFrozen(tile: typeof tiles.$inferSelect, startsAt: Date, now: D
 export function frozenUntil(tile: Pick<typeof tiles.$inferSelect, "hasFreezePeriod" | "freezeDurationMinutes">, startsAt: Date): Date | null {
   return tile.hasFreezePeriod ? new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000) : null;
 }
-export const frozenMessage = (unlockAt: Date) => `This tile is frozen until ${unlockAt.toISOString()}`;
+/** A moment as a Moderator or Player reads it: "Oct 5, 2026, 09:29 UTC" (the server can't know their time zone). */
+export const utcLabel = (at: Date) =>
+  `${at.toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })} UTC`;
+export const frozenMessage = (unlockAt: Date) => `This tile is frozen until ${utcLabel(unlockAt)}`;
 export const gateMessage = (blockedBy: string) => `${blockedBy}: the previous requirement must be completed first`;
 export const proofNotNeededMessage = (forTask: boolean) => (forTask ? "This task doesn't need a Proof screenshot" : "This tile doesn't need a Proof screenshot");
 

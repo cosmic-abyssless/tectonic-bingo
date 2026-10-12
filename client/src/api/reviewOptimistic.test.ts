@@ -22,13 +22,6 @@ describe("reviewedRow", () => {
     });
     expect(reviewedRow(row("1"), "reject", mod, undefined, AT).submission).toMatchObject({ status: "rejected", reviewerNotes: null });
   });
-
-  it("undo clears the review, notes and all", () => {
-    expect(reviewedRow(row("1", "rejected", other), "undo", mod, undefined, AT)).toMatchObject({
-      submission: { status: "pending", reviewedAt: null, reviewedByUserId: null, reviewerNotes: null },
-      reviewedByUser: null,
-    });
-  });
 });
 
 describe("withReviewsInFlight", () => {
@@ -43,13 +36,12 @@ describe("withReviewsInFlight", () => {
       data,
       [
         { submissionId: "1", action: "approve", at: AT },
-        { submissionId: "1", action: "undo", at: AT },
-        { submissionId: "3", action: "undo", at: AT },
+        { submissionId: "1", action: "reject", at: AT },
         { submissionId: "2", action: "reject", reviewerNotes: "blurry", at: AT },
       ],
       mod,
     );
-    expect(shown.submissions.map((r) => r.submission.status)).toEqual(["pending", "rejected", "pending"]);
+    expect(shown.submissions.map((r) => r.submission.status)).toEqual(["rejected", "rejected", "approved"]);
     expect(shown.submissions[1].submission.reviewerNotes).toBe("blurry");
   });
 
@@ -60,11 +52,9 @@ describe("withReviewsInFlight", () => {
 });
 
 describe("pendingCountChange", () => {
-  it("counts a Submission leaving or coming back to Pending", () => {
-    expect(pendingCountChange("pending", "approve")).toBe(-1);
-    expect(pendingCountChange("pending", "reject")).toBe(-1);
-    expect(pendingCountChange("approved", "undo")).toBe(1);
-    expect(pendingCountChange("pending", "undo")).toBe(0);
-    expect(pendingCountChange("approved", "reject")).toBe(0);
+  it("counts a Submission leaving Pending", () => {
+    expect(pendingCountChange("pending")).toBe(-1);
+    expect(pendingCountChange("approved")).toBe(0);
+    expect(pendingCountChange("rejected")).toBe(0);
   });
 });

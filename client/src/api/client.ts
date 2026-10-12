@@ -6,10 +6,13 @@ export class ApiError extends Error {
   // The server's stable error code, when it sends one (e.g. "cut_review_required" on the move into the Draft) — for
   // branching on without parsing the message.
   code?: string;
-  constructor(status: number, message: string, code?: string) {
+  // The whole JSON body, for a refusal that carries more than its message (an edit's warnings, EditSubmissionRefusal).
+  body?: unknown;
+  constructor(status: number, message: string, code?: string, body?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.body = body;
     this.name = "ApiError";
   }
 }
@@ -64,15 +67,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     let code: string | undefined;
+    let body: unknown;
     try {
       const data = await res.json();
+      body = data;
       if (data?.error) message = data.error;
       if (typeof data?.code === "string") code = data.code;
     } catch {
       // response body wasn't JSON — keep the generic message
     }
     if (res.status >= 500) reportClientError(`${path} ${message}`, "api.5xx");
-    const error = new ApiError(res.status, message, code);
+    const error = new ApiError(res.status, message, code, body);
     if (res.status === 403) for (const listener of refusalListeners) listener(path, init?.method ?? "GET", error);
     if (res.status === 429) for (const listener of slowDownListeners) listener(error);
     throw error;

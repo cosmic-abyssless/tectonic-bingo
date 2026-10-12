@@ -7,7 +7,7 @@ import * as schema from "../db/schema";
 import { bingos, claims, submissions, submissionScreenshots, teamNodeState } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile, generateLines, updateTileBonusPoints } from "./boardService";
-import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions } from "./submissionService";
+import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, utcLabel } from "./submissionService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 import { editSubmission, EditWarningsError } from "./submissionEdit";
 import { queryAuditLog } from "../audit/query";
@@ -462,7 +462,7 @@ describe("warnings", () => {
     const sub = drop(fx, [{ nodeId: fx.bow.id, itemName: "Twisted bow" }], { at: 180 });
     const early = t(30).toISOString();
     const warnings = warningsOf(() => edit(fx, sub.id, { submittedAt: early }));
-    expect(warnings).toEqual([{ code: "frozen", message: `This tile is frozen until ${t(120).toISOString()}` }]);
+    expect(warnings).toEqual([{ code: "frozen", message: `This tile is frozen until ${utcLabel(t(120))}` }]);
     expect(row(sub.id).submittedAt).toEqual(t(180)); // nothing was saved
 
     const result = edit(fx, sub.id, { submittedAt: early, force: true });

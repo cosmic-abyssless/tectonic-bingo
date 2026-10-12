@@ -17,7 +17,7 @@ import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { pricer, valuedAsOf } from "./gpValueService";
 import { describeSubmissionTarget, getSubmissionNodeIds, rebuildTeamState, recordPointChanges, scoreTeam } from "./scoringService";
-import { frozenMessage, frozenUntil, gateMessage, proofNotNeededMessage, tileForLeaf } from "./submissionService";
+import { frozenMessage, frozenUntil, gateMessage, proofNotNeededMessage, tileForLeaf, utcLabel } from "./submissionService";
 import { getTeamById, getTeamMembers } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -285,9 +285,9 @@ function warningsFor(tx: Tx, bingo: Bingo, teamId: string, submissionId: string,
   if (state.status === "rejected") return [];
   const out: EditWarning[] = [];
   const startsAt = effectiveStartsAt(tx, bingo);
-  if (startsAt && state.submittedAt < startsAt) out.push({ code: "before_start", message: `The bingo hadn't started yet at that time (it started ${startsAt.toISOString()})` });
+  if (startsAt && state.submittedAt < startsAt) out.push({ code: "before_start", message: `The bingo hadn't started yet at that time (it started ${utcLabel(startsAt)})` });
   const ended = endedAt(tx, bingo);
-  if (ended && state.submittedAt > ended) out.push({ code: "after_end", message: `The bingo had already ended at that time (it ended ${ended.toISOString()})` });
+  if (ended && state.submittedAt > ended) out.push({ code: "after_end", message: `The bingo had already ended at that time (it ended ${utcLabel(ended)})` });
   const unlockAt = state.tile && startsAt ? frozenUntil(state.tile, startsAt) : null;
   if (unlockAt && state.submittedAt < unlockAt) out.push({ code: "frozen", message: frozenMessage(unlockAt) });
 
