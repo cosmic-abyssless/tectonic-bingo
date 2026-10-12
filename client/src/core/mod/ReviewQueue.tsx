@@ -170,13 +170,15 @@ export function ReviewQueue({ slug }: { slug: string }) {
     setExpandedId(id);
   }
 
+  // Shown at once (useReviewSubmission): the row leaves Pending and closes without waiting for the server, so the next
+  // one can be reviewed straight away. A refused one comes back, with why above the list.
   async function submitReview(row: ModSubmissionRow, action: "approve" | "reject") {
     setError(null);
+    setExpandedId(null);
     try {
       await review.mutateAsync({ submissionId: row.submission.id, action, reviewerNotes: notes[row.submission.id] || undefined });
-      setExpandedId(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Review failed");
+      setError(`Couldn't ${action} ${row.tile.name} (${row.team.name}): ${e instanceof Error ? e.message : "review failed"}`);
     }
   }
 
@@ -187,7 +189,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
     try {
       await review.mutateAsync({ submissionId: row.submission.id, action: "undo" });
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Undo failed");
+      setError(`Couldn't undo the review of ${row.tile.name} (${row.team.name}): ${e instanceof Error ? e.message : "undo failed"}`);
     }
   }
 
@@ -242,7 +244,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
       } else if (e.key === "a" || e.key === "A") {
         if (!expandedId) return;
         const curr = visible.find((r) => r.submission.id === expandedId && r.submission.status === "pending");
-        if (curr && !review.isPending) {
+        if (curr) {
           e.preventDefault();
           submitReview(curr, "approve");
         }
@@ -259,7 +261,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [expandedId, visible, review.isPending, notes]);
+  }, [expandedId, visible, notes]);
 
   return (
     <div className="space-y-4">
@@ -410,7 +412,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     <span className="text-xs text-on-surface-subtle">{timeAgo(row.submission.submittedAt)}</span>
                     {canReview && <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>}
                     {!canReview && (
-                      <Button variant="ghost" size="sm" onPress={() => undoReview(row)} isDisabled={review.isPending}>
+                      <Button variant="ghost" size="sm" onPress={() => undoReview(row)}>
                         Undo review
                       </Button>
                     )}
@@ -463,13 +465,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     {error && <Notice tone="danger">{error}</Notice>}
 
                     <div id={`review-actions-${row.submission.id}`} className="flex gap-2">
-                      <Button variant="primary" className="flex-1" onPress={() => submitReview(row, "approve")} isDisabled={review.isPending}>
+                      <Button variant="primary" className="flex-1" onPress={() => submitReview(row, "approve")}>
                         <span className="flex items-center justify-center gap-1.5">
-                          {review.isPending ? "…" : "Approve"}
+                          Approve
                           <KeyCap>A</KeyCap>
                         </span>
                       </Button>
-                      <Button variant="danger" className="flex-1" onPress={() => submitReview(row, "reject")} isDisabled={review.isPending}>
+                      <Button variant="danger" className="flex-1" onPress={() => submitReview(row, "reject")}>
                         <span className="flex items-center justify-center gap-1.5">
                           Reject
                           <KeyCap>R</KeyCap>

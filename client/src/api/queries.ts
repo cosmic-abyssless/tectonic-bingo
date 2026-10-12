@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useInfiniteQuery, useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
   AvatarUser, MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
@@ -13,6 +13,7 @@ import { api, ApiError } from "./client";
 import * as bugReportsApi from "./bugReportsApi";
 import { readBoardCache, scheduleBoardCacheWrite } from "./boardCache";
 import { optimisticUpdate } from "./optimistic";
+import { asMinimalUser, pendingCountChange, withReviewsInFlight, type ReviewAction, type ReviewInFlight } from "./reviewOptimistic";
 
 // Centralized so WebSocketProvider can invalidate the same keys queries use.
 export const queryKeys = {
@@ -228,12 +229,27 @@ export function useTeamSubmissions(slug: string | undefined, teamId: string | un
   });
 }
 
+const reviewMutationKey = (slug: string) => ["reviewSubmission", slug] as const;
+
+/**
+ * The review queue, with the viewer's reviews that are still on their way already applied: a Submission leaves
+ * Pending the moment Approve or Reject is pressed. Applied over whatever's cached rather than written into it, so a
+ * refetch that lands first (another Moderator's review, over the socket) can't put it back for a moment.
+ */
 export function useModSubmissions(slug: string | undefined) {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.modSubmissions(slug ?? ""),
     queryFn: () => api.get<ModSubmissionsResponse>(`/api/bingos/${slug}/mod/submissions`),
     enabled: !!slug,
   });
+  const { user } = useAuth();
+  const reviewer = useMemo(() => asMinimalUser(user), [user]);
+  const reviews = useMutationState({
+    filters: { mutationKey: reviewMutationKey(slug ?? ""), status: "pending" },
+    select: (mutation): ReviewInFlight => ({ ...(mutation.state.variables as ReviewParams), at: new Date(mutation.state.submittedAt).toISOString() }),
+  });
+  const data = useMemo(() => query.data && withReviewsInFlight(query.data, reviews, reviewer), [query.data, reviews, reviewer]);
+  return { data, isLoading: query.isLoading };
 }
 
 export function usePendingCount(slug: string | undefined, enabled: boolean) {
@@ -263,17 +279,47 @@ export function useAnalyzeScreenshot(slug: string) {
   });
 }
 
+type ReviewParams = { submissionId: string; action: ReviewAction; reviewerNotes?: string };
+
+/**
+ * Approves, rejects or undoes a review, shown at once: useModSubmissions applies it while it's on its way, and the
+ * pending count moves straight away. A refused one goes back as it was.
+ */
 export function useReviewSubmission(slug: string) {
   const queryClient = useQueryClient();
+  const reviewer = asMinimalUser(useAuth().user);
   return useMutation({
-    mutationFn: (params: { submissionId: string; action: "approve" | "reject" | "undo"; reviewerNotes?: string }) =>
+    mutationKey: reviewMutationKey(slug),
+    mutationFn: (params: ReviewParams) =>
       api.patch<ReviewSubmissionResponse>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}`, {
         action: params.action,
         reviewerNotes: params.reviewerNotes,
       }),
-    onSuccess: () => {
+    onMutate: (params) => {
+      const row = queryClient.getQueryData<ModSubmissionsResponse>(queryKeys.modSubmissions(slug))?.submissions.find((r) => r.submission.id === params.submissionId);
+      const change = row ? pendingCountChange(row.submission.status, params.action) : 0;
+      if (change !== 0) {
+        void queryClient.cancelQueries({ queryKey: queryKeys.pendingCount(slug) });
+        queryClient.setQueryData<PendingCountResponse>(queryKeys.pendingCount(slug), (prev) => prev && { count: Math.max(0, prev.count + change) });
+      }
+      return { change };
+    },
+    onSuccess: (response, params) => {
+      // Saved: into the cache, so it stays put between this review leaving the in-flight ones and the refetch landing.
+      queryClient.setQueryData<ModSubmissionsResponse>(queryKeys.modSubmissions(slug), (prev) =>
+        prev && {
+          ...prev,
+          submissions: prev.submissions.map((r) => (r.submission.id === params.submissionId ? { ...r, submission: response.submission, reviewedByUser: params.action === "undo" ? null : reviewer } : r)),
+        },
+      );
+    },
+    onError: (_error, _params, context) => {
+      if (context?.change) queryClient.setQueryData<PendingCountResponse>(queryKeys.pendingCount(slug), (prev) => prev && { count: Math.max(0, prev.count - context.change) });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.modSubmissions(slug) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pendingCount(slug) });
+      // Its count would still have the reviews on their way as pending: the last one to finish refetches it.
+      if (queryClient.isMutating({ mutationKey: reviewMutationKey(slug) }) <= 1) queryClient.invalidateQueries({ queryKey: queryKeys.pendingCount(slug) });
       queryClient.invalidateQueries({ queryKey: ["teamProgress", slug] });
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
     },
