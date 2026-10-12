@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ModSubmissionRow, SubmissionScreenshot, SubmissionStatus } from "@bingo/shared";
-import { useBingo, useChangeSubmissionAttribution, useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
+import { useCreatePointAdjustment, useModSubmissions, useReviewSubmission } from "../../api/queries";
 import { SubmissionStatusBadge } from "../ui/StatusBadge";
 import { timeAgo } from "../ui/time";
 import { displayName } from "../ui/user";
@@ -9,10 +9,10 @@ import { Button } from "../ui/Button";
 import { Badge, Card, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
-import { SearchableSelect } from "../ui/SearchableSelect";
 import { MultiSelect } from "../ui/MultiSelect";
 import { inclusionFilter } from "../ui/inclusionFilter";
-import { useUrlSet } from "../ui/useUrlParam";
+import { useUrlParam, useUrlSet } from "../ui/useUrlParam";
+import { TableSearchInput } from "../ui/tableSearch";
 import { ScreenshotLink, ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
 import { LinkedClaimsSummary } from "../submissions/LinkedClaimsSummary";
@@ -23,7 +23,7 @@ import { ProofChecks, ProofFlagBadges } from "./ProofChecks";
 import { TooltipSpan } from "../ui/Tooltip";
 import { filterSubmissions, reviewerOptions, submitterOptions } from "./reviewQueueFilters";
 import { page, PAGE_SIZE, shownToInclude } from "../ui/paging";
-import { TextButton } from "../ui/TextButton";
+import { EditSubmissionModal } from "./EditSubmissionModal";
 
 function KeyCap({ children }: { children: React.ReactNode }) {
   return (
@@ -46,8 +46,8 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 
 // A MANUAL leaf has no separate completion decision — approving its claim IS
 // the decision (rejecting is "not done yet"). See docs/node-graph-model.md §5.
-/** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>`. */
-export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers"] as const;
+/** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>&q=<search>`. */
+export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers", "q"] as const;
 const DEFAULT_STATUSES = ["pending"];
 
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
@@ -102,8 +102,6 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const { data, isLoading } = useModSubmissions(slug);
   const review = useReviewSubmission(slug);
   const adjust = useCreatePointAdjustment(slug);
-  const changeAttribution = useChangeSubmissionAttribution(slug);
-  const { data: shell } = useBingo(slug);
   const submissions = data?.submissions ?? [];
 
   // Nothing ticked is Any. Status starts on Pending so the view still lands on "Pending only" by default, same as
@@ -113,6 +111,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [selectedTeams, setSelectedTeams] = useUrlSet("teams");
   const [selectedSubmitters, setSelectedSubmitters] = useUrlSet("submitters");
   const [selectedReviewers, setSelectedReviewers] = useUrlSet("reviewers");
+  const [search, setSearch] = useUrlParam("q");
+  const query = search ?? "";
   // How many of the filtered list are drawn (issue #383): a Bingo has 1,000+ Submissions, and drawing every one is
   // what's slow, so Load more adds a page at a time. Changing a filter goes back to the first page.
   const [shown, setShown] = useState(PAGE_SIZE);
@@ -122,10 +122,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [adjustOpenFor, setAdjustOpenFor] = useState<string | null>(null);
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
-  // Changing who a submission is credited to: which one is being edited, the player picked, and any refusal.
-  const [creditFor, setCreditFor] = useState<string | null>(null);
-  const [creditUserId, setCreditUserId] = useState("");
-  const [creditError, setCreditError] = useState<string | null>(null);
+  // The Submission open in the Edit modal. Kept while it closes, so its content stays put through the exit animation.
+  const [editing, setEditing] = useState<{ id: string; open: boolean } | null>(null);
   // A screenshot's height isn't known until it loads, so a load shortly after opening a submission reveals again.
   const revealUntil = useRef(0);
 
@@ -150,7 +148,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const teams = inclusionFilter(selectedTeams, teamOptions);
   const submitters = inclusionFilter(selectedSubmitters, submitterChoices);
   const reviewers = inclusionFilter(selectedReviewers, reviewerChoices);
-  const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers });
+  const filtered = filterSubmissions(submissions, { status: statuses, team: teams, submitter: submitters, reviewer: reviewers, query });
   // Newest first, whatever the filters.
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
   const visible = [...filtered].sort((a, b) => Date.parse(b.submission.submittedAt) - Date.parse(a.submission.submittedAt));
@@ -182,28 +180,6 @@ export function ReviewQueue({ slug }: { slug: string }) {
     }
   }
 
-  // Sends an approved/rejected submission back to pending; the server
-  // recomputes the team's points if it had been approved.
-  async function undoReview(row: ModSubmissionRow) {
-    setError(null);
-    try {
-      await review.mutateAsync({ submissionId: row.submission.id, action: "undo" });
-    } catch (e: unknown) {
-      setError(`Couldn't undo the review of ${row.tile.name} (${row.team.name}): ${e instanceof Error ? e.message : "undo failed"}`);
-    }
-  }
-
-  async function saveCredit(row: ModSubmissionRow) {
-    if (!creditUserId) return;
-    setCreditError(null);
-    try {
-      await changeAttribution.mutateAsync({ submissionId: row.submission.id, userId: creditUserId });
-      setCreditFor(null);
-    } catch (e: unknown) {
-      setCreditError(e instanceof Error ? e.message : "Couldn't change the player");
-    }
-  }
-
   async function submitAdjustment(teamId: string) {
     const amount = Number(adjustAmount);
     if (!amount || !adjustReason.trim()) return;
@@ -221,6 +197,8 @@ export function ReviewQueue({ slug }: { slug: string }) {
   // Keyboard navigation & shortcuts for reviewing submissions
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // The Edit modal's own buttons take keys too: A on its focused Status control mustn't approve the open row.
+      if (editing?.open) return;
       // Don't intercept when user is typing in an input/textarea
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) {
@@ -261,7 +239,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [expandedId, visible, notes]);
+  }, [expandedId, visible, notes, editing]);
 
   return (
     <div className="space-y-4">
@@ -287,6 +265,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
           {reviewerChoices.length > 0 && (
             <MultiSelect label="Reviewer" options={reviewerChoices} selected={reviewers.checked} onChange={setFilter(setSelectedReviewers)} />
           )}
+          <TableSearchInput
+            value={query}
+            onChange={(next) => {
+              setSearch(next || null);
+              setShown(PAGE_SIZE);
+            }}
+            placeholder="Search tile, item, player, notes…"
+          />
         </div>
         <div className="flex items-center gap-2 text-xs text-on-surface-subtle">
           <span className="flex items-center gap-1">
@@ -307,7 +293,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
-          {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed ? "New submissions show up here as they come in." : "No submissions match this filter."}
+          {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed && !query.trim() ? "New submissions show up here as they come in." : "No submissions match this filter."}
         </EmptyState>
       ) : (
         <div className="space-y-2">
@@ -359,46 +345,14 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     </p>
                     <p className="mt-0.5 text-xs text-on-surface-subtle">by {row.submittedByUser ? <PlayerName userId={row.submittedByUser.id}>{displayName(row.submittedByUser)}</PlayerName> : "unknown"}
                       {row.postedByUser && <> (posted by <PlayerName userId={row.postedByUser.id}>{displayName(row.postedByUser)}</PlayerName>)</>}
-                      {creditFor !== row.submission.id && (
+                      {row.submission.status !== "pending" && row.reviewedByUser && (
                         <>
                           {" · "}
-                          <TextButton
-                            onPress={() => {
-                              setCreditFor(row.submission.id);
-                              setCreditUserId("");
-                              setCreditError(null);
-                            }}
-                          >
-                            Change player
-                          </TextButton>
+                          {row.submission.status} by {displayName(row.reviewedByUser)}
+                          {row.submission.reviewedAt && <> {timeAgo(row.submission.reviewedAt)}</>}
                         </>
                       )}
-
                     </p>
-                    {creditFor === row.submission.id && (
-                      <div className="mt-2 max-w-md space-y-2" onClick={(e) => e.stopPropagation()}>
-                        <Field label={`Credit this submission to (a player on ${row.team.name})`}>
-                          <SearchableSelect
-                            value={creditUserId}
-                            options={(shell?.teams.find((t) => t.id === row.team.id)?.members ?? [])
-                              .filter((m) => m.user.id !== row.submission.submittedByUserId)
-                              .map((m) => ({ id: m.user.id, label: displayName(m.user) }))
-                              .sort((a, b) => a.label.localeCompare(b.label))}
-                            placeholder="Search players…"
-                            onChange={setCreditUserId}
-                          />
-                        </Field>
-                        {creditError && <p className="text-xs text-danger">{creditError}</p>}
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="primary" onPress={() => saveCredit(row)} isDisabled={!creditUserId || changeAttribution.isPending}>
-                            Save
-                          </Button>
-                          <Button size="sm" variant="ghost" onPress={() => setCreditFor(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                     {row.screenshots[0] && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <ScreenshotAnalysisBadges screenshot={row.screenshots[0]} />
@@ -411,11 +365,11 @@ export function ReviewQueue({ slug }: { slug: string }) {
                     <SubmissionStatusBadge status={row.submission.status} />
                     <span className="text-xs text-on-surface-subtle">{timeAgo(row.submission.submittedAt)}</span>
                     {canReview && <span className="text-on-surface-subtle">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>}
-                    {!canReview && (
-                      <Button variant="ghost" size="sm" onPress={() => undoReview(row)}>
-                        Undo review
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" onPress={() => setEditing({ id: row.submission.id, open: true })}>
+                        Edit
                       </Button>
-                    )}
+                    </span>
                   </div>
                 </div>
 
@@ -448,6 +402,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
                         A Proof screenshot: the starting state before this player's drops on {row.proofTaskLabel ?? row.tile.name} count. It awards no points.
                       </Notice>
                     )}
+
+                    {row.submission.status === "pending" &&
+                      (row.alreadyComplete ?? []).map((line) => (
+                        <Notice key={line} tone="warn">
+                          {line}
+                        </Notice>
+                      ))}
 
                     <ProofChecks checks={row.proofChecks ?? []} dropSubmittedAt={row.submission.submittedAt} />
 
@@ -520,6 +481,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
           )}
         </div>
       )}
+
+      <EditSubmissionModal
+        slug={slug}
+        row={submissions.find((r) => r.submission.id === editing?.id)}
+        isOpen={!!editing?.open}
+        onClose={() => setEditing((e) => e && { ...e, open: false })}
+      />
     </div>
   );
 }

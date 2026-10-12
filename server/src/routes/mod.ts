@@ -10,7 +10,7 @@ import * as schema from "../db/schema";
 import * as bingoService from "../services/bingoService";
 import * as historicalService from "../services/historicalService";
 import * as submissionService from "../services/submissionService";
-import { changeSubmissionAttribution } from "../services/submissionTarget";
+import { editSubmission, EditWarningsError } from "../services/submissionEdit";
 import * as signupService from "../services/signupService";
 import * as restrictionService from "../services/restrictionService";
 import * as draftService from "../services/draftService";
@@ -22,15 +22,16 @@ import * as cutReviewService from "../services/cutReviewService";
 import { getTectonicClient, TectonicUnavailableError } from "../services/tectonicService";
 import { fetchAndPersistPlayerStats } from "../services/playerStatsService";
 import { syncSignupRsn } from "../services/rsnSyncService";
-import { approveSubmission, rejectSubmission, undoSubmissionReview } from "../services/scoringService";
+import { approveSubmission, rejectSubmission } from "../services/scoringService";
 import { assertUserCan, bingoRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
 import { broadcastChange } from "../broadcastChange";
 import { afterStageChange } from "../services/stageChangeEffects";
 import { markAuditedNoop } from "../audit/record";
 import { queryAuditLog } from "../audit/query";
-import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility } from "@bingo/shared";
+import type { AuditAction, AuditCategory, AuditEntityType, AuditLogFilters, AuditVisibility, EditSubmissionInput } from "@bingo/shared";
 import { repriceSubmission } from "../services/gpRepriceService";
+import { refreshPricesAndFill } from "../services/gpValueService";
 import * as wrappedService from "../services/wrappedService";
 import * as superlativeService from "../services/superlativeService";
 import * as feedbackService from "../services/feedbackService";
@@ -71,7 +72,8 @@ router.patch(
     const submission = submissionService.getSubmissionById(db, submissionId);
     if (!submission) throw new ServiceError(404, "Submission not found");
 
-    const { action, reviewerNotes } = req.body as { action?: "approve" | "reject" | "undo"; reviewerNotes?: string };
+    // The queue's quick review. Sending a review back to pending, and every other change, is the edit below.
+    const { action, reviewerNotes } = req.body as { action?: "approve" | "reject"; reviewerNotes?: string };
 
     if (action === "approve" || action === "reject") {
       const result =
@@ -89,31 +91,29 @@ router.patch(
       return;
     }
 
-    if (action === "undo") {
-      const result = undoSubmissionReview(db, { submissionId, undoneByUserId: req.user!.id });
-      broadcastChange({
-        type: "submission_reviewed",
-        bingoId: req.bingo!.id,
-        payload: { teamId: submission.teamId, nodeIds: result.nodeIds },
-      });
-      res.json(result);
-      return;
-    }
-
-    throw new ServiceError(400, 'action must be "approve", "reject" or "undo"');
+    throw new ServiceError(400, 'action must be "approve" or "reject"');
   }),
 );
 
-// Changes which player a submission is credited to (someone forgot to pick the player they posted for).
-router.patch(
-  "/submissions/:id/attribution",
+// Edits a submission (CONTEXT.md "Submission", Editing): the whole form, any status. Breaking a Submit flow rule is a
+// 422 with the warnings until it's sent again with force.
+router.put(
+  "/submissions/:id",
   asyncHandler(async (req, res) => {
-    const { userId } = req.body as { userId?: string };
-    if (!userId) throw new ServiceError(400, "userId is required");
-    const submission = changeSubmissionAttribution(db, req.bingo!, { submissionId: req.params.id as string, userId, changedByUserId: req.user!.id });
-    // The same refresh a review triggers: drawers, the mod queue and the board all show who it is credited to.
-    broadcastChange({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: submission.teamId, nodeIds: [] } });
-    res.json({ submission });
+    let result;
+    try {
+      result = editSubmission(db, req.bingo!, { submissionId: req.params.id as string, editedByUserId: req.user!.id, input: req.body as EditSubmissionInput });
+    } catch (err) {
+      if (!(err instanceof EditWarningsError)) throw err;
+      res.status(422).json({ error: err.message, code: err.code, warnings: err.warnings });
+      return;
+    }
+    // The same refresh a review triggers, over the leaves it was on and is on now.
+    broadcastChange({ type: "submission_reviewed", bingoId: req.bingo!.id, payload: { teamId: result.submission.teamId, nodeIds: result.nodeIds } });
+    if (result.reviewed && wrappedService.publishWhenReady(db, req.bingo!, req.user!.id)) broadcastChange({ type: "wrapped_published", bingoId: req.bingo!.id, payload: {} });
+    res.json({ submission: result.submission, warnings: result.warnings });
+    // After responding, as after a submission: prices any claim it couldn't price yet once the price table refreshes.
+    if (result.unpriced) void refreshPricesAndFill(db);
   }),
 );
 

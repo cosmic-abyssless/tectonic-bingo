@@ -61,7 +61,7 @@ const ROUTES: Record<string, boolean> = {
   "POST /api/bingos/:slug/achievements/opened": false,
   // routes/mod.ts
   "PATCH /api/bingos/:slug/mod/submissions/:id": false,
-  "PATCH /api/bingos/:slug/mod/submissions/:id/attribution": false,
+  "PUT /api/bingos/:slug/mod/submissions/:id": false,
   "POST /api/bingos/:slug/mod/wrapped/publish": false,
   "POST /api/bingos/:slug/mod/submissions/:id/reprice": false,
   "POST /api/bingos/:slug/mod/teams/:teamId/adjustments": false,

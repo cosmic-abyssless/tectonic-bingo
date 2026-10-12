@@ -550,6 +550,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   proofChecks: ProofCheck[];
   /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
   reviewedByUser: MinimalUser | null;
+  /** A pending drop only: a line for each claimed Item that would add nothing, its Parts being complete for the Team already. */
+  alreadyComplete: string[];
 }
 
 // Derived cache: one row per node currently COMPLETE for a team (see
@@ -694,6 +696,51 @@ export interface TeamSubmissionsResponse {
 
 export interface ModSubmissionsResponse {
   submissions: ModSubmissionRow[];
+}
+
+/**
+ * A rule of the Submit flow that an edit breaks (CONTEXT.md "Submission", Editing). An edit isn't refused for one:
+ * the Moderator is shown it and can save anyway. Only what the edit itself brings is listed, not what was already so.
+ */
+export type EditWarningCode = "exclusive" | "gate" | "frozen" | "proof_not_required" | "before_start" | "after_end" | "already_complete";
+export interface EditWarning {
+  code: EditWarningCode;
+  /** Player-facing, in the Submit flow's own words where it has them. */
+  message: string;
+}
+
+/** The whole form of the mod queue's Edit: `PUT /api/bingos/:slug/mod/submissions/:id`. Screenshots and Team aren't editable. */
+export interface EditSubmissionInput {
+  /** The submission's updatedAt when the form was opened (ISO): refused with 409 when it has changed since. */
+  expectedUpdatedAt: string;
+  /** Who it is credited to: a Player of its Team. */
+  submittedByUserId: string;
+  /** ISO; not in the future. */
+  submittedAt: string;
+  status: SubmissionStatus;
+  /** Ignored (cleared) when the status is pending: a pending Submission has no review. */
+  reviewerNotes: string | null;
+  kind: SubmissionKind;
+  /** kind "drop": at least one, every leaf (ITEM or MANUAL) on one Tile, none twice. The item name comes from the leaf. */
+  claims?: { nodeId: string; quantity: number }[];
+  /** kind "proof": its Tile, and its Task when the requirement is per-Task. */
+  proofTileId?: string;
+  proofTaskId?: string | null;
+  /** Save even with warnings. Without it, any warning refuses the save with 422 (EditSubmissionRefusal). */
+  force?: boolean;
+}
+
+export interface EditSubmissionResponse {
+  submission: Submission;
+  /** The warnings it was saved over (empty when there were none). */
+  warnings: EditWarning[];
+}
+
+/** The 422 body when an edit has warnings and wasn't forced. */
+export interface EditSubmissionRefusal {
+  error: string;
+  code: "edit_warnings";
+  warnings: EditWarning[];
 }
 
 export interface PendingCountResponse {

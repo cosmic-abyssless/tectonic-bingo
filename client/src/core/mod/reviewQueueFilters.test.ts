@@ -15,7 +15,12 @@ const [alice, bob, carol, mod] = ["alice", "bob", "carol", "mod"].map(user) as [
 function row(id: string, o: { status?: SubmissionStatus; by?: MinimalUser | null; postedBy?: MinimalUser | null; reviewer?: MinimalUser | null; team?: string } = {}) {
   return {
     submission: { id, status: o.status ?? "pending" },
-    team: { id: o.team ?? "t1", name: o.team ?? "Team 1", color: "#fff" },
+    team: o.team === "Team 2" ? { id: "t2", name: "Team 2", color: "#fff" } : { id: "t1", name: "Team 1", color: "#fff" },
+    tile: { name: id === "3" ? "VORKATH" : "ZULRAH" },
+    partLabels: ["Page 1"],
+    proofTaskLabel: null,
+    leaves: [],
+    claims: id === "2" ? [{ itemName: "Tanzanite fang" }] : [],
     submittedByUser: o.by === undefined ? alice : o.by,
     postedByUser: o.postedBy ?? null,
     reviewedByUser: o.reviewer ?? null,
@@ -31,13 +36,14 @@ const ROWS = [
   row("5", { by: null, status: "approved", reviewer: mod }),
 ];
 
-function ids(filters: { status?: string[]; team?: string[]; submitter?: string[]; reviewer?: string[] }) {
+function ids(filters: { status?: string[]; team?: string[]; submitter?: string[]; reviewer?: string[]; query?: string }) {
   const f = (keys: string[] | undefined, options: { key: string }[]) => inclusionFilter(new Set(keys ?? []), options);
   return filterSubmissions(ROWS, {
     status: f(filters.status, [{ key: "pending" }, { key: "approved" }, { key: "rejected" }]),
-    team: f(filters.team, [{ key: "Team 1" }, { key: "Team 2" }]),
+    team: f(filters.team, [{ key: "t1" }, { key: "t2" }]),
     submitter: f(filters.submitter, submitterOptions(ROWS)),
     reviewer: f(filters.reviewer, reviewerOptions(ROWS)),
+    query: filters.query,
   }).map((r) => r.submission.id);
 }
 
@@ -85,9 +91,18 @@ describe("filterSubmissions", () => {
     expect(ids({ reviewer: [NOBODY_RECORDED] })).toEqual(["4"]);
   });
 
+  it("searches the Tile, Items, Team and people, ignoring case", () => {
+    expect(ids({ query: "vork" })).toEqual(["3"]);
+    expect(ids({ query: "FANG" })).toEqual(["2"]);
+    expect(ids({ query: "team 2" })).toEqual(["3"]);
+    expect(ids({ query: "carol" })).toEqual(["2", "3"]); // posted #2, credited with #3
+    expect(ids({ query: "  " })).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
   it("applies every filter at once", () => {
     expect(ids({ status: ["approved"], submitter: ["alice", "carol"] })).toEqual(["2", "4"]);
-    expect(ids({ reviewer: ["mod"], team: ["Team 2"] })).toEqual(["3"]);
+    expect(ids({ reviewer: ["mod"], team: ["t2"] })).toEqual(["3"]);
+    expect(ids({ team: ["t1"] })).toEqual(["1", "2", "4", "5"]);
     expect(ids({ status: ["pending"], reviewer: ["mod"] })).toEqual([]);
   });
 });

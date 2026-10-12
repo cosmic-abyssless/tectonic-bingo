@@ -37,7 +37,7 @@ The grouping itself is `condenseAuditEntries` in `shared/src/auditCondense.ts`.
 ### Scoring entries
 
 Points are recorded apart from the submission that earned them: each node
-whose awarded points changed on an approval or an undone review gets a
+whose awarded points changed on a review or an edit of a submission gets a
 `points.earned` / `points.lost` entry (`source`: `task`, `tile_bonus` or
 `line`), written just after the `submission.*` entry so the log is in causal
 order (a newest-first feed lists the points above the approval that awarded

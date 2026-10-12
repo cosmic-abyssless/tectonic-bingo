@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { queryOptions, useInfiniteQuery, useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState,
+  AccountTypesResponse, AchievementKey, BingoPermissionsResponse, FeedbackFormResponse, FeedbackResultsResponse, FeedbackSubmission, HistoricalBingoResponse, AuditLogFilters, AuditLogResponse, BingoListResponse, BingoModerator, BingoShellResponse, BoardResponse, BuyinsResponse, CreatePointAdjustmentResponse, CreateSubmissionResponse, DraftState, EditSubmissionInput, EditSubmissionResponse,
   AvatarUser, MeResponse, MinimalUser, ModSubmissionsResponse, MyAchievementsResponse, MyPairingResponse, MySignupResponse, MyTectonicRsnsResponse, PartnerCandidatesResponse, PickableMembersResponse, UnpairedSignupsResponse, PendingCountResponse,
   ReviewSubmissionResponse, RestrictionEntry, RosterResponse, CutReviewPreview, DraftCutPreview, ScreenshotAnalysis, Signup, SignupAnswerInput, SignupPairing, SignupQuestion, Stage,
   MyWrappedResponse, PickRating, PlayerProfile, RewindResponse, StatsResponse, WrappedState, SubmissionReaction, SubmissionReactionGroup, SuperlativeBallotResponse, SuperlativeTeamTally, SuperlativeTeamTurnout, Team, TeamProgressSummary, TeamSubmissionsResponse, ViewerBoardResponse,
@@ -285,7 +285,7 @@ export function useAnalyzeScreenshot(slug: string) {
 type ReviewParams = { submissionId: string; action: ReviewAction; reviewerNotes?: string };
 
 /**
- * Approves, rejects or undoes a review, shown at once: useModSubmissions applies it while it's on its way, and the
+ * Approves or rejects, shown at once: useModSubmissions applies it while it's on its way, and the
  * pending count moves straight away. A refused one goes back as it was.
  */
 export function useReviewSubmission(slug: string) {
@@ -300,7 +300,7 @@ export function useReviewSubmission(slug: string) {
       }),
     onMutate: (params) => {
       const row = queryClient.getQueryData<ModSubmissionsResponse>(queryKeys.modSubmissions(slug))?.submissions.find((r) => r.submission.id === params.submissionId);
-      const change = row ? pendingCountChange(row.submission.status, params.action) : 0;
+      const change = row ? pendingCountChange(row.submission.status) : 0;
       if (change !== 0) {
         void queryClient.cancelQueries({ queryKey: queryKeys.pendingCount(slug) });
         queryClient.setQueryData<PendingCountResponse>(queryKeys.pendingCount(slug), (prev) => prev && { count: Math.max(0, prev.count + change) });
@@ -312,7 +312,7 @@ export function useReviewSubmission(slug: string) {
       queryClient.setQueryData<ModSubmissionsResponse>(queryKeys.modSubmissions(slug), (prev) =>
         prev && {
           ...prev,
-          submissions: prev.submissions.map((r) => (r.submission.id === params.submissionId ? { ...r, submission: response.submission, reviewedByUser: params.action === "undo" ? null : reviewer } : r)),
+          submissions: prev.submissions.map((r) => (r.submission.id === params.submissionId ? { ...r, submission: response.submission, reviewedByUser: reviewer } : r)),
         },
       );
     },
@@ -329,14 +329,17 @@ export function useReviewSubmission(slug: string) {
   });
 }
 
-// Moves the credit for a submission to another player of its team (someone forgot to pick the player they posted for).
-export function useChangeSubmissionAttribution(slug: string) {
+// The mod queue's Edit (CONTEXT.md "Submission", Editing): the whole form, any status. Refreshes what a review does,
+// and the Stats, which a new credit or Claim moves.
+export function useEditSubmission(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { submissionId: string; userId: string }) =>
-      api.patch<{ submission: unknown }>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}/attribution`, { userId: params.userId }),
-    onSuccess: () => {
+    mutationFn: (params: { submissionId: string; input: EditSubmissionInput }) =>
+      api.put<EditSubmissionResponse>(`/api/bingos/${slug}/mod/submissions/${params.submissionId}`, params.input),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.modSubmissions(slug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pendingCount(slug) });
+      queryClient.invalidateQueries({ queryKey: ["teamProgress", slug] });
       queryClient.invalidateQueries({ queryKey: ["teamSubmissions", slug] });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats(slug) });
     },

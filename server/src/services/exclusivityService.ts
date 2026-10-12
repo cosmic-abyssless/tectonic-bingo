@@ -1,6 +1,6 @@
 // Enforcing exclusive items (docs/exclusive-items-plan.md): where each item node sits, which claims a team
 // already has, and applying the shared rule logic (shared/src/exclusivity.ts) to a submission and to scoring.
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { exclusivityConflicts, keepFirstScope, type ExclusivityConflict, type PlacedLeaf } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -50,22 +50,31 @@ export function placeLeaves(db: Queryable, bingoId: string, t: BoardTables = PUB
   return placed;
 }
 
-/** The nodes a team has a live claim on: its pending and approved submissions (a rejection frees the item). */
-export function liveClaimNodeIds(db: Queryable, teamId: string): string[] {
+/**
+ * The nodes a team has a live claim on: its pending and approved submissions (a rejection frees the item).
+ * `exceptSubmissionId` leaves one out: a submission being edited doesn't lock its own items.
+ */
+export function liveClaimNodeIds(db: Queryable, teamId: string, exceptSubmissionId?: string): string[] {
   return db
     .select({ nodeId: claims.nodeId })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
-    .where(and(eq(submissions.teamId, teamId), inArray(submissions.status, ["pending", "approved"])))
+    .where(and(eq(submissions.teamId, teamId), inArray(submissions.status, ["pending", "approved"]), exceptSubmissionId ? ne(submissions.id, exceptSubmissionId) : undefined))
     .all()
     .map((r) => r.nodeId);
 }
 
 /** What the team can't claim under the bingo's exclusivity rules (empty when it has none). */
-export function conflictsForClaims(db: Queryable, bingo: { id: string; exclusivityRulesJson: string }, teamId: string, nodeIds: string[]): ExclusivityConflict[] {
+export function conflictsForClaims(
+  db: Queryable,
+  bingo: { id: string; exclusivityRulesJson: string },
+  teamId: string,
+  nodeIds: string[],
+  exceptSubmissionId?: string,
+): ExclusivityConflict[] {
   const rules = parseExclusivityRules(bingo.exclusivityRulesJson);
   if (rules.length === 0) return [];
-  return exclusivityConflicts(rules, placeLeaves(db, bingo.id), liveClaimNodeIds(db, teamId), nodeIds);
+  return exclusivityConflicts(rules, placeLeaves(db, bingo.id), liveClaimNodeIds(db, teamId, exceptSubmissionId), nodeIds);
 }
 
 /** "Baron is already used on DT2 ISSUE 1: …", or for a group "Bludgeon claw is in Bludgeon piece, already used on SLAYER BOSSES · Page 1 (Bludgeon axon): …". */

@@ -1,16 +1,10 @@
 // Who a submission is for, and who posted it. A player submits to their own team, for themselves or for a
 // teammate: the usual case is someone at a PC posting a drop a teammate got on mobile. A mod (or site admin) may
 // also submit to any team of the bingo, but has to say which of its players the drop belongs to.
-import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../db/schema";
-import { claims, submissions } from "../db/schema";
-import { now as clockNow } from "../clock";
-import { audit } from "../audit/record";
-import { userLabelById } from "../audit/describe";
 import { ServiceError } from "./errors";
 import { assertUserCan } from "./permissions";
-import { describeSubmissionTarget } from "./scoringService";
 import { getTeamById, getTeamMembers, getUserTeamForBingo } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -64,50 +58,4 @@ export function resolveSubmissionTarget(db: Db, bingo: Bingo, user: { id: string
     throw new ServiceError(400, `That player isn't on ${team.name}`);
   }
   return { team, submittedByUserId: forUserId, postedByUserId: user.id };
-}
-
-/**
- * A mod changes which player a submission is credited to: for when whoever posted it forgot to pick the player it
- * was for. Only who gets the credit moves (stats, the board, the mod queue); the review, the points and the team are
- * untouched, so it works on a submission in any state. The uploader stays recorded as the poster: it is whoever
- * uploaded it before (the previous poster, or the player it was credited to if they posted it themselves), and
- * nothing is recorded as "posted by" when that is the player it is now credited to.
- */
-export function changeSubmissionAttribution(db: Db, bingo: Bingo, params: { submissionId: string; userId: string; changedByUserId: string }) {
-  return db.transaction((tx) => {
-    const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
-    const team = submission ? getTeamById(tx, submission.teamId) : null;
-    if (!submission || !team || team.bingoId !== bingo.id) throw new ServiceError(404, "Submission not found");
-
-    if (params.userId === submission.submittedByUserId) throw new ServiceError(400, "That player is already credited for this submission");
-    if (!getTeamMembers(tx, team.id).some((m) => m.userId === params.userId)) throw new ServiceError(400, `That player isn't on ${team.name}`);
-
-    const uploader = submission.postedByUserId ?? submission.submittedByUserId;
-    const updated = tx
-      .update(submissions)
-      .set({ submittedByUserId: params.userId, postedByUserId: params.userId === uploader ? null : uploader, updatedAt: clockNow() })
-      .where(eq(submissions.id, submission.id))
-      .returning()
-      .get();
-
-    const nodeIds = tx.select({ nodeId: claims.nodeId }).from(claims).where(eq(claims.submissionId, submission.id)).all().map((c) => c.nodeId);
-    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, bingo.id, nodeIds, submission);
-    audit(tx, {
-      action: "submission.attribution_changed",
-      bingoId: bingo.id,
-      entity: { type: "submission", id: submission.id, label },
-      teamId: team.id,
-      details: {
-        ...proof,
-        tileName,
-        taskLabels,
-        fromUserId: submission.submittedByUserId,
-        fromName: userLabelById(tx, submission.submittedByUserId, bingo.id) ?? "Unknown",
-        toUserId: params.userId,
-        toName: userLabelById(tx, params.userId, bingo.id) ?? "Unknown",
-      },
-      actor: { userId: params.changedByUserId },
-    });
-    return updated;
-  });
 }

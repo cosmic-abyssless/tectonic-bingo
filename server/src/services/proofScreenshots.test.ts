@@ -8,7 +8,8 @@ import { bingos, stageTransitions, submissions } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile, deleteTask, deleteTile, getBoardTiles, updateNode, updateTile } from "./boardService";
 import { createSubmission, getAllSubmissionsForBingo, getPendingCount, getPendingSubmissions, setSubmissionReaction } from "./submissionService";
-import { approveSubmission, rejectSubmission, undoSubmissionReview } from "./scoringService";
+import { approveSubmission, rejectSubmission } from "./scoringService";
+import { editSubmission } from "./submissionEdit";
 import { getContributionCounts, getTeamCredits, getTitleFacts } from "./statsService";
 import { getTeamProgress } from "./teamService";
 import { getRewind } from "./rewindService";
@@ -145,7 +146,7 @@ describe("posting a Proof screenshot", () => {
 });
 
 describe("reviewing a Proof screenshot", () => {
-  it("is in the review queue and approved, rejected and undone like any Submission, with no points", () => {
+  it("is in the review queue and approved, rejected and sent back to pending like any Submission, with no points", () => {
     const fx = seed();
     const a = proof(fx, fx.wt.id);
     const b = proof(fx, fx.mg.id, { taskId: fx.fish.id });
@@ -158,7 +159,10 @@ describe("reviewing a Proof screenshot", () => {
     expect(approve(fx, a.id)).toMatchObject({ nodeIds: [], newlyCompletedNodeIds: [], pointsDelta: 0 });
     reject(fx, b.id);
     expect(getTeamProgress(db, fx.team.id).totalPoints).toBe(0);
-    expect(undoSubmissionReview(db, { submissionId: a.id, undoneByUserId: fx.mod.id }).pointsDelta).toBe(0);
+    // Sent back to pending through an edit: still no points.
+    const approved = db.select().from(submissions).where(eq(submissions.id, a.id)).get()!;
+    const input = { expectedUpdatedAt: approved.updatedAt.toISOString(), submittedByUserId: approved.submittedByUserId, submittedAt: approved.submittedAt.toISOString(), status: "pending" as const, reviewerNotes: null, kind: "proof" as const, proofTileId: fx.wt.id };
+    expect(editSubmission(db, getBingo(fx.bingo.id), { submissionId: a.id, editedByUserId: fx.mod.id, input }).pointsDelta).toBe(0);
 
     const labels = queryAuditLog(db, { bingoId: fx.bingo.id }, {}).entries.map((e) => renderAuditLabel(e as AuditEntry));
     expect(labels.some((l) => l.includes('approved a Proof screenshot for "WINTERTODT"'))).toBe(true);

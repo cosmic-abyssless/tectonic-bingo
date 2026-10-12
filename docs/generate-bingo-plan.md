@@ -84,7 +84,10 @@ npm run generate-bingo:teardown -- --slug testdata-20260919-1432 # or --all
   `{ nodeId, itemName?, quantity? }[]` (`routes/bingos.ts:187`). OCR then
   runs in the background when `isOcrEnabled()` (`routes/bingos.ts:228`).
 - **Review:** `PATCH /api/bingos/:slug/mod/submissions/:id { action:
-  "approve"|"reject"|"undo", reviewerNotes? }` (`routes/mod.ts:40`).
+  "approve"|"reject", reviewerNotes? }` (`routes/mod.ts`). Everything else a
+  mod changes (back to pending, the credit, the claims, the time) is the
+  Edit: `PUT /api/bingos/:slug/mod/submissions/:id` with the whole form
+  (`EditSubmissionInput` in `shared/src/index.ts`).
   Mod routes need the user to be a bingo mod (`bingoService.isBingoMod`).
   `GET /api/bingos/:slug/mod/submissions` lists all; `GET
   /api/bingos/:slug/teams/:teamId/progress` gives `nodeStates` (complete
@@ -478,8 +481,11 @@ of a player's first submission is rejected with `reviewerNotes` "Codeword
 not visible in the screenshot, please re-submit with it showing"; the
 player re-submits the same claims 10–60 min later. After day one,
 rejections are 1% with a note from a short list ("Wrong item", "Can't see
-the drop", "Duplicate of an earlier submission"). One undo per run
-(`action: "undo"` then re-approve, a few minutes apart) to exercise it.
+the drop", "Duplicate of an earlier submission"). One approval per run is
+sent back to pending (an Edit with `status: "pending"`) then re-approved, a
+few minutes apart, to exercise it. A few more Edits, at most one of each per
+run: a re-credit, a quantity fix, a rejection approved after all, and a
+corrected submitted time (`docs/generate-bingo.md`).
 
 After every review batch, refresh each affected team's progress (`GET
 .../teams/:teamId/progress`) so gating and line logic use the server's
