@@ -50,7 +50,7 @@ export function lineLabel(line: { lineType: string; lineIndex: number }): string
 // tile bonus, then lines) and a newest-first feed lists the points above the approval. A
 // node's points can change without it newly completing (a points gate opening releases a task's
 // withheld points), hence the comparison of awarded points rather than of completed nodes.
-function recordPointChanges(
+export function recordPointChanges(
   tx: Tx,
   params: { bingoId: string; teamId: string; submissionId: string; reviewerUserId: string },
   before: { nodeId: string; pointsAwarded: number }[],
@@ -99,17 +99,19 @@ export function getSubmissionNodeIds(tx: Tx, submissionId: string): string[] {
  * What rebuildTeamState would store for a team, without writing it: every node complete for the team, with the points
  * it awards. `board` scores it against another copy of the board, such as the Draft board for a Publish preview
  * (boardDraftService): only Claims on nodes that board still has count, under that board's Exclusive Item rules.
+ * `exceptSubmissionId` scores it as if that submission weren't approved (an edit's submit gate check).
  */
 export function scoreTeam(
   tx: Tx,
   teamId: string,
   board?: { t: BoardTables; exclusivityRulesJson: string },
+  exceptSubmissionId?: string,
 ): Map<string, { completedAt: Date; pointsAwarded: number }> {
   const team = tx.select({ bingoId: teams.bingoId }).from(teams).where(eq(teams.id, teamId)).get();
   if (!team) throw new ServiceError(404, "Team not found");
 
   const { engineNodes, childrenOf, nodesById } = getFullGraph(tx, team.bingoId, board?.t ?? PUBLISHED_BOARD);
-  const claimed = getApprovedClaims(tx, teamId, team.bingoId).filter((c) => !board || nodesById.has(c.nodeId));
+  const claimed = getApprovedClaims(tx, teamId, team.bingoId, exceptSubmissionId).filter((c) => !board || nodesById.has(c.nodeId));
   const approvedClaims = applyExclusivity(tx, team.bingoId, claimed, board);
   const results = evaluateGraph(engineNodes, childrenOf, approvedClaims);
 
@@ -261,84 +263,5 @@ export function rejectSubmission(db: Db, params: RejectSubmissionParams): { subm
     });
 
     return { submission: updatedSubmission, nodeIds };
-  });
-}
-
-export interface UndoSubmissionReviewParams {
-  submissionId: string;
-  undoneByUserId: string;
-}
-
-export interface UndoSubmissionReviewResult {
-  submission: typeof submissions.$inferSelect;
-  nodeIds: string[];
-  previousStatus: "approved" | "rejected";
-  // Nodes that were complete before the undo and aren't any more. Always
-  // empty when the submission had been rejected (its claims never counted).
-  uncompletedNodeIds: string[];
-  // Zero or negative: points the team loses because of the undo.
-  pointsDelta: number;
-}
-
-// Sends a reviewed submission back to pending so it can be re-reviewed. The
-// reviewer fields are cleared (a pending submission has no review); the
-// previous decision survives in the audit entry. Undoing an approval is the
-// same full recompute approval is — the graph is re-evaluated against
-// whatever approved claims remain, so gated points, SUM tallies, lines and
-// tile bonuses all settle on their own.
-export function undoSubmissionReview(db: Db, params: UndoSubmissionReviewParams): UndoSubmissionReviewResult {
-  return db.transaction((tx): UndoSubmissionReviewResult => {
-    const submission = tx.select().from(submissions).where(eq(submissions.id, params.submissionId)).get();
-    if (!submission) throw new ServiceError(404, "Submission not found");
-    if (submission.status === "pending") throw new ServiceError(409, "Submission has not been reviewed");
-    const previousStatus = submission.status;
-    const team = tx.select().from(teams).where(eq(teams.id, submission.teamId)).get()!;
-
-    tx.update(submissions)
-      .set({ status: "pending", reviewedAt: null, reviewedByUserId: null, reviewerNotes: null, updatedAt: clockNow() })
-      .where(eq(submissions.id, submission.id))
-      .run();
-
-    const nodeIds = getSubmissionNodeIds(tx, submission.id);
-    let uncompletedNodeIds: string[] = [];
-    let pointsDelta = 0;
-    let scoreChange: { before: { nodeId: string; pointsAwarded: number }[]; after: Map<string, { pointsAwarded: number }> } | null = null;
-    if (previousStatus === "approved") {
-      const before = tx.select().from(teamNodeState).where(eq(teamNodeState.teamId, submission.teamId)).all();
-      const beforePoints = before.reduce((sum, r) => sum + r.pointsAwarded, 0);
-      const after = rebuildTeamState(tx, submission.teamId);
-      const afterPoints = [...after.values()].reduce((sum, s) => sum + s.pointsAwarded, 0);
-      uncompletedNodeIds = before.map((r) => r.nodeId).filter((id) => !after.has(id));
-      pointsDelta = afterPoints - beforePoints;
-      scoreChange = { before, after };
-    }
-
-    const updatedSubmission = tx.select().from(submissions).where(eq(submissions.id, submission.id)).get()!;
-
-    const { tileName, taskLabels, label, proof } = describeSubmissionTarget(tx, team.bingoId, nodeIds, submission);
-    audit(tx, {
-      action: "submission.review_undone",
-      bingoId: team.bingoId,
-      entity: { type: "submission", id: submission.id, label },
-      teamId: submission.teamId,
-      details: {
-        ...proof,
-        tileName,
-        taskLabels,
-        nodeIds,
-        previousStatus,
-        previousReviewerNotes: submission.reviewerNotes,
-        previousReviewedByUserId: submission.reviewedByUserId,
-        uncompletedNodeIds,
-        pointsDelta,
-        submittedByUserId: submission.submittedByUserId,
-      },
-      actor: { userId: params.undoneByUserId },
-    });
-    if (scoreChange) {
-      recordPointChanges(tx, { bingoId: team.bingoId, teamId: submission.teamId, submissionId: submission.id, reviewerUserId: params.undoneByUserId }, scoreChange.before, scoreChange.after);
-    }
-
-    return { submission: updatedSubmission, nodeIds, previousStatus, uncompletedNodeIds, pointsDelta };
   });
 }

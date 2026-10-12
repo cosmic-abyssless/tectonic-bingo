@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { GraphNode, GraphNodeInput } from "@bingo/shared";
 import * as schema from "../db/schema";
@@ -121,13 +121,22 @@ export function getFullGraph(db: Queryable, bingoId: string, t: BoardTables = PU
 
 // A team's approved claims across the whole bingo (the engine needs all of
 // them at once — a leaf can be a descendant of several roots). Claims on a node a Publish removed don't count.
-export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string): ApprovedClaim[] {
+// `exceptSubmissionId` leaves one submission out, as if it weren't approved (an edit's submit gate check).
+export function getApprovedClaims(db: Queryable, teamId: string, bingoId: string, exceptSubmissionId?: string): ApprovedClaim[] {
   return db
     .select({ nodeId: claims.nodeId, itemName: claims.itemName, quantity: claims.quantity, reviewedAt: submissions.reviewedAt })
     .from(claims)
     .innerJoin(submissions, eq(claims.submissionId, submissions.id))
     .innerJoin(nodes, eq(claims.nodeId, nodes.id))
-    .where(and(eq(submissions.teamId, teamId), eq(submissions.status, "approved"), eq(nodes.bingoId, bingoId), isNull(nodes.removedAt)))
+    .where(
+      and(
+        eq(submissions.teamId, teamId),
+        eq(submissions.status, "approved"),
+        eq(nodes.bingoId, bingoId),
+        isNull(nodes.removedAt),
+        exceptSubmissionId ? ne(submissions.id, exceptSubmissionId) : undefined,
+      ),
+    )
     .all()
     .map((r) => ({ ...r, reviewedAt: r.reviewedAt! }));
 }

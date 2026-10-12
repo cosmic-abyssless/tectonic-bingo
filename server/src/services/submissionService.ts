@@ -132,7 +132,7 @@ export function createSubmission(db: Db, bingo: Bingo, params: CreateSubmissionP
     );
     for (const leafId of nodeIds) {
       const blockedBy = submitGateBlock(tx, leafId, completedNodeIds);
-      if (blockedBy !== null) throw new ServiceError(400, `${blockedBy}: the previous requirement must be completed first`);
+      if (blockedBy !== null) throw new ServiceError(400, gateMessage(blockedBy));
     }
 
     // Exclusive items: an item the team already has claimed (pending or approved) in another place.
@@ -221,12 +221,19 @@ function assertOpenAt(tx: Tx, bingo: Bingo, now: Date): Date {
 }
 
 function assertNotFrozen(tile: typeof tiles.$inferSelect, startsAt: Date, now: Date): void {
-  if (!tile.hasFreezePeriod) return;
-  const unlockAt = new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000);
-  if (now < unlockAt) {
-    throw new ServiceError(400, `This tile is frozen until ${unlockAt.toISOString()}`);
-  }
+  const unlockAt = frozenUntil(tile, startsAt);
+  if (unlockAt && now < unlockAt) throw new ServiceError(400, frozenMessage(unlockAt));
 }
+
+// The Submit flow's rules, in its own words: also what an edit warns with (submissionEdit.ts).
+
+/** When a tile's Freeze Period ends, or null when it has none. */
+export function frozenUntil(tile: Pick<typeof tiles.$inferSelect, "hasFreezePeriod" | "freezeDurationMinutes">, startsAt: Date): Date | null {
+  return tile.hasFreezePeriod ? new Date(startsAt.getTime() + tile.freezeDurationMinutes * 60_000) : null;
+}
+export const frozenMessage = (unlockAt: Date) => `This tile is frozen until ${unlockAt.toISOString()}`;
+export const gateMessage = (blockedBy: string) => `${blockedBy}: the previous requirement must be completed first`;
+export const proofNotNeededMessage = (forTask: boolean) => (forTask ? "This task doesn't need a Proof screenshot" : "This tile doesn't need a Proof screenshot");
 
 // A Proof screenshot (CONTEXT.md): posted like a drop (for yourself or a teammate, only while live), but with no
 // claims, so no points, gates or exclusive items apply. It's only allowed where a requirement exists: a Tile-wide one
@@ -241,7 +248,7 @@ function createProofSubmission(db: Db, bingo: Bingo, params: CreateSubmissionPar
     const requirements = proofRequirements({ ...tile, node: getNodeTree(tx, tile.nodeId)! });
     const requirement = requirements.find((r) => r.taskId === null) ?? requirements.find((r) => r.taskId === (params.taskId ?? null));
     if (!requirement) {
-      throw new ServiceError(400, params.taskId && requirements.length > 0 ? "This task doesn't need a Proof screenshot" : "This tile doesn't need a Proof screenshot");
+      throw new ServiceError(400, proofNotNeededMessage(!!params.taskId && requirements.length > 0));
     }
     assertNotFrozen(tile, startsAt, now);
 

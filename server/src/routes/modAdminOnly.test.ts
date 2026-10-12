@@ -42,15 +42,14 @@ describe("site-admin-only mod routes", () => {
   });
 
   it.each([
-    ["the review route", "/submissions/:id"],
-    ["the route that changes who a submission is credited to", "/submissions/:id/attribution"],
+    ["the review and edit routes", "/submissions/:id"],
     ["publishing Wrapped", "/wrapped/publish"],
   ])("leaves %s to any mod", async (_name, path) => {
     const { default: modRouter } = await import("./mod");
     const { requireAdmin } = await import("../middleware/requireAdmin");
-    const layer = (modRouter.stack as unknown as Layer[]).find((l) => l.route?.path === path && !l.route.methods.get);
-    expect(layer, path).toBeDefined();
-    expect(layer!.route!.stack.map((l) => l.handle)).not.toContain(requireAdmin);
+    const layers = (modRouter.stack as unknown as Layer[]).filter((l) => l.route?.path === path && !l.route.methods.get);
+    expect(layers.length, path).toBeGreaterThan(0);
+    for (const layer of layers) expect(layer.route!.stack.map((l) => l.handle)).not.toContain(requireAdmin);
   });
 
   it("keeps bingo settings (\"Show screenshots once Finished\" among them) to site admins", async () => {

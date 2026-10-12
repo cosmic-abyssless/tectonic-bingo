@@ -214,15 +214,31 @@ export interface AuditDetailsMap {
     pointsDelta: number;
     submittedByUserId: string;
   };
-  /** A mod changed which player a submission is credited to (someone forgot to pick the player they posted for). */
+  /** A mod changed which player a submission is credited to. Written before Edit replaced "Change player"; old rows only. */
   "submission.attribution_changed": { kind?: "proof"; tileName: string | null; taskLabels: string[]; fromUserId: string; fromName: string; toUserId: string; toName: string };
+  /**
+   * A Moderator edited a submission (CONTEXT.md "Submission", Editing): every field it changed apart from its status,
+   * which is its own submission.approved / rejected / review_undone entry (so `changes` is empty when only the status
+   * changed, over warnings). tileName and taskLabels are as it is now. `pointsDelta`: when it re-scored and no status
+   * entry carries the points. `warnings`: the ones it was saved over.
+   */
+  "submission.edited": {
+    kind?: "proof";
+    tileName: string | null;
+    taskLabels: string[];
+    nodeIds: string[];
+    changes: SubmissionEditChange[];
+    pointsDelta?: number;
+    warnings?: string[];
+    submittedByUserId: string;
+  };
   /** A Moderator priced the submission's claims again (only the claims whose Drop value changed). */
   "submission.repriced": { tileName: string | null; taskLabels: string[]; claims: { itemName: string; before: number | null; after: number | null }[] };
   "submission.screenshot_analyzed": { codewordVerified: boolean; detectedItemName: string | null; textLength: number };
   "submission.screenshot_analysis_failed": Record<string, never>;
 
   "points.adjusted": { amount: number; reason: string };
-  /** One row per node whose awarded points changed when a submission was reviewed (or a review undone). */
+  /** One row per node whose awarded points changed when a submission was reviewed, its review undone, or it was edited. */
   "points.earned": PointChangeDetails;
   "points.lost": PointChangeDetails;
   /** Net change for one team after a board edit re-scored the bingo (only written when non-zero). */
@@ -348,6 +364,13 @@ export interface PointChangeDetails {
   submissionId: string;
 }
 
+/** One field a submission.edited entry changed, before and after in words (an ISO time for `submittedAt`); null for none. */
+export interface SubmissionEditChange {
+  field: "player" | "kind" | "tile" | "task" | "items" | "submittedAt" | "reviewerNotes";
+  before: string | null;
+  after: string | null;
+}
+
 export interface TaskSnapshot {
   kind: string;
   label: string | null;
@@ -446,6 +469,23 @@ export function describeClaims(details: { claims?: { itemName: string | null; qu
     parts.push(labels.length > 0 ? `proof of ${joinList(labels)}` : "proof");
   }
   return parts.length > 0 ? joinList(parts) : "a screenshot";
+}
+
+const EDIT_FIELD_NAMES: Record<SubmissionEditChange["field"], string> = {
+  player: "player",
+  kind: "kind",
+  tile: "tile",
+  task: "task",
+  items: "items",
+  submittedAt: "submitted",
+  reviewerNotes: "notes",
+};
+/** "2026-03-01 12:00 UTC": the same for every reader, as the stored value is. */
+const utcMinute = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+/** `player: Bob → Alice`, `notes: none → "gg"`. */
+function describeEditChange(c: SubmissionEditChange): string {
+  const value = (v: string | null) => (v === null ? "none" : c.field === "submittedAt" ? utcMinute(v) : c.field === "reviewerNotes" ? `"${v}"` : v);
+  return `${EDIT_FIELD_NAMES[c.field]}: ${value(c.before)} → ${value(c.after)}`;
 }
 
 const pointsFor = (d: PointChangeDetails) =>
@@ -791,6 +831,17 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "team",
     title: "Submission credit changed",
     label: (i) => `${actor(i)} changed who ${aSubmission(i.details)} for "${i.details.tileName ?? "a tile"}" is credited to, from ${i.details.fromName} to ${i.details.toName}`,
+  },
+  "submission.edited": {
+    category: "submission",
+    tone: "warn",
+    visibility: "mods",
+    title: "Submission edited",
+    label: (i) => {
+      const changes = i.details.changes.length ? ` (${i.details.changes.map(describeEditChange).join("; ")})` : "";
+      const warnings = i.details.warnings?.length ? `, over ${i.details.warnings.length === 1 ? "a warning" : "warnings"}: ${i.details.warnings.join("; ")}` : "";
+      return `${actor(i)} edited ${aSubmission(i.details)} for "${i.details.tileName ?? "a tile"}"${changes}${warnings}`;
+    },
   },
   "submission.repriced": {
     category: "submission",

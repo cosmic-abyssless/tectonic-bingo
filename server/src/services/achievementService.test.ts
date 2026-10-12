@@ -8,7 +8,7 @@ import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile } from "./boardService";
 import { createSubmission, setSubmissionReaction } from "./submissionService";
-import { changeSubmissionAttribution } from "./submissionTarget";
+import { editSubmission } from "./submissionEdit";
 import { setTileInterest } from "./teamService";
 import { GePriceTable } from "./gePriceService";
 import { fillMissingGpValuesAndNotify } from "./gpValueService";
@@ -824,7 +824,9 @@ describe("Never revoked", () => {
     const sub = submit(bingo, team.id, alice.id, leafId, itemName, { postedByUserId: bob.id }); // bob posts for alice
     expect(earned(bingo, bob.id, "partner_slayer")).toBe(true);
 
-    changeSubmissionAttribution(db, bingo, { submissionId: sub.id, userId: captain.id, changedByUserId: captain.id }); // mod re-credits it to captain
+    // A mod re-credits it to captain.
+    const input = { expectedUpdatedAt: sub.updatedAt.toISOString(), submittedByUserId: captain.id, submittedAt: sub.submittedAt.toISOString(), status: sub.status, reviewerNotes: null, kind: "drop" as const, claims: [{ nodeId: leafId, quantity: 1 }] };
+    editSubmission(db, bingo, { submissionId: sub.id, editedByUserId: captain.id, input });
     expect(earned(bingo, bob.id, "partner_slayer")).toBe(true); // bob keeps it — he did earn it, at the time
     expect(earned(bingo, captain.id, "strong_start")).toBe(false); // captain never posted anything themselves
   });

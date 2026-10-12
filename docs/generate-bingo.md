@@ -190,8 +190,15 @@ target (say `signup`), the later dates are simply scheduled in the future.
   It is drawn from its own random stream, so it never shifts anything else in a seeded run.
 - **Rejections are rare**: on the first day some players' first submission is rejected
   ("Codeword not visible...") and re-submitted 10-60 minutes later; after that about 1%.
-  One approval is undone and re-approved a few minutes later. Occasionally a mod adjusts
-  a team's points by +15.
+  One approval is sent back to pending (through the Edit) and re-approved a few minutes later.
+  Occasionally a mod adjusts a team's points by +15.
+- **Mods edit a few submissions** (CONTEXT.md "Submission", Editing), each at most once a run, through
+  the same `PUT .../mod/submissions/:id` the mod queue's Edit uses, and never over a warning: a drop a
+  teammate posted without picking who it was for is re-credited to that player while it's reviewed; a
+  quantity the screenshot doesn't bear out is lowered by one while it's approved; a first-day
+  "Codeword not visible" rejection is approved a few minutes later with a note (instead of being
+  re-posted); an approved drop's submitted time is moved back to when it dropped. They are drawn from
+  their own random stream.
 - Everything is stamped in date order, so the audit log reads the way a real one would.
 - **Wise Old Man snapshots** (`womSnapshots.ts`): a testdata- bingo is never read from WOM, so
   each player's snapshots are made up after play, from their approved drops. The kills before a
