@@ -339,10 +339,10 @@ export function BookBackArt({
       {/* Speed lines, radiating from the burst. */}
       <div
         className="absolute inset-0"
-        style={{ background: `repeating-conic-gradient(from 0deg at 22cqw 22cqw, color-mix(in srgb, ${colors.ON_LOUD} 22%, transparent) 0deg 7deg, transparent 7deg 16deg)` }}
+        style={{ background: `repeating-conic-gradient(from 0deg at 15cqw 15cqw, color-mix(in srgb, ${colors.ON_LOUD} 22%, transparent) 0deg 7deg, transparent 7deg 16deg)` }}
       />
-      {/* The burst, its centre near the corner so about two thirds of it is on the cover, with the art in it. */}
-      <div className="absolute -left-[12cqw] -top-[12cqw] h-[66cqw] w-[66cqw]">
+      {/* The burst, its centre near the corner so only part of it is on the cover, with the art in it just in from the edges. */}
+      <div className="absolute -left-[18cqw] -top-[18cqw] h-[66cqw] w-[66cqw]">
         <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
           <polygon points={BURST} fill={colors.SHADOW} transform="translate(2.4 2.4)" />
           <polygon points={BURST} fill={colors.YELLOW} stroke={colors.SHADOW} strokeWidth={1.6} strokeLinejoin="round" />
@@ -354,13 +354,13 @@ export function BookBackArt({
         )}
       </div>
       <span
-        className={`${LETTERED} absolute right-[4cqw] top-[21cqw] origin-center -rotate-[20deg] whitespace-nowrap uppercase leading-none`}
-        style={{ fontFamily: COMIC_FONT, fontSize: "15cqw", color: colors.ON_LOUD, textShadow: inkOutline(colors.SHADOW) }}
+        className={`${LETTERED} absolute right-[4cqw] top-[11cqw] origin-center -rotate-[9deg] whitespace-nowrap uppercase leading-none`}
+        style={{ fontFamily: COMIC_FONT, fontSize: "16cqw", color: colors.ON_LOUD, textShadow: inkOutline(colors.SHADOW) }}
       >
         Complete!
       </span>
       <div
-        className="absolute inset-x-[6cqw] top-[55cqw] border-[0.9cqw] px-[4cqw] py-[2.6cqw]"
+        className="absolute inset-x-[6cqw] top-[51cqw] border-[0.9cqw] px-[4cqw] py-[2.6cqw]"
         style={{ borderColor: colors.SHADOW, background: colors.PAPER_RAISED, color: colors.INK, boxShadow: `1.4cqw 1.4cqw 0 ${colors.SHADOW}` }}
       >
         <span className={`${LETTERED} mb-[1.6cqw] block uppercase leading-none`} style={{ fontFamily: COMIC_FONT, fontSize: "5.6cqw", letterSpacing: "0.05em", color: colors.INK_SUBTLE }}>
