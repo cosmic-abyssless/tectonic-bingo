@@ -87,6 +87,14 @@
   --color-osrs-name: #ffff00;
 }
 
+/* The comic theme's lettering (themes/comic/font.ts): Bangers with a crossed 7, so it can't be read as a 1. Ours, not
+   Google Fonts', for that one glyph (assets/fonts/README.md). */
+@font-face {
+  font-family: "Bangers";
+  src: url("./assets/fonts/Bangers-Tectonic.woff2") format("woff2");
+  font-display: swap;
+}
+
 @font-face {
   font-family: "RuneScape Bold 12";
   src: url("./assets/fonts/RuneScape-Bold-12.woff2") format("woff2");
