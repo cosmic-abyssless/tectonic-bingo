@@ -385,6 +385,13 @@ export function ReviewQueue({ slug }: { slug: string }) {
                       </Notice>
                     )}
 
+                    {row.submission.status === "pending" &&
+                      (row.alreadyComplete ?? []).map((line) => (
+                        <Notice key={line} tone="warn">
+                          {line}
+                        </Notice>
+                      ))}
+
                     <ProofChecks checks={row.proofChecks ?? []} dropSubmittedAt={row.submission.submittedAt} />
 
                     <Field label="Notes (optional)">

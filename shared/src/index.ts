@@ -550,6 +550,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   proofChecks: ProofCheck[];
   /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
   reviewedByUser: MinimalUser | null;
+  /** A pending drop only: a line for each claimed Item that would add nothing, its Parts being complete for the Team already. */
+  alreadyComplete: string[];
 }
 
 // Derived cache: one row per node currently COMPLETE for a team (see
@@ -700,7 +702,7 @@ export interface ModSubmissionsResponse {
  * A rule of the Submit flow that an edit breaks (CONTEXT.md "Submission", Editing). An edit isn't refused for one:
  * the Moderator is shown it and can save anyway. Only what the edit itself brings is listed, not what was already so.
  */
-export type EditWarningCode = "exclusive" | "gate" | "frozen" | "proof_not_required" | "before_start" | "after_end";
+export type EditWarningCode = "exclusive" | "gate" | "frozen" | "proof_not_required" | "before_start" | "after_end" | "already_complete";
 export interface EditWarning {
   code: EditWarningCode;
   /** Player-facing, in the Submit flow's own words where it has them. */

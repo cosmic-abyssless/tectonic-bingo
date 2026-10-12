@@ -17,7 +17,7 @@ import { conflictMessage, conflictsForClaims } from "./exclusivityService";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { pricer, valuedAsOf } from "./gpValueService";
 import { describeSubmissionTarget, getSubmissionNodeIds, rebuildTeamState, recordPointChanges, scoreTeam } from "./scoringService";
-import { frozenMessage, frozenUntil, gateMessage, proofNotNeededMessage, tileForLeaf, utcLabel } from "./submissionService";
+import { completedPartNotes, frozenMessage, frozenUntil, gateMessage, proofNotNeededMessage, tileForLeaf, utcLabel } from "./submissionService";
 import { getTeamById, getTeamMembers } from "./teamService";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -305,6 +305,9 @@ function warningsFor(tx: Tx, bingo: Bingo, teamId: string, submissionId: string,
   const blocked = new Set(nodeIds.map((id) => submitGateBlock(tx, id, completed)).filter((b): b is string => b !== null));
   for (const blockedBy of blocked) out.push({ code: "gate", message: gateMessage(blockedBy) });
   for (const conflict of conflictsForClaims(tx, bingo, teamId, nodeIds, submissionId)) out.push({ code: "exclusive", message: conflictMessage(conflict) });
+  // Approving Items whose Parts the team had already finished without it scores nothing: likely the wrong Part.
+  const root = state.status === "approved" && state.tile ? getNodeTree(tx, state.tile.nodeId) : undefined;
+  if (root) for (const message of completedPartNotes(state.tile!.name, root, nodeIds, completed)) out.push({ code: "already_complete", message });
   return out;
 }
 

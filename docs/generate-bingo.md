@@ -197,7 +197,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
   teammate posted without picking who it was for is re-credited to that player while it's reviewed; a
   quantity the screenshot doesn't bear out is lowered by one while it's approved; a first-day
   "Codeword not visible" rejection is approved a few minutes later with a note (instead of being
-  re-posted); an approved drop's submitted time is moved back to when it dropped. They are drawn from
+  re-posted); an approved drop's submitted time is moved back to when it dropped; a later Page's drop posted on
+  Page 1's copy of the item, though Page 1 was done (the queue says so), is moved to its own Page while
+  it's reviewed. They are drawn from
   their own random stream.
 - Everything is stamped in date order, so the audit log reads the way a real one would.
 - **Wise Old Man snapshots** (`womSnapshots.ts`): a testdata- bingo is never read from WOM, so

@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
-import { renderAuditLabel, type AuditEntry, type EditSubmissionInput } from "@bingo/shared";
+import { renderAuditLabel, type AuditEntry, type EditSubmissionInput, type GraphNode } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, claims, submissions, submissionScreenshots, teamNodeState } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { createTask, createTile, generateLines, updateTileBonusPoints } from "./boardService";
-import { createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, utcLabel } from "./submissionService";
+import { completedPartNotes, createSubmission, getAllSubmissionsForBingo, getTeamSubmissions, utcLabel } from "./submissionService";
 import { approveSubmission, rejectSubmission } from "./scoringService";
 import { editSubmission, EditWarningsError } from "./submissionEdit";
 import { queryAuditLog } from "../audit/query";
@@ -529,6 +529,60 @@ describe("warnings", () => {
     const sub = drop(fx, [{ nodeId: fx.fang.id, itemName: "Tanzanite fang" }]);
     reject(fx, sub.id);
     expect(edit(fx, sub.id, { submittedAt: t(-10).toISOString() }).warnings).toEqual([]);
+  });
+
+  // BLOOD SHARDS: Page 1 and Page 2 each take a Blood shard, on their own lists.
+  function shards(fx: Fx) {
+    const tile = createTile(db, { bingoId: fx.bingo.id, name: "BLOOD SHARDS", boardRow: 0, boardCol: 2 });
+    const page = (label: string) => createTask(db, tile.id, { kind: "ANY", label, points: 40, children: [{ kind: "ITEM", itemName: "Blood shard" }] }).children[0]!;
+    return { page1: page("Page 1"), page2: page("Page 2") };
+  }
+
+  it("for approving Items on a Part the Team had already completed without it, naming the Part that also takes them", () => {
+    const fx = seed();
+    const { page1, page2 } = shards(fx);
+    approve(fx, drop(fx, [{ nodeId: page1.id, itemName: "Blood shard" }]).id);
+    const second = drop(fx, [{ nodeId: page1.id, itemName: "Blood shard" }], { by: fx.bob.id });
+    expect(getAllSubmissionsForBingo(db, fx.bingo.id, "pending")[0]!.alreadyComplete).toEqual([
+      '"Blood shard" adds nothing: Page 1 of BLOOD SHARDS is already complete. Page 2 also takes it.',
+    ]);
+    expect(warningsOf(() => edit(fx, second.id, { status: "approved" }))).toEqual([
+      { code: "already_complete", message: '"Blood shard" adds nothing: Page 1 of BLOOD SHARDS is already complete. Page 2 also takes it.' },
+    ]);
+    // Moved to Page 2, it counts.
+    expect(edit(fx, second.id, { status: "approved", claims: [{ nodeId: page2.id, quantity: 1 }] }).warnings).toEqual([]);
+    expect(findState(fx.team.id, page2.id)).toBeDefined();
+  });
+
+  it("not for the submission that completed the Part, nor while it's pending", () => {
+    const fx = seed();
+    const { page1 } = shards(fx);
+    const first = drop(fx, [{ nodeId: page1.id, itemName: "Blood shard" }]);
+    expect(getAllSubmissionsForBingo(db, fx.bingo.id, "pending")[0]!.alreadyComplete).toEqual([]);
+    approve(fx, first.id);
+    expect(edit(fx, first.id, { reviewerNotes: "nice" }).warnings).toEqual([]);
+    expect(getAllSubmissionsForBingo(db, fx.bingo.id)[0]!.alreadyComplete).toEqual([]); // only a pending row has the line
+    const second = drop(fx, [{ nodeId: page1.id, itemName: "Blood shard" }]);
+    expect(edit(fx, second.id, { submittedAt: t(200).toISOString() }).warnings).toEqual([]);
+  });
+});
+
+describe("completedPartNotes", () => {
+  const node = (id: string, kind: GraphNode["kind"], children: GraphNode[] = [], extra: Partial<GraphNode> = {}): GraphNode =>
+    ({ id, kind, label: null, itemName: null, children, ...extra }) as GraphNode;
+  const item = (id: string, itemName: string) => node(id, "ITEM", [], { itemName });
+
+  it("says nothing for an Item shared by two Parts while either is unfinished", () => {
+    const shard = item("shard", "Blood shard");
+    const root = node("root", "ALL", [node("p1", "COUNT", [shard], { label: "Page 1" }), node("p2", "COUNT", [shard], { label: "Page 2" })]);
+    expect(completedPartNotes("SHARDS", root, ["shard"], new Set(["p1"]))).toEqual([]);
+    expect(completedPartNotes("SHARDS", root, ["shard"], new Set(["p1", "p2"]))).toEqual(['"Blood shard" adds nothing: Page 1 and Page 2 of SHARDS are already complete.']);
+  });
+
+  it("treats a Tile whose root is a SUM as one Part, so a claimed Item only adds nothing once the total is reached", () => {
+    const root = node("root", "SUM", [item("a", "Onyx"), item("b", "Zenyte")]);
+    expect(completedPartNotes("GEMS", root, ["a"], new Set(["a"]))).toEqual([]);
+    expect(completedPartNotes("GEMS", root, ["a"], new Set(["a", "root"]))).toEqual(['"Onyx" adds nothing: GEMS is already complete.']);
   });
 });
 

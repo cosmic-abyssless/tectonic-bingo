@@ -6,7 +6,7 @@
 // a batch (submissions pile up while the mods sleep); and the follow-ups of those (re-submissions after a
 // rejection, a review sent back to pending, a mod's edits, a point adjustment, a hand coming down). See
 // docs/generate-bingo-plan.md, Phase 4.
-import type { EditSubmissionInput, Submission as SubmissionRow, TeamProgressSummary } from "@bingo/shared";
+import type { EditSubmissionInput, GraphNode, Submission as SubmissionRow, TeamProgressSummary } from "@bingo/shared";
 import { ApiError } from "./client";
 import { planSubmissions, type BoardInfo, type Claim, type PartModel } from "./board";
 import { localHour, playingProbability, type Player } from "./people";
@@ -64,6 +64,8 @@ interface Submission {
   row: ServerRow;
   /** Posted by a teammate who forgot to pick `by`, so it's credited to the poster until a mod fixes it. */
   miscredited: boolean;
+  /** Posted on Page 1's copy of its item though Page 1 was done: the claims it belongs on, where a mod moves it. */
+  belongsOn?: Claim[];
 }
 
 type ServerRow = Pick<SubmissionRow, "submittedByUserId" | "submittedAt" | "status" | "reviewerNotes" | "updatedAt">;
@@ -98,7 +100,7 @@ export class Simulation {
   private readonly rejectedOnce = new Set<number>();
   private undoDone = false;
   // A mod's edits through the mod queue's Edit: at most one of each per run.
-  private readonly edits = { recredit: false, quantity: false, flip: false, time: false };
+  private readonly edits = { recredit: false, quantity: false, flip: false, time: false, page: false };
   private readonly summary: SimSummary = { submitted: 0, approved: 0, rejected: 0, pendingAtEnd: 0, errors: new Map(), teams: [], earliest: null, latest: null };
   private readonly rng: Rng;
   /** Its own stream, so choosing who posts a drop never shifts anything else in a seeded run. */
@@ -289,16 +291,23 @@ export class Simulation {
     // Once a run, the teammate forgets to pick who it's for, and a mod fixes the credit when reviewing it.
     const miscredited = !!poster && !this.edits.recredit && this.editRng.chance(0.3);
     if (miscredited) this.edits.recredit = true;
+    // Once a run, a Page 2 drop is posted on Page 1's copy of the item though Page 1 is done, and a mod moves it.
+    const belongsOn = !again ? this.misplace(team, state, claims) : null;
+    const posted = belongsOn ?? claims;
     try {
       const { submission } = await this.ctx.api
         .as((poster ?? by).discordId)
-        .submit<{ submission: { id: string } & ServerRow }>(`/api/bingos/${this.ctx.slug}/submissions`, claims, { at }, poster && !miscredited ? by.userId! : undefined);
+        .submit<{ submission: { id: string } & ServerRow }>(`/api/bingos/${this.ctx.slug}/submissions`, posted, { at }, poster && !miscredited ? by.userId! : undefined);
       this.stamp(at);
       const first = !this.rejectedOnce.has(by.index) && at.getTime() < this.ctx.tl.startsAt.getTime() + DAY && this.rng.chance(0.2);
       if (first) this.rejectedOnce.add(by.index);
-      const rec: Submission = { id: submission.id, team, state, claims, by, at, status: "pending", reviewScheduled: false, rejectFirst: first, row: submission, miscredited };
+      const rec: Submission = { id: submission.id, team, state, claims: posted, by, at, status: "pending", reviewScheduled: false, rejectFirst: first, row: submission, miscredited };
+      if (belongsOn) {
+        this.edits.page = true;
+        rec.belongsOn = claims;
+      }
       this.pending.push(rec);
-      team.live.set(rec.id, claims.map((c) => c.nodeId));
+      team.live.set(rec.id, posted.map((c) => c.nodeId));
       state.outstanding++;
       this.summary.submitted++;
     } catch (err) {
@@ -334,7 +343,13 @@ export class Simulation {
     if (sub.miscredited && sub.by.userId) changes.submittedByUserId = sub.by.userId;
     const over = sub.claims.find((c) => (c.quantity ?? 1) >= 2);
     let claims = sub.claims;
-    if (action === "approve" && over && !this.edits.quantity && this.editRng.chance(0.3)) {
+    if (sub.belongsOn) {
+      // The queue says Page 1 is already complete, and that the Part it's for takes the item too.
+      claims = sub.belongsOn;
+      sub.belongsOn = undefined;
+      changes.claims = claims.map((c) => ({ nodeId: c.nodeId, quantity: c.quantity ?? 1 }));
+      if (action === "approve") reviewerNotes = `Moved to ${sub.state.part.label}: ${this.board.tileById.get(sub.state.part.tileId)!.parts[0]!.label} was already complete`;
+    } else if (action === "approve" && over && !this.edits.quantity && this.editRng.chance(0.3)) {
       this.edits.quantity = true;
       const shows = (over.quantity ?? 1) - 1;
       claims = sub.claims.map((c) => (c === over ? { ...c, quantity: shows } : c));
@@ -346,6 +361,7 @@ export class Simulation {
       if (!(await this.edit(mod, sub, { ...changes, status, reviewerNotes: reviewerNotes ?? null }, at, `review ${action} with an edit`))) return;
       sub.claims = claims;
       sub.miscredited = false;
+      if (sub.status === "pending") sub.team.live.set(sub.id, claims.map((c) => c.nodeId));
     } else {
       try {
         const { submission } = await this.ctx.api.as(mod.discordId).patch<{ submission: ServerRow }>(`/api/bingos/${this.ctx.slug}/mod/submissions/${sub.id}`, { action, reviewerNotes }, { at });
@@ -507,6 +523,31 @@ export class Simulation {
 
   private async refreshAll(): Promise<void> {
     for (const team of this.teams) await this.refresh(team);
+  }
+
+  /**
+   * The same drop on Page 1's copy of its item, when this is a later Page of a Tile whose Page 1 the team has done and
+   * Page 1 takes every item it claims (on leaves of its own). Null when it can't be, or isn't this time.
+   */
+  private misplace(team: SimTeam, state: PartState, claims: Claim[]): Claim[] | null {
+    if (this.edits.page || state.part.index === 0) return null;
+    const first = this.board.tileById.get(state.part.tileId)!.parts[0]!;
+    if (!team.completed.has(first.id)) return null;
+    const own = new Set(state.part.leafIds);
+    const firstItems = new Map<string, string>();
+    const walk = (n: GraphNode) => {
+      if (n.kind === "ITEM" && n.itemName && !own.has(n.id)) firstItems.set(n.itemName.toLowerCase(), n.id);
+      n.children.forEach(walk);
+    };
+    walk(first.node);
+    const moved = claims.map((c) => {
+      const nodeId = c.itemName ? firstItems.get(c.itemName.toLowerCase()) : undefined;
+      return nodeId ? { ...c, nodeId } : null;
+    });
+    if (moved.some((c) => c === null)) return null;
+    const misplaced = moved as Claim[];
+    if (!misplaced.every((c) => this.board.claimable(c.nodeId, team.completed)) || this.conflicts(team, misplaced)) return null;
+    return this.editRng.chance(0.5) ? misplaced : null;
   }
 
   private conflicts(team: SimTeam, claims: Claim[]): boolean {

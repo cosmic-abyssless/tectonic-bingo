@@ -238,6 +238,42 @@ export const frozenMessage = (unlockAt: Date) => `This tile is frozen until ${ut
 export const gateMessage = (blockedBy: string) => `${blockedBy}: the previous requirement must be completed first`;
 export const proofNotNeededMessage = (forTask: boolean) => (forTask ? "This task doesn't need a Proof screenshot" : "This tile doesn't need a Proof screenshot");
 
+const joinLabels = (labels: string[]) => (labels.length <= 1 ? labels.join("") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`);
+
+/**
+ * The claimed leaves that would add nothing to their Tile (CONTEXT.md "Submission", Already complete): every Part they count
+ * toward is already complete in `completed`. One line for each, naming the Tile's unfinished Parts that take the same
+ * Item, where it likely belongs. An Item shared by two Parts still helps while either is unfinished. A Tile whose root
+ * is a SUM is one Part: every claim adds to its total.
+ */
+export function completedPartNotes(tileName: string, root: GraphNode, leafIds: string[], completed: ReadonlySet<string>): string[] {
+  const parts = (root.kind === "SUM" ? [root] : root.children).map((node, i) => {
+    const ids = subtreeIds(node);
+    const items = new Set<string>();
+    const walk = (n: GraphNode) => {
+      if (n.kind === "ITEM" && n.itemName) items.add(n.itemName.toLowerCase());
+      n.children.forEach(walk);
+    };
+    walk(node);
+    return { label: node === root ? tileName : node.label || `Part ${i + 1}`, ids, items, done: completed.has(node.id) };
+  });
+  const find = (n: GraphNode, id: string): GraphNode | undefined => (n.id === id ? n : n.children.reduce<GraphNode | undefined>((hit, c) => hit ?? find(c, id), undefined));
+  const notes: string[] = [];
+  for (const leafId of new Set(leafIds)) {
+    const counted = parts.filter((p) => p.ids.has(leafId));
+    if (counted.length === 0 || counted.some((p) => !p.done)) continue;
+    const leaf = find(root, leafId);
+    const itemName = leaf?.kind === "ITEM" ? leaf.itemName?.toLowerCase() : undefined;
+    const elsewhere = itemName ? parts.filter((p) => !p.done && !p.ids.has(leafId) && p.items.has(itemName)).map((p) => p.label) : [];
+    const where = counted[0]!.label === tileName ? tileName : `${joinLabels(counted.map((p) => p.label))} of ${tileName}`;
+    notes.push(
+      `"${leaf?.itemName ?? leaf?.label ?? "This item"}" adds nothing: ${where} ${counted.length > 1 ? "are" : "is"} already complete.` +
+        (elsewhere.length ? ` ${joinLabels(elsewhere)} also ${elsewhere.length > 1 ? "take" : "takes"} it.` : ""),
+    );
+  }
+  return notes;
+}
+
 // A Proof screenshot (CONTEXT.md): posted like a drop (for yourself or a teammate, only while live), but with no
 // claims, so no points, gates or exclusive items apply. It's only allowed where a requirement exists: a Tile-wide one
 // (any Task given is ignored), or the named Task's own. Not a drop, so no Achievements hear of it.
@@ -513,6 +549,8 @@ export interface ModSubmissionRow extends SubmissionDetails {
   proofChecks: ProofCheck[];
   /** The Moderator or Admin who reviewed it. Null while pending, and when nobody was recorded (an imported Historical one). */
   reviewedByUser: MinimalUser | null;
+  /** A pending drop only: a line for each claimed Item that would add nothing, its Parts being complete for the Team already. */
+  alreadyComplete: string[];
 }
 
 // Every node id under a Task, itself included.
@@ -592,20 +630,32 @@ export function getAllSubmissionsForBingo(db: Db, bingoId: string, status?: (typ
           .map((r) => r.submission),
       )
     : details.filter((d) => !isDrop(d.submission));
+  // What each Team has complete now, for the pending drops' "already complete" lines; read once per Team.
+  const completedByTeam = new Map<string, Set<string>>();
+  const completedFor = (teamId: string) => {
+    let completed = completedByTeam.get(teamId);
+    if (!completed) {
+      completed = new Set(db.select({ nodeId: teamNodeState.nodeId }).from(teamNodeState).where(eq(teamNodeState.teamId, teamId)).all().map((s) => s.nodeId));
+      completedByTeam.set(teamId, completed);
+    }
+    return completed;
+  };
 
   return rows.map((r, i) => {
     const d = details[i]!;
     if (!isDrop(d.submission)) {
       const tile = tileById.get(d.submission.proofTileId!)!;
       const task = d.submission.proofTaskId ? trees.get(tile.nodeId)?.children.find((t) => t.id === d.submission.proofTaskId) : undefined;
-      return { ...d, leaves: [], tile, team: r.team, proofTaskLabel: task ? (task.label ?? tile.name) : null, partLabels: [], proofChecks: [] };
+      return { ...d, leaves: [], tile, team: r.team, proofTaskLabel: task ? (task.label ?? tile.name) : null, partLabels: [], proofChecks: [], alreadyComplete: [] };
     }
     const claimedNodeIds = [...new Set(d.claims.map((c) => c.nodeId))];
     const leaves = claimedNodeIds.map((id) => leafById.get(id)!).filter(Boolean);
     const firstLeafId = claimedNodeIds[0];
     const tile = firstLeafId ? tileOf(firstLeafId) : null;
     const partLabels = tile ? partsOf(tile).filter((p) => claimedNodeIds.some((id) => p.ids.has(id))).map((p) => p.label) : [];
-    return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, partLabels, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [] };
+    const root = tile ? trees.get(tile.nodeId) : undefined;
+    const alreadyComplete = d.submission.status === "pending" && tile && root ? completedPartNotes(tile.name, root, claimedNodeIds, completedFor(d.submission.teamId)) : [];
+    return { ...d, leaves, tile: tile!, team: r.team, proofTaskLabel: null, partLabels, proofChecks: tile ? proofChecksFor(d, withNode(tile), proofs) : [], alreadyComplete };
   });
 }
 
