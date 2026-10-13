@@ -10,8 +10,8 @@ import { Badge, Card, EmptyState, Notice } from "../ui/Card";
 import { Field, Input, Textarea } from "../ui/Field";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "../ui/icons";
 import { MultiSelect } from "../ui/MultiSelect";
-import { inclusionFilter } from "../ui/inclusionFilter";
-import { useUrlParam, useUrlSet } from "../ui/useUrlParam";
+import { inclusionFilter, storedPicks } from "../ui/inclusionFilter";
+import { useClearUrlParams, useUrlParam, useUrlSet } from "../ui/useUrlParam";
 import { TableSearchInput } from "../ui/tableSearch";
 import { ScreenshotLink, ScreenshotThumb } from "../submissions/ScreenshotThumb";
 import { claimsGpBreakdown, claimsGpValue } from "../submissions/claimsSummary";
@@ -49,6 +49,8 @@ const STATUS_OPTIONS: { key: SubmissionStatus; label: string }[] = [
 /** The Submissions filters' params (#389): `?status=pending,approved&teams=<id>,<id>&q=<search>`. */
 export const SUBMISSION_FILTER_PARAMS = ["status", "teams", "submitters", "reviewers", "q"] as const;
 const DEFAULT_STATUSES = ["pending"];
+/** The filters besides Status, which Clear filters drops. */
+const NARROWING_PARAMS = ["teams", "submitters", "reviewers", "q"] as const;
 
 const isManualRow = (row: ModSubmissionRow) => row.leaves.some((l) => l.kind === "MANUAL");
 // A Proof screenshot (CONTEXT.md): no claims, so no item to match or drop value to show.
@@ -113,6 +115,7 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const [selectedReviewers, setSelectedReviewers] = useUrlSet("reviewers");
   const [search, setSearch] = useUrlParam("q");
   const query = search ?? "";
+  const clearNarrowing = useClearUrlParams(NARROWING_PARAMS);
   // How many of the filtered list are drawn (issue #383): a Bingo has 1,000+ Submissions, and drawing every one is
   // what's slow, so Load more adds a page at a time. Changing a filter goes back to the first page.
   const [shown, setShown] = useState(PAGE_SIZE);
@@ -153,11 +156,18 @@ export function ReviewQueue({ slug }: { slug: string }) {
   const onlyPending = statuses.checked.length === 1 && statuses.checked[0] === "pending";
   const visible = [...filtered].sort((a, b) => Date.parse(b.submission.submittedAt) - Date.parse(a.submission.submittedAt));
   const drawn = page(visible, shown);
+  // What the Status filter would show that the others hide, so an empty list says so: a new pending Submission
+  // mustn't vanish behind a Reviewer filter left over from looking through approved ones.
+  const narrowedBy = [teams.narrowed && "Team", submitters.narrowed && "Submitter", reviewers.narrowed && "Reviewer", query.trim() && "search"].filter(
+    (name): name is string => !!name,
+  );
+  const hidden = visible.length === 0 && narrowedBy.length > 0 ? submissions.filter((r) => statuses.matches(r.submission.status)).length : 0;
 
-  // Picking a filter starts its list from the top.
-  function setFilter(set: (keys: Set<string>) => void) {
+  // Picking a filter starts its list from the top. Every option picked is kept as All (storedPicks), so a
+  // Submission from a Team or Player the options didn't list yet, or a pending one under Reviewer, still shows.
+  function setFilter(set: (keys: Set<string>) => void, options: { key: string }[]) {
     return (keys: string[]) => {
-      set(new Set(keys));
+      set(new Set(storedPicks(keys, options)));
       setShown(PAGE_SIZE);
     };
   }
@@ -249,21 +259,21 @@ export function ReviewQueue({ slug }: { slug: string }) {
             label="Status"
             options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.key] }))}
             selected={statuses.checked}
-            onChange={setFilter(setSelectedStatuses)}
+            onChange={setFilter(setSelectedStatuses, STATUS_OPTIONS)}
           />
           {allTeams.length > 0 && (
             <MultiSelect
               label="Team"
               options={teamOptions}
               selected={teams.checked}
-              onChange={setFilter(setSelectedTeams)}
+              onChange={setFilter(setSelectedTeams, teamOptions)}
             />
           )}
           {submitterChoices.length > 0 && (
-            <MultiSelect label="Submitter" options={submitterChoices} selected={submitters.checked} onChange={setFilter(setSelectedSubmitters)} />
+            <MultiSelect label="Submitter" options={submitterChoices} selected={submitters.checked} onChange={setFilter(setSelectedSubmitters, submitterChoices)} />
           )}
           {reviewerChoices.length > 0 && (
-            <MultiSelect label="Reviewer" options={reviewerChoices} selected={reviewers.checked} onChange={setFilter(setSelectedReviewers)} />
+            <MultiSelect label="Reviewer" options={reviewerChoices} selected={reviewers.checked} onChange={setFilter(setSelectedReviewers, reviewerChoices)} />
           )}
           <TableSearchInput
             value={query}
@@ -291,6 +301,27 @@ export function ReviewQueue({ slug }: { slug: string }) {
 
       {isLoading ? (
         <p className="py-20 text-center text-sm text-on-surface-muted">Loading…</p>
+      ) : hidden > 0 ? (
+        <EmptyState
+          title="Nothing matches these filters"
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                clearNarrowing();
+                setShown(PAGE_SIZE);
+              }}
+            >
+              Clear filters
+            </Button>
+          }
+        >
+          {hidden} {onlyPending ? "pending " : ""}
+          {hidden === 1 ? "submission is" : "submissions are"} hidden by the{" "}
+          {narrowedBy.length === 1 ? narrowedBy[0] : `${narrowedBy.slice(0, -1).join(", ")} and ${narrowedBy.at(-1)}`}{" "}
+          {narrowedBy.length === 1 ? "filter" : "filters"}.
+        </EmptyState>
       ) : visible.length === 0 ? (
         <EmptyState icon={<CheckIcon />} title="Nothing to review">
           {onlyPending && !teams.narrowed && !submitters.narrowed && !reviewers.narrowed && !query.trim() ? "New submissions show up here as they come in." : "No submissions match this filter."}

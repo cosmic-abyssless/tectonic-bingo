@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MinimalUser, ModSubmissionRow, SubmissionStatus } from "@bingo/shared";
-import { inclusionFilter } from "../ui/inclusionFilter";
+import { inclusionFilter, storedPicks } from "../ui/inclusionFilter";
 import {
   filterSubmissions,
   NOBODY_RECORDED,
@@ -104,5 +104,20 @@ describe("filterSubmissions", () => {
     expect(ids({ reviewer: ["mod"], team: ["t2"] })).toEqual(["3"]);
     expect(ids({ team: ["t1"] })).toEqual(["1", "2", "4", "5"]);
     expect(ids({ status: ["pending"], reviewer: ["mod"] })).toEqual([]);
+  });
+
+  it("still shows a new pending Submission under every Reviewer and Submitter picked while nothing was pending", () => {
+    const reviewed = ROWS.filter((r) => r.submission.status !== "pending");
+    const reviewers = storedPicks(reviewerOptions(reviewed).map((o) => o.key), reviewerOptions(reviewed));
+    const submitters = storedPicks(submitterOptions(reviewed).map((o) => o.key), submitterOptions(reviewed));
+    // The new one's by dave, whom no option listed when everyone was picked.
+    const rows = [...ROWS, row("6", { by: user("dave") })];
+    const shown = filterSubmissions(rows, {
+      status: inclusionFilter(new Set(["pending"]), [{ key: "pending" }, { key: "approved" }, { key: "rejected" }]),
+      team: inclusionFilter(new Set(), [{ key: "t1" }, { key: "t2" }]),
+      submitter: inclusionFilter(new Set(submitters), submitterOptions(rows)),
+      reviewer: inclusionFilter(new Set(reviewers), reviewerOptions(rows)),
+    });
+    expect(shown.map((r) => r.submission.id)).toEqual(["1", "6"]);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inclusionFilter } from "./inclusionFilter";
+import { ALL, inclusionFilter, storedPicks } from "./inclusionFilter";
 
 const OPTIONS = [{ key: "a" }, { key: "b" }, { key: "c" }];
 
@@ -21,6 +21,19 @@ describe("inclusionFilter", () => {
     const f = inclusionFilter(new Set(["a", "b", "c"]), OPTIONS);
     expect(f).toMatchObject({ checked: ["a", "b", "c"], query: undefined, narrowed: false });
     expect(f.matches("new")).toBe(true);
+  });
+
+  it("keeps All as All when an option turns up after it was picked", () => {
+    const picked = storedPicks(["a", "b", "c"], OPTIONS);
+    expect(picked).toEqual([ALL]);
+    const f = inclusionFilter(new Set(picked), [...OPTIONS, { key: "d" }]);
+    expect(f).toMatchObject({ checked: ["a", "b", "c", "d"], narrowed: false });
+    expect(f.matches("d")).toBe(true);
+  });
+
+  it("keeps the picks themselves when some option is left out", () => {
+    expect(storedPicks(["a", "c"], OPTIONS)).toEqual(["a", "c"]);
+    expect(storedPicks([], OPTIONS)).toEqual([]);
   });
 
   it("ignores ticks for options that are no longer there, and is Any again if none are left", () => {

@@ -23,6 +23,9 @@ export function AttentionDot({ label, className }: { label: string; className?: 
 
 export const pickerTriggerClass = "!transition-[background-color,color] pressed:!scale-100";
 
+/** The Select all row's id: without one React Aria makes one up (react-aria-1), which can't be told from an option. */
+const SELECT_ALL_ID = "picker-select-all";
+
 export function Picker({
   options,
   selectedKeys,
@@ -41,8 +44,13 @@ export function Picker({
   const multiple = selectionMode === "multiple";
   const allSelected = options.length > 0 && options.every((o) => selectedKeys.has(o.key));
 
+  // The Select all row is a menu item too, so a toggle can arrive with its key: its onAction does the picking, and its
+  // key mustn't end up among the picks (prod saw `?submitters=<id>,react-aria-1`).
   function handleSelectionChange(keys: Selection) {
-    onSelectionChange(keys === "all" ? options.map((o) => o.key) : [...keys].map((k: Key) => String(k)));
+    if (keys === "all") return onSelectionChange(options.map((o) => o.key));
+    const picked = [...keys].map((k: Key) => String(k));
+    if (picked.includes(SELECT_ALL_ID)) return;
+    onSelectionChange(picked);
   }
 
   return (
@@ -66,6 +74,7 @@ export function Picker({
         {multiple && options.length > 0 && (
           <>
             <MenuItem
+              id={SELECT_ALL_ID}
               variant="action"
               textValue={allSelected ? "Deselect all" : "Select all"}
               shouldCloseOnSelect={false}
