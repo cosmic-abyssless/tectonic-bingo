@@ -71,12 +71,18 @@ export function setUnvaluedItemDismissed(itemName: string, dismissed: boolean) {
   return api.put("/api/admin/unvalued-items/dismissed", { itemName, dismissed });
 }
 
-// Claude connections to the admin MCP server (#293): your own, or (Site Admins) everyone's.
+// Claude connections to the MCP server (#293): your own (anyone with MCP access), or (Owners) everyone's.
 export function getMcpConnections(scope: "mine" | "all") {
-  return api.get<{ connections: McpConnection[] }>(scope === "mine" ? "/api/admin/mcp-connections/mine" : "/api/admin/mcp-connections");
+  return api.get<{ connections: McpConnection[] }>(scope === "mine" ? "/api/me/mcp-connections" : "/api/admin/mcp-connections");
 }
-export function revokeMcpConnection(id: string) {
-  return api.delete(`/api/admin/mcp-connections/${id}`);
+export function revokeMcpConnection(id: string, scope: "mine" | "all") {
+  return api.delete(scope === "mine" ? `/api/me/mcp-connections/${id}` : `/api/admin/mcp-connections/${id}`);
+}
+export function getMcpAccessUsers() {
+  return api.get<{ users: User[] }>("/api/admin/mcp-access");
+}
+export function setUserMcpAccess(userId: string, mcpAccess: boolean) {
+  return api.put<{ user: User }>(`/api/admin/users/${userId}/mcp-access`, { mcpAccess });
 }
 export function getPastWomCompetitions() {
   return api.get<{ competitions: WomPastCompetition[] }>("/api/admin/wom-competitions");

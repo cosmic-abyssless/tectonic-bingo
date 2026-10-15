@@ -1,25 +1,43 @@
-// The admin MCP server's tools and what every one of them gets for free: the calling admin, an audit entry per call,
-// a per-connection rate limit, and read-only annotations. A tool only declares its input and computes its answer; add
-// new ones to MCP_TOOLS.
+// The MCP server's tools and what every one of them gets for free: the calling user and their scope (access.ts), an
+// audit entry per call, a per-connection rate limit, and read-only annotations. A tool only declares its input and
+// computes its answer; add new ones to MCP_TOOLS.
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { McpServer, type AuthInfo, type CallToolResult } from "@modelcontextprotocol/server";
 import * as schema from "../db/schema";
 import { oauthClients, users } from "../db/schema";
-import { can } from "@bingo/shared";
 import { audit } from "../audit/record";
-import { siteRoles } from "../services/permissions";
+import { mcpScope, type McpScope } from "./access";
 import { McpToolError, type McpTool, type McpToolContext } from "./tool";
+import { achievements } from "./tools/achievements";
+import { bingoBoard } from "./tools/bingoBoard";
 import { bingoSummary } from "./tools/bingoSummary";
 import { describeSchema } from "./tools/describeSchema";
+import { drops } from "./tools/drops";
 import { listBingos } from "./tools/listBingos";
 import { playerContributions } from "./tools/playerContributions";
+import { playerHistory } from "./tools/playerHistory";
 import { runSql } from "./tools/runSql";
+import { teamProgress } from "./tools/teamProgress";
 import { tileStats } from "./tools/tileStats";
+import { womGains } from "./tools/womGains";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
-export const MCP_TOOLS: McpTool[] = [listBingos, bingoSummary, tileStats, playerContributions, describeSchema, runSql] as unknown as McpTool[];
+export const MCP_TOOLS: McpTool[] = [
+  listBingos,
+  bingoSummary,
+  bingoBoard,
+  tileStats,
+  teamProgress,
+  playerContributions,
+  playerHistory,
+  drops,
+  achievements,
+  womGains,
+  describeSchema,
+  runSql,
+] as unknown as McpTool[];
 
 export const RATE_LIMIT = { calls: 60, windowMs: 60_000 };
 
@@ -48,15 +66,23 @@ function errorResult(message: string): CallToolResult {
   return { isError: true, content: [{ type: "text", text: message }] };
 }
 
-/** One MCP server instance for one request, serving MCP_TOOLS as the admin the verified token belongs to. */
-export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: McpTool[] = MCP_TOOLS): McpServer {
-  const server = new McpServer(
-    { name: "tectonic-bingo", title: "Tectonic Bingo", version: "1.0.0" },
-    { instructions: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with bingo_summary, tile_stats or player_contributions. For anything they don't answer, describe_schema and run_sql query a copy of the database (points still come from the curated tools)." },
-  );
-  const { userId, connectionId } = (authInfo?.extra ?? {}) as { userId?: string; connectionId?: string };
+const INSTRUCTIONS: Record<McpScope, string> = {
+  all: "Read-only data about Tectonic Bingo's Bingos, for site admins balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with the other tools. For anything they don't answer, describe_schema and run_sql query a copy of the database (points still come from the curated tools).",
+  finished:
+    "Read-only data about Tectonic Bingo's Finished Bingos, Historical ones included, for balancing future Bingos. Start with list_bingos, then ask about one Bingo by its slug with the other tools. Bingos that aren't Finished yet aren't available.",
+};
 
-  for (const tool of tools) {
+/**
+ * One MCP server instance for one request, serving MCP_TOOLS as the user the verified token belongs to. A user with
+ * Finished-only scope isn't offered the full-scope tools at all.
+ */
+export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: McpTool[] = MCP_TOOLS): McpServer {
+  const { userId, connectionId } = (authInfo?.extra ?? {}) as { userId?: string; connectionId?: string };
+  const owner = userId ? db.select().from(users).where(eq(users.id, userId)).get() : undefined;
+  const offeredScope = (owner && mcpScope(owner)) ?? "finished";
+  const server = new McpServer({ name: "tectonic-bingo", title: "Tectonic Bingo", version: "1.0.0" }, { instructions: INSTRUCTIONS[offeredScope] });
+
+  for (const tool of tools.filter((t) => offeredScope === "all" || !t.fullScopeOnly)) {
     server.registerTool(
       tool.name,
       {
@@ -68,11 +94,14 @@ export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: Mc
       async (args: Record<string, unknown>): Promise<CallToolResult> => {
         // The /mcp route only lets verified tokens through; this guards a server built without one.
         const user = userId ? db.select().from(users).where(eq(users.id, userId)).get() : undefined;
-        if (!user || !can(siteRoles(user), null, "administer_site").ok || !authInfo || !connectionId) return errorResult("Only site admins can use these tools.");
+        const scope = user ? mcpScope(user) : null;
+        if (!user || !scope || !authInfo || !connectionId) return errorResult("Only site admins and people given MCP access can use these tools.");
+        // Checked again per call, as access can change between listing the tools and calling one.
+        if (tool.fullScopeOnly && scope !== "all") return errorResult("Only site admins can use this tool.");
         const limit = takeRateLimit(connectionId);
         if (!limit.ok) return errorResult(`Too many tool calls: try again in ${limit.retryAfterSeconds} seconds.`);
 
-        const ctx: McpToolContext = { db, user };
+        const ctx: McpToolContext = { db, user, scope };
         const clientName = (() => {
           const row = db.select({ metadataJson: oauthClients.metadataJson }).from(oauthClients).where(eq(oauthClients.clientId, authInfo.clientId)).get();
           return row ? ((JSON.parse(row.metadataJson) as { client_name?: string }).client_name ?? null) : null;
@@ -97,7 +126,7 @@ export function buildMcpServer(db: Db, authInfo: AuthInfo | undefined, tools: Mc
               clientName,
               ...(failure !== null ? { error: failure } : result !== undefined && tool.auditDetails ? tool.auditDetails(result) : {}),
             },
-            actor: { userId: user.id, type: "user", role: "admin" },
+            actor: { userId: user.id, type: "user", role: scope === "all" ? "admin" : "player" },
           });
         }
         if (failure !== null) return errorResult(failure);

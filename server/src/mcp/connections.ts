@@ -63,7 +63,9 @@ export function listConnections(db: Queryable, userId?: string, now: Date = cloc
   return selectConnections(db, now, { userId }).map(toConnection);
 }
 
-function revokeRow(tx: Tx, row: ReturnType<typeof selectConnections>[number], now: Date, reason: "revoked" | "admin_removed", actorUserId: string | null): void {
+type RevokeReason = "revoked" | "admin_removed" | "mcp_access_removed";
+
+function revokeRow(tx: Tx, row: ReturnType<typeof selectConnections>[number], now: Date, reason: RevokeReason, actorUserId: string | null): void {
   tx.update(oauthTokens).set({ revokedAt: now }).where(eq(oauthTokens.id, row.id)).run();
   const { clientName, redirectHost } = describeClient(row.metadataJson);
   audit(tx, {
@@ -86,10 +88,19 @@ export function revokeConnection(db: Db, connectionId: string, actor: { id: stri
   });
 }
 
-/** Revokes every live connection of an Admin who just lost the role. Call inside the role change's transaction. */
-export function revokeAllForUser(tx: Tx, userId: string, actorUserId: string | null, now: Date = clockNow()): number {
+/**
+ * Revokes every live connection of a user who just lost their access: an Admin losing the role, or a user who isn't an
+ * Admin losing MCP access. Call inside the change's transaction.
+ */
+export function revokeAllForUser(
+  tx: Tx,
+  userId: string,
+  actorUserId: string | null,
+  now: Date = clockNow(),
+  reason: Exclude<RevokeReason, "revoked"> = "admin_removed",
+): number {
   const rows = selectConnections(tx, now, { userId });
-  for (const row of rows) revokeRow(tx, row, now, "admin_removed", actorUserId);
+  for (const row of rows) revokeRow(tx, row, now, reason, actorUserId);
   // Lapsed ones too, which aren't listed but still hold a refresh token.
   tx.update(oauthTokens).set({ revokedAt: now }).where(and(eq(oauthTokens.userId, userId), isNull(oauthTokens.revokedAt))).run();
   return rows.length;

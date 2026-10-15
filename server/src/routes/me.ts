@@ -13,6 +13,7 @@ import * as notificationService from "../services/notificationService";
 import { answerOffer, assertOffer, claimOffer } from "../services/notificationOffers";
 import { discordDmsAvailable, sendTestDm } from "../services/notificationDm";
 import * as userSettingsService from "../services/userSettingsService";
+import * as mcpConnections from "../mcp/connections";
 
 const router = Router();
 
@@ -24,6 +25,21 @@ router.get("/", noStore, requireAuth, (req, res) => {
   // switcher knows to offer them back.
   res.json({ user: req.user, devMode, isOwner: isOwner(req.user!), devAdminOff: devAdminOff(req.session) });
 });
+
+// The viewer's own Claude connections to the MCP server ("Connected apps" in the account menu): a site admin's, or a user's
+// with MCP access (CONTEXT.md). Anyone may list and revoke their own; nobody else's here (Owners do that from Site admin).
+router.get("/mcp-connections", noStore, requireAuth, (req, res) => {
+  res.json({ connections: mcpConnections.listConnections(db, req.user!.id) });
+});
+
+router.delete(
+  "/mcp-connections/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    mcpConnections.revokeConnection(db, req.params.id as string, { id: req.user!.id, isSiteAdmin: false });
+    res.status(204).end();
+  }),
+);
 
 // The Tutorial (CONTEXT.md) was finished or skipped, so it doesn't start again on any device. Answers with the
 // viewer's record, as GET / does.

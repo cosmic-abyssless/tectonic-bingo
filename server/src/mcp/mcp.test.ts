@@ -18,7 +18,7 @@ import { createMcpRouter } from "./router";
 import { authorizeReturnPath, isAllowedRedirectUri, RETURN_COOKIE } from "./oauthProvider";
 import { RATE_LIMIT, resetRateLimits, takeRateLimit } from "./tools";
 import { listConnections, revokeConnection } from "./connections";
-import { setUserAdmin } from "../services/userService";
+import { setUserAdmin, setUserMcpAccess } from "../services/userService";
 import { buildReplica, resetReplica } from "./sql/replica";
 import { saveTo, tempDir } from "../testUtils/mcpSql";
 
@@ -271,12 +271,12 @@ describe("authorize", () => {
     expect(authorizeReturnPath(undefined)).toBeNull();
   });
 
-  it("refuses anyone who isn't an Admin", async () => {
+  it("refuses anyone who is neither an Admin nor given MCP access", async () => {
     const browser = new Browser();
     await browser.login(playerId);
     const res = await browser.fetch(authorizePath(clientId, pkce().challenge));
     expect(res.status).toBe(403);
-    expect(await res.text()).toContain("site admins can connect Claude");
+    expect(await res.text()).toContain("people an admin has given MCP access, can connect Claude");
   });
 
   it("asks an Admin once, naming the app and its redirect host, then redirects with a code, the state and iss", async () => {
@@ -447,7 +447,20 @@ describe("/mcp", () => {
     const { access } = await connect();
     const { result } = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 1, method: "tools/list" }));
     const tools = result!.tools as { name: string; annotations: Record<string, unknown> }[];
-    expect(tools.map((t) => t.name)).toEqual(["list_bingos", "bingo_summary", "tile_stats", "player_contributions", "describe_schema", "run_sql"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "list_bingos",
+      "bingo_summary",
+      "bingo_board",
+      "tile_stats",
+      "team_progress",
+      "player_contributions",
+      "player_history",
+      "drops",
+      "achievements",
+      "wom_gains",
+      "describe_schema",
+      "run_sql",
+    ]);
     for (const tool of tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
@@ -477,7 +490,7 @@ describe("/mcp", () => {
     expect(ok.result!.structuredContent).toMatchObject({ bingo: { slug: "summer" }, standings: [] });
 
     const missing = await rpcResult(await callMcp(access, { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "tile_stats", arguments: { slug: "nope" } } }));
-    expect(missing.result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringContaining('No Bingo has the slug "nope"') }] });
+    expect(missing.result).toMatchObject({ isError: true, content: [{ type: "text", text: expect.stringContaining('No Bingo you can read has the slug "nope"') }] });
 
     const entries = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).all();
     expect(entries.map((e) => [e.entityId, e.bingoId])).toEqual([["bingo_summary", bingo.id], ["tile_stats", null]]);
@@ -584,5 +597,90 @@ describe("connections", () => {
     setUserAdmin(db, adminId, true);
     expect((await callMcp(first.access, tools)).status).toBe(401);
     expect((await token({ grant_type: "refresh_token", client_id: second.clientId, refresh_token: second.refresh })).body).toMatchObject({ error: "invalid_grant" });
+  });
+});
+
+describe("MCP access", () => {
+  const tools = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+  const call = (name: string, args: Record<string, unknown> = {}) => ({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } });
+  const addBingo = (slug: string, stage: "live" | "complete" | "planning") =>
+    db.insert(bingos).values({ slug, name: slug, boardRows: 5, boardCols: 5, createdByUserId: adminId, stage }).returning().get();
+
+  beforeEach(() => {
+    db.update(users).set({ mcpAccess: true }).where(eq(users.id, playerId)).run();
+  });
+
+  it("lets a user given it connect, telling them it reads Finished Bingos", async () => {
+    const clientId = ((await (await register()).json()) as { client_id: string }).client_id;
+    const browser = new Browser();
+    await browser.login(playerId);
+    const html = await (await browser.fetch(authorizePath(clientId, pkce().challenge))).text();
+    expect(html).toContain("Finished Bingos' Board, Teams and Submissions");
+    expect(html).not.toContain("signup answers");
+    expect((await connect(playerId)).access).toBeTruthy();
+  });
+
+  it("offers them the curated tools only, never describe_schema or run_sql", async () => {
+    const { access } = await connect(playerId);
+    const { result } = await rpcResult(await callMcp(access, tools));
+    const names = (result!.tools as { name: string }[]).map((t) => t.name);
+    expect(names).toContain("list_bingos");
+    expect(names).not.toContain("run_sql");
+    expect(names).not.toContain("describe_schema");
+    const sql = await rpcResult(await callMcp(access, call("run_sql", { query: "SELECT 1" })));
+    expect(JSON.stringify(sql)).not.toContain('"rows"');
+  });
+
+  it("lists and answers about Finished Bingos only, as if the others didn't exist, and audits the call as a Player's", async () => {
+    addBingo("now", "live");
+    addBingo("plan", "planning");
+    addBingo("past", "complete");
+    const { access } = await connect(playerId);
+
+    const list = await rpcResult(await callMcp(access, call("list_bingos")));
+    expect((list.result!.structuredContent as { bingos: { slug: string }[] }).bingos.map((b) => b.slug)).toEqual(["past"]);
+
+    const live = await rpcResult(await callMcp(access, call("bingo_summary", { slug: "now" })));
+    expect(live.result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining('No Bingo you can read has the slug "now"') }] });
+    const past = await rpcResult(await callMcp(access, call("bingo_summary", { slug: "past" })));
+    expect(past.result!.isError).toBeFalsy();
+
+    const entry = db.select().from(auditLog).where(eq(auditLog.action, "mcp.tool_called")).get()!;
+    expect(entry).toMatchObject({ actorUserId: playerId, actorRole: "player" });
+  });
+
+  it("an Admin still reads every Bingo", async () => {
+    addBingo("now", "live");
+    addBingo("past", "complete");
+    const { access } = await connect();
+    const list = await rpcResult(await callMcp(access, call("list_bingos")));
+    expect((list.result!.structuredContent as { bingos: { slug: string }[] }).bingos.map((b) => b.slug).sort()).toEqual(["now", "past"]);
+  });
+
+  it("refuses their token once it's taken away", async () => {
+    const { access } = await connect(playerId);
+    db.update(users).set({ mcpAccess: false }).where(eq(users.id, playerId)).run();
+    expect((await callMcp(access, tools)).status).toBe(401);
+  });
+
+  it("revoking it ends every connection, audited, and granting it back doesn't revive them", async () => {
+    const first = await connect(playerId);
+    setUserMcpAccess(db, playerId, false);
+    expect(db.select().from(oauthTokens).all().every((t) => t.revokedAt !== null)).toBe(true);
+    expect(JSON.parse(db.select().from(auditLog).where(eq(auditLog.action, "mcp.connection_revoked")).get()!.details)).toMatchObject({
+      reason: "mcp_access_removed",
+      ownerUserId: playerId,
+    });
+    expect(JSON.parse(db.select().from(auditLog).where(eq(auditLog.action, "user.mcp_access_changed")).get()!.details)).toEqual({ mcpAccess: { before: true, after: false } });
+
+    setUserMcpAccess(db, playerId, true);
+    expect((await callMcp(first.access, tools)).status).toBe(401);
+  });
+
+  it("revoking it from an Admin leaves their connections, which the Admin role covers", async () => {
+    db.update(users).set({ mcpAccess: true }).where(eq(users.id, adminId)).run();
+    const { access } = await connect();
+    setUserMcpAccess(db, adminId, false);
+    expect((await callMcp(access, tools)).status).toBe(200);
   });
 });

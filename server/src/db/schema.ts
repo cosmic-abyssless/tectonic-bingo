@@ -20,6 +20,9 @@ export const users = sqliteTable('users', {
   // Site admins can create bingos and grant mod/admin to others from the admin
   // panel. Bootstrapped via the ADMIN_DISCORD_IDS env var on login.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+  // MCP access (CONTEXT.md): the MCP server's curated tools, over Finished Bingos only, without being a site admin.
+  // Granted and revoked by any Admin from Site admin > Users. A site admin has the full server whatever this says.
+  mcpAccess: integer('mcp_access', { mode: 'boolean' }).notNull().default(false),
   // When the account finished or skipped the Tutorial (CONTEXT.md); null until then. Per account, so it's seen on
   // every device; replaying it from the ☰ menu never changes it.
   tutorialSeenAt: integer('tutorial_seen_at', { mode: 'timestamp' }),

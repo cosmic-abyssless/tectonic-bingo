@@ -1,13 +1,18 @@
 // bingo_summary, tile_stats and player_contributions on a seeded, Finished Bingo, checked against the Stats page's
 // services (statsService, teamService) so the tools can't drift from what the site shows.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "fs";
+import path from "path";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { eq } from "drizzle-orm";
+import type { HistoricalBundle } from "@bingo/shared";
 import * as schema from "../../db/schema";
-import { bingos, claims, signups, stageTransitions, submissions, teamMembers, teamPointAdjustments, teams, tileInterests, users, womSnapshots } from "../../db/schema";
+import { bingos, claims, draftPicks, signups, stageTransitions, submissions, teamMembers, teamPointAdjustments, teams, tileInterests, users, womSnapshots } from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { createTask, createTile, generateLines } from "../../services/boardService";
+import { writeHistoricalBingo } from "../../services/historicalImportService";
+import { getStandings } from "../../services/historicalService";
 import { approveSubmission, rejectSubmission } from "../../services/scoringService";
 import { getPointsOverTime, getStats } from "../../services/statsService";
 import { getTeamProgress } from "../../services/teamService";
@@ -100,7 +105,7 @@ function seed(): Seed {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   ({ sqlite, db } = createTestDb());
-  ctx = { db, user: db.insert(users).values({ discordId: "admin", discordUsername: "admin", isAdmin: true }).returning().get() };
+  ctx = { db, user: db.insert(users).values({ discordId: "admin", discordUsername: "admin", isAdmin: true }).returning().get(), scope: "all" };
 });
 
 afterEach(() => {
@@ -119,7 +124,8 @@ describe("bingo_summary", () => {
       { rank: 1, team: "Team A", points: totalA, gpGained: 5_000_000 },
       { rank: 2, team: "Team B", points: totalB, gpGained: 3_100_000 },
     ]);
-    expect(out.bingo).toEqual({ slug: "summer", name: "Summer Bingo", stage: "complete", finished: true });
+    expect(out.bingo).toEqual({ slug: "summer", name: "Summer Bingo", stage: "complete", finished: true, historical: false });
+    expect(out.standingsSource).toBe("scoreboard");
     expect(out.timing).toMatchObject({ startedAt: T0.toISOString(), endedAt: at(48).toISOString(), durationHours: 48 });
 
     const series = out.pointsOverTime;
@@ -150,6 +156,68 @@ describe("bingo_summary", () => {
     expect(row.pointsShares.map((p: any) => p.player)).toEqual(["Bob RSN", "Alice RSN"]);
     expect(row.pointsShares.reduce((sum: number, p: any) => sum + p.points, 0)).toBeCloseTo(15, 1);
     expect(out.stages.map((s: any) => [s.from, s.to])).toEqual([["reveal", "live"], ["live", "complete"]]);
+  });
+});
+
+describe("bingo_summary Teams and Historical Bingos", () => {
+  it("lists each Team's members, leads first, with their Draft picks and any Borrowed account", () => {
+    const s = seed();
+    const mod = db.select().from(users).where(eq(users.discordUsername, "mod")).get()!.id;
+    const dave = db.insert(users).values({ discordId: "dave", discordUsername: "dave" }).returning().get().id;
+    db.insert(teamMembers).values({ teamId: s.teamB, userId: dave, isCoCaptain: true }).run();
+    db.update(teamMembers).set({ isCaptain: true }).where(eq(teamMembers.userId, s.alice)).run();
+    db.update(teamMembers).set({ isCaptain: true }).where(eq(teamMembers.userId, s.carol)).run();
+    db.update(signups).set({ accountBorrowed: true }).where(eq(signups.userId, s.bob)).run();
+    // Two Teams: pick 3 is in round 2.
+    db.insert(draftPicks).values([
+      { bingoId: s.bingoId, pickNumber: 1, teamId: s.teamB, userId: dave, pickedByUserId: mod },
+      { bingoId: s.bingoId, pickNumber: 3, teamId: s.teamA, userId: s.bob, pickedByUserId: mod },
+    ]).run();
+
+    const out = bingoSummary.run({ slug: "summer" }, ctx) as any;
+    expect(out.teams).toEqual([
+      {
+        team: "Team A",
+        members: [
+          { player: "Alice RSN", borrowed: false, lead: "captain", draft: "Captain" },
+          { player: "Bob RSN", borrowed: true, lead: null, draft: { pick: 3, ofPicks: 3, round: 2 } },
+        ],
+      },
+      {
+        team: "Team B",
+        members: [
+          { player: "Carol RSN", borrowed: false, lead: "captain", draft: "Captain" },
+          // No Signup: named by Discord name. A co-captain who was picked shows the pick.
+          { player: "dave", borrowed: false, lead: "co-captain", draft: { pick: 1, ofPicks: 3, round: 1 } },
+        ],
+      },
+    ]);
+  });
+
+  it("gives a Historical Bingo's recorded standings, not ~0 points from scoring it here", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const sample = JSON.parse(fs.readFileSync(path.join(__dirname, "../../testUtils/fixtures/sample-historical-bundle.json"), "utf8")) as HistoricalBundle;
+    const { bingo } = writeHistoricalBingo(db, sample, new Map(), ctx.user.id);
+
+    const out = bingoSummary.run({ slug: bingo.slug }, ctx) as any;
+    expect(out.bingo).toMatchObject({ finished: true, historical: true });
+    expect(out.standingsSource).toBe("recorded");
+    const recorded = getStandings(db, bingo.id);
+    expect(out.standings).toEqual(recorded.map((s) => ({ rank: s.place, team: s.teamName, points: s.points, gpGained: 0 })));
+    expect(out.standings.map((s: any) => [s.team, s.rank, s.points])).toEqual([
+      ["Sea Snakes", 1, 145],
+      ["Lava Dragons", 2, 120],
+      ["Rock Crabs", 3, null],
+    ]);
+    // What scoring it here would have said: nothing, for a sparse import.
+    expect(recorded.map((s) => getTeamProgress(db, s.teamId).totalPoints)).toEqual([0, 0, 0]);
+    expect(out.pointsOverTime).toBeNull();
+    expect(out.teams.map((t: any) => t.team)).toEqual(["Sea Snakes", "Lava Dragons", "Rock Crabs"]);
+    expect(out.teams[0].members).toEqual([
+      { player: "Tidecaller", borrowed: false, lead: "captain", draft: "Captain" },
+      { player: "Brine", borrowed: false, lead: "co-captain", draft: "Co-captain" },
+      { player: "Kelp Lord", borrowed: false, lead: null, draft: null },
+    ]);
   });
 });
 
@@ -234,9 +302,16 @@ describe("every Bingo tool", () => {
   it.each([bingoSummary, tileStats, playerContributions])("returns an unknown slug as a tool error ($name)", (tool) => {
     seed();
     expect(() => tool.run({ slug: "nope" } as never, ctx)).toThrow(McpToolError);
-    expect(() => tool.run({ slug: "nope" } as never, ctx)).toThrow('No Bingo has the slug "nope"');
+    expect(() => tool.run({ slug: "nope" } as never, ctx)).toThrow('No Bingo you can read has the slug "nope"');
     expect(tool.bingoIdFor!({ slug: "nope" } as never, ctx)).toBeNull();
     expect(tool.bingoIdFor!({ slug: "summer" } as never, ctx)).toBe(db.select().from(bingos).get()!.id);
+  });
+
+  it.each([bingoSummary, tileStats, playerContributions])("refuses a Bingo that isn't Finished to MCP access, not to a site admin ($name)", (tool) => {
+    seed();
+    db.update(bingos).set({ stage: "live" }).run();
+    expect(() => tool.run({ slug: "summer" } as never, { ...ctx, scope: "finished" })).toThrow('No Bingo you can read has the slug "summer"');
+    expect(() => tool.run({ slug: "summer" } as never, ctx)).not.toThrow();
   });
 });
 
