@@ -33,7 +33,7 @@ export function RewindControls({ controls }: { controls: RewindControlsModel }) 
         <ComicButton
           size="md"
           variant="primary"
-          sfx={controls.playing ? false : { text: "GO!" }}
+          sfx={false}
           className="w-[7.5rem] max-sm:w-[6.25rem] max-sm:px-2"
           aria-label={controls.playing ? "Pause" : "Play"}
           onPress={controls.togglePlay}
