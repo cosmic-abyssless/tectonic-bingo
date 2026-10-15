@@ -104,32 +104,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         </WrappedScene>
       )}
 
-      {b.achievements && (
-        <WrappedScene steps={b.achievements.mostBy && b.achievements.allFirst ? 2 : 1} className="text-center">
-          <div className="w-full max-w-lg">
-            {b.achievements.mostBy && (
-              <Reveal step={0}>
-                <WrappedHeading kicker="Most achievements by:">
-                  <span className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-                    {b.achievements.mostBy.people.map((p) => (
-                      <WrappedPerson key={p.id} person={p} size="lg" />
-                    ))}
-                  </span>
-                </WrappedHeading>
-                <p className="mt-3 text-lg text-on-surface-muted">{b.achievements.mostBy.earnedLabel}</p>
-              </Reveal>
-            )}
-            {b.achievements.allFirst && (
-              <Reveal step={b.achievements.mostBy ? 1 : 0} className={b.achievements.mostBy ? "mt-14" : undefined}>
-                <WrappedHeading kicker="Completed all first, at:">{b.achievements.allFirst.atLabel}</WrappedHeading>
-                <div className="mt-4 flex justify-center">
-                  <WrappedPerson person={b.achievements.allFirst.person} />
-                </div>
-              </Reveal>
-            )}
-          </div>
-        </WrappedScene>
-      )}
+      {b.achievements && <Achievements a={b.achievements} />}
 
       {b.steal && (
         <WrappedScene steps={2} className="text-center">
@@ -214,6 +189,74 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         </WrappedScene>
       )}
     </>
+  );
+}
+
+/** The Achievement leaders: who earned the most, who completed all first, the top Players and every Team. */
+function Achievements({ a }: { a: NonNullable<WrappedBingoModel["achievements"]> }) {
+  const parts = [!!a.mostBy, !!a.allFirst, a.top.length > 0, a.teams.length > 0];
+  const step = (i: number) => parts.slice(0, i).filter(Boolean).length;
+  return (
+    <WrappedScene steps={parts.filter(Boolean).length} className="text-center">
+      <div className="w-full max-w-2xl">
+        {a.mostBy && (
+          <Reveal step={0}>
+            <WrappedHeading kicker="Most achievements by:">
+              <span className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+                {a.mostBy.people.map((p) => (
+                  <WrappedPerson key={p.id} person={p} size="lg" />
+                ))}
+              </span>
+            </WrappedHeading>
+            <p className="mt-3 text-lg text-on-surface-muted">{a.mostBy.earnedLabel}</p>
+          </Reveal>
+        )}
+        {a.allFirst && (
+          <Reveal step={step(1)} className={a.mostBy ? "mt-14" : undefined}>
+            <WrappedHeading kicker="Completed all first, at:">{a.allFirst.atLabel}</WrappedHeading>
+            <div className="mt-4 flex justify-center">
+              <WrappedPerson person={a.allFirst.person} />
+            </div>
+          </Reveal>
+        )}
+        {a.top.length > 0 && (
+          <Reveal step={step(2)} className="mt-12">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Top achievers</p>
+            <ol className="mt-4 space-y-2 text-left">
+              {a.top.map((p) => (
+                <li key={p.person.id} className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-2 ${p.isMyTeam ? "border-on-surface" : "border-outline"}`}>
+                  <span className="num w-10 shrink-0 font-black text-on-surface-muted">{p.placementLabel}</span>
+                  <span className="min-w-0 flex-1">
+                    <WrappedPerson person={p.person} detail={p.teamName ? `${p.teamName} · ${p.atLabel}` : p.atLabel} />
+                  </span>
+                  <span className="num shrink-0 font-semibold">{p.earnedLabel}</span>
+                </li>
+              ))}
+            </ol>
+          </Reveal>
+        )}
+        {a.teams.length > 0 && (
+          <Reveal step={step(3)} className="mt-12">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Achievements by Team</p>
+            <ol className="mt-4 space-y-2 text-left">
+              {a.teams.map((t) => (
+                <li key={t.teamId} className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-2 ${t.isMine ? "border-on-surface" : "border-outline"}`}>
+                  <span className="num w-10 shrink-0 font-black text-on-surface-muted">{t.placementLabel}</span>
+                  {t.color && <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />}
+                  <span className="min-w-0 flex-1 truncate font-semibold">
+                    {t.name}
+                    {t.isMine && <span className="ml-2 text-xs font-normal text-on-surface-muted">your Team</span>}
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="num font-semibold">{t.earnedLabel}</span> <span className="text-sm text-on-surface-muted">{t.averageLabel}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Reveal>
+        )}
+      </div>
+    </WrappedScene>
   );
 }
 

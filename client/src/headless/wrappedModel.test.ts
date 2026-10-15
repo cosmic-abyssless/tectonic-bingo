@@ -288,8 +288,30 @@ describe("buildWrappedStory", () => {
 
     it("names who earned the most, tied Players all named, and who completed all first and when", () => {
       const data = response(player());
-      data.bingo.achievements = { total: 16, most: { players: [u("me"), u("bob")], earned: 16 }, allFirst: { player: u("bob"), at: iso(5) } };
+      data.bingo.achievements = {
+        total: 16,
+        most: { players: [u("me"), u("bob")], earned: 16 },
+        allFirst: { player: u("bob"), at: iso(5) },
+        top: [
+          { player: u("bob"), teamId: "b", earned: 16, lastEarnedAt: iso(5) },
+          { player: u("me"), teamId: "a", earned: 16, lastEarnedAt: iso(6) },
+          { player: u("al"), teamId: "a", earned: 9, lastEarnedAt: iso(7) },
+        ],
+        teams: [
+          { teamId: "a", earned: 25, players: 3 },
+          { teamId: "b", earned: 16, players: 2 },
+        ],
+      };
       const a = achievementsOf(data)!;
+      expect(a.top.map((p) => [p.person.name, p.placementLabel, p.earnedLabel, p.teamName, p.isMyTeam])).toEqual([
+        ["bob rsn", "1st", "16 of 16", "Blue", false],
+        ["me rsn", "1st", "16 of 16", "Red", true],
+        ["al rsn", "3rd", "9 of 16", "Red", true],
+      ]);
+      expect(a.teams.map((t) => [t.name, t.placementLabel, t.earnedLabel, t.averageLabel, t.isMine])).toEqual([
+        ["Red", "1st", "25", "8.3 per Player", true],
+        ["Blue", "2nd", "16", "8 per Player", false],
+      ]);
       expect(a.mostBy).toEqual({ people: [expect.objectContaining({ name: "me rsn", isYou: true }), expect.objectContaining({ name: "bob rsn", isYou: false })], earnedLabel: "16 of 16 Achievements" });
       expect(a.allFirst).toEqual({ person: expect.objectContaining({ name: "bob rsn" }), atLabel: new Date(iso(5)).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) });
     });
@@ -297,7 +319,7 @@ describe("buildWrappedStory", () => {
     it("leaves out a part nobody qualifies for, and the whole with neither, Achievements off or an older Wrapped", () => {
       const data = response(player());
       data.bingo.achievements = { total: 16, most: { players: [u("me")], earned: 1 }, allFirst: null };
-      expect(achievementsOf(data)).toEqual({ mostBy: expect.objectContaining({ earnedLabel: "1 of 16 Achievements" }), allFirst: null });
+      expect(achievementsOf(data)).toEqual({ mostBy: expect.objectContaining({ earnedLabel: "1 of 16 Achievements" }), allFirst: null, top: [], teams: [] });
       data.bingo.achievements = { total: 16, most: null, allFirst: null };
       expect(achievementsOf(data)).toBeNull();
       data.bingo.achievements = null;

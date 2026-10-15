@@ -195,30 +195,44 @@ export function bossLeadersOf(
   });
 }
 
+/** How many Players the Achievement leaders' top list names. */
+const TOP_ACHIEVERS = 5;
+
 /**
- * The Bingo's Achievement leaders (BingoWrapped.achievements) among `playerIds`, from each Player's earned Achievements
- * (oldest first) out of the `total` switched on: who earned the most (tied Players by name), and who earned all of them
- * first, when their last one came (a tie at the same moment goes by name).
+ * The Bingo's Achievement leaders (BingoWrapped.achievements) among `players` (each with their Team), from each
+ * Player's earned Achievements out of the `total` switched on: who earned the most (tied Players by name), who earned
+ * all of them first (when their last one came; a tie at the same moment goes by name), and the top Players: most earned
+ * first, then who got there first, then by name. Every Team of `teamOrder` (the final standings) is ranked by its
+ * Players' Achievements added up, tied Teams keeping that order.
  */
 export function achievementLeadersOf(
   earned: Map<string, { earnedAt: Date }[]>,
-  playerIds: string[],
+  players: { userId: string; teamId: string }[],
   total: number,
   userById: Map<string, AvatarUser>,
+  teamOrder: string[],
 ): WrappedAchievementLeaders {
-  const counts = playerIds.filter((id) => userById.has(id)).map((id) => ({ user: userById.get(id)!, earned: earned.get(id) ?? [] }));
+  const counts = players
+    .filter((p) => userById.has(p.userId))
+    .map((p) => {
+      const mine = earned.get(p.userId) ?? [];
+      return { user: userById.get(p.userId)!, teamId: p.teamId, earned: mine.length, lastAt: Math.max(0, ...mine.map((e) => e.earnedAt.getTime())) };
+    });
   const byName = (a: AvatarUser, b: AvatarUser) => playerName(a).localeCompare(playerName(b));
-  const most = Math.max(0, ...counts.map((c) => c.earned.length));
-  const allFirst = total > 0
-    ? counts
-        .filter((c) => c.earned.length >= total)
-        .map((c) => ({ player: c.user, at: Math.max(...c.earned.map((e) => e.earnedAt.getTime())) }))
-        .sort((a, b) => a.at - b.at || byName(a.player, b.player))[0]
-    : undefined;
+  const most = Math.max(0, ...counts.map((c) => c.earned));
+  const ranked = counts.filter((c) => c.earned > 0).sort((a, b) => b.earned - a.earned || a.lastAt - b.lastAt || byName(a.user, b.user));
+  const allFirst = total > 0 ? ranked.filter((c) => c.earned >= total).sort((a, b) => a.lastAt - b.lastAt || byName(a.user, b.user))[0] : undefined;
   return {
     total,
-    most: most > 0 ? { players: counts.filter((c) => c.earned.length === most).map((c) => c.user).sort(byName), earned: most } : null,
-    allFirst: allFirst ? { player: allFirst.player, at: new Date(allFirst.at).toISOString() } : null,
+    most: most > 0 ? { players: counts.filter((c) => c.earned === most).map((c) => c.user).sort(byName), earned: most } : null,
+    allFirst: allFirst ? { player: allFirst.user, at: new Date(allFirst.lastAt).toISOString() } : null,
+    teams: teamOrder
+      .map((teamId) => {
+        const mine = counts.filter((c) => c.teamId === teamId);
+        return { teamId, earned: mine.reduce((sum, c) => sum + c.earned, 0), players: mine.length };
+      })
+      .sort((a, b) => b.earned - a.earned),
+    top: ranked.slice(0, TOP_ACHIEVERS).map((c) => ({ player: c.user, teamId: c.teamId, earned: c.earned, lastEarnedAt: new Date(c.lastAt).toISOString() })),
   };
 }
 
@@ -388,6 +402,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   // Players: everyone on a Team.
   const playerIds = [...new Set(memberRows.map((m) => m.userId))];
   const achievements = getEarnedAchievements(db, bingo);
+  const teamOfUser = new Map(memberRows.map((m) => [m.userId, m.teamId]));
 
   const bingoData: BingoWrapped = {
     bingoName: bingo.name,
@@ -400,12 +415,11 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     biggestSteal,
     moderation: reviewStats(reviews, userById),
     bossLeaders: bossLeadersOf(parseWrappedBosses(bingo.wrappedBossesJson), bossGains, userById, wrappedTeams.map((t) => t.teamId)),
-    achievements: achievements ? achievementLeadersOf(achievements, playerIds, getEnabledAchievementKeys(db, bingoId).length, userById) : null,
+    achievements: achievements ? achievementLeadersOf(achievements, playerIds.map((userId) => ({ userId, teamId: teamOfUser.get(userId)! })), getEnabledAchievementKeys(db, bingoId).length, userById, wrappedTeams.map((t) => t.teamId)) : null,
   };
 
   const averageSubmissions = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.approvedSubmissions ?? 0), 0) / playerIds.length : 0;
   const averagePointsShare = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.pointsShare ?? 0), 0) / playerIds.length : 0;
-  const teamOfUser = new Map(memberRows.map((m) => [m.userId, m.teamId]));
   const pairs = getAcceptedPairs(db, bingoId).filter((p) => teamOfUser.has(p.userIds[0]) && teamOfUser.get(p.userIds[0]) === teamOfUser.get(p.userIds[1]));
   const shareOf = (id: string) => contributionOf.get(id)?.pointsShare ?? 0;
   const duoTotals = pairs.map((p) => shareOf(p.userIds[0]) + shareOf(p.userIds[1]));

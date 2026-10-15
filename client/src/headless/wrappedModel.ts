@@ -449,7 +449,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
         }),
       )
       .filter((boss) => boss.teams.length > 0),
-    achievements: achievementsOf(bingo.achievements, person),
+    achievements: achievementsOf(bingo.achievements, person, teamById, myTeamId),
   };
   sections.push(b);
 
@@ -468,12 +468,40 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 }
 
-/** The Bingo section's Achievement leaders, worded; null with nothing to say. */
-function achievementsOf(a: MyWrappedResponse["bingo"]["achievements"], person: (u: AvatarUser) => WrappedPersonModel): WrappedBingoModel["achievements"] {
+/** The Bingo section's Achievement leaders, worded; null with nothing to say. Tied counts share a placement. */
+function achievementsOf(
+  a: MyWrappedResponse["bingo"]["achievements"],
+  person: (u: AvatarUser) => WrappedPersonModel,
+  teamById: Map<string, WrappedTeam>,
+  myTeamId: string | null,
+): WrappedBingoModel["achievements"] {
   if (!a || (!a.most && !a.allFirst)) return null;
+  const top = a.top ?? [];
+  const teams = (a.teams ?? []).filter((t) => teamById.has(t.teamId));
   return {
     mostBy: a.most ? { people: a.most.players.map(person), earnedLabel: `${a.most.earned.toLocaleString()} of ${plural(a.total, "Achievement")}` } : null,
     allFirst: a.allFirst ? { person: person(a.allFirst.player), atLabel: whenLabel(a.allFirst.at) } : null,
+    top: top.map((p) => {
+      const team = teamById.get(p.teamId);
+      return {
+        person: person(p.player),
+        placementLabel: ordinal(1 + top.filter((o) => o.earned > p.earned).length),
+        earnedLabel: `${p.earned.toLocaleString()} of ${a.total.toLocaleString()}`,
+        atLabel: whenLabel(p.lastEarnedAt),
+        teamName: team?.name ?? null,
+        teamColor: team?.color ?? null,
+        isMyTeam: p.teamId === myTeamId,
+      };
+    }),
+    teams: teams.map((t) => ({
+      teamId: t.teamId,
+      name: teamById.get(t.teamId)!.name,
+      color: teamById.get(t.teamId)!.color,
+      placementLabel: ordinal(1 + teams.filter((o) => o.earned > t.earned).length),
+      earnedLabel: t.earned.toLocaleString(),
+      averageLabel: `${(t.players ? t.earned / t.players : 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} per Player`,
+      isMine: t.teamId === myTeamId,
+    })),
   };
 }
 
