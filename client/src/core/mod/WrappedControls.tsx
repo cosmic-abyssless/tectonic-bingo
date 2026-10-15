@@ -111,9 +111,8 @@ function PreviewSummary({ data }: { data: MyWrappedResponse }) {
     ["Rarest drop", b.rarestDrop ? `${b.rarestDrop.itemName} (1 in ${Math.round(b.rarestDrop.luckOneIn!).toLocaleString()})` : "—"],
     ["Most reacted", b.mostReacted ? `${b.mostReacted.drop.itemName} (${b.mostReacted.reactions})` : "—"],
     ["Biggest steal", b.biggestSteal ? `${playerName(b.biggestSteal.player)}: picked ${b.biggestSteal.position}, finished ${b.biggestSteal.rank}` : "—"],
-    ["Most achievements", b.achievements?.most ? `${b.achievements.most.players.map(playerName).join(", ")} (${b.achievements.most.earned} of ${b.achievements.total})` : "—"],
     ["Completed all first", b.achievements?.allFirst ? `${playerName(b.achievements.allFirst.player)}, ${new Date(b.achievements.allFirst.at).toLocaleString()}` : "—"],
-    ["Top achievers", b.achievements?.top?.length ? b.achievements.top.map((p) => `${playerName(p.player)} ${p.earned}`).join(", ") : "—"],
+    ["Most achievements", b.achievements?.top?.length ? b.achievements.top.map((p) => `${playerName(p.player)} ${p.earned}`).join(", ") : "—"],
     ["Achievements by Team", b.achievements?.teams?.length ? b.achievements.teams.map((t) => `${b.teams.find((o) => o.teamId === t.teamId)?.name ?? "?"} ${t.earned}`).join(", ") : "—"],
     ["Reviews", `${m.reviewed} · median ${minutes(m.medianReviewMs)} · fastest ${minutes(m.fastestReviewMs)}`],
   ];
