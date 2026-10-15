@@ -416,12 +416,23 @@ describe("the Achievement leaders", () => {
     expect(bingo.achievements!.most!.earned).toBe(2);
     expect(bingo.achievements!.most!.players.map((p) => p.id)).toEqual([fx.carol.id, fx.dave.id]);
     expect(bingo.achievements!.allFirst).toEqual({ player: expect.objectContaining({ id: fx.dave.id }), at: t(30).toISOString() });
+    // Top: most first, then who got there first.
+    expect(bingo.achievements!.top!.map((p) => [p.player.id, p.teamId, p.earned, p.lastEarnedAt])).toEqual([
+      [fx.dave.id, fx.teamA.id, 2, t(30).toISOString()],
+      [fx.carol.id, fx.teamA.id, 2, t(50).toISOString()],
+      [fx.erin.id, fx.teamB.id, 1, t(5).toISOString()],
+    ]);
+    // Every Team, by its Players' Achievements added up.
+    expect(bingo.achievements!.teams).toEqual([
+      { teamId: fx.teamA.id, earned: 4, players: 3 },
+      { teamId: fx.teamB.id, earned: 1, players: 3 },
+    ]);
   });
 
   it("has neither part when nobody earned any, and is null with Achievements switched off", () => {
     const fx = seed();
     switchOn(fx, ["night_owl"]);
-    expect(computeWrapped(db, finish(fx)).bingo.achievements).toEqual({ total: 1, most: null, allFirst: null });
+    expect(computeWrapped(db, finish(fx)).bingo.achievements).toMatchObject({ total: 1, most: null, allFirst: null, top: [] });
     db.update(bingos).set({ achievementsEnabled: false }).where(eq(bingos.id, fx.bingo.id)).run();
     expect(computeWrapped(db, db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!).bingo.achievements).toBeNull();
   });
@@ -429,9 +440,10 @@ describe("the Achievement leaders", () => {
   it("breaks a tie for completing all at the same moment by name", () => {
     const users = new Map([["b", { id: "b", rsn: "Bee" }], ["a", { id: "a", rsn: "Ay" }]].map(([id, u]) => [id as string, { discordUsername: "", discordGlobalName: null, discordGuildNick: null, discordId: "", discordAvatar: null, ...(u as object) } as never]));
     const at = new Date(T0);
-    const leaders = achievementLeadersOf(new Map([["a", [{ earnedAt: at }]], ["b", [{ earnedAt: at }]]]), ["b", "a"], 1, users);
+    const leaders = achievementLeadersOf(new Map([["a", [{ earnedAt: at }]], ["b", [{ earnedAt: at }]]]), [{ userId: "b", teamId: "t" }, { userId: "a", teamId: "t" }], 1, users, ["t"]);
     expect(leaders.allFirst!.player).toMatchObject({ id: "a" });
     expect(leaders.most!.players.map((p) => (p as { id: string }).id)).toEqual(["a", "b"]);
+    expect(leaders.top!.map((p) => (p.player as { id: string }).id)).toEqual(["a", "b"]);
   });
 });
 

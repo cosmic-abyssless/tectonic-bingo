@@ -1043,6 +1043,13 @@ export interface WrappedBingoModel {
     mostBy: { people: WrappedPersonModel[]; earnedLabel: string } | null;
     /** `atLabel`: when their last one was earned ("Sat 14 Mar, 21:04"). */
     allFirst: { person: WrappedPersonModel; atLabel: string } | null;
+    /**
+     * The top Players (up to 5), most first: `earnedLabel` "23 of 23", `atLabel` when they reached that many, and their
+     * Team. Empty on a Wrapped published before it was stored.
+     */
+    top: { person: WrappedPersonModel; placementLabel: string; earnedLabel: string; atLabel: string; teamName: string | null; teamColor: string | null; isMyTeam: boolean }[];
+    /** Every Team by its Players' Achievements added up: `earnedLabel` "212", `averageLabel` "10.1 per Player". Empty on a Wrapped published before it was stored. */
+    teams: { teamId: string; name: string; color: string | null; placementLabel: string; earnedLabel: string; averageLabel: string; isMine: boolean }[];
   } | null;
 }
 

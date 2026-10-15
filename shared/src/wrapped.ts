@@ -263,6 +263,16 @@ export interface WrappedAchievementLeaders {
   most: { players: AvatarUser[]; earned: number } | null;
   /** The first Player to earn every one, and when (their last one's earn time, ISO); null when nobody did. */
   allFirst: { player: AvatarUser; at: string } | null;
+  /**
+   * The top Players (up to 5): most earned first, then who got to that many first (their last one's earn time, ISO),
+   * each with their Team. Missing from Wrapped published before it was stored.
+   */
+  top?: { player: AvatarUser; teamId: string; earned: number; lastEarnedAt: string }[];
+  /**
+   * Every Team, by how many Achievements its Players earned between them (most first; tied Teams in final-standings
+   * order), with how many Players it has. Missing from Wrapped published before it was stored.
+   */
+  teams?: { teamId: string; earned: number; players: number }[];
 }
 
 export interface WrappedState {
