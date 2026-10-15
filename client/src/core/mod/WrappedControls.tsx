@@ -111,6 +111,8 @@ function PreviewSummary({ data }: { data: MyWrappedResponse }) {
     ["Rarest drop", b.rarestDrop ? `${b.rarestDrop.itemName} (1 in ${Math.round(b.rarestDrop.luckOneIn!).toLocaleString()})` : "—"],
     ["Most reacted", b.mostReacted ? `${b.mostReacted.drop.itemName} (${b.mostReacted.reactions})` : "—"],
     ["Biggest steal", b.biggestSteal ? `${playerName(b.biggestSteal.player)}: picked ${b.biggestSteal.position}, finished ${b.biggestSteal.rank}` : "—"],
+    ["Most achievements", b.achievements?.most ? `${b.achievements.most.players.map(playerName).join(", ")} (${b.achievements.most.earned} of ${b.achievements.total})` : "—"],
+    ["Completed all first", b.achievements?.allFirst ? `${playerName(b.achievements.allFirst.player)}, ${new Date(b.achievements.allFirst.at).toLocaleString()}` : "—"],
     ["Reviews", `${m.reviewed} · median ${minutes(m.medianReviewMs)} · fastest ${minutes(m.fastestReviewMs)}`],
   ];
   return (

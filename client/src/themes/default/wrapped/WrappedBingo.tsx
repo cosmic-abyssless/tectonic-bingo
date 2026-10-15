@@ -104,6 +104,33 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
         </WrappedScene>
       )}
 
+      {b.achievements && (
+        <WrappedScene steps={b.achievements.mostBy && b.achievements.allFirst ? 2 : 1} className="text-center">
+          <div className="w-full max-w-lg">
+            {b.achievements.mostBy && (
+              <Reveal step={0}>
+                <WrappedHeading kicker="Most achievements by:">
+                  <span className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+                    {b.achievements.mostBy.people.map((p) => (
+                      <WrappedPerson key={p.id} person={p} size="lg" />
+                    ))}
+                  </span>
+                </WrappedHeading>
+                <p className="mt-3 text-lg text-on-surface-muted">{b.achievements.mostBy.earnedLabel}</p>
+              </Reveal>
+            )}
+            {b.achievements.allFirst && (
+              <Reveal step={b.achievements.mostBy ? 1 : 0} className={b.achievements.mostBy ? "mt-14" : undefined}>
+                <WrappedHeading kicker="Completed all first, at:">{b.achievements.allFirst.atLabel}</WrappedHeading>
+                <div className="mt-4 flex justify-center">
+                  <WrappedPerson person={b.achievements.allFirst.person} />
+                </div>
+              </Reveal>
+            )}
+          </div>
+        </WrappedScene>
+      )}
+
       {b.steal && (
         <WrappedScene steps={2} className="text-center">
           <Reveal step={0}>

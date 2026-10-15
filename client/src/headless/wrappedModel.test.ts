@@ -283,6 +283,29 @@ describe("buildWrappedStory", () => {
     });
   });
 
+  describe("the Achievement leaders", () => {
+    const achievementsOf = (data: MyWrappedResponse) => (story(data).sections.find((s) => s.id === "bingo")!.section as WrappedBingoModel).achievements;
+
+    it("names who earned the most, tied Players all named, and who completed all first and when", () => {
+      const data = response(player());
+      data.bingo.achievements = { total: 16, most: { players: [u("me"), u("bob")], earned: 16 }, allFirst: { player: u("bob"), at: iso(5) } };
+      const a = achievementsOf(data)!;
+      expect(a.mostBy).toEqual({ people: [expect.objectContaining({ name: "me rsn", isYou: true }), expect.objectContaining({ name: "bob rsn", isYou: false })], earnedLabel: "16 of 16 Achievements" });
+      expect(a.allFirst).toEqual({ person: expect.objectContaining({ name: "bob rsn" }), atLabel: new Date(iso(5)).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) });
+    });
+
+    it("leaves out a part nobody qualifies for, and the whole with neither, Achievements off or an older Wrapped", () => {
+      const data = response(player());
+      data.bingo.achievements = { total: 16, most: { players: [u("me")], earned: 1 }, allFirst: null };
+      expect(achievementsOf(data)).toEqual({ mostBy: expect.objectContaining({ earnedLabel: "1 of 16 Achievements" }), allFirst: null });
+      data.bingo.achievements = { total: 16, most: null, allFirst: null };
+      expect(achievementsOf(data)).toBeNull();
+      data.bingo.achievements = null;
+      expect(achievementsOf(data)).toBeNull();
+      expect(achievementsOf(response(player()))).toBeNull();
+    });
+  });
+
   it("labels a Moderator's preview", () => {
     const s = story(response(null, { preview: true, state: { published: false, publishedAt: null, publishOnFinish: false, pendingSubmissions: 0 } }));
     expect(s.preview).toBe(true);

@@ -449,6 +449,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
         }),
       )
       .filter((boss) => boss.teams.length > 0),
+    achievements: achievementsOf(bingo.achievements, person),
   };
   sections.push(b);
 
@@ -464,6 +465,15 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     outroReachedBefore: opts.outroReachedBefore ?? false,
     feedback,
     actions,
+  };
+}
+
+/** The Bingo section's Achievement leaders, worded; null with nothing to say. */
+function achievementsOf(a: MyWrappedResponse["bingo"]["achievements"], person: (u: AvatarUser) => WrappedPersonModel): WrappedBingoModel["achievements"] {
+  if (!a || (!a.most && !a.allFirst)) return null;
+  return {
+    mostBy: a.most ? { people: a.most.players.map(person), earnedLabel: `${a.most.earned.toLocaleString()} of ${plural(a.total, "Achievement")}` } : null,
+    allFirst: a.allFirst ? { person: person(a.allFirst.player), atLabel: whenLabel(a.allFirst.at) } : null,
   };
 }
 
