@@ -57,7 +57,7 @@ export function AppHeader({
   titleClassName?: string;
   style?: CSSProperties;
 }) {
-  const { user, devMode, logout } = useAuth();
+  const { user, logout } = useAuth();
   const siteAdmin = useSiteCan("administer_site").allowed;
   const navigate = useNavigate();
   // Inside a bingo the viewer is named by the RSN they signed up with (their team's roster carries it); anywhere
@@ -99,8 +99,9 @@ export function AppHeader({
       id: "site",
       label: "Site",
       items: [
-        // Admins and dev login, who have several Bingos to move between; everyone else plays the latest ("/").
-        ...(siteAdmin || devMode ? [{ id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/bingos") }] : []),
+        // Every Bingo they can see, past ones included: "/" only ever lands on the latest, and this is the way to a
+        // Finished or Historical one.
+        { id: "all-bingos", text: "All bingos", label: "All bingos", wikiIcon: "Grid Master icon", current: onBingoList, onAction: () => navigate("/bingos") },
         ...(siteAdmin
           ? [
               {
