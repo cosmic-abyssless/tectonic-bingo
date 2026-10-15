@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useComic } from "../ui/useComic";
+import { isPinchZoomed } from "../../../core/ui/pinchZoom";
 import { screenHalftone } from "./halftoneSheet";
 
 /**
@@ -12,7 +13,8 @@ export function useScreenHalftone(): string | null {
     let settle: ReturnType<typeof setTimeout> | undefined;
     const onResize = () => {
       clearTimeout(settle);
-      settle = setTimeout(() => setUrl(screenHalftone()), 200);
+      // Safari calls a pinch-zoom a resize and gives the zoomed-in part as the window's size; the screen hasn't changed.
+      settle = setTimeout(() => !isPinchZoomed() && setUrl(screenHalftone()), 200);
     };
     window.addEventListener("resize", onResize);
     return () => {
