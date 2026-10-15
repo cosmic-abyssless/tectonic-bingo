@@ -248,6 +248,21 @@ export interface BingoWrapped {
    * left out. Missing from Wrapped published before it was stored.
    */
   bossLeaders?: WrappedBossLeader[];
+  /**
+   * Achievements (CONTEXT.md) across the Bingo's Players: who earned the most, and who earned every one first. Null when
+   * the Bingo has them switched off; missing from Wrapped published before it was stored.
+   */
+  achievements?: WrappedAchievementLeaders | null;
+}
+
+/** The Bingo's Achievement leaders, counting only the Achievements switched on and the Players on a Team. */
+export interface WrappedAchievementLeaders {
+  /** How many Achievements were switched on. */
+  total: number;
+  /** The Player, or tied Players, who earned the most, and how many; null when nobody earned any. */
+  most: { players: AvatarUser[]; earned: number } | null;
+  /** The first Player to earn every one, and when (their last one's earn time, ISO); null when nobody did. */
+  allFirst: { player: AvatarUser; at: string } | null;
 }
 
 export interface WrappedState {

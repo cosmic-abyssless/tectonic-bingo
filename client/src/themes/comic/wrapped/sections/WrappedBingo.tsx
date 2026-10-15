@@ -17,6 +17,7 @@ import { DropRain } from "./DropRain";
  *   1½. It rained loot: every drop of the Bingo, its icon raining down into a pile filling the page.
  *   2. The highlights: the race, the rarest drop, the crowd favourite.
  *   2½. Raids and bosses: who killed each the most, a few to a page, dealt evenly over as many pages as they need.
+ *   2¾. Achievements: who earned the most, and who earned every one first.
  *   3. The draft's Steal, then Behind the scenes: who moderated (the Moderators category's art and credits), the wait times.
  *   4. The reviewers, then every Team's Superlatives, a few Teams to a page, dealt evenly over as many pages as they need.
  * A part the Bingo has nothing for leaves its panel out, and a page left with none is not drawn.
@@ -27,6 +28,7 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
   // Each later page's panels, in the default section's order; a panel's step is how many of its page's panels come first.
   const highlights = [!!b.race, !!b.rarestDrop, !!b.mostReacted];
   const backstage = [!!b.steal, !!m, !!m && minis.length > 0];
+  const achieved = [!!b.achievements?.mostBy, !!b.achievements?.allFirst];
   // The Superlatives of every Team can run long (a card per Team), so they are dealt over pages of a few cards each; the
   // first shares its page with the reviewers when there are any.
   const firstPick = m && m.reviewers.length > 0 ? 2 : 4;
@@ -152,6 +154,23 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
           </div>
         </WrappedScene>
       ))}
+
+      {b.achievements && count(achieved) > 0 && (
+        <WrappedScene steps={count(achieved)}>
+          <div className="flex flex-1 flex-col justify-center gap-3">
+            {b.achievements.mostBy && (
+              <Reveal step={0} className={PADDED_PANEL}>
+                <MostAchievements mostBy={b.achievements.mostBy} />
+              </Reveal>
+            )}
+            {b.achievements.allFirst && (
+              <Reveal step={at(achieved, 1)} className={PADDED_PANEL}>
+                <AllFirst allFirst={b.achievements.allFirst} />
+              </Reveal>
+            )}
+          </div>
+        </WrappedScene>
+      )}
 
       {count(backstage) > 0 && (
         <WrappedScene steps={count(backstage)}>
@@ -346,6 +365,44 @@ function Steal({ steal }: { steal: NonNullable<WrappedBingoModel["steal"]> }) {
           The {steal.positionLabel} Player drafted{steal.teamName && ` (by ${steal.teamName})`}, finished {steal.rankLabel} in Points share. {steal.placesBeatenLabel} better than their draft spot.
         </span>
       </CaptionBox>
+    </PanelBody>
+  );
+}
+
+type Achieved = NonNullable<WrappedBingoModel["achievements"]>;
+
+/** Who earned the most Achievements: each tied Player lettered, the count in a caption. */
+function MostAchievements({ mostBy }: { mostBy: NonNullable<Achieved["mostBy"]> }) {
+  const { colors } = useComic();
+  return (
+    <PanelBody tone="yellow" rays="12% 15%" align="start" gap={0}>
+      <Kicker>Most achievements by:</Kicker>
+      <Sfx size={26} tilt={8} className="absolute top-0 right-0">
+        Ding!
+      </Sfx>
+      <div className="mt-3 flex flex-col gap-2 pr-16">
+        {mostBy.people.map((p) => (
+          <ComicPerson key={p.id} person={p} size={40} nameSize={26} lettered />
+        ))}
+      </div>
+      <CaptionBox tone="paper" tilt={-0.6} className="mt-3 text-[14px]">
+        <span style={{ color: colors.INK_BODY }}>{mostBy.earnedLabel}</span>
+      </CaptionBox>
+    </PanelBody>
+  );
+}
+
+/** The first to earn every Achievement: when, lettered big, and who. */
+function AllFirst({ allFirst }: { allFirst: NonNullable<Achieved["allFirst"]> }) {
+  return (
+    <PanelBody tone="green" rays="85% 85%" align="start" gap={0}>
+      <Kicker tilt={1.2}>Completed all first, at:</Kicker>
+      <PanelHeading className="mt-2" size={30}>
+        {allFirst.atLabel}
+      </PanelHeading>
+      <div className="mt-3">
+        <ComicPerson person={allFirst.person} size={32} nameSize={16} />
+      </div>
     </PanelBody>
   );
 }

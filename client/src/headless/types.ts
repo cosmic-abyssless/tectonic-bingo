@@ -1034,6 +1034,16 @@ export interface WrappedBingoModel {
    * Wrapped published before it was stored.
    */
   bossLeaders: WrappedBossLeaderModel[];
+  /**
+   * Achievements across the Bingo: who earned the most (tied Players all named), and who earned every one first and when.
+   * Null when neither has anything to say, with Achievements switched off, and on a Wrapped published before it was stored.
+   */
+  achievements: {
+    /** `earnedLabel`: "12 of 16 Achievements". */
+    mostBy: { people: WrappedPersonModel[]; earnedLabel: string } | null;
+    /** `atLabel`: when their last one was earned ("Sat 14 Mar, 21:04"). */
+    allFirst: { person: WrappedPersonModel; atLabel: string } | null;
+  } | null;
 }
 
 export interface WrappedOutroModel {

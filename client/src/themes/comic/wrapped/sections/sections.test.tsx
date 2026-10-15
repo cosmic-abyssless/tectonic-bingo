@@ -89,6 +89,7 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
       teams: [{ teamId: "t2", name: "Blue Team", color: "#0000ff", isMine: false, killsLabel: `${i + 1} kills`, topPlayers: [{ person: person(4), killsLabel: `${i + 1} kills` }] }],
     })),
   ],
+  achievements: { mostBy: { people: [person(2), person(3)], earnedLabel: "14 of 16 Achievements" }, allFirst: { person: person(4), atLabel: "Sun 15 Mar, 18:02" } },
   ...over,
 });
 
@@ -154,7 +155,9 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
     ["no Superlatives", bingo({ teamSuperlatives: [] })],
     ["no raids or bosses", bingo({ bossLeaders: [] })],
     ["one boss", bingo({ bossLeaders: bingo().bossLeaders.slice(1, 2) })],
-    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [] })],
+    ["only the most achievements", bingo({ achievements: { mostBy: bingo().achievements!.mostBy, allFirst: null } })],
+    ["only who completed all first", bingo({ achievements: { mostBy: null, allFirst: bingo().achievements!.allFirst } })],
+    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [], achievements: null })],
   ];
   for (const [name, model] of cases) {
     it(name, () => {
@@ -188,9 +191,9 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
       </WrappedProgressProvider>,
     );
     const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
-    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the Steal and Behind the scenes;
-    // the reviewers and the first two Teams; the other five Teams over two pages.
-    expect(scenes.length).toBe(9);
+    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the Achievement leaders; the
+    // Steal and Behind the scenes; the reviewers and the first two Teams; the other five Teams over two pages.
+    expect(scenes.length).toBe(10);
     for (const scene of scenes) {
       const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
       expect(steps.length).toBeGreaterThan(0);
