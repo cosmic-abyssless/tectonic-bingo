@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
+import type { LuckFacts, LuckWeights, PlayerEffort, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
@@ -220,6 +220,8 @@ export interface ContributionCount {
   /** Total drop value (CONTEXT.md): Drop values of this player's approved claims. */
   gpGained: number;
   awards: ContributionAward[];
+  /** Effort (CONTEXT.md); null when not recorded. */
+  effort: PlayerEffort | null;
 }
 
 /** A Team's exclusivity-filtered approved Claims, and the awards they earned. */
@@ -355,6 +357,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
         pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
         gpGained: gpByUser.get(userId) ?? 0,
         awards,
+        effort: null,
       };
     })
     .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
@@ -661,6 +664,7 @@ export interface Stats {
   /** The Title settings for picking holders: which Titles are on and their minimums. A Finished Bingo's frozen copy (#221). */
   titleSettings: TitleSettings;
   womReadAt: Date | null;
+  tileEffort: { tileId: string; teamId: string; userId: string; hours: number }[];
 }
 
 export function getStats(db: Db, bingoId: string): Stats {
@@ -680,6 +684,7 @@ export function getStats(db: Db, bingoId: string): Stats {
     titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
     titleSettings,
     womReadAt: lastReadAt(db, bingoId),
+    tileEffort: [],
   };
 }
 
@@ -699,6 +704,7 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
     titleContext: stats.titleContext,
     titleSettings: stats.titleSettings,
     womReadAt: stats.womReadAt,
+    tileEffort: own(stats.tileEffort),
   };
 }
 

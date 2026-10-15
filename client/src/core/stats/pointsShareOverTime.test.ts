@@ -11,6 +11,7 @@ const player = (userId: string, teamId: string, awards: ContributionAward[]): Co
   approvedSubmissions: awards.length,
   pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
   gpGained: 0,
+  effort: null,
   awards,
 });
 

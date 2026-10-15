@@ -328,6 +328,18 @@ A Player's portion of their Team's points, credited from the Claims that complet
 - **Rules:** Each award (a Task, Part or Tile bonus) is split between the Players whose approved Claims were on the path that completed it, weighted by quantity: ALL counts every child, ANY the first child to complete, COUNT N the first N, SUM N and item quantities (each times what its Item counts as) in approval order, capped at what was still needed. Claims approved after the award, or on branches that didn't decide it, earn nothing. A Tile bonus, and each Tile's equal part of a Line bonus, go to Players by their share of that Tile. Point Adjustments are left out. Shown to two decimal places.
 - **Not:** A count of Submissions. Many easy Claims don't beat one Claim that completed a raid Part.
 
+### Effort
+The hours a Player spent at the bosses of the Board's Parts while their Team still needed them, as Wise Old Man
+measures EHB, whether or not they got anything. **Effort share** is their part of their Team's Effort.
+- **Rules:** Each Part has its bosses: those that drop its Items (as Luck knows them), plus any an Admin adds, less any
+  an Admin removes, set on the Part or on its whole Tile. An hour at a boss counts toward the Parts with that boss that
+  were still incomplete for the Player's Team at that moment (completed when the deciding Submission was made), split
+  evenly between them; time at a boss no open Part needs isn't Effort. Hours between two Wise Old Man snapshots are
+  taken as earned evenly across the gap. Only bosses Wise Old Man measures count (not Slayer monsters, minigames or
+  skilling). Shown to one decimal place; Effort share as a percentage. Follows the Stats visibility rules.
+- **Not:** Points, nor part of Points share. A Player can have a large Effort and no points.
+- **Historical Bingos:** not recorded.
+
 ### Stats
 The Bingo's stats page: points over time, each Player's Points share over time (the top five and you, to start), the timeline, top contributors (ranked by Points share) and tile completion.
 - **Rules:** Moderators who aren't playing see every Team at every stage. While the Bingo is Live a Player (a playing Moderator included) sees only their own Team; once it is Finished everyone sees every Team. "First to complete" events are shown to Moderators throughout and to Players only once the Bingo is Finished.
