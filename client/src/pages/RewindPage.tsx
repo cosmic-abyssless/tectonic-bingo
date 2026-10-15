@@ -10,7 +10,7 @@ import { useEscapeBack } from "../core/ui/useEscapeBack";
 import { useRememberTheme } from "../themes/rememberedTheme";
 import { NotRecordedPage } from "../core/historical/NotRecorded";
 
-/** Rewind (CONTEXT.md): /b/:slug/rewind?at=<ms>&team=<id>. Only for a Finished Bingo; any other stage goes to its board. */
+/** Rewind (CONTEXT.md): /b/:slug/rewind?at=<ms>&view=<team id or "all">. Only for a Finished Bingo; any other stage goes to its board. */
 export function RewindPage() {
   const { slug } = useParams<{ slug: string }>();
   useEscapeBack(`/b/${slug}`);
