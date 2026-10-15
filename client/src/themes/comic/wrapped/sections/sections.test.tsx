@@ -89,6 +89,14 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
       teams: [{ teamId: "t2", name: "Blue Team", color: "#0000ff", isMine: false, killsLabel: `${i + 1} kills`, topPlayers: [{ person: person(4), killsLabel: `${i + 1} kills` }] }],
     })),
   ],
+  achievements: {
+    top: [2, 3, 4].map((n, i) => ({ person: person(n), placementLabel: i < 2 ? "1st" : "3rd", earnedLabel: i < 2 ? "14" : "12", outOfLabel: "of 23", atLabel: `Sun 15 Mar, 1${n}:00`, teamName: "Red Team", teamColor: "#ff0000", isMyTeam: true })),
+    allFirst: { person: person(4), atLabel: "Sun 15 Mar, 18:02" },
+    teams: [
+      { teamId: "t1", name: "Red Team", color: "#ff0000", placementLabel: "1st", earnedLabel: "212", averageLabel: "10.1 per Player", isMine: true },
+      { teamId: "t2", name: "Blue Team", color: "#0000ff", placementLabel: "2nd", earnedLabel: "180", averageLabel: "9 per Player", isMine: false },
+    ],
+  },
   ...over,
 });
 
@@ -154,7 +162,10 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
     ["no Superlatives", bingo({ teamSuperlatives: [] })],
     ["no raids or bosses", bingo({ bossLeaders: [] })],
     ["one boss", bingo({ bossLeaders: bingo().bossLeaders.slice(1, 2) })],
-    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [] })],
+    ["only the top achievers", bingo({ achievements: { ...bingo().achievements!, allFirst: null, teams: [] } })],
+    ["only who completed all first", bingo({ achievements: { ...bingo().achievements!, top: [], teams: [] } })],
+    ["top achievers from an older Wrapped, without Team or time", bingo({ achievements: { ...bingo().achievements!, top: bingo().achievements!.top.map((p) => ({ ...p, atLabel: null, teamName: null, teamColor: null })) } })],
+    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [], achievements: null })],
   ];
   for (const [name, model] of cases) {
     it(name, () => {
@@ -188,9 +199,10 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
       </WrappedProgressProvider>,
     );
     const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
-    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the Steal and Behind the scenes;
-    // the reviewers and the first two Teams; the other five Teams over two pages.
-    expect(scenes.length).toBe(9);
+    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the top achievers; who
+    // completed all first and every Team; the Steal and Behind the scenes; the reviewers and the first two Teams; the other five
+    // Teams over two pages.
+    expect(scenes.length).toBe(11);
     for (const scene of scenes) {
       const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
       expect(steps.length).toBeGreaterThan(0);
