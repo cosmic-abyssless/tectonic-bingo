@@ -52,6 +52,13 @@ import { TaskPicker } from "./submission/TaskPicker";
 import { ProofPicker } from "./submission/ProofPicker";
 import { StagedClaimsList } from "./submission/StagedClaimsList";
 import { RewindPopup } from "./rewind/RewindPopup";
+import { RewindTimeline } from "./rewind/RewindTimeline";
+import { RewindControls } from "./rewind/RewindControls";
+import { RewindScoreboard } from "./rewind/RewindScoreboard";
+import { RewindLog } from "./rewind/RewindLog";
+import { RewindClosing } from "./rewind/RewindClosing";
+import { RewindTileMarkers } from "./rewind/RewindTileMarkers";
+import { RewindTileTeams } from "./rewind/RewindTileTeams";
 import { WrappedBanner } from "./wrapped/WrappedBanner";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
 import { WrappedYou } from "./wrapped/sections/WrappedYou";
@@ -147,6 +154,7 @@ const comicChromeLight = {
 const DraftPageLayout = lazy(() => awaitModule(import("./page/DraftPageLayout")).then((m) => ({ default: m.DraftPageLayout })));
 const StatsPageLayout = lazy(() => awaitModule(import("./page/StatsPageLayout")).then((m) => ({ default: m.StatsPageLayout })));
 const FeedbackPageLayout = lazy(() => awaitModule(import("./page/FeedbackPageLayout")).then((m) => ({ default: m.FeedbackPageLayout })));
+const RewindPageLayout = lazy(() => awaitModule(import("./rewind/RewindPageLayout")).then((m) => ({ default: m.RewindPageLayout })));
 const WrappedPage = lazy(() => awaitModule(import("./wrapped/WrappedPage")).then((m) => ({ default: m.WrappedPage })));
 
 const comicTheme: ThemeDefinition = {
@@ -216,7 +224,15 @@ const comicTheme: ThemeDefinition = {
     ProofPicker,
     RequirementPicker,
     StagedClaimsList,
+    RewindPage: RewindPageLayout,
+    RewindTimeline,
+    RewindControls,
+    RewindScoreboard,
+    RewindLog,
     RewindPopup,
+    RewindClosing,
+    RewindTileMarkers,
+    RewindTileTeams,
     WrappedPage,
     WrappedYou,
     WrappedDuo,
