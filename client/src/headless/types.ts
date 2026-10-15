@@ -607,6 +607,8 @@ export interface RewindTickModel {
   current: boolean;
   /** Its Team's colour, in the All Teams view (where ticks are coloured by Team); null otherwise. */
   teamColor: string | null;
+  /** What it was, as its log entry says it, for hovering the tick. */
+  entry: RewindLogEntryModel;
 }
 
 export interface RewindTimelineModel {

@@ -1,6 +1,7 @@
 import type { RewindControlsModel } from "../../../headless/types";
 import { FastForwardIcon, PauseIcon, PlayIcon, RewindIcon, StepBackIcon, StepForwardIcon } from "../../../core/ui/icons";
 import { COMIC_FIGURES_FONT } from "../font";
+import { TextTooltip } from "../../../core/ui/Tooltip";
 import { ComicButton, ComicIconButton } from "../ui/ComicButton";
 import { ComicCheckbox } from "../ui/ComicCheckbox";
 import { useComic } from "../ui/useComic";
@@ -10,7 +11,7 @@ const nextSpeed = ({ speed, speeds }: RewindControlsModel) => speeds[(speeds.ind
 
 /**
  * Play/Pause, a red Bangers button, between the steps: one Submission either way, and (outside) one notable-or-bigger
- * Submission, each an ink-ringed button like the Wrapped's page turns. Then Play's speed and where Play is, and the
+ * Submission, each an ink-ringed button like the Wrapped's page turns, with a tooltip saying which it is. Then Play's speed and where Play is, and the
  * "Show rejected" chip.
  */
 export function RewindControls({ controls }: { controls: RewindControlsModel }) {
@@ -18,18 +19,22 @@ export function RewindControls({ controls }: { controls: RewindControlsModel }) 
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <div className="flex flex-wrap items-center gap-2 max-sm:gap-1.5">
-        <ComicIconButton
-          label="Previous notable submission"
-          sfx={false}
-          isDisabled={!controls.canPrevNotable}
-          onPress={controls.prevNotable}
-          className="size-9 max-sm:size-8"
-        >
-          <RewindIcon />
-        </ComicIconButton>
-        <ComicIconButton label="Previous submission" sfx={false} isDisabled={!controls.canPrev} onPress={controls.prev} className="size-9 max-sm:size-8">
-          <StepBackIcon />
-        </ComicIconButton>
+        <TextTooltip text="Back to the previous notable submission, skipping minor ones">
+          <ComicIconButton
+            label="Previous notable submission"
+            sfx={false}
+            isDisabled={!controls.canPrevNotable}
+            onPress={controls.prevNotable}
+            className="size-9 max-sm:size-8"
+          >
+            <RewindIcon />
+          </ComicIconButton>
+        </TextTooltip>
+        <TextTooltip text="Back one submission">
+          <ComicIconButton label="Previous submission" sfx={false} isDisabled={!controls.canPrev} onPress={controls.prev} className="size-9 max-sm:size-8">
+            <StepBackIcon />
+          </ComicIconButton>
+        </TextTooltip>
         <ComicButton
           size="md"
           variant="primary"
@@ -41,12 +46,22 @@ export function RewindControls({ controls }: { controls: RewindControlsModel }) 
           {controls.playing ? <PauseIcon /> : <PlayIcon />}
           {controls.playing ? "Pause" : "Play"}
         </ComicButton>
-        <ComicIconButton label="Next submission" sfx={false} isDisabled={!controls.canNext} onPress={controls.next} className="size-9 max-sm:size-8">
-          <StepForwardIcon />
-        </ComicIconButton>
-        <ComicIconButton label="Next notable submission" sfx={false} isDisabled={!controls.canNextNotable} onPress={controls.nextNotable} className="size-9 max-sm:size-8">
-          <FastForwardIcon />
-        </ComicIconButton>
+        <TextTooltip text="Forward one submission">
+          <ComicIconButton label="Next submission" sfx={false} isDisabled={!controls.canNext} onPress={controls.next} className="size-9 max-sm:size-8">
+            <StepForwardIcon />
+          </ComicIconButton>
+        </TextTooltip>
+        <TextTooltip text="Forward to the next notable submission, skipping minor ones">
+          <ComicIconButton
+            label="Next notable submission"
+            sfx={false}
+            isDisabled={!controls.canNextNotable}
+            onPress={controls.nextNotable}
+            className="size-9 max-sm:size-8"
+          >
+            <FastForwardIcon />
+          </ComicIconButton>
+        </TextTooltip>
         <ComicButton
           size="sm"
           variant="yellow"

@@ -304,7 +304,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       atClockLabel: clock(at),
       startLabel: clock(start),
       endLabel: clock(end),
-      ticks: items.map((i) => ({
+      ticks: items.map((i, index) => ({
         id: i.sub.id,
         position: (i.at - start) / span,
         tier: i.sub.significance.tier,
@@ -312,6 +312,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
         past: i.at <= at,
         current: i.sub.id === current?.sub.id,
         teamColor: allTeams ? (teamById.get(i.sub.teamId)?.color ?? null) : null,
+        entry: logEntries[index]!,
       })),
       seek,
       jumpTo: (id) => step(items.findIndex((i) => i.sub.id === id)),

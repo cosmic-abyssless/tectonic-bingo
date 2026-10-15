@@ -1,19 +1,16 @@
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SignificanceTier } from "@bingo/shared";
 import type { RewindLogEntryModel, RewindLogModel } from "../../../headless/types";
 import { TextTooltip } from "../../../core/ui/Tooltip";
 import type { ComicColors } from "../board/colors";
 import { COMIC_FIGURES_FONT } from "../font";
-import { burstPoints } from "../ui/Burst";
 import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { display } from "../wrapped/sections/sectionParts-team-bingo";
 import { LETTERED } from "../../lettering";
-import { RewindPanel } from "./rewindParts";
+import { RewindPanel, TierMark } from "./rewindParts";
 
 // How many entries a phone shows before "Show all" (a wide screen scrolls the whole log instead).
 const PHONE_ENTRIES = 5;
-const BURST = burstPoints(10, 30, 50, 4);
 
 /**
  * Every Submission so far, newest first, one line each in an ink panel: its tier mark (a dot, a diamond, a starburst:
@@ -69,19 +66,6 @@ export function RewindLog({ log }: { log: RewindLogModel }) {
   );
 }
 
-/** The tier's mark: the bigger the Submission, the louder. */
-function TierMark({ tier, fill, colors }: { tier: SignificanceTier; fill: string | null; colors: ComicColors }) {
-  if (tier === "huge")
-    return (
-      <svg viewBox="0 0 100 100" aria-hidden className="size-[18px] overflow-visible">
-        <polygon points={BURST} fill={fill ?? colors.RED} stroke={colors.LINE} strokeWidth={9} strokeLinejoin="round" />
-      </svg>
-    );
-  if (tier === "notable")
-    return <span aria-hidden className="block size-[9px] rotate-45 border-2" style={{ background: fill ?? colors.YELLOW, borderColor: colors.LINE }} />;
-  return <span aria-hidden className="block size-[7px] rounded-full" style={{ background: fill ?? colors.INK_SUBTLE }} />;
-}
-
 // Memoised: Play re-renders the log every step, and only the rows that came or went (or gained focus) change.
 const LogRow = memo(function LogRow({
   entry,
@@ -114,7 +98,11 @@ const LogRow = memo(function LogRow({
           }}
         >
           <span className="flex h-5 w-[18px] shrink-0 items-center justify-center">
-            <TierMark tier={entry.rejected ? "minor" : entry.tier} fill={entry.rejected ? colors.RULE : (teamFill ?? (current && entry.tier === "notable" ? colors.PAPER_RAISED : null))} colors={colors} />
+            <TierMark
+              tier={entry.rejected ? "minor" : entry.tier}
+              fill={entry.rejected ? colors.RULE : (teamFill ?? (current && entry.tier === "notable" ? colors.PAPER_RAISED : null))}
+              colors={colors}
+            />
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-2">
