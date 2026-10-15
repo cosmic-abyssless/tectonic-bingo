@@ -101,6 +101,13 @@
 .comic-rays-spin {
   animation: comic-spin 90s linear infinite;
 }
+/* Pinch-zoomed in on the full-size picture viewer (PinnedArt's ArtViewer; core/ui/pinchZoom.ts), nothing is drawn
+ * behind it: Safari redraws every layer at the zoom, and the page and modal under a Submission's screenshot ran an
+ * iPhone out of memory (reloading the page, then crashing it). They keep their state, and come back zoomed out. */
+:root[data-pinch-zoomed] body:has([data-art-viewer]) > :not([data-art-viewer], :has([data-art-viewer])) {
+  visibility: hidden;
+  content-visibility: hidden;
+}
 
 /* Thick ink frame with a hard offset shadow. */
 .comic-ink-panel {

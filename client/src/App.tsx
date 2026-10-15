@@ -9,6 +9,7 @@ import { ToastRegion, toastOnce } from "./core/ui/Toast";
 import { NewVersionNotice } from "./core/ui/NewVersionNotice";
 import { NotificationDelivery } from "./core/notifications/NotificationDelivery";
 import { useSyncColorSchemeAttribute } from "./core/ui/colorScheme";
+import { useSyncPinchZoomAttribute } from "./core/ui/pinchZoom";
 import { Login } from "./pages/Login";
 import { BingoList } from "./pages/BingoList";
 import { LatestBingoRedirect } from "./pages/LatestBingoRedirect";
@@ -78,6 +79,7 @@ function SlowDownNotice() {
 
 export default function App() {
   useSyncColorSchemeAttribute();
+  useSyncPinchZoomAttribute();
   return (
     <LazyMotion features={loadMotionFeatures}>
     <BrowserRouter>
