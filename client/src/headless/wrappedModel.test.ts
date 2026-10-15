@@ -286,7 +286,7 @@ describe("buildWrappedStory", () => {
   describe("the Achievement leaders", () => {
     const achievementsOf = (data: MyWrappedResponse) => (story(data).sections.find((s) => s.id === "bingo")!.section as WrappedBingoModel).achievements;
 
-    it("names who earned the most, tied Players all named, and who completed all first and when", () => {
+    it("lists the top Players with their Team and when, tied counts sharing a placement, who completed all first, and every Team", () => {
       const data = response(player());
       data.bingo.achievements = {
         total: 16,
@@ -303,24 +303,35 @@ describe("buildWrappedStory", () => {
         ],
       };
       const a = achievementsOf(data)!;
-      expect(a.top.map((p) => [p.person.name, p.placementLabel, p.earnedLabel, p.teamName, p.isMyTeam])).toEqual([
-        ["bob rsn", "1st", "16 of 16", "Blue", false],
-        ["me rsn", "1st", "16 of 16", "Red", true],
-        ["al rsn", "3rd", "9 of 16", "Red", true],
+      const when = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      expect(a.top.map((p) => [p.person.name, p.placementLabel, p.earnedLabel, p.outOfLabel, p.atLabel, p.teamName, p.isMyTeam])).toEqual([
+        ["bob rsn", "1st", "16", "of 16", when(iso(5)), "Blue", false],
+        ["me rsn", "1st", "16", "of 16", when(iso(6)), "Red", true],
+        ["al rsn", "3rd", "9", "of 16", when(iso(7)), "Red", true],
       ]);
+      expect(a.allFirst).toEqual({ person: expect.objectContaining({ name: "bob rsn" }), atLabel: when(iso(5)) });
       expect(a.teams.map((t) => [t.name, t.placementLabel, t.earnedLabel, t.averageLabel, t.isMine])).toEqual([
         ["Red", "1st", "25", "8.3 per Player", true],
         ["Blue", "2nd", "16", "8 per Player", false],
       ]);
-      expect(a.mostBy).toEqual({ people: [expect.objectContaining({ name: "me rsn", isYou: true }), expect.objectContaining({ name: "bob rsn", isYou: false })], earnedLabel: "16 of 16 Achievements" });
-      expect(a.allFirst).toEqual({ person: expect.objectContaining({ name: "bob rsn" }), atLabel: new Date(iso(5)).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) });
     });
 
-    it("leaves out a part nobody qualifies for, and the whole with neither, Achievements off or an older Wrapped", () => {
+    it("lists only who earned the most on a Wrapped published before the top list was stored", () => {
       const data = response(player());
-      data.bingo.achievements = { total: 16, most: { players: [u("me")], earned: 1 }, allFirst: null };
-      expect(achievementsOf(data)).toEqual({ mostBy: expect.objectContaining({ earnedLabel: "1 of 16 Achievements" }), allFirst: null, top: [], teams: [] });
-      data.bingo.achievements = { total: 16, most: null, allFirst: null };
+      data.bingo.achievements = { total: 16, most: { players: [u("me"), u("bob")], earned: 12 }, allFirst: null };
+      expect(achievementsOf(data)).toEqual({
+        top: [
+          expect.objectContaining({ person: expect.objectContaining({ name: "me rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
+          expect.objectContaining({ person: expect.objectContaining({ name: "bob rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
+        ],
+        allFirst: null,
+        teams: [],
+      });
+    });
+
+    it("is left out with nothing to say, Achievements off or an older Wrapped", () => {
+      const data = response(player());
+      data.bingo.achievements = { total: 16, most: null, allFirst: null, top: [], teams: [{ teamId: "a", earned: 0, players: 3 }] };
       expect(achievementsOf(data)).toBeNull();
       data.bingo.achievements = null;
       expect(achievementsOf(data)).toBeNull();

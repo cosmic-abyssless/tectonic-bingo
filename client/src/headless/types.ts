@@ -1035,19 +1035,18 @@ export interface WrappedBingoModel {
    */
   bossLeaders: WrappedBossLeaderModel[];
   /**
-   * Achievements across the Bingo: who earned the most (tied Players all named), and who earned every one first and when.
-   * Null when neither has anything to say, with Achievements switched off, and on a Wrapped published before it was stored.
+   * Achievements across the Bingo. Null when it has nothing to say, with Achievements switched off, and on a Wrapped
+   * published before it was stored.
    */
   achievements: {
-    /** `earnedLabel`: "12 of 16 Achievements". */
-    mostBy: { people: WrappedPersonModel[]; earnedLabel: string } | null;
-    /** `atLabel`: when their last one was earned ("Sat 14 Mar, 21:04"). */
-    allFirst: { person: WrappedPersonModel; atLabel: string } | null;
     /**
-     * The top Players (up to 5), most first: `earnedLabel` "23 of 23", `atLabel` when they reached that many, and their
-     * Team. Empty on a Wrapped published before it was stored.
+     * "Most achievements by:": the top Players (up to 5), most first, tied counts sharing a placement: `earnedLabel` "14",
+     * `outOfLabel` "of 23", `atLabel` when they reached that many, and their Team. On a Wrapped published before the
+     * list was stored, only the Players tied for the most, without a Team or time.
      */
-    top: { person: WrappedPersonModel; placementLabel: string; earnedLabel: string; atLabel: string; teamName: string | null; teamColor: string | null; isMyTeam: boolean }[];
+    top: { person: WrappedPersonModel; placementLabel: string; earnedLabel: string; outOfLabel: string; atLabel: string | null; teamName: string | null; teamColor: string | null; isMyTeam: boolean }[];
+    /** "Completed all first, at:": `atLabel` when their last one was earned ("Sat 14 Mar, 21:04"). */
+    allFirst: { person: WrappedPersonModel; atLabel: string } | null;
     /** Every Team by its Players' Achievements added up: `earnedLabel` "212", `averageLabel` "10.1 per Player". Empty on a Wrapped published before it was stored. */
     teams: { teamId: string; name: string; color: string | null; placementLabel: string; earnedLabel: string; averageLabel: string; isMine: boolean }[];
   } | null;

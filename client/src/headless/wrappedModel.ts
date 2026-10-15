@@ -475,19 +475,20 @@ function achievementsOf(
   teamById: Map<string, WrappedTeam>,
   myTeamId: string | null,
 ): WrappedBingoModel["achievements"] {
-  if (!a || (!a.most && !a.allFirst)) return null;
-  const top = a.top ?? [];
+  // A Wrapped published before the top list was stored names only who earned the most: they head the list.
+  const top = a?.top ?? a?.most?.players.map((player) => ({ player, teamId: "", earned: a.most!.earned, lastEarnedAt: null as string | null })) ?? [];
+  if (!a || (top.length === 0 && !a.allFirst)) return null;
   const teams = (a.teams ?? []).filter((t) => teamById.has(t.teamId));
   return {
-    mostBy: a.most ? { people: a.most.players.map(person), earnedLabel: `${a.most.earned.toLocaleString()} of ${plural(a.total, "Achievement")}` } : null,
     allFirst: a.allFirst ? { person: person(a.allFirst.player), atLabel: whenLabel(a.allFirst.at) } : null,
     top: top.map((p) => {
       const team = teamById.get(p.teamId);
       return {
         person: person(p.player),
         placementLabel: ordinal(1 + top.filter((o) => o.earned > p.earned).length),
-        earnedLabel: `${p.earned.toLocaleString()} of ${a.total.toLocaleString()}`,
-        atLabel: whenLabel(p.lastEarnedAt),
+        earnedLabel: p.earned.toLocaleString(),
+        outOfLabel: `of ${a.total.toLocaleString()}`,
+        atLabel: p.lastEarnedAt ? whenLabel(p.lastEarnedAt) : null,
         teamName: team?.name ?? null,
         teamColor: team?.color ?? null,
         isMyTeam: p.teamId === myTeamId,

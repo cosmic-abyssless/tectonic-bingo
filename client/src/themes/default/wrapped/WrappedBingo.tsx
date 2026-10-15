@@ -192,51 +192,42 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
   );
 }
 
-/** The Achievement leaders: who earned the most, who completed all first, the top Players and every Team. */
+/** The Achievement leaders: the top Players ("Most achievements by:"), who completed all first, and every Team. */
 function Achievements({ a }: { a: NonNullable<WrappedBingoModel["achievements"]> }) {
-  const parts = [!!a.mostBy, !!a.allFirst, a.top.length > 0, a.teams.length > 0];
+  const parts = [a.top.length > 0, !!a.allFirst, a.teams.length > 0];
   const step = (i: number) => parts.slice(0, i).filter(Boolean).length;
   return (
     <WrappedScene steps={parts.filter(Boolean).length} className="text-center">
       <div className="w-full max-w-2xl">
-        {a.mostBy && (
+        {a.top.length > 0 && (
           <Reveal step={0}>
-            <WrappedHeading kicker="Most achievements by:">
-              <span className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-                {a.mostBy.people.map((p) => (
-                  <WrappedPerson key={p.id} person={p} size="lg" />
-                ))}
-              </span>
-            </WrappedHeading>
-            <p className="mt-3 text-lg text-on-surface-muted">{a.mostBy.earnedLabel}</p>
+            <WrappedHeading kicker="Achievements">Most achievements by:</WrappedHeading>
+            <ol className="mt-6 space-y-2 text-left">
+              {a.top.map((p) => (
+                <li key={p.person.id} className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-2 ${p.isMyTeam ? "border-on-surface" : "border-outline"}`}>
+                  <span className="num w-10 shrink-0 font-black text-on-surface-muted">{p.placementLabel}</span>
+                  <span className="min-w-0 flex-1">
+                    <WrappedPerson person={p.person} detail={p.teamName} />
+                    {p.atLabel && <span className="mt-0.5 block text-xs text-on-surface-muted">{p.atLabel}</span>}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap">
+                    <span className="num text-lg font-bold">{p.earnedLabel}</span> <span className="text-sm text-on-surface-muted">{p.outOfLabel}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
           </Reveal>
         )}
         {a.allFirst && (
-          <Reveal step={step(1)} className={a.mostBy ? "mt-14" : undefined}>
+          <Reveal step={step(1)} className={a.top.length > 0 ? "mt-14" : undefined}>
             <WrappedHeading kicker="Completed all first, at:">{a.allFirst.atLabel}</WrappedHeading>
             <div className="mt-4 flex justify-center">
               <WrappedPerson person={a.allFirst.person} />
             </div>
           </Reveal>
         )}
-        {a.top.length > 0 && (
-          <Reveal step={step(2)} className="mt-12">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Top achievers</p>
-            <ol className="mt-4 space-y-2 text-left">
-              {a.top.map((p) => (
-                <li key={p.person.id} className={`flex items-center gap-3 rounded-xl border bg-surface px-4 py-2 ${p.isMyTeam ? "border-on-surface" : "border-outline"}`}>
-                  <span className="num w-10 shrink-0 font-black text-on-surface-muted">{p.placementLabel}</span>
-                  <span className="min-w-0 flex-1">
-                    <WrappedPerson person={p.person} detail={p.teamName ? `${p.teamName} · ${p.atLabel}` : p.atLabel} />
-                  </span>
-                  <span className="num shrink-0 font-semibold">{p.earnedLabel}</span>
-                </li>
-              ))}
-            </ol>
-          </Reveal>
-        )}
         {a.teams.length > 0 && (
-          <Reveal step={step(3)} className="mt-12">
+          <Reveal step={step(2)} className="mt-12">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Achievements by Team</p>
             <ol className="mt-4 space-y-2 text-left">
               {a.teams.map((t) => (
@@ -247,8 +238,9 @@ function Achievements({ a }: { a: NonNullable<WrappedBingoModel["achievements"]>
                     {t.name}
                     {t.isMine && <span className="ml-2 text-xs font-normal text-on-surface-muted">your Team</span>}
                   </span>
-                  <span className="shrink-0 text-right">
-                    <span className="num font-semibold">{t.earnedLabel}</span> <span className="text-sm text-on-surface-muted">{t.averageLabel}</span>
+                  <span className="shrink-0 text-right leading-tight">
+                    <span className="num block font-semibold">{t.earnedLabel}</span>
+                    <span className="block text-xs text-on-surface-muted">{t.averageLabel}</span>
                   </span>
                 </li>
               ))}
