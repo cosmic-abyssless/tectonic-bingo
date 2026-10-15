@@ -23,6 +23,10 @@ const EMPTY_ITEMS: RewindItem[] = [];
 const EMPTY_BOARD_STATE = boardStateAt(undefined, EMPTY_ITEMS, 0);
 // How long the URL waits for the moment to settle before recording it (a drag moves it many times a second).
 const URL_WRITE_DELAY_MS = 300;
+// The view's own param: the Board keeps `team` and drops it when it names the viewer's Team (or isn't a Team at all, as
+// "all" isn't), so sharing that one had the two rewriting the URL back and forth. `team` is still read, for older links.
+const VIEW_PARAM = "view";
+const LEGACY_TEAM_PARAM = "team";
 
 const clock = (ms: number) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -64,9 +68,9 @@ function toSubmissionModel(sub: RewindSubmission, at: number, start: number, tea
 }
 
 /**
- * Rewind's headless state (CONTEXT.md "Rewind"): the moment being viewed (in the URL as ?at=, with ?team=), Play and
+ * Rewind's headless state (CONTEXT.md "Rewind"): the moment being viewed (in the URL as ?at=, with ?view=), Play and
  * stepping, the scoreboard, and the popups. Wraps a BoardProvider fed with the viewed Team's Board at that moment, so
- * the ordinary Board slots draw it. In the All Teams view (?team=all) that Board is the shared layout with no one's
+ * the ordinary Board slots draw it. In the All Teams view (?view=all) that Board is the shared layout with no one's
  * progress, and tileTeams says which Teams have completed each Tile. Sits inside BingoPageProvider, whose shell
  * (teams, tiles) it reads.
  */
@@ -99,8 +103,9 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const at = atState ?? (params.get("at") && Number.isFinite(urlAt) ? clamp(urlAt) : start);
 
   // The view: a Team's id, or ALL_TEAMS.
-  const urlTeam = params.get("team");
-  const viewId = teamState ?? (urlTeam === ALL_TEAMS || page.teams.some((t) => t.id === urlTeam) ? urlTeam : null) ?? page.myTeam?.id ?? page.teams[0]?.id ?? null;
+  const urlTeam = params.get(VIEW_PARAM) ?? params.get(LEGACY_TEAM_PARAM);
+  const defaultViewId = page.myTeam?.id ?? page.teams[0]?.id ?? null;
+  const viewId = teamState ?? (urlTeam === ALL_TEAMS || page.teams.some((t) => t.id === urlTeam) ? urlTeam : null) ?? defaultViewId;
   const allTeams = viewId === ALL_TEAMS;
   const teamId = allTeams ? null : viewId;
   const teamModel = page.teams.find((t) => t.id === teamId) ?? null;
@@ -122,22 +127,20 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
   const playable = useCallback((i: RewindItem) => playsAt(i.sub.significance.tier, speed), [speed]);
   const focusIndex = focusId ? items.findIndex((i) => i.sub.id === focusId) : -1;
 
-  // The moment into the URL once it settles, so a link (or a reload) opens Rewind right there.
+  // The moment into the URL once it settles, so a link (or a reload) opens Rewind right there. Not while playing, which
+  // would rewrite it at every stop; pausing writes where Play got to. The default view (the viewer's Team) is left out.
   useEffect(() => {
-    if (atState === null && teamState === null) return;
+    if (playing || (atState === null && teamState === null)) return;
     const timer = setTimeout(() => {
-      setParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (atState !== null) next.set("at", String(Math.round(atState)));
-          if (viewId) next.set("team", viewId);
-          return next;
-        },
-        { replace: true },
-      );
+      const next = new URLSearchParams(params);
+      if (atState !== null) next.set("at", String(Math.round(atState)));
+      next.delete(LEGACY_TEAM_PARAM);
+      if (viewId && viewId !== defaultViewId) next.set(VIEW_PARAM, viewId);
+      else next.delete(VIEW_PARAM);
+      if (next.toString() !== params.toString()) setParams(next, { replace: true });
     }, URL_WRITE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [atState, teamState, viewId, setParams]);
+  }, [playing, atState, teamState, viewId, defaultViewId, params, setParams]);
 
   // A popup of "any" shows even a minor Submission's (a log entry opened); "notable" only a notable-or-bigger one's.
   const show = useCallback(
@@ -301,7 +304,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
       atClockLabel: clock(at),
       startLabel: clock(start),
       endLabel: clock(end),
-      ticks: items.map((i) => ({
+      ticks: items.map((i, index) => ({
         id: i.sub.id,
         position: (i.at - start) / span,
         tier: i.sub.significance.tier,
@@ -309,6 +312,7 @@ export function RewindProvider({ slug, children, renderLoading, renderError }: {
         past: i.at <= at,
         current: i.sub.id === current?.sub.id,
         teamColor: allTeams ? (teamById.get(i.sub.teamId)?.color ?? null) : null,
+        entry: logEntries[index]!,
       })),
       seek,
       jumpTo: (id) => step(items.findIndex((i) => i.sub.id === id)),

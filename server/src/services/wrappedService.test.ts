@@ -11,7 +11,7 @@ import { approveSubmission, rejectSubmission } from "./scoringService";
 import { ServiceError } from "./errors";
 import * as statsService from "./statsService";
 import * as rewindService from "./rewindService";
-import { computeWrapped, duoMoments, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
+import { achievementLeadersOf, computeWrapped, duoMoments, getWrappedState, isPublished, publishWhenReady, publishWrapped, readBingoWrapped, readMyWrapped } from "./wrappedService";
 import { createBingo, toPublicBingo, updateBingoSettings } from "./bingoService";
 import { removeTeamMember } from "./teamService";
 import { createCategory as createSuperlativeCategory, setVote as setSuperlativeVote } from "./superlativeService";
@@ -390,6 +390,60 @@ describe("computeWrapped", () => {
     const dave = players.find((p) => p.userId === fx.dave.id)!.you;
     expect(teamA!.mvp?.teamPointsFraction).toBeGreaterThan(0);
     expect(teamA!.mvp?.teamPointsFraction).toBeCloseTo(dave.teamPointsFraction);
+  });
+});
+
+describe("the Achievement leaders", () => {
+  const earn = (fx: Fx, userId: string, key: string, at: Date) => db.insert(schema.achievementEarned).values({ bingoId: fx.bingo.id, userId, achievementKey: key, earnedAt: at }).run();
+  const switchOn = (fx: Fx, keys: string[]) => db.insert(schema.bingoAchievementSettings).values(keys.map((k) => ({ bingoId: fx.bingo.id, achievementKey: k, enabled: true, firstSwitchedOnAt: t(0) }))).run();
+
+  it("names who earned the most, ties shared, and who earned every switched-on one first, counting only Players on a Team", () => {
+    const fx = seed();
+    switchOn(fx, ["night_owl", "big_spender"]);
+    db.insert(schema.bingoAchievementSettings).values({ bingoId: fx.bingo.id, achievementKey: "regular", enabled: false, firstSwitchedOnAt: t(0) }).run();
+    earn(fx, fx.carol.id, "night_owl", t(10));
+    earn(fx, fx.carol.id, "big_spender", t(50));
+    earn(fx, fx.dave.id, "big_spender", t(20));
+    earn(fx, fx.dave.id, "night_owl", t(30));
+    earn(fx, fx.erin.id, "night_owl", t(5));
+    // Switched off: not counted, so it doesn't make erin a leader.
+    earn(fx, fx.erin.id, "regular", t(6));
+    // mod2 isn't on a Team.
+    earn(fx, fx.mod2.id, "night_owl", t(1));
+    earn(fx, fx.mod2.id, "big_spender", t(2));
+    const { bingo } = computeWrapped(db, finish(fx));
+    expect(bingo.achievements!.total).toBe(2);
+    expect(bingo.achievements!.most!.earned).toBe(2);
+    expect(bingo.achievements!.most!.players.map((p) => p.id)).toEqual([fx.carol.id, fx.dave.id]);
+    expect(bingo.achievements!.allFirst).toEqual({ player: expect.objectContaining({ id: fx.dave.id }), at: t(30).toISOString() });
+    // Top: most first, then who got there first.
+    expect(bingo.achievements!.top!.map((p) => [p.player.id, p.teamId, p.earned, p.lastEarnedAt])).toEqual([
+      [fx.dave.id, fx.teamA.id, 2, t(30).toISOString()],
+      [fx.carol.id, fx.teamA.id, 2, t(50).toISOString()],
+      [fx.erin.id, fx.teamB.id, 1, t(5).toISOString()],
+    ]);
+    // Every Team, by its Players' Achievements added up.
+    expect(bingo.achievements!.teams).toEqual([
+      { teamId: fx.teamA.id, earned: 4, players: 3 },
+      { teamId: fx.teamB.id, earned: 1, players: 3 },
+    ]);
+  });
+
+  it("has neither part when nobody earned any, and is null with Achievements switched off", () => {
+    const fx = seed();
+    switchOn(fx, ["night_owl"]);
+    expect(computeWrapped(db, finish(fx)).bingo.achievements).toMatchObject({ total: 1, most: null, allFirst: null, top: [] });
+    db.update(bingos).set({ achievementsEnabled: false }).where(eq(bingos.id, fx.bingo.id)).run();
+    expect(computeWrapped(db, db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!).bingo.achievements).toBeNull();
+  });
+
+  it("breaks a tie for completing all at the same moment by name", () => {
+    const users = new Map([["b", { id: "b", rsn: "Bee" }], ["a", { id: "a", rsn: "Ay" }]].map(([id, u]) => [id as string, { discordUsername: "", discordGlobalName: null, discordGuildNick: null, discordId: "", discordAvatar: null, ...(u as object) } as never]));
+    const at = new Date(T0);
+    const leaders = achievementLeadersOf(new Map([["a", [{ earnedAt: at }]], ["b", [{ earnedAt: at }]]]), [{ userId: "b", teamId: "t" }, { userId: "a", teamId: "t" }], 1, users, ["t"]);
+    expect(leaders.allFirst!.player).toMatchObject({ id: "a" });
+    expect(leaders.most!.players.map((p) => (p as { id: string }).id)).toEqual(["a", "b"]);
+    expect(leaders.top!.map((p) => (p.player as { id: string }).id)).toEqual(["a", "b"]);
   });
 });
 
