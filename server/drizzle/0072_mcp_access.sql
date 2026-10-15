@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `mcp_access` integer DEFAULT false NOT NULL;

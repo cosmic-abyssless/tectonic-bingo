@@ -89,6 +89,8 @@ export interface User {
   /** Was a member of the clan's Discord server at last login. */
   inGuild: boolean;
   isAdmin: boolean;
+  /** MCP access (CONTEXT.md): the MCP server's curated tools over Finished Bingos, without being a site admin. */
+  mcpAccess: boolean;
   /** When the account finished or skipped the Tutorial (CONTEXT.md); null until then. */
   tutorialSeenAt: string | null;
   createdAt: string;

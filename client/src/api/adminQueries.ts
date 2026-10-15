@@ -30,6 +30,7 @@ export const adminQueryKeys = {
   bugReports: ["adminBugReports"] as const,
   mcpConnections: (scope: "mine" | "all") => ["adminMcpConnections", scope] as const,
   siteAdmins: ["adminSiteAdmins"] as const,
+  mcpAccess: ["adminMcpAccess"] as const,
   siteAuditLog: (bingoScope: string | null | "all", filters: AuditLogFilters) => ["siteAuditLog", bingoScope, filters] as const,
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
   wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
@@ -99,6 +100,11 @@ export function usePieceValues() {
 
 export function useTitleSettings() {
   return useQuery({ queryKey: adminQueryKeys.titleSettings, queryFn: () => adminApi.getTitleSettings() });
+}
+
+/** Site admin > MCP access: every user given it. Refetched on any access change (access_changed). */
+export function useMcpAccessUsers() {
+  return useQuery({ queryKey: adminQueryKeys.mcpAccess, queryFn: () => adminApi.getMcpAccessUsers() });
 }
 
 /** Site admin > Site admins: the Owners, then every other site admin. Refetched on any Admin flag change (access_changed). */

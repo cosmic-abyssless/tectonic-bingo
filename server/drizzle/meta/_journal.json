@@ -491,6 +491,13 @@
       "when": 1791761155421,
       "tag": "0071_user_settings_animations",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "6",
+      "when": 1792105837079,
+      "tag": "0072_mcp_access",
+      "breakpoints": true
     }
   ]
 }

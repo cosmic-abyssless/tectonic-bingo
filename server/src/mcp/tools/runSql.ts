@@ -74,6 +74,7 @@ export const runSql = defineTool({
     `One read-only SQLite query (SELECT, WITH, VALUES or EXPLAIN) over a copy of the site's database that is rebuilt every ${REPLICA_INTERVAL_MS / 60_000} minutes, with secrets and private data removed. ` +
     `Call describe_schema first for the tables, columns and what they mean. Limits: one statement, ${SQL_LIMITS.timeoutMs / 1000} seconds, ${SQL_LIMITS.rowLimit} rows. ` +
     "Scores aren't a column: for points use bingo_summary, tile_stats and player_contributions. Timestamps are unix seconds (datetime(col, 'unixepoch')), except audit_log.created_at in milliseconds.",
+  fullScopeOnly: true,
   input: z.object({ query: z.string().min(1).max(20_000).describe("One SQLite statement.") }),
   run: ({ query }) => runSqlQuery(query),
   auditDetails: (result) => ({ rowCount: (result as SqlAnswer).rowCount }),

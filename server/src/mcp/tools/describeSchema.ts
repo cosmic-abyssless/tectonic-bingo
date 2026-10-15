@@ -30,6 +30,7 @@ export const describeSchema = defineTool({
   name: "describe_schema",
   title: "Describe the SQL schema",
   description: "The tables and columns run_sql can query, with what each means in the site's terms, and how old the data is. Call it before writing SQL.",
+  fullScopeOnly: true,
   input: z.object({}),
   run: () => {
     const types = columnTypes();

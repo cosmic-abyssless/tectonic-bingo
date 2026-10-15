@@ -1,9 +1,10 @@
-// The admin MCP server's OAuth 2.1 authorization server, over SQLite (docs: #289, #290). The SDK's mcpAuthRouter serves
+// The MCP server's OAuth 2.1 authorization server, over SQLite (docs: #289, #290). The SDK's mcpAuthRouter serves
 // the endpoints (discovery, /register, /authorize, /token, /revoke) and calls this provider for everything that needs
-// storage or a person: registering Claude's apps, the admin's sign-in and approval, and issuing and checking tokens.
+// storage or a person: registering Claude's apps, the user's sign-in and approval, and issuing and checking tokens.
 //
 // Sign-in reuses the site's Discord login: /authorize reads the session's user, sends someone without one to Discord
-// and back, refuses anyone who isn't a site Admin, and asks an Admin once per app before handing it a code. Every code
+// and back, refuses anyone with no MCP access (access.ts: a site Admin, or a user given MCP access), and asks them
+// once per app before handing it a code. Every code
 // and token is random, and only its SHA-256 is stored.
 import { createHash, randomBytes } from "crypto";
 import { and, eq, gte, isNull, lt, notExists, or, sql } from "drizzle-orm";
@@ -25,8 +26,8 @@ import {
 } from "@modelcontextprotocol/server-legacy/auth";
 import * as schema from "../db/schema";
 import { oauthClients, oauthCodes, oauthTokens, users } from "../db/schema";
-import { can, discordName } from "@bingo/shared";
-import { siteRoles } from "../services/permissions";
+import { discordName } from "@bingo/shared";
+import { mcpScope } from "./access";
 import { MCP_SCOPE, type McpUrls } from "./config";
 import { consentPage, messagePage } from "./pages";
 import { now as clockNow } from "../clock";
@@ -40,7 +41,7 @@ export const CONNECTION_IDLE_MS = 30 * 24 * 60 * 60 * 1000;
 /** A registration nobody has finished signing in with is deleted after this long. */
 export const UNUSED_CLIENT_TTL_MS = 24 * 60 * 60 * 1000;
 
-/** Where, after the admin's Discord login, to pick the authorize request back up (a path on this site). */
+/** Where, after the user's Discord login, to pick the authorize request back up (a path on this site). */
 export const RETURN_COOKIE = "mcp_authorize_return";
 
 // claude.ai and Claude Desktop come back through Claude's own callback; Claude Code listens on a loopback port.
@@ -156,8 +157,8 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
       res.redirect("/auth/discord");
       return;
     }
-    if (!can(siteRoles(user), null, "administer_site").ok) {
-      res.status(403).type("html").send(messagePage("Admins only", "Only Tectonic Bingo's site admins can connect Claude. Ask an admin if you need this."));
+    if (!mcpScope(user)) {
+      res.status(403).type("html").send(messagePage("No MCP access", "Only Tectonic Bingo's site admins, and people an admin has given MCP access, can connect Claude. Ask an admin if you need this."));
       return;
     }
 
@@ -166,7 +167,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
       const expected = req.session.mcpConsentToken;
       delete req.session.mcpConsentToken;
       if (!expected || body.consent_token !== expected) throw new InvalidRequestError("The approval form expired; start connecting again");
-      if (body.decision !== "approve") throw new AccessDeniedError("The admin declined to connect this app");
+      if (body.decision !== "approve") throw new AccessDeniedError("The user declined to connect this app");
     } else if (!this.hasLiveConnection(user.id, client.client_id)) {
       const token = newSecret();
       req.session.mcpConsentToken = token;
@@ -185,7 +186,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
         .status(200)
         .set("Cache-Control", "no-store")
         .type("html")
-        .send(consentPage({ appName: client.client_name || "An unnamed app", redirectHost: new URL(params.redirectUri).host, adminName: discordName(user), fields }));
+        .send(consentPage({ appName: client.client_name || "An unnamed app", redirectHost: new URL(params.redirectUri).host, userName: discordName(user), scope: mcpScope(user)!, fields }));
       return;
     }
 
@@ -210,7 +211,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
     res.redirect(302, target.href);
   }
 
-  /** Whether this admin already approved this app and the connection is still live: then no second approval is asked. */
+  /** Whether this user already approved this app and the connection is still live: then no second approval is asked. */
   private hasLiveConnection(userId: string, clientId: string): boolean {
     const idleSince = new Date(this.now().getTime() - CONNECTION_IDLE_MS);
     const row = this.db
@@ -240,7 +241,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
     if (deleted.length === 0) throw new InvalidGrantError("The authorization code was already used");
     if (redirectUri !== undefined && redirectUri !== row.redirectUri) throw new InvalidGrantError("redirect_uri doesn't match the authorization request");
     if (resource && resource.href !== row.resource) throw new InvalidTargetError(`The only resource is ${row.resource}`);
-    if (!this.isAdmin(row.userId)) throw new InvalidGrantError("The user is no longer a site admin");
+    if (!this.hasAccess(row.userId)) throw new InvalidGrantError("The user no longer has MCP access");
 
     const access = newSecret();
     const refresh = newSecret();
@@ -271,7 +272,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
     }
     if (scopes?.some((s) => s !== row.scope)) throw new InvalidScopeError(`The only scope is ${row.scope}`);
     if (resource && resource.href !== row.resource) throw new InvalidTargetError(`The only resource is ${row.resource}`);
-    if (!this.isAdmin(row.userId)) throw new InvalidGrantError("The user is no longer a site admin");
+    if (!this.hasAccess(row.userId)) throw new InvalidGrantError("The user no longer has MCP access");
 
     const access = newSecret();
     const refresh = newSecret();
@@ -288,7 +289,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const row = this.db
-      .select({ token: oauthTokens, isAdmin: users.isAdmin })
+      .select({ token: oauthTokens, isAdmin: users.isAdmin, mcpAccess: users.mcpAccess })
       .from(oauthTokens)
       .innerJoin(users, eq(users.id, oauthTokens.userId))
       .where(eq(oauthTokens.accessTokenHash, hash(token)))
@@ -296,7 +297,7 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
     const now = this.now();
     if (!row || row.token.revokedAt || row.token.accessExpiresAt.getTime() <= now.getTime()) throw invalidToken("The access token is invalid, expired or revoked");
     if (row.token.resource !== this.urls.resource.href) throw invalidToken("The access token is for another resource");
-    if (!can(siteRoles(row), null, "administer_site").ok) throw invalidToken("The user is no longer a site admin");
+    if (!mcpScope(row)) throw invalidToken("The user no longer has MCP access");
 
     this.db.update(oauthTokens).set({ lastUsedAt: now }).where(eq(oauthTokens.id, row.token.id)).run();
     return {
@@ -318,9 +319,9 @@ export class SqliteOAuthProvider implements OAuthServerProvider {
       .run();
   }
 
-  private isAdmin(userId: string): boolean {
-    const user = this.db.select({ isAdmin: users.isAdmin }).from(users).where(eq(users.id, userId)).get();
-    return !!user && can(siteRoles(user), null, "administer_site").ok;
+  private hasAccess(userId: string): boolean {
+    const user = this.db.select({ isAdmin: users.isAdmin, mcpAccess: users.mcpAccess }).from(users).where(eq(users.id, userId)).get();
+    return !!user && mcpScope(user) !== null;
   }
 
   private tokenResponse(access: string, refresh: string, scope: string): OAuthTokens {

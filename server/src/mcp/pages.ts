@@ -1,5 +1,6 @@
-// The two plain pages the OAuth authorize step shows an admin: "connect this app?" and a refusal. Served by the server
+// The two plain pages the OAuth authorize step shows the user: "connect this app?" and a refusal. Served by the server
 // itself (not the React client) because they sit in the middle of a redirect chain that must stay on one origin.
+import type { McpScope } from "./access";
 
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -34,24 +35,33 @@ function page(title: string, body: string): string {
 export interface ConsentPageInput {
   appName: string;
   redirectHost: string;
-  adminName: string;
+  userName: string;
+  /** What they can read: every Bingo (a site admin), or Finished ones (MCP access). */
+  scope: McpScope;
   /** Every authorize parameter, posted back to /authorize with the decision. */
   fields: Record<string, string>;
 }
 
-export function consentPage({ appName, redirectHost, adminName, fields }: ConsentPageInput): string {
+const ALL_BINGOS = `<ul>
+  <li>every Bingo's settings, Board, Teams and Submissions, and their statistics;</li>
+  <li>Players' Discord names and ids, and their signup answers.</li>
+</ul>`;
+
+const FINISHED_BINGOS = `<ul>
+  <li>Finished Bingos' Board, Teams and Submissions, and their statistics, Historical Bingos included;</li>
+  <li>the Players in them, by their RSN.</li>
+</ul>`;
+
+export function consentPage({ appName, redirectHost, userName, scope, fields }: ConsentPageInput): string {
   const hidden = Object.entries(fields)
     .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
     .join("\n");
   return page(
     "Connect to Claude",
     `<h1>Connect ${escapeHtml(appName)} to Tectonic Bingo?</h1>
-<p>Signed in as <strong>${escapeHtml(adminName)}</strong>. After this, sign-in completes at <strong>${escapeHtml(redirectHost)}</strong>.</p>
+<p>Signed in as <strong>${escapeHtml(userName)}</strong>. After this, sign-in completes at <strong>${escapeHtml(redirectHost)}</strong>.</p>
 <p>It will be able to read, as you:</p>
-<ul>
-  <li>every Bingo's settings, Board, Teams and Submissions, and their statistics;</li>
-  <li>Players' Discord names and ids, and their signup answers.</li>
-</ul>
+${scope === "all" ? ALL_BINGOS : FINISHED_BINGOS}
 <p>It can't change anything. What it reads goes to Anthropic as part of your conversation. Only connect an app you started yourself.</p>
 <form method="post" action="/authorize">
 ${hidden}

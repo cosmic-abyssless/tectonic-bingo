@@ -130,7 +130,7 @@ export function AppHeader({
       items: [
         ...(user && openProfile ? [{ id: "profile", text: "Profile", label: "Profile", wikiIcon: "Worn Equipment", onAction: () => openProfile(user.id) }] : []),
         { id: "settings", text: "Settings", label: "Settings", wikiIcon: "Account Management", current: onUserSettings, onAction: () => navigate(USER_SETTINGS_PATH, { state: bingoSlug ? { bingoSlug } : undefined }) },
-        ...(siteAdmin ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
+        ...(siteAdmin || user?.mcpAccess ? [{ id: "connected-apps", text: "Connected apps", label: "Connected apps", wikiIcon: "Account Management - Links icon", onAction: () => setConnectedAppsOpen(true) }] : []),
         ...(!phone
           ? [
               {
@@ -201,7 +201,7 @@ export function AppHeader({
           {user && <HeaderMenu trigger={{ kind: "account", name: myRsn || displayName(user), avatarUrl: avatarUrl(user) }} groups={accountGroups} />}
         </div>
         {user && <PhoneLoginDialog isOpen={phoneLoginOpen} onClose={() => setPhoneLoginOpen(false)} />}
-        {siteAdmin && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
+        {(siteAdmin || user?.mcpAccess) && <ConnectedAppsDialog isOpen={connectedAppsOpen} onClose={() => setConnectedAppsOpen(false)} />}
       </div>
     </header>
   );

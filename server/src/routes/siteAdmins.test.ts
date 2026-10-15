@@ -163,6 +163,33 @@ describe("Owner-only Claude connections", () => {
   });
 });
 
+describe("MCP access", () => {
+  const hasAccess = (who: Person) => db.select().from(schema.users).where(eq(schema.users.id, people[who].id)).get()!.mcpAccess;
+
+  it("lets any Admin grant and revoke it, lists who has it, and tells their client", async () => {
+    const granted = await call("admin", "PUT", `/admin/users/${people.member.id}/mcp-access`, { mcpAccess: true });
+    expect(granted.status).toBe(200);
+    expect(hasAccess("member")).toBe(true);
+    expect(broadcast).toHaveBeenCalledWith({ type: "access_changed", bingoId: null, payload: { userIds: [people.member.id] } });
+    expect(((await call("admin", "GET", "/admin/mcp-access")).body.users as { id: string }[]).map((u) => u.id)).toEqual([people.member.id]);
+
+    expect((await call("admin", "PUT", `/admin/users/${people.member.id}/mcp-access`, { mcpAccess: false })).status).toBe(200);
+    expect(hasAccess("member")).toBe(false);
+  });
+
+  it("refuses anyone who isn't an Admin, and a body without a boolean", async () => {
+    expect((await call("member", "PUT", `/admin/users/${people.member.id}/mcp-access`, { mcpAccess: true })).status).toBe(403);
+    expect((await call("member", "GET", "/admin/mcp-access")).status).toBe(403);
+    expect((await call("admin", "PUT", `/admin/users/${people.member.id}/mcp-access`, { mcpAccess: "yes" })).status).toBe(400);
+    expect(hasAccess("member")).toBe(false);
+  });
+
+  it("lets anyone list their own Claude connections from /api/me, not others'", async () => {
+    expect((await call("member", "GET", "/me/mcp-connections")).body).toEqual({ connections: [] });
+    expect((await call("member", "DELETE", "/me/mcp-connections/nope")).status).toBe(404);
+  });
+});
+
 describe("GET /api/me isOwner", () => {
   it("says whether the viewer is an Owner", async () => {
     expect((await call("owner", "GET", "/me")).body.isOwner).toBe(true);
