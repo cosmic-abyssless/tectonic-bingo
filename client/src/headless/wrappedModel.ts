@@ -8,6 +8,7 @@ import { formatGp } from "../core/ui/gp";
 import { avatarUrl, displayName } from "../core/ui/user";
 import { formatOneIn } from "./rewindModel";
 import type {
+  WrappedAchievementsModel,
   WrappedBingoModel,
   WrappedBossLeaderModel,
   WrappedCaptainModel,
@@ -50,6 +51,7 @@ const SECTION_LABEL: Record<WrappedSectionModel["kind"], string> = {
   moderator: "Your reviews",
   team: "Your Team",
   bingo: "The Bingo",
+  achievements: "Achievements",
   outro: "The end",
 };
 
@@ -462,9 +464,12 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
         }),
       )
       .filter((boss) => boss.teams.length > 0),
-    achievements: achievementsOf(bingo.achievements, person, teamById, myTeamId),
   };
   sections.push(b);
+
+  // Achievements.
+  const achievements = achievementsOf(bingo.achievements, player?.you ?? null, art("achievements"), person, teamById, myTeamId);
+  if (achievements) sections.push(achievements);
 
   sections.push({ kind: "outro", art: art("outro"), bingoName: bingo.bingoName, cards: shareCards(data, opts, slug, person) });
 
@@ -481,24 +486,53 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
   };
 }
 
-/** The Bingo section's Achievement leaders, worded; null with nothing to say. Tied counts share a placement. */
+/** How many of the viewer's rarest Achievements their place shows. */
+const RAREST_SHOWN = 3;
+
+/** "7.7 per Player": an average to at most one decimal place. */
+const perPlayer = (earned: number, players: number) => `${(players ? earned / players : 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} per Player`;
+/** A UTC day, short: "Sat 12 Oct". */
+const shortDayLabel = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+/**
+ * The Achievements section, worded; null when the Bingo has Achievements switched off or nobody earned one. The
+ * leaderboard's places are distinct: the stored list is already in order, a tie going to who got there first. `you` is
+ * the viewer's own Wrapped (null for a viewer who isn't a Player): the only place an Achievement's Rarity is read from.
+ */
 function achievementsOf(
   a: MyWrappedResponse["bingo"]["achievements"],
+  you: WrappedYou | null,
+  art: WrappedSectionArtModel,
   person: (u: AvatarUser) => WrappedPersonModel,
   teamById: Map<string, WrappedTeam>,
   myTeamId: string | null,
-): WrappedBingoModel["achievements"] {
-  // A Wrapped published before the top list was stored names only who earned the most: they head the list.
-  const top = a?.top ?? a?.most?.players.map((player) => ({ player, teamId: "", earned: a.most!.earned, lastEarnedAt: null as string | null })) ?? [];
-  if (!a || (top.length === 0 && !a.allFirst)) return null;
+): WrappedAchievementsModel | null {
+  if (!a) return null;
+  // A Wrapped published before the top list was stored names only who earned the most, tied: they head the list, sharing first.
+  const top = a.top ?? a.most?.players.map((player) => ({ player, teamId: "", earned: a.most!.earned, lastEarnedAt: null as string | null })) ?? [];
+  const anyEarned = a.playersWithAny !== undefined ? a.playersWithAny > 0 : top.length > 0 || !!a.allFirst;
+  if (!anyEarned) return null;
   const teams = (a.teams ?? []).filter((t) => teamById.has(t.teamId));
+  const counted = a.players !== undefined && a.playersWithAny !== undefined && a.earnedTotal !== undefined && a.players > 0 ? { players: a.players, withAny: a.playersWithAny, earned: a.earnedTotal } : null;
+  const allFirst = a.allFirst ? { person: person(a.allFirst.player), atLabel: whenLabel(a.allFirst.at) } : null;
+
+  const days = a.byDay ?? [];
+  const busiest = days.reduce<(typeof days)[number] | null>((best, d) => (!best || d.earned > best.earned ? d : best), null);
+
+  const mine = you?.achievements ?? [];
+  const rarest = mine
+    .filter((x): x is typeof x & { earnedByPercent: number } => x.earnedByPercent !== undefined)
+    .sort((x, y) => x.earnedByPercent - y.earnedByPercent)
+    .slice(0, RAREST_SHOWN);
+
   return {
-    allFirst: a.allFirst ? { person: person(a.allFirst.player), atLabel: whenLabel(a.allFirst.at) } : null,
-    top: top.map((p) => {
+    kind: "achievements",
+    art,
+    leaderboard: top.map((p, i) => {
       const team = teamById.get(p.teamId);
       return {
         person: person(p.player),
-        placementLabel: ordinal(1 + top.filter((o) => o.earned > p.earned).length),
+        placementLabel: ordinal(a.top ? i + 1 : 1),
         earnedLabel: p.earned.toLocaleString(),
         outOfLabel: `of ${a.total.toLocaleString()}`,
         atLabel: p.lastEarnedAt ? whenLabel(p.lastEarnedAt) : null,
@@ -507,15 +541,39 @@ function achievementsOf(
         isMyTeam: p.teamId === myTeamId,
       };
     }),
+    participation:
+      counted || allFirst
+        ? {
+            playersLabel: counted ? `${counted.withAny.toLocaleString()} of ${plural(counted.players, "Player")}` : null,
+            percentLabel: counted ? percent(counted.withAny / counted.players) : null,
+            earnedLabel: counted ? `${counted.earned.toLocaleString()} earned` : null,
+            averageLabel: counted ? perPlayer(counted.earned, counted.players) : null,
+            allLabel: counted && a.allCount ? `${a.allCount.toLocaleString()} earned every one` : null,
+            allFirst,
+          }
+        : null,
     teams: teams.map((t) => ({
       teamId: t.teamId,
       name: teamById.get(t.teamId)!.name,
       color: teamById.get(t.teamId)!.color,
       placementLabel: ordinal(1 + teams.filter((o) => o.earned > t.earned).length),
       earnedLabel: t.earned.toLocaleString(),
-      averageLabel: `${(t.players ? t.earned / t.players : 0).toLocaleString(undefined, { maximumFractionDigits: 1 })} per Player`,
+      averageLabel: perPlayer(t.earned, t.players),
       isMine: t.teamId === myTeamId,
     })),
+    byDay:
+      days.length >= 2 && busiest
+        ? { days: days.map((d) => ({ dayLabel: shortDayLabel(d.date), earned: d.earned, isBusiest: d === busiest })), busiestLabel: `${shortDayLabel(busiest.date)}: ${busiest.earned.toLocaleString()}` }
+        : null,
+    you:
+      mine.length > 0
+        ? {
+            earnedLabel: mine.length.toLocaleString(),
+            outOfLabel: `of ${a.total.toLocaleString()}`,
+            rankLabel: you?.achievementRank ? `#${you.achievementRank.rank.toLocaleString()} of ${you.achievementRank.players.toLocaleString()}` : null,
+            rarest: rarest.map((x) => ({ key: x.key, name: x.name, itemName: x.itemName, percentLabel: `${x.earnedByPercent}%` })),
+          }
+        : null,
   };
 }
 

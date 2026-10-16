@@ -1041,22 +1041,51 @@ export interface WrappedBingoModel {
    * Wrapped published before it was stored.
    */
   bossLeaders: WrappedBossLeaderModel[];
+}
+
+/**
+ * The Achievements section (CONTEXT.md "Achievement"): who unlocked the most, how many took part, when, every Team, and
+ * the viewer's own place. Only told when the Bingo has Achievements switched on and someone earned one. Nothing in it
+ * names who earned a particular Achievement.
+ */
+export interface WrappedAchievementsModel {
+  kind: "achievements";
+  art: WrappedSectionArtModel;
   /**
-   * Achievements across the Bingo. Null when it has nothing to say, with Achievements switched off, and on a Wrapped
+   * "Most achievements by:": the top Players (up to 10), most first, a tie going to who got there first, so each has a
+   * place of their own: `earnedLabel` "14", `outOfLabel` "of 23", `atLabel` when they reached that many, and their
+   * Team. On a Wrapped published before the list was stored, only the Players tied for the most, without a Team or time.
+   */
+  leaderboard: { person: WrappedPersonModel; placementLabel: string; earnedLabel: string; outOfLabel: string; atLabel: string | null; teamName: string | null; teamColor: string | null; isMyTeam: boolean }[];
+  /**
+   * How many took part: `playersLabel` "72 of 80 Players" (who earned at least one), `percentLabel` "90%", `earnedLabel`
+   * "612 earned", `averageLabel` "7.7 per Player", `allLabel` "3 earned every one" (null when nobody did). Those are all
+   * null on a Wrapped published before they were stored. `allFirst` is "Completed all first, at:", with when their last
+   * one was earned ("Sat 14 Mar, 21:04"). Null with neither.
+   */
+  participation: {
+    playersLabel: string | null;
+    percentLabel: string | null;
+    earnedLabel: string | null;
+    averageLabel: string | null;
+    allLabel: string | null;
+    allFirst: { person: WrappedPersonModel; atLabel: string } | null;
+  } | null;
+  /** Every Team by its Players' Achievements added up: `earnedLabel` "212", `averageLabel` "10.1 per Player". Empty on a Wrapped published before it was stored. */
+  teams: { teamId: string; name: string; color: string | null; placementLabel: string; earnedLabel: string; averageLabel: string; isMine: boolean }[];
+  /**
+   * Achievements earned on each UTC day of the Bingo, from the first earn to the last ("Sat 12 Oct"; a day with none at
+   * 0), the busiest marked, and `busiestLabel` "Sat 12 Oct: 140". Null with fewer than 2 days, and on a Wrapped
    * published before it was stored.
    */
-  achievements: {
-    /**
-     * "Most achievements by:": the top Players (up to 5), most first, tied counts sharing a placement: `earnedLabel` "14",
-     * `outOfLabel` "of 23", `atLabel` when they reached that many, and their Team. On a Wrapped published before the
-     * list was stored, only the Players tied for the most, without a Team or time.
-     */
-    top: { person: WrappedPersonModel; placementLabel: string; earnedLabel: string; outOfLabel: string; atLabel: string | null; teamName: string | null; teamColor: string | null; isMyTeam: boolean }[];
-    /** "Completed all first, at:": `atLabel` when their last one was earned ("Sat 14 Mar, 21:04"). */
-    allFirst: { person: WrappedPersonModel; atLabel: string } | null;
-    /** Every Team by its Players' Achievements added up: `earnedLabel` "212", `averageLabel` "10.1 per Player". Empty on a Wrapped published before it was stored. */
-    teams: { teamId: string; name: string; color: string | null; placementLabel: string; earnedLabel: string; averageLabel: string; isMine: boolean }[];
-  } | null;
+  byDay: { days: { dayLabel: string; earned: number; isBusiest: boolean }[]; busiestLabel: string } | null;
+  /**
+   * The viewer's own place: `earnedLabel` "9", `outOfLabel` "of 23", `rankLabel` "#14 of 80" (null on a Wrapped
+   * published before it was stored), and their rarest Achievements, rarest first (up to 3), each with `percentLabel`
+   * "4%" of Players having it (empty on a Wrapped published before it was stored). Null for a viewer who isn't a Player
+   * or earned none.
+   */
+  you: { earnedLabel: string; outOfLabel: string; rankLabel: string | null; rarest: { key: string; name: string; itemName: string; percentLabel: string }[] } | null;
 }
 
 export interface WrappedOutroModel {
@@ -1163,7 +1192,16 @@ export interface WrappedTeamCardModel extends WrappedShareCardBase {
 
 export type WrappedShareCardModel = WrappedPlayerCardModel | WrappedTeamCardModel;
 
-export type WrappedSectionModel = WrappedIntroModel | WrappedYouModel | WrappedDuoModel | WrappedCaptainModel | WrappedModeratorModel | WrappedTeamModel | WrappedBingoModel | WrappedOutroModel;
+export type WrappedSectionModel =
+  | WrappedIntroModel
+  | WrappedYouModel
+  | WrappedDuoModel
+  | WrappedCaptainModel
+  | WrappedModeratorModel
+  | WrappedTeamModel
+  | WrappedBingoModel
+  | WrappedAchievementsModel
+  | WrappedOutroModel;
 export type WrappedSectionKind = WrappedSectionModel["kind"];
 
 export interface WrappedModel {
