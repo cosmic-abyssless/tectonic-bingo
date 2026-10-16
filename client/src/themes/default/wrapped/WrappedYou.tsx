@@ -148,10 +148,16 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
         </WrappedScene>
       )}
 
-      {(y.wom || y.draft) && (
-        <WrappedScene steps={2}>
-          {y.wom && (
+      {(y.effort || y.wom || y.draft) && (
+        <WrappedScene steps={Math.max(2, [y.effort, y.wom, y.draft].filter(Boolean).length)}>
+          {y.effort && (
             <Reveal step={0}>
+              <WrappedStat value={y.effort.hoursLabel} label="of Effort, at bosses your Team still needed" />
+              {(y.effort.shareLabel || y.effort.tileLabel) && <p className="mt-3 text-center text-on-surface-muted">{[y.effort.shareLabel, y.effort.tileLabel].filter(Boolean).join(" · ")}</p>}
+            </Reveal>
+          )}
+          {y.wom && (
+            <Reveal step={y.effort ? 1 : 0} className={y.effort ? "mt-14" : undefined}>
               <WrappedStat value={y.wom.ehbLabel} label="Efficient hours bossed" />
               {y.wom.bosses.length > 0 && (
                 <ul className="mt-6 flex flex-wrap justify-center gap-2">
@@ -165,7 +171,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
             </Reveal>
           )}
           {y.draft && (
-            <Reveal step={y.wom ? 1 : 0} className="mt-14 text-center">
+            <Reveal step={(y.effort ? 1 : 0) + (y.wom ? 1 : 0)} className="mt-14 text-center">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-muted">Draft day</p>
               <p className="mt-3 text-3xl font-bold">{y.draft.pickLabel}</p>
               <p className="mt-1 text-on-surface-muted">The {y.draft.positionLabel} Player off the board.</p>

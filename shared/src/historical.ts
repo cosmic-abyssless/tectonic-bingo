@@ -26,12 +26,13 @@ export interface HistoricalRecorded {
 
 /**
  * Whether a Title can't be judged for a Historical Bingo because its data was never recorded: the Wise Old Man-based
- * ones without snapshots, and Overachiever (Achievements are off for every Historical Bingo). Such a Title shows
- * NOT_RECORDED_HISTORICAL, never a holder picked from partial data. Always false for any other Bingo (`recorded` null).
+ * ones without snapshots, Unsung hero without Submissions too (Effort needs both), and Overachiever (Achievements are
+ * off for every Historical Bingo). Such a Title shows NOT_RECORDED_HISTORICAL, never a holder picked from partial data.
+ * Always false for any other Bingo (`recorded` null).
  */
 export function titleNotRecorded(title: { id: string; source: "bingo" | "wom" }, recorded: HistoricalRecorded | null): boolean {
   if (!recorded) return false;
-  if (title.source === "wom") return !recorded.womSnapshots;
+  if (title.source === "wom") return !recorded.womSnapshots || (title.id === "unsung_hero" && !recorded.submissions);
   return title.id === "overachiever";
 }
 

@@ -1,5 +1,6 @@
 // setup.ts's weighAnItem: the Counts as a run gives one Item after the import, sent back the way the board editor
-// sends a Task, and written by the real board service to the Draft board; and publishBoard, which publishes it.
+// sends a Task, and written by the real board service to the Draft board; editEffortBosses, an Admin adding and removing
+// Effort bosses on the Draft board; and publishBoard, which publishes them.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Database from "better-sqlite3";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
@@ -8,11 +9,12 @@ import * as schema from "../../db/schema";
 import { createTestDb } from "../../testUtils/testDb";
 import { eq } from "drizzle-orm";
 import { createTask, createTile, getBoardForViewer, getBoardTiles, updateNode } from "../../services/boardService";
-import { editDraft, getDraftStatus, getEditorBoard, getPublishPreview, publishDraft } from "../../services/boardDraftService";
+import { editDraft, editorTables, getDraftStatus, getEditorBoard, getPublishPreview, publishDraft } from "../../services/boardDraftService";
 import { DRAFT_BOARD } from "../../services/boardTables";
 import { exportBingo, importBingo as realImport } from "../../services/bingoExportService";
 import { getBoardTags } from "../../services/tagService";
-import { goLive, importBingo, planGoLive, publishBoard, weighAnItem, type Ctx } from "./setup";
+import { changeEffortBoss, effectiveBosses, getBoardEffortBosses } from "../../services/effortBossService";
+import { editEffortBosses, goLive, importBingo, planGoLive, publishBoard, weighAnItem, type Ctx } from "./setup";
 import { Rng } from "./rng";
 
 vi.mock("../../ws", () => ({ broadcast: vi.fn() }));
@@ -43,7 +45,7 @@ function seed() {
 }
 
 // A Ctx whose requests go straight to the board services, as the admin routes would.
-function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[]) {
+function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[], seed = 1) {
   const patches: { path: string; body: GraphNodeInput }[] = [];
   const posts: { path: string; body: unknown }[] = [];
   const session = {
@@ -51,6 +53,7 @@ function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[]) {
       if (path.endsWith("/admin/board-draft")) return getEditorBoard(db, bingo.id);
       if (path.endsWith("/admin/board-draft/status")) return { status: getDraftStatus(db, bingo.id) };
       if (path.endsWith("/admin/board-draft/preview")) return { preview: getPublishPreview(db, bingo.id) };
+      if (path.endsWith("/admin/effort-bosses")) return getBoardEffortBosses(db, bingo.id, editorTables(db, bingo.id));
       throw new Error(`unexpected GET ${path}`);
     },
     patch: async (path: string, body: GraphNodeInput) => {
@@ -59,11 +62,13 @@ function ctxFor(bingo: typeof schema.bingos.$inferSelect, log: string[]) {
     },
     post: async (path: string, body: { revision: string }) => {
       posts.push({ path, body });
+      const part = /\/admin\/parts\/([^/]+)\/effort-bosses$/.exec(path);
+      if (part) return editDraft(db, bingo.id, null, (t) => changeEffortBoss(db, bingo.id, { partId: part[1]! }, body as unknown as { metric: string; mode: string }, t));
       if (!path.endsWith("/admin/board-draft/publish")) throw new Error(`unexpected POST ${path}`);
       return publishDraft(db, bingo, body.revision);
     },
   };
-  const ctx = { api: { as: () => session }, slug: bingo.slug, admin: "admin", log: (m: string) => log.push(m) } as unknown as Ctx;
+  const ctx = { api: { as: () => session }, rng: new Rng(seed), slug: bingo.slug, admin: "admin", log: (m: string) => log.push(m) } as unknown as Ctx;
   return { ctx, patches, posts };
 }
 
@@ -115,6 +120,57 @@ describe("publishBoard", () => {
     const { ctx, posts } = ctxFor(bingo, []);
     await publishBoard(ctx, new Date());
     expect(posts).toHaveLength(0);
+  });
+});
+
+// Effort bosses (CONTEXT.md "Effort"): a run adds one to a Part whose Items give it none and removes a derived one from
+// another, through the board editor's endpoints, and publishBoard publishes them.
+describe("editEffortBosses", () => {
+  function effortSeed() {
+    const { bingo } = seed();
+    const vork = getBoardTiles(db, bingo.id).find((t) => t.name === "Vorkath")!;
+    // A Part whose Items come from two bosses (Zulrah's fang, Vorkath's head).
+    createTask(db, vork.id, { kind: "ALL", label: "Page 2", points: 20, children: [{ kind: "ITEM", itemName: "Tanzanite fang" }, { kind: "ITEM", itemName: "Vorkath's head" }] }, 1);
+    return bingo;
+  }
+  const partsByLabel = (bingoId: string) =>
+    new Map(getBoardTiles(db, bingoId).flatMap((t) => t.node.children.map((p) => [`${t.name} ${p.label}`, effectiveBosses(db, bingoId).get(p.id)!] as const)));
+
+  it("adds a Board boss to a bare Part and removes one from a Part with two, on the Draft board until it's published", async () => {
+    const bingo = effortSeed();
+    const log: string[] = [];
+    const { ctx, posts } = ctxFor(bingo, log);
+    expect(partsByLabel(bingo.id)).toEqual(new Map([["Vorkath Head", ["vorkath"]], ["Vorkath Page 2", ["vorkath", "zulrah"]], ["Wintertodt Page 1", []]]));
+    await editEffortBosses(ctx, new Date());
+
+    expect(posts.map((p) => (p.body as unknown as { mode: string }).mode)).toEqual(["add", "remove"]);
+    expect(partsByLabel(bingo.id).get("Wintertodt Page 1")).toEqual([]);
+    await publishBoard(ctx, new Date());
+    const after = partsByLabel(bingo.id);
+    const [added, removed] = posts.map((p) => (p.body as unknown as { metric: string }).metric);
+    expect(after.get("Wintertodt Page 1")).toEqual([added]);
+    expect(after.get("Vorkath Page 2")).toEqual(["vorkath", "zulrah"].filter((m) => m !== removed));
+    expect(after.get("Vorkath Head")).toEqual(["vorkath"]);
+    expect(log.slice(0, 2)).toEqual([
+      `Effort boss ${added === "vorkath" ? "Vorkath" : "Zulrah"} added to "Wintertodt Page 1"`,
+      `Effort boss ${removed === "vorkath" ? "Vorkath" : "Zulrah"} removed from "Vorkath Page 2"`,
+    ]);
+    expect(log.at(-1)).toMatch(/^published the board/);
+  });
+
+  it("makes the same changes for the same seed", async () => {
+    const logs: string[][] = [];
+    for (const run of [0, 1]) {
+      if (run > 0) {
+        sqlite.close();
+        ({ sqlite, db } = createTestDb());
+      }
+      const log: string[] = [];
+      await editEffortBosses(ctxFor(effortSeed(), log, 7).ctx, new Date());
+      logs.push(log);
+    }
+    expect(logs[1]).toEqual(logs[0]);
+    expect(logs[0]).toHaveLength(2);
   });
 });
 

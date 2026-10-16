@@ -1,7 +1,7 @@
 // Wrapped (CONTEXT.md "Wrapped"): the story's sections, built from the published data (MyWrappedResponse) as it is.
 // Nothing here recomputes a stat: it picks what to say, words it, and leaves out every part (and every section) that
 // has nothing to say for this viewer. Pure, so it's tested without React.
-import { achievementDef, isAchievementKey, type AvatarUser, type MyWrappedResponse, type WrappedArtSection, type WrappedCaptain, type WrappedDrop, type WrappedPointsPoint, type WrappedTeam } from "@bingo/shared";
+import { achievementDef, isAchievementKey, type AvatarUser, type MyWrappedResponse, type WrappedArtSection, type WrappedCaptain, type WrappedDrop, type WrappedPointsPoint, type WrappedTeam, type WrappedYou } from "@bingo/shared";
 import { thumbUrl } from "../api/imageVariants";
 import { wikiIconUrl } from "../api/wikiIcons";
 import { formatGp } from "../core/ui/gp";
@@ -75,6 +75,11 @@ export function shortDuration(ms: number): string {
 const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
 /** A Points share, as the Stats page shows it: up to two decimals. */
 const share = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+/** Effort's hours, always to one decimal place ("14.2"), and its share of the Team's to at most one ("23%", "23.4%"). */
+const effortHours = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const effortShare = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+/** Effort worth showing: recorded (Wrapped published before it has none) and at least a tenth of an hour. */
+const shownEffort = (effort: WrappedYou["effort"]) => (effort && effort.hours >= 0.05 ? effort : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 const whenLabel = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -247,6 +252,7 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
     const valued = y.topDrops.filter((d) => d.gpValue !== null && d.gpValue > 0);
     const achievedAt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
     const bosses = (y.wom?.bosses ?? []).filter((b) => b.kills > 0);
+    const effort = shownEffort(y.effort);
     const you: WrappedYouModel = {
       kind: "you",
       art: art("you"),
@@ -288,6 +294,13 @@ export function buildWrappedStory(data: MyWrappedResponse, opts: WrappedStoryOpt
         earnedLabel: achievedAt(a.earnedAt),
       })),
       wom: y.wom && (y.wom.ehb > 0 || bosses.length > 0) ? { ehbLabel: y.wom.ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }), bosses: bosses.map((b) => ({ name: b.name, killsLabel: plural(b.kills, "kill") })) } : null,
+      effort: effort
+        ? {
+            hoursLabel: `${effortHours(effort.hours)} hours`,
+            shareLabel: effort.share !== null ? `${effortShare(effort.share)} of your Team's Effort` : null,
+            tileLabel: effort.topTile ? `Most at ${effort.topTile.name} (${effortHours(effort.topTile.hours)} h)` : null,
+          }
+        : null,
       draft: y.draft ? { pickLabel: `Pick ${y.draft.pickNumber}`, positionLabel: ordinal(y.draft.position) } : null,
     };
     const { kind: _kind, art: _art, titles, achievements, topDrops, ...parts } = you;
@@ -572,6 +585,7 @@ export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, s
   const luck = luckiest && dropLuck(luckiest.luckOneIn, luckiest.luckKills);
   const topIsLuckiest = !!top && !!luckiest && top.submissionId === luckiest.submissionId && top.itemName === luckiest.itemName;
   const ehb = y.wom?.ehb ?? 0;
+  const effort = shownEffort(y.effort);
   const playerCard: WrappedPlayerCardModel = {
     ...base("player", "Player card"),
     kind: "player",
@@ -595,13 +609,14 @@ export function shareCards(data: MyWrappedResponse, opts: WrappedStoryOptions, s
     submissions: y.submissions > 0 ? { countLabel: y.submissions.toLocaleString(), comparisonLabel: y.bingoAverageSubmissions > 0 ? `${timesLabel(y.submissions / y.bingoAverageSubmissions)} avg` : null } : null,
     achievementsLabel: y.achievements.length > 0 ? y.achievements.length.toLocaleString() : null,
     ehbLabel: y.wom && ehb > 0 ? ehb.toLocaleString(undefined, { maximumFractionDigits: 1 }) : null,
+    effort: effort ? { hoursLabel: `${effortHours(effort.hours)} h`, shareLabel: effort.share !== null ? `${effortShare(effort.share)} of Team` : null } : null,
     titles: y.titles.slice(0, CARD_TITLES).map((t) => ({ id: t.id, name: t.name })),
     topDrop: top ? { ...cardDrop(top), isLuckiest: topIsLuckiest, luckLabel: topIsLuckiest && luck ? luck.chanceLabel : null } : null,
     luckiestDrop: luckiest && luck && !topIsLuckiest ? { ...cardDrop(luckiest), luckLabel: luck.chanceLabel } : null,
     driestStreak: y.driestStreak && y.driestStreak.kills > 0 ? { boss: y.driestStreak.boss, killsLabel: plural(y.driestStreak.kills, "kill"), chanceLabel: formatOneIn(y.driestStreak.oneIn) } : null,
   };
   const p = playerCard;
-  if (p.pointsShare || p.dropValueLabel || p.submissions || p.achievementsLabel || p.ehbLabel || p.titles.length || p.draftLabel || p.topDrop || p.luckiestDrop || p.driestStreak) {
+  if (p.pointsShare || p.dropValueLabel || p.submissions || p.achievementsLabel || p.ehbLabel || p.effort || p.titles.length || p.draftLabel || p.topDrop || p.luckiestDrop || p.driestStreak) {
     cards.push(playerCard);
   }
 

@@ -17,6 +17,7 @@ import { collectLabeledConditions, collectSharedNodeIds } from "../board/require
 import { thumbUrl } from "../../api/imageVariants";
 import { FileDropButton } from "../ui/FileDropButton";
 import { TagsField } from "./TagsField";
+import { EffortBossesField } from "./EffortBossesField";
 
 // Every ALL/ANY/COUNT/SUM block on this tile (including a whole task's own
 // root), labeled by which task it's under and a dot-notation index within it
@@ -208,6 +209,9 @@ function TileEditor({ slug, themeKey, tile, categories, locked, onClose }: { slu
               )}
               <div className="col-span-2">
                 <TagsField slug={slug} owner={{ tileId: tile.id }} locked={!!locked} hint="Words the board's search finds this tile by, e.g. kq or a common misspelling. Players never see them." />
+              </div>
+              <div className="col-span-2">
+                <EffortBossesField slug={slug} owner={{ tileId: tile.id }} tileId={tile.id} parts={tile.node.children.map((p) => ({ id: p.id, label: p.label }))} locked={!!locked} />
               </div>
             </div>
           </div>

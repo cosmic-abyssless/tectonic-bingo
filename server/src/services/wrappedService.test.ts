@@ -540,6 +540,43 @@ describe("who killed each raid and boss the most", () => {
   });
 });
 
+describe("each Player's Effort", () => {
+  /** A Wise Old Man snapshot with per-boss EHB (null: stored before per-boss EHB was kept), `at` minutes into the Bingo. */
+  function snapshot(fx: Fx, userId: string, at: number, bossEhb: Record<string, number> | null) {
+    db.insert(schema.womSnapshots)
+      .values({ bingoId: fx.bingo.id, userId, takenAt: t(at), ehb: 0, ehp: 0, clues: 0, bossKillsJson: "{}", bossEhbJson: bossEhb ? JSON.stringify(bossEhb) : null })
+      .run();
+  }
+
+  it("gives their hours, their share of the Team's Effort and the Tile they put the most into, null without per-boss EHB", () => {
+    const fx = seed();
+    // Nothing is completed, so every Part is open all Bingo. Vorkath counts toward the head; Zulrah's hours split between
+    // the fang (ZULRAH) and the scales (VORKATH).
+    snapshot(fx, fx.alice.id, -10, { vorkath: 10, zulrah: 0 });
+    snapshot(fx, fx.alice.id, 500, { vorkath: 16, zulrah: 2 });
+    snapshot(fx, fx.carol.id, -10, { vorkath: 0 });
+    snapshot(fx, fx.carol.id, 500, { vorkath: 2 });
+    snapshot(fx, fx.bob.id, -10, null);
+    snapshot(fx, fx.bob.id, 500, null);
+    const { players } = computeWrapped(db, finish(fx));
+    const of = (id: string) => players.find((p) => p.userId === id)!.you.effort;
+
+    expect(of(fx.alice.id)).toEqual({ hours: 8, share: 80, topTile: { name: "VORKATH", hours: 7 } });
+    expect(of(fx.carol.id)).toEqual({ hours: 2, share: 20, topTile: { name: "VORKATH", hours: 2 } });
+    expect(of(fx.dave.id)).toBeNull();
+    expect(of(fx.bob.id)).toBeNull();
+  });
+
+  it("is null for everyone when no snapshot has per-boss EHB", () => {
+    const fx = seed();
+    snapshot(fx, fx.alice.id, -10, null);
+    snapshot(fx, fx.alice.id, 500, null);
+    play(fx);
+    const { players } = computeWrapped(db, finish(fx));
+    expect(players.every((p) => p.you.effort === null)).toBe(true);
+  });
+});
+
 describe("the Bingo's list of raids and bosses", () => {
   it("starts as the default, and saving it unchanged changes nothing", () => {
     const fx = seed();

@@ -49,7 +49,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   // routes/admin.ts, mounted at /api/bingos/:slug/admin
   "PATCH /api/bingos/:slug/admin/settings": ["settings.updated"],
   "POST /api/bingos/:slug/admin/discord/remove": ["settings.updated", "discord.removed"],
-  // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, tags, and the Exclusive Item rules and
+  // The Draft board (CONTEXT.md): its edits (categories, tiles, tasks, lines, tags, Effort bosses, and the Exclusive Item rules and
   // Rules text at .../board-draft/rules) are auditSkip()'d, audited instead by the Publish that applies them.
   "POST /api/bingos/:slug/admin/board-draft/publish": ["board.published", "points.rescored"],
   "POST /api/bingos/:slug/admin/board-draft/discard": ["board.discarded"],
@@ -93,6 +93,7 @@ export const AUDITED_ROUTES: Record<string, AuditAction[]> = {
   "PUT /api/admin/notification-folding": ["notification_folding.updated"],
   "POST /api/admin/bingos/import": ["bingo.created", "settings.updated", "category.created", "tile.created", "task.created", "line.generated", "line.updated", "question.created"],
   "DELETE /api/admin/bingos/:id": ["bingo.deleted"],
+  "POST /api/admin/bingos/:slug/wom-reread": ["bingo.wom_reread"],
   "POST /api/admin/historical-bingos": ["bingo.historical_imported"],
   "PATCH /api/admin/users/:id": ["user.admin_changed", "mcp.connection_revoked"],
   "PUT /api/admin/users/:id/mcp-access": ["user.mcp_access_changed", "mcp.connection_revoked"],

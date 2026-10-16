@@ -498,6 +498,13 @@
       "when": 1792105837079,
       "tag": "0072_mcp_access",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1792132301483,
+      "tag": "0073_effort",
+      "breakpoints": true
     }
   ]
 }

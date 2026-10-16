@@ -41,6 +41,7 @@ import {
   superlativeCategories,
   superlativeVotes,
   tags,
+  effortBosses,
   tiles,
   users,
   womPastCompetitions,
@@ -54,6 +55,7 @@ import {
   draftNodes,
   draftTileCategories,
   draftTags,
+  draftEffortBosses,
   draftTiles,
 } from "../db/schema";
 import { ServiceError } from "./errors";
@@ -508,6 +510,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(signupQuestions).where(eq(signupQuestions.bingoId, bingoId)).run();
     // The Draft board (CONTEXT.md), if any: the same tables over again.
     tx.delete(draftTags).where(eq(draftTags.bingoId, bingoId)).run();
+    tx.delete(draftEffortBosses).where(eq(draftEffortBosses.bingoId, bingoId)).run();
     tx.delete(draftBingoLines).where(eq(draftBingoLines.bingoId, bingoId)).run();
     tx.delete(draftTiles).where(eq(draftTiles.bingoId, bingoId)).run();
     tx.delete(draftNodeEdges).where(inArray(draftNodeEdges.parentId, tx.select({ id: draftNodes.id }).from(draftNodes).where(eq(draftNodes.bingoId, bingoId)))).run();
@@ -516,6 +519,7 @@ export function deleteBingo(db: Db, bingoId: string): { files: string[] } {
     tx.delete(boardDrafts).where(eq(boardDrafts.bingoId, bingoId)).run();
     tx.delete(bingoLines).where(eq(bingoLines.bingoId, bingoId)).run();
     tx.delete(tags).where(eq(tags.bingoId, bingoId)).run();
+    tx.delete(effortBosses).where(eq(effortBosses.bingoId, bingoId)).run();
     tx.delete(tiles).where(eq(tiles.bingoId, bingoId)).run();
     tx.delete(tileCategories).where(eq(tileCategories.bingoId, bingoId)).run();
     tx.delete(nodeEdges).where(inArray(nodeEdges.parentId, nodeIds)).run();

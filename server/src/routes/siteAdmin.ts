@@ -14,6 +14,7 @@ import * as notificationDm from "../services/notificationDm";
 import * as bugReportService from "../services/bugReportService";
 import * as pastWomCompetitionService from "../services/pastWomCompetitionService";
 import * as userService from "../services/userService";
+import { rereadBingo } from "../services/womReadService";
 import * as mcpConnections from "../mcp/connections";
 import { userSiteRoles } from "../services/permissions";
 import { ServiceError } from "../services/errors";
@@ -94,6 +95,17 @@ router.delete(
     // And the Discord roles and channels made for its Teams (their rows outlive the bingo for this). Fire-and-forget.
     void removeDiscordTeams(db, req.params.id as string);
     res.status(204).end();
+  }),
+);
+
+// Site admin > Bingos > Re-read Wise Old Man: reads a Finished Bingo's snapshots from Wise Old Man again, in the
+// background through the paced read queue, to fill in what older reads didn't keep (per-boss EHB, for Effort).
+router.post(
+  "/bingos/:slug/wom-reread",
+  asyncHandler(async (req, res) => {
+    const bingo = bingoService.getBingoBySlug(db, req.params.slug as string);
+    if (!bingo) throw new ServiceError(404, "Bingo not found");
+    res.json({ players: rereadBingo(db, bingo.id) });
   }),
 );
 

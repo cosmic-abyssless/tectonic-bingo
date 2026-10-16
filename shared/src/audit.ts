@@ -70,6 +70,8 @@ export interface AuditDetailsMap {
 
   /** The last of a Historical Bingo's pending screenshots was attached (one entry for them all, not one each). */
   "bingo.historical_screenshots_attached": { slug: string; name: string; screenshots: number };
+  /** A Site admin had a Finished Bingo read from Wise Old Man again (womReadService.rereadBingo): `players` queued. */
+  "bingo.wom_reread": { slug: string; name: string; players: number };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
   /** MCP access (CONTEXT.md) granted or revoked from Site admin > Users. */
@@ -153,6 +155,11 @@ export interface AuditDetailsMap {
    */
   "tag.added": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
   "tag.removed": { tileName: string; partLabel?: string | null; kind: TagKind; text: string; aliases?: number };
+  /**
+   * A Tile's or Part's Effort bosses (CONTEXT.md "Effort") changed: `boss` (a Wise Old Man boss's name) was added,
+   * removed, or reset to what its Items derive. Edits on the Draft board aren't recorded one by one (Publish is).
+   */
+  "board.effort_boss_changed": { tileName: string; partLabel?: string | null; boss: string; change: "added" | "removed" | "reset" };
 
   "task.created": { tileId: string; tileName: string; after: TaskSnapshot };
   "task.updated": { tileId: string; tileName: string; before: TaskSnapshot; after: TaskSnapshot };
@@ -534,6 +541,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     title: "Historical screenshots attached",
     label: (i) => `${actor(i)} attached the last of the historical Bingo "${i.details.name}"'s ${i.details.screenshots} screenshots`,
   },
+  "bingo.wom_reread": {
+    category: "bingo",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wise Old Man re-read",
+    label: (i) => `${actor(i)} had the bingo "${i.details.name}" read from Wise Old Man again (${i.details.players} players)`,
+  },
   "user.admin_changed": {
     category: "moderation",
     tone: "warn",
@@ -723,6 +737,18 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
   },
   "tag.added": { category: "board", tone: "ok", visibility: "mods", title: "Tag added", label: (i) => `${actor(i)} added ${describeTag(i.details)} to ${tagOwner(i.details)}` },
   "tag.removed": { category: "board", tone: "danger", visibility: "mods", title: "Tag removed", label: (i) => `${actor(i)} removed ${describeTag(i.details)} from ${tagOwner(i.details)}` },
+  "board.effort_boss_changed": {
+    category: "board",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Effort bosses changed",
+    label: (i) =>
+      i.details.change === "added"
+        ? `${actor(i)} added ${i.details.boss} to ${tagOwner(i.details)}'s Effort bosses`
+        : i.details.change === "removed"
+          ? `${actor(i)} removed ${i.details.boss} from ${tagOwner(i.details)}'s Effort bosses`
+          : `${actor(i)} set ${i.details.boss} on ${tagOwner(i.details)} back to what its Items derive`,
+  },
   // The tile's name can be missing: entries whose details went over the size cap before it kept the small fields.
   "task.created": { category: "board", tone: "ok", visibility: "mods", title: "Task created", label: (i) => `${actor(i)} added a task${onTile("to", i.details.tileName)}` },
   "task.updated": { category: "board", tone: "neutral", visibility: "mods", title: "Task updated", label: (i) => `${actor(i)} updated a task${onTile("on", i.details.tileName)}` },

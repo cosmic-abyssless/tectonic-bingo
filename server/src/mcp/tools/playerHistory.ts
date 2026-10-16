@@ -27,7 +27,14 @@ function timelineOf(db: Db, bingoId: string, userId: string): WomSnapshot[] {
     .where(and(eq(womSnapshots.bingoId, bingoId), eq(womSnapshots.userId, userId)))
     .orderBy(womSnapshots.takenAt)
     .all()
-    .map((r) => ({ at: r.takenAt, bossKills: JSON.parse(r.bossKillsJson) as WomSnapshot["bossKills"], ehb: r.ehb, ehp: r.ehp, clues: r.clues }));
+    .map((r) => ({
+      at: r.takenAt,
+      bossKills: JSON.parse(r.bossKillsJson) as WomSnapshot["bossKills"],
+      bossEhb: r.bossEhbJson === null ? {} : (JSON.parse(r.bossEhbJson) as WomSnapshot["bossEhb"]),
+      ehb: r.ehb,
+      ehp: r.ehp,
+      clues: r.clues,
+    }));
 }
 
 export const playerHistory = defineTool({

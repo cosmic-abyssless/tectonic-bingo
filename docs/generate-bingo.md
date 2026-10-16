@@ -94,7 +94,10 @@ target (say `signup`), the later dates are simply scheduled in the future.
    Item that **counts as** more than one (CONTEXT.md "Counts as"), the admin then gives one such a weight in the
    Task's PATCH, as the board editor would: the last Item of the first SUM over two or more Items with a total of at
    least 3 counts as a quarter of that total (from 2, at most 25). Drops of it count for that much, so it takes fewer.
-   That PATCH goes to the **Draft board** (CONTEXT.md), as every board edit does, so the admin then **publishes** it
+   The admin also changes two Parts' **Effort bosses** (CONTEXT.md "Effort") through the board editor's endpoints
+   (`setup.ts` `editEffortBosses`, seeded): adds one of the Board's bosses to a Part whose Items give it none, and
+   removes a derived boss from another Part (one with two or more where there is one).
+   Those edits go to the **Draft board** (CONTEXT.md), as every board edit does, so the admin then **publishes** them
    through the Publish endpoint, the way the Publish screen does (its preview, then a Publish of the revision it
    showed): the Bingo plays on the board it set up, and its audit log shows "Board published". The import itself is
    the Published board, so a run with no board edit publishes nothing.
@@ -157,7 +160,7 @@ target (say `signup`), the later dates are simply scheduled in the future.
    goes through is a sanity check failure). Then, for `complete`, the mods clear the
    queue and an admin completes the bingo. Every player on a team is then given made-up
    **Wise Old Man snapshots** up to the end of the run (see below), so Grinder, the luck
-   Titles (Spoon, Dry, Clutch) and the achievements that read WOM have something to judge. For `complete` the
+   Titles (Spoon, Dry, Clutch), **Effort** and the achievements that read WOM have something to judge. For `complete` the
    Players then answer the **Feedback form** through its endpoint, about 70% of a Team's Players and most Captains
    (a Captain also answering the Captains-only questions), a few editing what they sent; the run checks the
    results' counts against what it sent. The run's own player (`--me`) never answers, so their card is still there to
@@ -209,8 +212,12 @@ target (say `signup`), the later dates are simply scheduled in the future.
   players keep going at a Board boss after their last drop, or at one they've had nothing from,
   for as long as a real dry streak would last: that's Dry. About a third of the players also run
   each of the raids and bosses Wrapped looks at (the Bingo's list), a few kills a day, so Wrapped
-  shows who killed each the most. EHB follows the time they play, not
-  the kills. Snapshots come every few hours plus one shortly after each drop, from a baseline
+  shows who killed each the most. EHB follows the time they play, not the kills: each player has a budget of
+  hours over the Bingo (up to about a third of it, by how much of the day they play; most well under). Each boss's
+  EHB is its kills over that boss's kills an hour (roughly Wise Old Man's main-account rates, `KILLS_PER_HOUR`),
+  which is what Effort counts; where the kills gained come to more hours than the budget leaves, every boss's gain
+  is scaled down to fit. The total EHB is the bosses' plus a modest filler for bosses the generator doesn't model,
+  so the two agree. Snapshots come every few hours plus one shortly after each drop, from a baseline
   before the start. The simulation hands out rare drops more often than real play would, so
   Spoon's luckiest players read luckier than a real bingo's.
 

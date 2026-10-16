@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import type { LuckFacts, LuckWeights, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
+import type { LuckFacts, LuckWeights, PlayerEffort, PlayerTitleFacts, TileHeatmapCell, TileProgress, TitleAwardFact, TitleSettings, ValuedAs } from "@bingo/shared";
 import { valuedAsOf } from "./gpValueService";
 import * as schema from "../db/schema";
 import { bingoLines, bingos, claims, draftPicks, nodeEdges, nodes, stageTransitions, submissions, teamMembers, teamNodeState, teamPointAdjustments, teams, tiles, users } from "../db/schema";
@@ -21,6 +21,7 @@ import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
 import { getBingoTitleSettings } from "./titleSettingsService";
 import { keptStats } from "./statsCache";
+import { computeEffort, type EffortResult } from "./effortService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -220,6 +221,8 @@ export interface ContributionCount {
   /** Total drop value (CONTEXT.md): Drop values of this player's approved claims. */
   gpGained: number;
   awards: ContributionAward[];
+  /** Effort (CONTEXT.md); null when not recorded. */
+  effort: PlayerEffort | null;
 }
 
 /** A Team's exclusivity-filtered approved Claims, and the awards they earned. */
@@ -277,10 +280,12 @@ export function getPointsShares(db: Db, bingoId: string, teamCredits = getTeamCr
 }
 
 // Every member of every team with their approved submissions and Points share, highest share first. Members
-// with nothing approved yet are included at 0, so a team sees its whole roster.
-export function getContributionCounts(db: Db, bingoId: string, shares = getPointsShares(db, bingoId)): ContributionCount[] {
+// with nothing approved yet are included at 0, so a team sees its whole roster. `effort` is computeEffort's result,
+// passed in by a caller that also needs it, else computed here.
+export function getContributionCounts(db: Db, bingoId: string, shares = getPointsShares(db, bingoId), effort?: EffortResult | null): ContributionCount[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   if (teamIds.length === 0) return [];
+  const efforts = (effort !== undefined ? effort : computeEffort(db, db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!))?.players;
 
   const teamByUser = new Map<string, string>();
   for (const m of db.select({ userId: teamMembers.userId, teamId: teamMembers.teamId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all()) teamByUser.set(m.userId, m.teamId);
@@ -355,6 +360,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
         pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
         gpGained: gpByUser.get(userId) ?? 0,
         awards,
+        effort: efforts?.get(userId) ?? null,
       };
     })
     .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
@@ -516,7 +522,8 @@ function luckFacts(
 
 /**
  * What Titles (shared/titles.ts) are picked from: one entry per Player of `contributions`, built from their awards
- * (with when each completed and whether they closed it), their Submissions and Claims, and their Wise Old Man gains.
+ * (with when each completed and whether they closed it), their Submissions and Claims, their Wise Old Man gains, and
+ * the Effort `contributions` carry (so Effort is computed once, by getContributionCounts).
  */
 export function getTitleFacts(
   db: Db,
@@ -626,6 +633,7 @@ export function getTitleFacts(
       totalQuantity: quantity.get(c.userId) ?? 0,
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
+      effort: c.effort && { uncompletedHours: c.effort.uncompletedHours, asOf: c.effort.asOf },
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
       draft: draft.get(c.userId) ?? null,
       lastAt: {
@@ -661,13 +669,15 @@ export interface Stats {
   /** The Title settings for picking holders: which Titles are on and their minimums. A Finished Bingo's frozen copy (#221). */
   titleSettings: TitleSettings;
   womReadAt: Date | null;
+  tileEffort: { tileId: string; teamId: string; userId: string; hours: number }[];
 }
 
 export function getStats(db: Db, bingoId: string): Stats {
   const teamCredits = getTeamCredits(db, bingoId);
   const shares = getPointsShares(db, bingoId, teamCredits);
-  const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  const effort = computeEffort(db, bingo);
+  const contributions = getContributionCounts(db, bingoId, shares, effort);
   const titleSettings = getBingoTitleSettings(db, bingo);
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
@@ -680,6 +690,7 @@ export function getStats(db: Db, bingoId: string): Stats {
     titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
     titleSettings,
     womReadAt: lastReadAt(db, bingoId),
+    tileEffort: effort?.tileEffort ?? [],
   };
 }
 
@@ -699,6 +710,7 @@ export function filterStatsForTeam(stats: Stats, teamId: string): Stats {
     titleContext: stats.titleContext,
     titleSettings: stats.titleSettings,
     womReadAt: stats.womReadAt,
+    tileEffort: own(stats.tileEffort),
   };
 }
 

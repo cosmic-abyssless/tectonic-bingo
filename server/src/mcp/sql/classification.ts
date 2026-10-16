@@ -37,6 +37,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
   draft_tile_categories: { denied: "The Draft board's unpublished Categories." },
   draft_bingo_lines: { denied: "The Draft board's unpublished Lines." },
   draft_tags: { denied: "The Draft board's unpublished Tags." },
+  draft_effort_bosses: { denied: "The Draft board's unpublished Effort bosses." },
   // Notifications (CONTEXT.md): one user's own settings, Inbox, offers, presence and Discord DMs. Personal, not balancing data.
   notification_settings: { denied: "A user's own Notification settings." },
   user_settings: { denied: "A user's own User settings (their Board size)." },
@@ -279,8 +280,18 @@ export const SQL_TABLES: Record<string, TableClass> = {
 
   // ---- Wise Old Man ----------------------------------------------------------------------------------------------
   wom_snapshots: {
-    note: "Wise Old Man snapshots of each Player during a Bingo (EHB, EHP, clues, boss kill counts).",
-    columns: { id: "", bingo_id: "", user_id: "", taken_at: TS, ehb: "", ehp: "", clues: "", boss_kills_json: "{ boss metric: kills }" },
+    note: "Wise Old Man snapshots of each Player during a Bingo (EHB, EHP, clues, boss kill counts, EHB per boss).",
+    columns: {
+      id: "",
+      bingo_id: "",
+      user_id: "",
+      taken_at: TS,
+      ehb: "",
+      ehp: "",
+      clues: "",
+      boss_kills_json: "{ boss metric: kills }",
+      boss_ehb_json: "{ boss metric: EHB }, bosses with some only; null on rows read before it was kept",
+    },
   },
   wom_reads: {
     note: "Where each Player's snapshot reads stand.",
@@ -403,6 +414,17 @@ export const SQL_TABLES: Record<string, TableClass> = {
       text: "",
       boss_tag_id: "A Text tag a Boss tag added (one of the wiki's names for the boss): that Boss tag",
       sort_order: "The order they were added in, per Tile or Part",
+    },
+  },
+  effort_bosses: {
+    note: "An Admin's changes to the Wise Old Man bosses a Part's Effort counts (CONTEXT.md \"Effort\"), on a Tile (tile_id: all its Parts) or one of its Parts (node_id). A Part's bosses are otherwise derived from its Items.",
+    columns: {
+      id: "",
+      bingo_id: "",
+      tile_id: "Set for a change to every Part of the Tile",
+      node_id: "nodes.id of the Part, for a change to one Part",
+      metric: "Wise Old Man boss metric",
+      mode: "add (a boss its Items don't derive) or remove (a derived or Tile-added boss)",
     },
   },
   bingo_lines: {

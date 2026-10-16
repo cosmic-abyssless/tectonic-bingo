@@ -278,7 +278,7 @@ function StripDrop({ drop, tag, detail, coins }: { drop: WrappedShareCardDropMod
 }
 
 /** What a full Player card leaves out, in this order, while it doesn't fit: text is never shrunk to cram them in. */
-const LEAVE_OUT = ["driestStreak", "ehb", "achievements"] as const;
+const LEAVE_OUT = ["effort", "driestStreak", "ehb", "achievements"] as const;
 type Optional = (typeof LEAVE_OUT)[number];
 
 /**
@@ -287,7 +287,7 @@ type Optional = (typeof LEAVE_OUT)[number];
  */
 function useFit(card: WrappedPlayerCardModel) {
   const ref = useRef<HTMLDivElement>(null);
-  const has: Record<Optional, boolean> = { driestStreak: !!card.driestStreak, ehb: !!card.ehbLabel, achievements: !!card.achievementsLabel };
+  const has: Record<Optional, boolean> = { effort: !!card.effort, driestStreak: !!card.driestStreak, ehb: !!card.ehbLabel, achievements: !!card.achievementsLabel };
   const present = LEAVE_OUT.filter((f) => has[f]);
   const [fit, setFit] = useState({ card, left: 0 });
   const left = fit.card === card ? fit.left : 0;
@@ -320,6 +320,7 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
     card.submissions && `${card.submissions.countLabel} submissions${card.submissions.comparisonLabel ? ` (${card.submissions.comparisonLabel})` : ""}`,
     fit.shows("achievements") && `${card.achievementsLabel} achievements`,
     fit.shows("ehb") && `${card.ehbLabel} EHB gained`,
+    fit.shows("effort") && `${card.effort!.hoursLabel} Effort${card.effort!.shareLabel ? ` (${card.effort!.shareLabel})` : ""}`,
   ].filter((s): s is string => !!s);
   const streak = fit.shows("driestStreak") ? card.driestStreak : null;
   const drops = [

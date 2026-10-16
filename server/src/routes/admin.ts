@@ -15,6 +15,7 @@ import * as boardService from "../services/boardService";
 import * as boardDraftService from "../services/boardDraftService";
 import { removeUploads } from "../services/uploadFiles";
 import * as tagService from "../services/tagService";
+import * as effortBossService from "../services/effortBossService";
 import { getOsrsWikiClient, WikiUnavailableError } from "../services/osrsWikiService";
 import { isOsrsItemSearchEnabled } from "./osrsItems";
 import * as wrappedArtService from "../services/wrappedArtService";
@@ -647,6 +648,42 @@ router.delete(
   auditSkip(DRAFT_EDIT),
   asyncHandler(async (req, res) => {
     res.json({ tags: editDraft(req, (t) => tagService.removeTag(db, req.bingo!.id, req.params.id as string, t)) });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Effort bosses (CONTEXT.md "Effort"): the Wise Old Man bosses a Part's Effort counts, derived from its Items, plus an
+// Admin's adds and removes on a Tile or a Part. Only the board editor reads them; on the Draft board like Tags. Each
+// change answers with the board's Effort bosses.
+// ---------------------------------------------------------------------------
+
+router.get(
+  "/effort-bosses",
+  asyncHandler(async (req, res) => {
+    res.json(effortBossService.getBoardEffortBosses(db, req.bingo!.id, boardDraftService.editorTables(db, req.bingo!.id)));
+  }),
+);
+// { metric, mode }: "add" adds the boss, "remove" takes it off (an added one's row goes, a derived one gets a remove).
+router.post(
+  "/tiles/:tileId/effort-bosses",
+  auditSkip(DRAFT_EDIT),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(editDraft(req, (t) => effortBossService.changeEffortBoss(db, req.bingo!.id, { tileId: req.params.tileId as string }, req.body ?? {}, t)));
+  }),
+);
+router.post(
+  "/parts/:partId/effort-bosses",
+  auditSkip(DRAFT_EDIT),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(editDraft(req, (t) => effortBossService.changeEffortBoss(db, req.bingo!.id, { partId: req.params.partId as string }, req.body ?? {}, t)));
+  }),
+);
+// Drops one add or remove: the boss is back to what the Items say ("restore" on a removed one).
+router.delete(
+  "/effort-bosses/:id",
+  auditSkip(DRAFT_EDIT),
+  asyncHandler(async (req, res) => {
+    res.json(editDraft(req, (t) => effortBossService.resetEffortBoss(db, req.bingo!.id, req.params.id as string, t)));
   }),
 );
 

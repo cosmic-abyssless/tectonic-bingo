@@ -64,6 +64,7 @@ const fullYou: WrappedYouModel = {
     { key: "b", name: "Night Owl", itemName: "Rune scimitar", description: null, earnedLabel: "26 Sep" },
   ],
   wom: { ehbLabel: "42.6", bosses: [{ name: "Vorkath", killsLabel: "494 kills" }] },
+  effort: { hoursLabel: "14.2 hours", shareLabel: "23% of your Team's Effort", tileLabel: "Most at Vorkath (6.1 h)" },
   draft: { pickLabel: "Pick 7", positionLabel: "13th" },
 };
 
@@ -157,7 +158,7 @@ describe("the comic's You, Duo, Captain and Moderator pages", () => {
   });
 
   it("draws a panel only for a part with something to say", () => {
-    const sparse: WrappedYouModel = { ...fullYou, art: NO_ART, submissions: { countLabel: "1 Submission", comparison: null }, points: null, gp: null, topDrops: [], luckiestDrop: null, driestStreak: null, firstLast: null, mostActiveDay: null, titles: [], achievements: [], wom: null, draft: null };
+    const sparse: WrappedYouModel = { ...fullYou, art: NO_ART, submissions: { countLabel: "1 Submission", comparison: null }, points: null, gp: null, topDrops: [], luckiestDrop: null, driestStreak: null, firstLast: null, mostActiveDay: null, titles: [], achievements: [], wom: null, effort: null, draft: null };
     const root = draw(<WrappedYou section={sparse} />, true);
     expect(root.querySelectorAll(".wrapped-panel")).toHaveLength(1);
     // One page: the second is for the story's later parts, which this Player has none of.

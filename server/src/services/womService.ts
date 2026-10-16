@@ -185,6 +185,8 @@ export interface WomSnapshot {
   at: Date;
   /** Kill count per WOM boss metric. Null while it's below the hiscores' minimum (WOM's -1). */
   bossKills: Record<string, number | null>;
+  /** EHB per WOM boss metric, at the account type's rates (Effort, CONTEXT.md). Only bosses with some (ehb > 0). */
+  bossEhb: Record<string, number>;
   ehb: number | null;
   ehp: number | null;
   /** Clue scrolls of every tier. Null while it's below the hiscores' minimum. */
@@ -194,7 +196,7 @@ export interface WomSnapshot {
 interface RawSnapshot {
   createdAt?: unknown;
   data?: {
-    bosses?: Record<string, { kills?: unknown }>;
+    bosses?: Record<string, { kills?: unknown; ehb?: unknown }>;
     activities?: Record<string, { score?: unknown }>;
     computed?: Record<string, { value?: unknown }>;
   };
@@ -210,10 +212,15 @@ export function parseSnapshots(raw: unknown[]): WomSnapshot[] {
     const at = typeof snap?.createdAt === "string" ? new Date(snap.createdAt) : null;
     if (!at || Number.isNaN(at.getTime()) || !snap.data) continue;
     const bossKills: Record<string, number | null> = {};
-    for (const [metric, boss] of Object.entries(snap.data.bosses ?? {})) bossKills[metric] = ranked(boss?.kills);
+    const bossEhb: Record<string, number> = {};
+    for (const [metric, boss] of Object.entries(snap.data.bosses ?? {})) {
+      bossKills[metric] = ranked(boss?.kills);
+      if (typeof boss?.ehb === "number" && boss.ehb > 0) bossEhb[metric] = boss.ehb;
+    }
     out.push({
       at,
       bossKills,
+      bossEhb,
       ehb: ranked(snap.data.computed?.ehb?.value),
       ehp: ranked(snap.data.computed?.ehp?.value),
       clues: ranked(snap.data.activities?.clue_scrolls_all?.score),

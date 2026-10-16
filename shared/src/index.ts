@@ -1530,6 +1530,22 @@ export interface ContributionCount {
   /** Total drop value (CONTEXT.md): Drop values of this player's approved claims. */
   gpGained: number;
   awards: ContributionAward[];
+  /** Null when not recorded (a Historical Bingo, no usable Wise Old Man snapshots). */
+  effort: PlayerEffort | null;
+}
+
+/** A Player's Effort in one Bingo (CONTEXT.md "Effort"). Null on a ContributionCount when not recorded. */
+export interface PlayerEffort {
+  /** EHB at open Parts' bosses, all Tiles. */
+  hours: number;
+  /** hours / their Team's total Effort, 0-100. Null when the Team's total is 0. */
+  share: number | null;
+  /** Hours on Parts their Team never completed (the Title's measure). */
+  uncompletedHours: number;
+  /** Per Tile, largest first; only Tiles with hours > 0. */
+  byTile: { tileId: string; hours: number }[];
+  /** The latest snapshot the hours run up to (ISO). */
+  asOf: string;
 }
 
 export interface TeamGpGained {
@@ -1583,6 +1599,8 @@ export interface StatsResponse {
   titleSettings: TitleSettings;
   /** The last time Wise Old Man was read for any Player of the Bingo; null if it hasn't been. */
   womReadAt: string | null;
+  /** Each Player's Effort (CONTEXT.md) per Tile, for the Tile completion view; filtered like contributions. */
+  tileEffort: { tileId: string; teamId: string; userId: string; hours: number }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1725,6 +1743,7 @@ export * from "./auditCondense.ts";
 export * from "./bingoExport.ts";
 export * from "./boardDraft.ts";
 export * from "./discord.ts";
+export * from "./effortBosses.ts";
 export * from "./exclusivity.ts";
 export * from "./historical.ts";
 export * from "./historicalBundle.ts";

@@ -595,6 +595,9 @@ export const womSnapshots = sqliteTable('wom_snapshots', {
   clues: integer('clues'),
   // { [WOM boss metric]: kills | null }
   bossKillsJson: text('boss_kills_json').notNull(),
+  // { [WOM boss metric]: EHB } for bosses with some, for Effort (CONTEXT.md). Null on a row read before per-boss EHB
+  // was kept: a re-read (womReadService.rereadBingo) fills it in.
+  bossEhbJson: text('boss_ehb_json'),
 }, (t) => [
   uniqueIndex('wom_snapshots_bingo_user_taken_unq').on(t.bingoId, t.userId, t.takenAt),
 ]);
@@ -820,6 +823,27 @@ export const tags = sqliteTable('tags', tagColumns(() => tiles, () => nodes), (t
   index('tags_bingo_idx').on(t.bingoId),
 ]);
 
+// Effort bosses (CONTEXT.md "Effort"): an Admin's changes to the Wise Old Man bosses a Part's Effort counts, on a Tile
+// (tileId: every Part of it) or on one of its Parts (nodeId), never both. A Part's bosses are derived from its Items
+// (effortBossService); a row adds one they don't derive, or removes one. Like Tags, its own table, so nothing served
+// to Players carries them, and kept apart from Tags, which mean something else (the search). Shared by the Published
+// board's `effort_bosses` and the Draft board's `draft_effort_bosses`.
+const effortBossColumns = (tileTable: () => { id: AnySQLiteColumn }, nodeTable: () => { id: AnySQLiteColumn }) => ({
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  bingoId: text('bingo_id').notNull().references(() => bingos.id),
+  tileId: text('tile_id').references(() => tileTable().id),
+  nodeId: text('node_id').references(() => nodeTable().id),
+  // A Wise Old Man boss metric ("vorkath").
+  metric: text('metric').notNull(),
+  mode: text('mode', { enum: ['add', 'remove'] }).notNull(),
+});
+// One row per boss per Tile or Part. Two indexes rather than one over (tile, node, metric): SQLite treats NULLs as
+// distinct, so each only binds the rows whose owner it names.
+export const effortBosses = sqliteTable('effort_bosses', effortBossColumns(() => tiles, () => nodes), (t) => [
+  uniqueIndex('effort_bosses_tile_metric_unq').on(t.bingoId, t.tileId, t.metric),
+  uniqueIndex('effort_bosses_node_metric_unq').on(t.bingoId, t.nodeId, t.metric),
+]);
+
 // All possible lines on the board (rows + cols + diagonals, generated from
 // bingos.boardRows/boardCols; diagonals only when the board is square). Each
 // line is a presentation wrapper around a node whose children are the line's
@@ -874,6 +898,11 @@ export const draftBingoLines = sqliteTable('draft_bingo_lines', bingoLineColumns
 // Tags (CONTEXT.md "Tag") go through the draft with the rest of the Board: a Publish applies them, keeping their ids.
 export const draftTags = sqliteTable('draft_tags', tagColumns(() => draftTiles, () => draftNodes), (t) => [
   index('draft_tags_bingo_idx').on(t.bingoId),
+]);
+// Effort bosses (CONTEXT.md "Effort") too: a Publish applies them, keeping their ids.
+export const draftEffortBosses = sqliteTable('draft_effort_bosses', effortBossColumns(() => draftTiles, () => draftNodes), (t) => [
+  uniqueIndex('draft_effort_bosses_tile_metric_unq').on(t.bingoId, t.tileId, t.metric),
+  uniqueIndex('draft_effort_bosses_node_metric_unq').on(t.bingoId, t.nodeId, t.metric),
 ]);
 
 // ---------------------------------------------------------------------------

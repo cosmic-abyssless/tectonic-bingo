@@ -60,6 +60,8 @@ export interface ExportNode {
   reuse?: boolean;
   /** A Part's (a Tile's direct child) Tags (CONTEXT.md). Absent in older files, and on every other node: none. */
   tags?: ExportTag[];
+  /** A Part's Effort bosses (CONTEXT.md "Effort"): an Admin's adds and removes. Absent in older files, and on other nodes: none. */
+  effortBosses?: ExportEffortBoss[];
   children: ExportNode[];
 }
 
@@ -68,6 +70,12 @@ export interface ExportNode {
  * wiki's names for the boss) as `aliases`, as they stood when exported: import restores them without asking the wiki.
  */
 export type ExportTag = { kind: "text"; text: string } | { kind: "boss"; text: string; aliases: string[] };
+
+/** An Admin's change to a Tile's or a Part's Effort bosses (CONTEXT.md "Effort"): a Wise Old Man boss metric added or removed. */
+export interface ExportEffortBoss {
+  metric: string;
+  mode: "add" | "remove";
+}
 
 export interface ExportCategory {
   localId: number;
@@ -107,6 +115,8 @@ export interface ExportTile {
   image?: ExportImage;
   /** The Tile's own Tags (CONTEXT.md); its Parts' are on each task. Absent in older files: none. */
   tags?: ExportTag[];
+  /** The Tile's own Effort bosses (CONTEXT.md "Effort"), for all its Parts; each Part's are on its task. Absent in older files: none. */
+  effortBosses?: ExportEffortBoss[];
   tasks: ExportNode[];
 }
 

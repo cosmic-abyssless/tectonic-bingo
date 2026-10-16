@@ -2,6 +2,7 @@ import type { ContributionAward, ContributionCount, PickedTitle } from "@bingo/s
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { TitleChip } from "./TitleChrome";
 import { formatGp } from "../ui/gp";
+import { formatEffortHours, formatEffortShare } from "./effort";
 
 /** Points share to at most two decimals: 12, 12.5, 12.33. */
 export function formatShare(points: number): string {
@@ -58,7 +59,19 @@ function AwardRow({ award, color }: { award: ContributionAward; color: string })
 }
 
 /** Where a player's Points share (CONTEXT.md) came from, grouped by kind of award. */
-export function PointsShareBreakdown({ contribution, teamColor, rank, titles }: { contribution: ContributionCount; teamColor: string | null; rank: { place: number; of: number }; titles: PickedTitle[] }) {
+export function PointsShareBreakdown({
+  contribution,
+  teamColor,
+  rank,
+  titles,
+  effortTiles,
+}: {
+  contribution: ContributionCount;
+  teamColor: string | null;
+  rank: { place: number; of: number };
+  titles: PickedTitle[];
+  effortTiles: { name: string; hours: number }[];
+}) {
   const color = teamColor ?? FALLBACK_TEAM_COLOR;
   return (
     <div className="space-y-4">
@@ -70,6 +83,7 @@ export function PointsShareBreakdown({ contribution, teamColor, rank, titles }: 
         {/* Total drop value (CONTEXT.md): what their approved drops were worth. */}
         <Figure label="Total drop value" value={formatGp(contribution.gpGained)} />
       </div>
+      {contribution.effort && <EffortSection effort={contribution.effort} tiles={effortTiles} />}
       {contribution.awards.length === 0 ? (
         <p className="text-sm text-on-surface-subtle">None of their claims have completed anything yet.</p>
       ) : (
@@ -99,6 +113,35 @@ export function PointsShareBreakdown({ contribution, teamColor, rank, titles }: 
         Only claims that completed something count: the first full set of an "any of", or up to the total a sum needs. Moderator adjustments aren't included.
       </p>
     </div>
+  );
+}
+
+// Effort (CONTEXT.md): their hours at the bosses of the team's parts until each was done, their share of the team's, and the
+// Tiles they put the most into. Not part of Points share.
+function EffortSection({ effort, tiles }: { effort: NonNullable<ContributionCount["effort"]>; tiles: { name: string; hours: number }[] }) {
+  return (
+    <section className="rounded-lg border border-outline">
+      <header className="flex items-baseline justify-between gap-3 border-b border-outline bg-surface-hover/50 px-3 py-2">
+        <span>
+          <span className="text-xs font-semibold tracking-wide text-on-surface uppercase">Effort</span>{" "}
+          <span className="text-xs text-on-surface-subtle">Hours spent working on tiles, even if they didn't get the drop.</span>
+        </span>
+        <span className="num shrink-0 text-sm font-semibold text-on-surface">{formatEffortHours(effort.hours)}</span>
+      </header>
+      <div className="space-y-1.5 px-3 py-2.5">
+        {effort.share !== null && <p className="text-sm text-on-surface-muted">{formatEffortShare(effort.share)} of the team's Effort</p>}
+        {tiles.length > 0 && (
+          <ul className="space-y-1">
+            {tiles.map((t, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate text-on-surface">{t.name}</span>
+                <span className="num shrink-0 text-on-surface-muted">{formatEffortHours(t.hours)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 

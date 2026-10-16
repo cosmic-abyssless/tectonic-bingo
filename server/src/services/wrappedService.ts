@@ -43,6 +43,7 @@ import { getBingoTitleSettings } from "./titleSettingsService";
 import { getEarnedAchievements, getEnabledAchievementKeys } from "./achievementService";
 import { bossGainsOf, gainsOf, loadTimelines } from "./womReadService";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
+import { computeEffort } from "./effortService";
 import { getAcceptedPairs } from "./pairingService";
 import { artSet } from "./wrappedArtService";
 import { rsnsInBingo } from "./playerNames";
@@ -303,6 +304,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const finishedAt = endedAt(db, bingo);
   const picked = pickTitles(titleFacts, { now: finishedAt ?? clockNow(), liveAt, endedAt: finishedAt }, titleSettings);
   const rewind = rewindService.getRewind(db, bingo);
+  const effort = computeEffort(db, bingo)?.players;
 
   // Every review of the Bingo's drop Submissions (approved or rejected), by whoever made it: a Moderator or an Admin.
   // Proof screenshots are left out of Wrapped, reviews included.
@@ -441,6 +443,8 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     const busiestDay = [...perDay].sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0]))[0];
 
     const timeline = timelines.get(userId);
+    const myEffort = effort?.get(userId);
+    const effortTile = myEffort?.byTile[0];
     const womGains = liveAt && timeline ? gainsOf(timeline, liveAt, finishedAt) : null;
     const pick = pickOf.get(userId);
     const gpGained = c?.gpGained ?? 0;
@@ -517,6 +521,13 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
           womGains && timeline
             ? { ehb: womGains.ehb, bosses: bossGainsOf(timeline, liveAt!, finishedAt).slice(0, TOP_BOSSES).map((b) => ({ ...b, name: bossName(b.metric) })), asOf: womGains.asOf }
             : null,
+        effort: myEffort
+          ? {
+              hours: myEffort.hours,
+              share: myEffort.share,
+              topTile: effortTile && tileById.has(effortTile.tileId) ? { name: tileById.get(effortTile.tileId)!.name, hours: effortTile.hours } : null,
+            }
+          : null,
         draft: pick && facts?.draftPlace ? { pickNumber: pick.pickNumber, position: facts.draftPlace.position } : null,
       },
       duo,

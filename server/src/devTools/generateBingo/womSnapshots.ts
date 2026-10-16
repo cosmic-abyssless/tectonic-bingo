@@ -9,6 +9,12 @@
 // from that boss), which is where Dry comes from. Snapshots come every few hours, plus one shortly after each drop,
 // as if the Player updated on logout. Some Players also run a few of the raids and bosses Wrapped looks at (the Bingo's
 // list), drops or not, so a generated Wrapped shows who killed each the most.
+//
+// EHB comes from the time a Player plays, not the kills, which the drops and raids can push past what one Player could
+// do: each has a budget of hours over the Bingo (a share of it, by how much of the day they play). Each boss's EHB is
+// its kills over that boss's kills an hour, as Wise Old Man works it out, so Effort has per-boss hours to count; where
+// the kills gained come to more hours than the budget leaves, every boss's gain is scaled down to fit. The total EHB is
+// the bosses' plus a modest filler for bosses the generator doesn't model, so the two agree.
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../../db/schema";
@@ -32,6 +38,22 @@ type Db = BetterSQLite3Database<typeof schema>;
 
 // The hiscores list a boss from 5 kills; below that WOM reports it as unranked (null).
 const HISCORE_MIN_KILLS = 5;
+
+// Kills an hour at each boss, roughly Wise Old Man's main-account EHB rates: a boss's EHB is its kills over this. A boss
+// not listed goes at DEFAULT_KILLS_PER_HOUR.
+const KILLS_PER_HOUR: Partial<Record<BossMetric, number>> = {
+  abyssal_sire: 45, alchemical_hydra: 33, amoxliatl: 55, araxxor: 38, artio: 60, barrows_chests: 22, brutus: 45, bryophyta: 9, callisto: 55,
+  calvarion: 50, cerberus: 60, chambers_of_xeric: 3.5, chambers_of_xeric_challenge_mode: 2.3, chaos_elemental: 50, chaos_fanatic: 80,
+  commander_zilyana: 50, corporeal_beast: 60, crazy_archaeologist: 75, dagannoth_prime: 90, dagannoth_rex: 90, dagannoth_supreme: 90,
+  deranged_archaeologist: 80, doom_of_mokhaiotl: 10, duke_sucellus: 38, general_graardor: 50, giant_mole: 100, grotesque_guardians: 36,
+  hespori: 60, kalphite_queen: 50, king_black_dragon: 120, kraken: 100, kreearra: 40, kril_tsutsaroth: 60, mimic: 60, nex: 13, nightmare: 14,
+  phosanis_nightmare: 7, obor: 12, phantom_muspah: 30, sarachnis: 80, scorpia: 120, scurrius: 80, skotizo: 45, sol_heredit: 1.3, spindel: 60,
+  the_gauntlet: 10, the_corrupted_gauntlet: 7, the_hueycoatl: 18, the_leviathan: 37, the_royal_titans: 60, the_whisperer: 28,
+  theatre_of_blood: 3, theatre_of_blood_hard_mode: 2.6, thermonuclear_smoke_devil: 125, tombs_of_amascut: 2.5, tombs_of_amascut_expert: 2,
+  tzkal_zuk: 0.8, tztok_jad: 2, vardorvis: 41, venenatis: 50, vetion: 40, vorkath: 34, yama: 9, zulrah: 40,
+};
+const DEFAULT_KILLS_PER_HOUR = 30;
+const killsPerHour = (m: string) => KILLS_PER_HOUR[m as BossMetric] ?? DEFAULT_KILLS_PER_HOUR;
 
 export interface FakeTimelineInput {
   start: Date;
@@ -121,9 +143,16 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   for (const d of drops) times.add(Math.min(end.getTime(), d.at.getTime() + Math.round(rng.between(5, 90) * MINUTE)));
   times.add(end.getTime() - Math.round(rng.between(0, 2) * HOUR));
 
-  // EHB from the time they play rather than the kills above, which the drops can push past what one Player could do.
+  // The hours they put in over the Bingo: the budget, part filler at bosses the generator doesn't model and the rest
+  // at the bosses above, whose gains are scaled down when their kills come to more. New draws are on a fork of their
+  // own, so the kills, ehp and clues stay as they were.
   const ehb0 = rng.between(0, 800);
   const ehbPerHour = activity * rng.between(0.5, 0.9);
+  const spanHours = Math.max(1e-9, (end.getTime() - start.getTime()) / HOUR);
+  const budget = spanHours * ehbPerHour;
+  const filler = budget * rng.fork("ehb-filler").between(0.15, 0.4);
+  const gainedHours = [...base.keys()].reduce((sum, m) => sum + killsAt(m, end.getTime()) / killsPerHour(m), 0);
+  const scale = gainedHours > budget - filler ? (budget - filler) / gainedHours : 1;
   const ehp0 = rng.between(50, 3000);
   const clues0 = rng.int(0, 400);
   let ehp = ehp0;
@@ -132,15 +161,19 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   for (const t of [...times].sort((a, b) => a - b)) {
     const during = t > start.getTime();
     const bossKills: Record<string, number | null> = {};
+    const bossEhb: Record<string, number> = {};
     for (const [m, b] of base) {
       const k = during ? killsAt(m, t) : 0;
       bossKills[m] = b + k >= HISCORE_MIN_KILLS ? b + k : null;
+      // Wise Old Man gives an unranked boss no EHB, as it has no kills to count.
+      if (bossKills[m] !== null) bossEhb[m] = (b + k * scale) / killsPerHour(m);
     }
+    const atBosses = Object.values(bossEhb).reduce((sum, h) => sum + h, 0);
     if (during) {
       ehp += rng.chance(0.3) ? rng.between(0, 1.5) : 0;
       clues += rng.chance(0.25) ? rng.int(1, 3) : 0;
     }
-    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], ehb: ehb0 + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
+    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb, ehb: ehb0 + atBosses + (during ? (((t - start.getTime()) / HOUR) * filler) / spanHours : 0), ehp, clues });
   }
   return out;
 }
@@ -180,7 +213,7 @@ export function fillFakeWomSnapshots(db: Db, slug: string, seed: number): { play
       // Forked by Discord ID, which the seed fixes (unlike the user's id), so each Player's timeline is repeatable.
       const timeline = fakeTimeline(rng.fork(m.discordId), { start, end, drops: dropsByUser.get(m.userId) ?? [], boardItems, rates, wrappedBosses });
       for (const s of timeline) {
-        tx.insert(womSnapshots).values({ bingoId: bingo.id, userId: m.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills) }).run();
+        tx.insert(womSnapshots).values({ bingoId: bingo.id, userId: m.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills), bossEhbJson: JSON.stringify(s.bossEhb) }).run();
       }
       snapshots += timeline.length;
       tx.insert(womReads).values({ bingoId: bingo.id, userId: m.userId, rsn: rsns.get(m.userId) ?? m.discordId, readAt: at, readThrough: end }).run();
