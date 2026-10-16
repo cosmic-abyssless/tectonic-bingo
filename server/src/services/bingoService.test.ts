@@ -6,7 +6,7 @@ import * as schema from "../db/schema";
 import { bingos } from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { addModerator, advanceStage, assertBoardEditable, assertQuestionsEditable, createBingo, deleteBingo, normalizeExclusivityRules, parseExclusivityRules, listBingos, removeModerator, toPublicBingo, toViewerBingo, updateBingoSettings } from "./bingoService";
-import { effectiveStartsAt } from "./bingoStart";
+import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { createTask, createTile } from "./boardService";
 import { createTeam } from "./teamService";
 import { adminPair } from "./pairingService";
@@ -157,6 +157,44 @@ describe("advanceStage", () => {
   it("updates the stage on the bingos row", () => {
     const bingo = seedBingo({ startsAt: null });
     advanceStage(db, { bingoId: bingo.id, toStage: "live", changedByUserId: bingo.createdByUserId });
+    expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("live");
+  });
+});
+
+// Finishing with when the Bingo really ended (CONTEXT.md "Stage"): everything measured to its end runs up to then.
+describe("advanceStage: finishing with an earlier end", () => {
+  const startsAt = new Date("2026-03-01T18:00:00Z");
+  const wentLive = new Date("2026-03-01T18:00:05Z");
+  const now = new Date("2026-03-10T12:00:00Z");
+  function liveBingo() {
+    const bingo = seedBingo({ stage: "live", startsAt, endsAt: new Date("2026-03-12T20:00:00Z") });
+    db.insert(schema.stageTransitions).values({ bingoId: bingo.id, fromStage: "reveal", toStage: "live", changedByUserId: bingo.createdByUserId, createdAt: wentLive }).run();
+    return bingo;
+  }
+  const finish = (bingoId: string, by: string, endedAt?: Date) => advanceStage(db, { bingoId, toStage: "complete", changedByUserId: by, now, endedAt });
+
+  it("records the end it's given as when the Bingo finished, and says so in the audit log", () => {
+    const bingo = liveBingo();
+    const ended = new Date("2026-03-08T10:16:00Z");
+    const updated = finish(bingo.id, bingo.createdByUserId, ended);
+    expect(endedAt(db, updated)).toEqual(ended);
+    const row = db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "stage.changed")).get()!;
+    expect(JSON.parse(row.details)).toMatchObject({ from: "live", to: "complete", endedAt: ended.toISOString() });
+    expect(row.createdAt).toEqual(now);
+  });
+
+  it("ends now without one", () => {
+    const bingo = liveBingo();
+    expect(endedAt(db, finish(bingo.id, bingo.createdByUserId))).toEqual(now);
+  });
+
+  it("refuses an end in the future, before the start, or before the last stage change, and one when not finishing", () => {
+    const bingo = liveBingo();
+    const by = bingo.createdByUserId;
+    expect(() => finish(bingo.id, by, new Date("2026-03-10T12:00:01Z"))).toThrow(/future/);
+    expect(() => finish(bingo.id, by, new Date("2026-03-01T17:59:00Z"))).toThrow(/before it started/);
+    expect(() => finish(bingo.id, by, new Date("2026-03-01T18:00:01Z"))).toThrow(/last changed stage/);
+    expect(() => advanceStage(db, { bingoId: bingo.id, toStage: "reveal", changedByUserId: by, now, endedAt: new Date("2026-03-08T00:00:00Z") })).toThrow(/Only finishing/);
     expect(db.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!.stage).toBe("live");
   });
 });

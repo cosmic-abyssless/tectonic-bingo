@@ -12,6 +12,8 @@ import { Card, Notice } from "../ui/Card";
 import { MilestoneCountdown, StageStepper } from "../ui/StageStepper";
 import { ArrowLeftIcon, ArrowRightIcon } from "../ui/icons";
 import { formatDuration, formatLocalDateTime } from "../ui/time";
+import { fromLocalInput, toLocalInput } from "../ui/timeRange";
+import { Field, Input } from "../ui/Field";
 import { CutReviewModal } from "./CutReviewModal";
 import { TextButton } from "../ui/TextButton";
 
@@ -51,6 +53,11 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   const startAhead = beforeLive && startsAt !== null && (startsAt > Date.now() || serverSaysAhead);
   const startingEarly = confirming === "live" && startAhead;
 
+  // Finishing: when the Bingo really ended (CONTEXT.md "Stage"), now unless the Admin sets it earlier. Wise Old Man
+  // gains (Titles, Effort, Wrapped) count up to it. Only sent once changed, so a dialog left open doesn't backdate.
+  const [endedAtInput, setEndedAtInput] = useState("");
+  const [endedAtChanged, setEndedAtChanged] = useState(false);
+
   const idx = STAGE_ORDER.indexOf(bingo.stage);
   const nextStage = idx < STAGE_ORDER.length - 1 ? STAGE_ORDER[idx + 1] : null;
   const prevStage = idx > 0 ? STAGE_ORDER[idx - 1] : null;
@@ -82,6 +89,10 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
         return;
       }
     }
+    if (toStage === "complete") {
+      setEndedAtInput(toLocalInput(new Date().toISOString()));
+      setEndedAtChanged(false);
+    }
     setConfirming(toStage);
   }
 
@@ -94,7 +105,8 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   async function go(toStage: Stage) {
     setError(null);
     try {
-      await advanceStage.mutateAsync({ toStage, startNow: toStage === "live" && startAhead });
+      const endedAt = toStage === "complete" && endedAtChanged ? fromLocalInput(endedAtInput, "start") : undefined;
+      await advanceStage.mutateAsync({ toStage, startNow: toStage === "live" && startAhead, endedAt });
       setConfirming(null);
       setServerSaysAhead(false);
     } catch (e: unknown) {
@@ -177,6 +189,20 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
                 <Notice tone="warn">Its start date has already passed, so it goes Live by itself within seconds of reaching Board revealed.</Notice>
               )}
               {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
+              {confirming === "complete" && (
+                <Field label="Ended at" hint="Your local time. Set it earlier if the bingo ended before now: Wise Old Man gains (Titles, Effort, Wrapped) count up to then.">
+                  <Input
+                    type="datetime-local"
+                    value={endedAtInput}
+                    max={toLocalInput(new Date().toISOString())}
+                    onChange={(e) => {
+                      setEndedAtInput(e.target.value);
+                      setEndedAtChanged(true);
+                    }}
+                    className="num"
+                  />
+                </Field>
+              )}
               {confirming === "draft" && (
                 <DraftCutsPreview
                   cuts={cuts}

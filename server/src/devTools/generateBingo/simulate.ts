@@ -154,7 +154,8 @@ export class Simulation {
         const when = new Date(tl.endsAt.getTime() + (5 + i * 20) * MINUTE);
         this.at(when, () => this.reviewBatch(mod, when));
       }
-      this.at(tl.completeAt, () => setStage(this.ctx, "complete", tl.completeAt));
+      // Finished an hour after its end, after the last reviews, set as having ended at its end.
+      this.at(tl.completeAt, () => setStage(this.ctx, "complete", tl.completeAt, tl.endsAt));
     }
 
     while (this.queue.length > 0) {

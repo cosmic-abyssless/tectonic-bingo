@@ -43,9 +43,10 @@ export async function runInOrder(events: Timed[], limit: Date): Promise<number> 
   return ran;
 }
 
-export async function setStage(ctx: Ctx, toStage: string, at: Date): Promise<void> {
-  await ctx.api.as(ctx.admin).post(path(ctx, "/mod/stage"), { toStage }, { at });
-  ctx.log(`stage -> ${toStage} at ${fmt(at)}`);
+/** `endedAt`: finishing, when the Bingo really ended, as an Admin who finishes it after its end sets it. */
+export async function setStage(ctx: Ctx, toStage: string, at: Date, endedAt?: Date): Promise<void> {
+  await ctx.api.as(ctx.admin).post(path(ctx, "/mod/stage"), { toStage, ...(endedAt ? { endedAt: endedAt.toISOString() } : {}) }, { at });
+  ctx.log(`stage -> ${toStage} at ${fmt(at)}${endedAt ? `, ended ${fmt(endedAt)}` : ""}`);
 }
 
 /**

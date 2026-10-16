@@ -386,12 +386,31 @@ describe("syncWomCompetition", () => {
   });
 
   it("sends the bingo's start and end dates when they differ", async () => {
-    const startsAt = new Date("2026-03-02T18:00:00.000Z");
-    const endsAt = new Date("2026-03-12T20:00:00.000Z");
-    const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, startsAt, endsAt });
-    const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
-    await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
-    expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-05T00:00:00.000Z") });
+    try {
+      const startsAt = new Date("2026-03-02T18:00:00.000Z");
+      const endsAt = new Date("2026-03-12T20:00:00.000Z");
+      const { bingo } = seedBingoWithTeam({ womCompetitionId: 42, startsAt, endsAt });
+      const fetchImpl = mockFetch([{ body: womState() }, { body: {} }]);
+      await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+      expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Ended by hand on Wise Old Man (a Team had won): the bingo's later end date would reopen it.
+  it("leaves the end of a competition that has already ended, and still sends a team change", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-10T00:00:00.000Z") });
+    try {
+      const { bingo, team } = seedBingoWithTeam({ womCompetitionId: 42, endsAt: new Date("2026-03-15T18:00:00.000Z") });
+      db.update(schema.teams).set({ name: "Renamed Team" }).where(eq(schema.teams.id, team.id)).run();
+      const fetchImpl = mockFetch([{ body: womState({ endsAt: "2026-03-08T10:16:00.000Z" }) }, { body: {} }]);
+      await syncWomCompetition(db, bingo.id, new WomCompetitionClient(fetchImpl));
+      expect(putBody(fetchImpl)).toEqual({ verificationCode: "secret-code", teams: [{ name: "Renamed Team", participants: ["CaptainRsn"] }] });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("with no start date set, starts the competition when the bingo went live", async () => {

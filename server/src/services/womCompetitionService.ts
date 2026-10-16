@@ -362,9 +362,11 @@ export async function syncWomCompetition(db: Db, bingoId: string, client: WomCom
     if (bingo.name !== current.title) changes.title = bingo.name;
     if (current.metric !== WOM_COMPETITION_METRIC) changes.metric = WOM_COMPETITION_METRIC;
     // The bingo's dates, where it has them: with none, WOM keeps what it was created with (the draft's end, and two
-    // weeks on). WOM needs the end after the start.
+    // weeks on). WOM needs the end after the start. A competition that has already ended keeps its end: someone ended
+    // it on purpose (on Wise Old Man, when a Team had won), and the bingo's later end date would reopen it.
+    const ended = !!current.endsAt && current.endsAt.getTime() <= clockNow().getTime();
     const startsAt = effectiveStartsAt(db, bingo) ?? current.startsAt;
-    const endsAt = bingo.endsAt ?? current.endsAt;
+    const endsAt = ended ? current.endsAt : (bingo.endsAt ?? current.endsAt);
     if (startsAt && endsAt && endsAt > startsAt) {
       if (startsAt.getTime() !== current.startsAt?.getTime()) changes.startsAt = startsAt;
       if (endsAt.getTime() !== current.endsAt?.getTime()) changes.endsAt = endsAt;
