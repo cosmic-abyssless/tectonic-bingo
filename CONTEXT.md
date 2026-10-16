@@ -26,7 +26,7 @@ The current lifecycle phase of a Bingo. Transitions move forward through a fixed
 4. **Draft** (`draft`) — Captains take turns picking players/duos in structured rounds. Every Player can watch; Cut signups are no longer Players from this stage on.
 5. **Board revealed** (`reveal`) — Teams are set; the board is visible for prep, but submissions are not yet accepted.
 6. **Live** (`live`) — The Bingo is running. Submissions are accepted and reviewed; points accumulate. Live always means started: a Bingo at Board revealed goes Live by itself at its start date, and an Admin going Live sooner (**Start now**) moves the start date to that moment. A Live Bingo's start date can't be in the future. It doesn't finish by itself at its end date: an Admin moves it to Finished.
-7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared.
+7. **Finished** (`complete`) — The Bingo has ended. Final scores are locked, winners declared. The Admin finishing it says when it ended: now, or earlier when it really ended before (a Team had already won). Wise Old Man gains (Titles, Effort, Achievements, Wrapped) and anything else measured to the end run up to then. A Wise Old Man competition that has already ended keeps its end: the Bingo's dates never reopen it.
 - **Avoid:** "captains stage" in discussion or UI copy. It is the code value for Signups closed and reads as if it were about the Captain role.
 
 ### Codeword

@@ -187,13 +187,21 @@ router.post(
   "/stage",
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const { toStage, startNow } = req.body as { toStage?: bingoService.Stage; startNow?: unknown };
+    const { toStage, startNow, endedAt } = req.body as { toStage?: bingoService.Stage; startNow?: unknown; endedAt?: unknown };
     if (!toStage || !bingoService.STAGE_ORDER.includes(toStage)) {
       throw new ServiceError(400, "toStage must be a valid stage");
     }
+    if (endedAt !== undefined && endedAt !== null && typeof endedAt !== "string") throw new ServiceError(400, "endedAt must be a date");
     const fromStage = req.bingo!.stage;
     // startNow: going Live ahead of the start date, which moves the start date to now (bingoService.advanceStage).
-    const bingo = bingoService.advanceStage(db, { bingoId: req.bingo!.id, toStage, changedByUserId: req.user!.id, startNow: startNow === true });
+    // endedAt: finishing, when the Bingo really ended if before now.
+    const bingo = bingoService.advanceStage(db, {
+      bingoId: req.bingo!.id,
+      toStage,
+      changedByUserId: req.user!.id,
+      startNow: startNow === true,
+      ...(endedAt ? { endedAt: new Date(endedAt) } : {}),
+    });
     afterStageChange(db, bingo, fromStage, toStage, req.user!.id);
     res.json({ bingo: bingoService.toPublicBingo(bingo) });
   }),

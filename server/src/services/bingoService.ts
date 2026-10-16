@@ -70,6 +70,7 @@ import * as wrappedBossesService from "./wrappedBossesService";
 import { assertCutReviewSatisfied } from "./cutReviewService";
 import { assertTeamsLedByPairs } from "./teamService";
 import { assertNotHistorical, deleteHistoricalRows } from "./historicalService";
+import { effectiveStartsAt } from "./bingoStart";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -342,6 +343,11 @@ export interface AdvanceStageParams {
   startNow?: boolean;
   /** Only from this stage: a change decided on before the transaction (the automatic start) isn't made if the stage moved since. */
   fromStage?: Stage;
+  /**
+   * Finishing: when the Bingo really ended, if before now (CONTEXT.md "Stage"). Wise Old Man gains (Titles, Effort,
+   * Achievements, Wrapped) and anything else measured to the Bingo's end run up to it. Now when unset.
+   */
+  endedAt?: Date;
   now?: Date; // injectable for tests
 }
 
@@ -378,6 +384,25 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     // reveal and live again never restarted it.)
     const now = params.now ?? clockNow();
 
+    // Finishing with an earlier end: no later than now, and no earlier than the start or the last stage change, so the
+    // stage log stays in order. The transition below records it as when the Bingo finished.
+    if (params.endedAt) {
+      if (params.toStage !== "complete") throw new ServiceError(400, "Only finishing the bingo can set when it ended");
+      if (Number.isNaN(params.endedAt.getTime())) throw new ServiceError(400, "endedAt must be a date");
+      if (params.endedAt.getTime() > now.getTime()) throw new ServiceError(400, "The bingo can't have ended in the future");
+      const started = effectiveStartsAt(tx, bingo);
+      if (started && params.endedAt.getTime() < started.getTime()) throw new ServiceError(400, "The bingo can't have ended before it started");
+      const lastChange = tx
+        .select({ at: stageTransitions.createdAt })
+        .from(stageTransitions)
+        .where(eq(stageTransitions.bingoId, bingo.id))
+        .orderBy(desc(stageTransitions.createdAt))
+        .get()?.at;
+      if (lastChange && params.endedAt.getTime() < lastChange.getTime()) {
+        throw new ServiceError(400, `The bingo can't have ended before it last changed stage, ${lastChange.toISOString()}`);
+      }
+    }
+
     // Live always means started (CONTEXT.md "Stage"). With the start date still ahead, the Bingo goes Live by itself
     // then (bingoStartService.ts); going Live sooner is starting now, which moves the start date to this moment, so
     // Submissions, Tile freezes and the Wise Old Man competition all start from it.
@@ -394,7 +419,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
     if (params.toStage === "complete") freezeTitleSettings(tx, bingo.id, now);
     else if (bingo.stage === "complete") unfreezeTitleSettings(tx, bingo.id);
     tx.insert(stageTransitions)
-      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId ?? bingo.createdByUserId, createdAt: now })
+      .values({ bingoId: bingo.id, fromStage: bingo.stage as Stage, toStage: params.toStage, changedByUserId: params.changedByUserId ?? bingo.createdByUserId, createdAt: params.endedAt ?? now })
       .run();
     audit(tx, {
       action: "stage.changed",
@@ -405,6 +430,7 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
         to: params.toStage,
         ...(params.changedByUserId === null ? { automatic: true } : {}),
         ...(startsEarly ? { startedEarly: true, scheduledStart: bingo.startsAt!.toISOString() } : {}),
+        ...(params.endedAt ? { endedAt: params.endedAt.toISOString() } : {}),
       },
       actor: params.changedByUserId === null ? "system" : { userId: params.changedByUserId },
       now: params.now,
