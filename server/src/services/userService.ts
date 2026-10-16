@@ -46,6 +46,7 @@ export const PUBLIC_USER_COLS = {
   discordGlobalName: users.discordGlobalName,
   discordGuildNick: users.discordGuildNick,
   discordAvatar: users.discordAvatar,
+  discordGuildAvatar: users.discordGuildAvatar,
 };
 
 export function getMinimalUser(db: Db, userId: string) {

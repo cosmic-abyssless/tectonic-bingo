@@ -11,6 +11,7 @@ export interface PhoneLoginAccount {
   discordGlobalName: string | null;
   discordGuildNick: string | null;
   discordAvatar: string | null;
+  discordGuildAvatar: string | null;
 }
 
 /** A new one-time link for this account (the last one stops working). The token is for the QR code only. */

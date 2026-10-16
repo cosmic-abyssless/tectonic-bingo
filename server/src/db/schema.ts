@@ -12,6 +12,10 @@ export const users = sqliteTable('users', {
   discordGlobalName: text('discord_global_name'),
   discordGuildNick: text('discord_guild_nick'),
   discordAvatar: text('discord_avatar'),
+  // Their own picture in the clan's Discord server (DISCORD_GUILD_ID), as `<guild id>/<avatar hash>`; null when they
+  // haven't set one there, so the site shows discordAvatar as Discord does. Read at login and refreshed daily by the bot
+  // (services/discordAvatarService.ts).
+  discordGuildAvatar: text('discord_guild_avatar'),
   // Whether the user was a member of DISCORD_GUILD_ID at their last Discord
   // login. Non-members are locked out of every bingo route. Defaults to true
   // because only a real OAuth login can observe membership — dev-login and

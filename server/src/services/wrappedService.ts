@@ -79,7 +79,7 @@ function avatarUsers(db: Db, bingoId: string, userIds: string[]): Map<string, Av
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return new Map();
   const rows = db
-    .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick, discordId: users.discordId, discordAvatar: users.discordAvatar })
+    .select({ id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick, discordId: users.discordId, discordAvatar: users.discordAvatar, discordGuildAvatar: users.discordGuildAvatar })
     .from(users)
     .where(inArray(users.id, ids))
     .all();
@@ -95,7 +95,7 @@ function dropsOf(subs: RewindSubmission[], userById: Map<string, AvatarUser>): W
       s.claims.map((c) => ({
         submissionId: s.id,
         teamId: s.teamId,
-        player: s.player ? (userById.get(s.player.id) ?? { ...s.player, discordId: "", discordAvatar: null }) : null,
+        player: s.player ? (userById.get(s.player.id) ?? { ...s.player, discordId: "", discordAvatar: null, discordGuildAvatar: null }) : null,
         itemName: c.label,
         quantity: c.quantity,
         gpValue: c.gpValue,

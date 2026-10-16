@@ -27,7 +27,7 @@ vi.mock("../ocr", () => ({
   analyzeSubmissionScreenshot: vi.fn(),
 }));
 
-const PUBLIC_USER_KEYS = ["discordAvatar", "discordGlobalName", "discordGuildNick", "discordId", "discordUsername", "id", "rsn"];
+const PUBLIC_USER_KEYS = ["discordAvatar", "discordGlobalName", "discordGuildAvatar", "discordGuildNick", "discordId", "discordUsername", "id", "rsn"];
 
 function expectPublic(user: object | null | undefined) {
   expect(user).toBeTruthy();

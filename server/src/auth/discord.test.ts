@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe("upsertLoginUser", () => {
   it("creates a new user from a Discord profile", async () => {
-    const user = await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild" });
+    const user = await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild", avatar: null });
     expect(user.discordId).toBe("111");
     expect(user.discordUsername).toBe("alice");
     expect(user.discordGuildNick).toBe("AliceInGuild");
@@ -30,11 +30,18 @@ describe("upsertLoginUser", () => {
     expect(user.isAdmin).toBe(false);
   });
 
-  it("records non-membership and clears the guild nick", async () => {
-    await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild" });
+  it("records non-membership and clears the guild nick and picture", async () => {
+    await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: true, nick: "AliceInGuild", avatar: "999/abc" });
     const second = await upsertLoginUser(db, { id: "111", username: "alice" }, { inGuild: false });
     expect(second.inGuild).toBe(false);
     expect(second.discordGuildNick).toBeNull();
+    expect(second.discordGuildAvatar).toBeNull();
+  });
+
+  it("stores the picture set in the clan's server beside the global one", async () => {
+    const user = await upsertLoginUser(db, { id: "111", username: "alice", avatar: "global" }, { inGuild: true, nick: null, avatar: "999/server" });
+    expect(user.discordAvatar).toBe("global");
+    expect(user.discordGuildAvatar).toBe("999/server");
   });
 
   it("keeps the stored membership when the lookup result is unknown", async () => {
@@ -51,7 +58,7 @@ describe("upsertLoginUser", () => {
 
   it("upserts on repeat login, updating profile fields", async () => {
     await upsertLoginUser(db, { id: "111", username: "alice" }, null);
-    const second = await upsertLoginUser(db, { id: "111", username: "alice_renamed" }, { inGuild: true, nick: "NewNick" });
+    const second = await upsertLoginUser(db, { id: "111", username: "alice_renamed" }, { inGuild: true, nick: "NewNick", avatar: null });
     const all = await db.select().from(schema.users);
     expect(all).toHaveLength(1);
     expect(second.discordUsername).toBe("alice_renamed");
@@ -94,6 +101,14 @@ describe("fetchGuildMembership", () => {
   afterEach(() => vi.restoreAllMocks());
   const discordError = (status: number) =>
     new DiscordAPIError({ code: 0, message: "nope" }, 0, status, "GET", "https://discord.com/api/v10/users/@me/guilds/g/member", { body: undefined, files: undefined });
+
+  it("reads the member's nick and their picture in the server", async () => {
+    process.env.DISCORD_GUILD_ID = "999";
+    vi.spyOn(REST.prototype, "get").mockResolvedValue({ nick: "Al", avatar: "server" });
+    expect(await fetchGuildMembership("token")).toEqual({ inGuild: true, nick: "Al", avatar: "999/server" });
+    vi.spyOn(REST.prototype, "get").mockResolvedValue({ nick: null, avatar: null });
+    expect(await fetchGuildMembership("token")).toEqual({ inGuild: true, nick: null, avatar: null });
+  });
 
   it("reads a 404 as not in the server, without reporting it", async () => {
     const error = vi.spyOn(log, "error").mockImplementation(() => {});

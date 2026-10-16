@@ -81,6 +81,11 @@ export interface User {
   discordGuildNick: string | null;
   discordAvatar: string | null;
   /**
+   * Their own picture in the clan's Discord server, as `<guild id>/<avatar hash>`; null when they haven't set one
+   * there. Shown in place of discordAvatar (avatarUrl). Optional: a Wrapped published before it was stored lacks it.
+   */
+  discordGuildAvatar?: string | null;
+  /**
    * The RSN this player signed up with in the bingo the response is about. The server sets it on the users it sends
    * inside a bingo (a roster, a submission, the stats, the audit log); it is absent on site-level lists, and for an
    * account with no signup in that bingo (a mod who isn't playing). See playerName.
@@ -102,7 +107,7 @@ export interface User {
  * (isAdmin, inGuild) or timestamps. Every response that lists someone other than the viewer uses this; only the
  * viewer's own record (/api/me) and site-admin user management send the full User.
  */
-export type PublicUser = Pick<User, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordAvatar"> & {
+export type PublicUser = Pick<User, "id" | "discordId" | "discordUsername" | "discordGlobalName" | "discordGuildNick" | "discordAvatar" | "discordGuildAvatar"> & {
   rsn: string | null;
 };
 
@@ -1519,7 +1524,7 @@ export interface ContributionAward {
 }
 
 /** A MinimalUser plus only what avatarUrl (client/src/core/ui/user.ts) needs to show their Discord avatar. */
-export type AvatarUser = MinimalUser & Pick<User, "discordId" | "discordAvatar">;
+export type AvatarUser = MinimalUser & Pick<User, "discordId" | "discordAvatar" | "discordGuildAvatar">;
 
 export interface ContributionCount {
   userId: string;

@@ -14,6 +14,7 @@ import type { SessionUser } from "../types";
 import { audit } from "../audit/record";
 import { userLabel } from "../audit/describe";
 import { log } from "../log";
+import { guildAvatarOf } from "../services/discordAvatarService";
 
 interface LoginProfile {
   id: string;
@@ -25,7 +26,8 @@ interface LoginProfile {
 // Result of asking Discord whether the signer is in DISCORD_GUILD_ID.
 // `null` means we couldn't tell (lookup failed), so the stored answer is
 // left as-is rather than locking someone out over a transient error.
-export type GuildMembership = { inGuild: true; nick: string | null } | { inGuild: false } | null;
+// `avatar` is their own picture in the server, in users.discordGuildAvatar's form.
+export type GuildMembership = { inGuild: true; nick: string | null; avatar: string | null } | { inGuild: false } | null;
 
 // Upserts the user row for a Discord login and applies the ADMIN_DISCORD_IDS
 // bootstrap (elevate-only — never demotes an admin granted via the admin
@@ -42,7 +44,7 @@ export async function upsertLoginUser(
     discordUsername: profile.username,
     discordGlobalName: profile.global_name ?? null,
     discordAvatar: profile.avatar ?? null,
-    ...(guild && { inGuild: guild.inGuild, discordGuildNick: guild.inGuild ? guild.nick : null }),
+    ...(guild && { inGuild: guild.inGuild, discordGuildNick: guild.inGuild ? guild.nick : null, discordGuildAvatar: guild.inGuild ? guild.avatar : null }),
   };
 
   const [dbUser] = await dbInstance
@@ -75,8 +77,9 @@ export async function upsertLoginUser(
 export async function fetchGuildMembership(accessToken: string): Promise<GuildMembership> {
   try {
     const rest = new REST({ version: "10", authPrefix: "Bearer" }).setToken(accessToken);
-    const member = (await rest.get(`/users/@me/guilds/${process.env.DISCORD_GUILD_ID}/member`)) as APIGuildMember;
-    return { inGuild: true, nick: member.nick ?? null };
+    const guildId = process.env.DISCORD_GUILD_ID!;
+    const member = (await rest.get(`/users/@me/guilds/${guildId}/member`)) as APIGuildMember;
+    return { inGuild: true, nick: member.nick ?? null, avatar: guildAvatarOf(guildId, member.avatar) };
   } catch (err) {
     if (err instanceof DiscordAPIError && err.status === 404) return { inGuild: false };
     // Discord answering with any other error goes to Sentry (log.error); not reaching it at all is only logged.

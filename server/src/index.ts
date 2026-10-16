@@ -35,6 +35,7 @@ import { refreshPricesAndFill } from "./services/gpValueService";
 import { fillAuditSearchText } from "./audit/searchText";
 import { redateDropsToSignupTimezones } from "./services/achievementService";
 import { startWomReads } from "./services/womReadService";
+import { startDiscordAvatarRefresh } from "./services/discordAvatarService";
 import { startBingoStarts } from "./services/bingoStartService";
 import { startNotificationRounds } from "./services/notificationScheduler";
 import { installDmHandoff } from "./services/notificationDm";
@@ -286,6 +287,8 @@ server.listen(PORT, () => {
   }
   // Hourly Wise Old Man snapshot reads for Titles, paced within WOM's rate limit.
   startWomReads(db);
+  // Players' Discord pictures (their own in the clan's server when set), read by the bot daily: a login alone could be weeks apart.
+  startDiscordAvatarRefresh(db);
   // Each Bingo goes Live by itself at its start date, checked every few seconds.
   startBingoStarts(db);
   // Notifications (CONTEXT.md): the audit log's entries no request drained, Discord DMs that are due, and the kinds no

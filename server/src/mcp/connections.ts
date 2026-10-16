@@ -25,6 +25,7 @@ function selectConnections(db: Queryable, now: Date, only: { userId?: string; id
         discordGlobalName: users.discordGlobalName,
         discordGuildNick: users.discordGuildNick,
         discordAvatar: users.discordAvatar,
+        discordGuildAvatar: users.discordGuildAvatar,
       },
     })
     .from(oauthTokens)

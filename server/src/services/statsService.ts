@@ -28,8 +28,8 @@ type Db = BetterSQLite3Database<typeof schema>;
 type MinimalUser = Pick<typeof users.$inferSelect, "id" | "discordUsername" | "discordGlobalName" | "discordGuildNick"> & { rsn?: string | null };
 const MINIMAL_USER_COLS = { id: users.id, discordUsername: users.discordUsername, discordGlobalName: users.discordGlobalName, discordGuildNick: users.discordGuildNick };
 // Contributions also carry what the client needs for a Discord avatar (Titles section), and nothing more.
-type AvatarUser = MinimalUser & Pick<typeof users.$inferSelect, "discordId" | "discordAvatar">;
-const AVATAR_USER_COLS = { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar };
+type AvatarUser = MinimalUser & Pick<typeof users.$inferSelect, "discordId" | "discordAvatar" | "discordGuildAvatar">;
+const AVATAR_USER_COLS = { ...MINIMAL_USER_COLS, discordId: users.discordId, discordAvatar: users.discordAvatar, discordGuildAvatar: users.discordGuildAvatar };
 
 export interface PointsOverTimePoint {
   at: Date;
