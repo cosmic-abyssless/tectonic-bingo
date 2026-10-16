@@ -8,6 +8,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Tooltip } from "../../../core/ui/Tooltip";
 import { useSlot } from "../../context";
 import { REWIND_POPUP_GAP } from "../../rewindPopupPointer";
+import { rewindPopupTransition } from "../../rewindPopupMotion";
 import { placePopup, type Bounds, type Placement } from "../../default/rewind/popupPlacement";
 import { ComicPage } from "../fx/ComicPage";
 import { comicHeaderProps } from "../page/headerStyle";
@@ -132,7 +133,9 @@ export function RewindPageLayout() {
 
         {/* Over the Board, clear of the header and the dock; only the card itself takes clicks. */}
         <div className="pointer-events-none fixed inset-0 z-40">
-          <AnimatePresence mode="wait">
+          {/* Not mode="wait": at 4x and 8x the next popup comes before the last has gone, and waiting on each exit queued them
+              up until a popup stuck on screen while Play went on without it. The new one comes in as the old one goes. */}
+          <AnimatePresence>
             {popup && <PlacedPopup key={popup.submission.id} popup={popup} bounds={bounds} />}
             {!popup && closing && (
               <m.div
@@ -279,7 +282,7 @@ function PlacedPopup({ popup, bounds }: { popup: RewindPopupModel; bounds: () =>
       }
       animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.98 }}
-      transition={big && !reduceMotion ? { type: "spring", stiffness: 380, damping: 20 } : { duration: 0.16 }}
+      transition={rewindPopupTransition(popup.holdMs, big && !reduceMotion ? { type: "spring", stiffness: 380, damping: 20 } : null)}
     >
       <RewindPopup popup={popup} pointer={placement?.pointer ?? null} />
     </m.div>
