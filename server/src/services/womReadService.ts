@@ -7,6 +7,8 @@
 // request per Player, at start + 6h (queueDueWomUpdates), goes through the same queue and pacing.
 // Once a Bingo is Finished, one last read runs up to its end, and after that it's never read again, unless a Site admin
 // asks for a re-read (rereadBingo), which reads the whole Bingo again to fill in what older reads didn't keep.
+// A Player whose first snapshot was stored before per-boss EHB was kept (Effort) is read from the start once more on
+// their next read, Live or within the final read's grace, which fills it in on its own.
 import { and, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { WomGains } from "@bingo/shared";
@@ -59,7 +61,7 @@ export type ReadResult = "read" | "updated" | "skipped" | "rate_limited" | "fail
  * Reads one Player's new snapshots, from their last stored one (or shortly before the Bingo's start) up to now, or
  * up to the Bingo's end once it's Finished. Skips a Bingo that isn't running and a Player already read through its end.
  * A re-read reads a Finished Bingo's whole range again; snapshots already stored keep everything but get the per-boss
- * EHB they were stored without.
+ * EHB they were stored without. A Player whose first stored snapshot lacks it is read from the start the same way.
  */
 export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: { now: Date; beforeEachPage?: () => Promise<void> }): Promise<ReadResult> {
   const bingo = db.select().from(bingos).where(eq(bingos.id, job.bingoId)).get();
@@ -80,15 +82,18 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
   }
   const reread = job.kind === "reread";
   if (reread && !end) return "skipped";
-  if (!reread && end && state?.readThrough && state.readThrough >= end) return "skipped";
 
-  const lastStored = db
-    .select({ at: max(womSnapshots.takenAt) })
-    .from(womSnapshots)
-    .where(and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, job.userId)))
-    .get()?.at;
+  const theirs = and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, job.userId));
+  const latest = db.select({ at: max(womSnapshots.takenAt) }).from(womSnapshots).where(theirs).get()?.at;
+  const first = db.select({ bossEhbJson: womSnapshots.bossEhbJson }).from(womSnapshots).where(theirs).orderBy(womSnapshots.takenAt).limit(1).get();
+  // Their first snapshot was stored before per-boss EHB was kept: read from the start again, which fills it in on every
+  // snapshot (then the first has it, so this happens once). Not the latest: a read since the deploy fills that one alone.
+  const backfill = first !== undefined && first.bossEhbJson === null;
+  if (!reread && !backfill && end && state?.readThrough && state.readThrough >= end) return "skipped";
+
   // From the last stored snapshot itself (it comes back again and is ignored), so nothing between reads is missed.
-  const from = reread ? new Date(start.getTime() - BASELINE_LOOKBACK_MS) : (lastStored ?? state?.readThrough ?? new Date(start.getTime() - BASELINE_LOOKBACK_MS));
+  const from =
+    reread || backfill ? new Date(start.getTime() - BASELINE_LOOKBACK_MS) : (latest ?? state?.readThrough ?? new Date(start.getTime() - BASELINE_LOOKBACK_MS));
   if (from >= to) return "skipped";
 
   const raw = await client.getSnapshots(rsn, from, to, { beforeEachPage: opts.beforeEachPage });
@@ -317,11 +322,25 @@ export function queueDueReads(db: Db, queue: WomReadQueue, now: Date): void {
     const readThrough = new Map(
       db.select({ userId: womReads.userId, readThrough: womReads.readThrough }).from(womReads).where(eq(womReads.bingoId, bingo.id)).all().map((r) => [r.userId, r.readThrough]),
     );
+    const lacking = lackingBossEhb(db, bingo.id);
     for (const userId of members(db, bingo.id)) {
       const through = readThrough.get(userId);
-      if (!through || through < end) queue.add({ bingoId: bingo.id, userId });
+      if (!through || through < end || lacking.has(userId)) queue.add({ bingoId: bingo.id, userId });
     }
   }
+}
+
+/** The Players whose first stored snapshot was stored before per-boss EHB was kept: their next read fills it in. */
+function lackingBossEhb(db: Db, bingoId: string): Set<string> {
+  const first = new Map<string, string | null>();
+  const rows = db
+    .select({ userId: womSnapshots.userId, bossEhbJson: womSnapshots.bossEhbJson })
+    .from(womSnapshots)
+    .where(eq(womSnapshots.bingoId, bingoId))
+    .orderBy(womSnapshots.takenAt)
+    .all();
+  for (const r of rows) if (!first.has(r.userId)) first.set(r.userId, r.bossEhbJson);
+  return new Set([...first].filter(([, json]) => json === null).map(([userId]) => userId));
 }
 
 /**

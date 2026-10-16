@@ -19,7 +19,7 @@ incomplete for their Team, and their share of their Team's Effort.
 | How Parts get bosses | **Derived from the Part's Items** through Luck's drop-rate table (an Item's bosses), and an Admin can **add or remove** bosses per Tile or Part in the board editor. |
 | Where it shows | **Stats page** (contributors table column; each Tile's Effort by Player), **player card**, **Wrapped** (Player section and Player share card), and **a new Title**. |
 | Name | **Effort** / **Effort share**. |
-| Bingos already Finished | **Backfilled**: per-boss EHB is read again from Wise Old Man's snapshot history. Historical Bingos have no snapshots: not recorded. |
+| Bingos already running or Finished | **Backfilled on their own**: a Player whose first stored snapshot lacks per-boss EHB is read from the Bingo's start again on their next read (Live, or Finished within the final read's 7-day grace). A Bingo Finished longer ago has a Re-read button. Historical Bingos have no snapshots: not recorded. |
 
 Two calls made here, not by the user (flag in the PR if changed):
 
@@ -109,7 +109,12 @@ at the account type's rates (ironmen differ).
    `server/src/audit/routePolicy.ts`), and a **Re-read Wise Old Man** button per Finished Bingo on
    Site admin > Bingos (`client/src/pages/SiteAdminPage.tsx` `BingosList`, around line 199), with copy saying a
    published Wrapped only shows the new numbers once it's published again.
-5. testdata Bingos are skipped by the reader (`readPlayer`); that stays.
+5. **Automatic backfill** (added after review): `readPlayer` reads from `start − BASELINE_LOOKBACK_MS` again, ignoring
+   `readThrough`, when the Player's first stored snapshot has null `boss_ehb_json`, and `queueDueReads` queues a
+   Finished Bingo's Player within the grace period on the same condition. A Live Bingo's snapshots from before the
+   deploy are filled on the first read after it, with no button. Keying on the first snapshot means it happens once, and still fires for a Player read since the deploy (that read fills only the latest):
+   after the full read the first has per-boss EHB.
+6. testdata Bingos are skipped by the reader (`readPlayer`); that stays.
 
 Tests (`server/src/services/womReadService.test.ts` and `womService.test.ts`): parsing keeps per-boss EHB and drops
 -1/0/missing; a re-read fills null `boss_ehb_json` and leaves filled rows alone; the re-read ignores the grace period.
