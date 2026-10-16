@@ -72,6 +72,12 @@ export interface WrappedYou {
   achievements: { key: string; name: string; itemName: string; earnedAt: string }[];
   /** Wise Old Man gains over the Bingo: EHB and their biggest boss kill counts. Null without Wise Old Man data. */
   wom: { ehb: number; bosses: { metric: string; name: string; kills: number }[]; asOf: string } | null;
+  /**
+   * Their Effort (CONTEXT.md): EHB at the bosses of their Team's open Parts, their share of the Team's Effort (0-100, null
+   * when the Team's is 0), and the Tile they put the most into. Null when not recorded. Missing from Wrapped published
+   * before it was stored.
+   */
+  effort?: { hours: number; share: number | null; topTile: { name: string; hours: number } | null } | null;
   /** Their Draft pick: the pick number, and the draft position (Players drafted before them + 1). Null if not drafted. */
   draft: { pickNumber: number; position: number } | null;
 }

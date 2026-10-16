@@ -883,6 +883,11 @@ export interface WrappedYouModel {
   /** `description` is how it was earned; null for one no longer in the catalogue. */
   achievements: { key: string; name: string; itemName: string; description: string | null; earnedLabel: string }[];
   wom: { ehbLabel: string; bosses: { name: string; killsLabel: string }[] } | null;
+  /**
+   * Their Effort (CONTEXT.md): "14.2 hours", "23% of your Team's Effort" (null when the Team had none) and "Most at Vorkath
+   * (6.1 h)" (null without a Tile). Null when not recorded, under a tenth of an hour, or in Wrapped published before it.
+   */
+  effort: { hoursLabel: string; shareLabel: string | null; tileLabel: string | null } | null;
   draft: { pickLabel: string; positionLabel: string } | null;
 }
 
@@ -1125,13 +1130,15 @@ export interface WrappedPlayerCardModel extends WrappedShareCardBase {
   achievementsLabel: string | null;
   /** EHB gained ("312.4"), only with Wise Old Man data; else null. */
   ehbLabel: string | null;
+  /** Their Effort ("14.2 h") and its share of the Team's ("23% of Team", null when the Team had none); null when not shown in the you-model. The first thing left out when the card runs out of room. */
+  effort: { hoursLabel: string; shareLabel: string | null } | null;
   /** The first 3 Titles they held, in Title priority order. */
   titles: { id: string; name: string }[];
   /** Their most valuable drop; `isLuckiest` when it's also their luckiest, then carrying its `luckLabel`. */
   topDrop: (WrappedShareCardDropModel & { isLuckiest: boolean; luckLabel: string | null }) | null;
   /** Their luckiest drop and how rare its luck was ("1 in 5,000"); null when it's the top drop (or they had none). */
   luckiestDrop: (WrappedShareCardDropModel & { luckLabel: string }) | null;
-  /** Their driest streak: the first thing left out when the card runs out of room. */
+  /** Their driest streak: left out, after Effort, when the card runs out of room. */
   driestStreak: { boss: string; killsLabel: string; chanceLabel: string } | null;
 }
 

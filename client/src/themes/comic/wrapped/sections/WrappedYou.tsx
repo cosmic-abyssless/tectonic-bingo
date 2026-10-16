@@ -16,7 +16,7 @@ const art = (images: number) => `[&>div]:mb-2 [&>ul]:mb-2 ${images === 1 ? "[&_i
 /**
  * You, as up to four comic pages (#420): the splash with the Submission count, the comparison, the Points share and the
  * Drop value; the biggest drops, the luckiest and the driest streak; the first and last drops, the biggest day and the
- * Titles; then the Achievements, Wise Old Man and Draft day.
+ * Titles; then the Achievements, Effort, Wise Old Man and Draft day.
  * Every line the default section has is here, in its order; a part with nothing to say is left out and the panels left
  * fill its room.
  */
@@ -46,6 +46,7 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
 
   let d = 0;
   const achievements = y.achievements.length > 0 ? d++ : -1;
+  const effort = y.effort ? d++ : -1;
   const wom = y.wom ? d++ : -1;
   const draft = y.draft ? d++ : -1;
 
@@ -283,6 +284,23 @@ export function WrappedYou({ section: y }: { section: WrappedYouModel }) {
                     </li>
                   ))}
                 </ul>
+              </PanelBody>
+            </Reveal>
+          )}
+
+          {y.effort && (
+            <Reveal step={effort} className={`${FILL} overflow-hidden`}>
+              <PanelBody tone="green" rays="15% 50%" align="start" gap={5}>
+                <Kicker tone="cyan" tilt={-1.5}>
+                  Hours put in
+                </Kicker>
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <InkTitle size={36}>{y.effort.hoursLabel}</InkTitle>
+                  <Body size={14} className="font-semibold">
+                    of Effort, at bosses your Team still needed
+                  </Body>
+                </div>
+                {(y.effort.shareLabel || y.effort.tileLabel) && <Body size={14}>{[y.effort.shareLabel, y.effort.tileLabel].filter(Boolean).join(" · ")}</Body>}
               </PanelBody>
             </Reveal>
           )}

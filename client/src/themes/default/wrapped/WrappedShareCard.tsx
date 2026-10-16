@@ -145,7 +145,7 @@ const luckDetail = (luckLabel: string) => (
 );
 
 /** What a full Player card leaves out, in this order, while it doesn't fit: text is never shrunk to cram them in. */
-const LEAVE_OUT = ["driestStreak", "ehb", "achievements"] as const;
+const LEAVE_OUT = ["effort", "driestStreak", "ehb", "achievements"] as const;
 type Optional = (typeof LEAVE_OUT)[number];
 
 /**
@@ -154,7 +154,7 @@ type Optional = (typeof LEAVE_OUT)[number];
  */
 function useFit(card: WrappedPlayerCardModel) {
   const ref = useRef<HTMLDivElement>(null);
-  const has: Record<Optional, boolean> = { driestStreak: !!card.driestStreak, ehb: !!card.ehbLabel, achievements: !!card.achievementsLabel };
+  const has: Record<Optional, boolean> = { effort: !!card.effort, driestStreak: !!card.driestStreak, ehb: !!card.ehbLabel, achievements: !!card.achievementsLabel };
   const present = LEAVE_OUT.filter((f) => has[f]);
   const [fit, setFit] = useState({ card, left: 0 });
   const left = fit.card === card ? fit.left : 0;
@@ -175,6 +175,7 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
     card.submissions && { label: "Submissions", value: card.submissions.countLabel, extra: card.submissions.comparisonLabel },
     fit.shows("achievements") && { label: "Achievements", value: card.achievementsLabel!, extra: null },
     fit.shows("ehb") && { label: "EHB gained", value: card.ehbLabel!, extra: null },
+    fit.shows("effort") && { label: "Effort", value: card.effort!.hoursLabel, extra: card.effort!.shareLabel },
   ].filter((s): s is { label: string; value: string; extra: string | null } => !!s);
   const streak = fit.shows("driestStreak") ? card.driestStreak : null;
   return (
@@ -234,7 +235,8 @@ function PlayerCard({ card }: { card: WrappedPlayerCardModel }) {
             </div>
           )}
           {small.length > 0 && (
-            <div className="mt-4 flex gap-7">
+            // Wrapping, so a row too wide for the card overflows downwards and the fit leaves something out.
+            <div className="mt-4 flex flex-wrap gap-x-7 gap-y-4">
               {small.map((s) => (
                 <div key={s.label} className="min-w-0">
                   <p className="num text-[20px] font-black leading-none">

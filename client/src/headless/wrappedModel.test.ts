@@ -170,6 +170,28 @@ describe("buildWrappedStory", () => {
     expect(you.driestStreak).toEqual({ boss: "Zulrah", killsLabel: "191 kills", rateLabel: "1/57", chanceLabel: "1 in 30" });
   });
 
+  it("words Effort, and leaves it out when not recorded, under a tenth of an hour, or missing from an older Wrapped", () => {
+    const youWith = (you: Partial<WrappedYou>) => {
+      const section = story(response(player({ submissions: 1, ...you }))).sections.find((s) => s.id === "you")!.section;
+      if (section.kind !== "you") throw new Error("not you");
+      return section;
+    };
+    expect(youWith({ effort: { hours: 14.16, share: 23.04, topTile: { name: "Vorkath", hours: 6.08 } } }).effort).toEqual({
+      hoursLabel: "14.2 hours",
+      shareLabel: "23% of your Team's Effort",
+      tileLabel: "Most at Vorkath (6.1 h)",
+    });
+    // Hours always to one decimal place; a Team with no Effort has no share; no Tile, no Tile line.
+    expect(youWith({ effort: { hours: 3, share: null, topTile: null } }).effort).toEqual({ hoursLabel: "3.0 hours", shareLabel: null, tileLabel: null });
+    expect(youWith({ effort: { hours: 3, share: 37.55, topTile: null } }).effort?.shareLabel).toBe("37.6% of your Team's Effort");
+    expect(youWith({ effort: { hours: 0.04, share: 1, topTile: null } }).effort).toBeNull();
+    expect(youWith({ effort: null }).effort).toBeNull();
+    // emptyYou has no effort field at all, as Wrapped published before it was stored.
+    expect(youWith({}).effort).toBeNull();
+    // Effort alone is something to say.
+    expect(kinds(response(player({ effort: { hours: 2, share: 100, topTile: null } })))).toContain("you");
+  });
+
   it("never measures a Player against a number they fell short of", () => {
     const you = story(response(player({ submissions: 2, pointsShare: 3, bingoAveragePointsShare: 10, teamPointsFraction: 0.05, teamRank: 9, teamSize: 10 }))).sections[1]!.section;
     if (you.kind !== "you") throw new Error("not you");
@@ -554,6 +576,16 @@ describe("share cards", () => {
     expect(c.titles.map((t) => t.name)).toEqual(["Carry", "Closer", "Spoon"]);
   });
 
+  it("shows Effort on the Player card with its share of the Team's, and leaves it out when there's none", () => {
+    expect(playerCard({ effort: { hours: 14.16, share: 23.04, topTile: { name: "Vorkath", hours: 6.08 } } }).effort).toEqual({ hoursLabel: "14.2 h", shareLabel: "23% of Team" });
+    expect(playerCard({ effort: { hours: 5, share: null, topTile: null } }).effort).toEqual({ hoursLabel: "5.0 h", shareLabel: null });
+    expect(playerCard({ effort: { hours: 0.01, share: 1, topTile: null } }).effort).toBeNull();
+    expect(playerCard({ effort: null }).effort).toBeNull();
+    expect(playerCard().effort).toBeNull();
+    // Effort alone is enough for a Player card.
+    expect(cardsOf(response(player({ effort: { hours: 2, share: 100, topTile: null } }))).map((c) => c.kind)).toEqual(["player", "team"]);
+  });
+
   it("shows one top drop and one luckiest drop, and a drop that's both once, tagged as both", () => {
     const tbow = drop("s1", { luckOneIn: 3000 });
     const pet = drop("s2", { itemName: "Pet snakeling", gpValue: null, luckOneIn: 5000 });
@@ -568,7 +600,7 @@ describe("share cards", () => {
 
   it("leaves out each part of the Player card without data, and the card itself with nothing to show", () => {
     const c = card(response(player({ gpGained: 3_000_000, wom: { ehb: 0, bosses: [], asOf: iso(30) } })), "player")!;
-    expect(c).toMatchObject({ partnerLabel: null, draftLabel: null, pointsShare: null, submissions: null, achievementsLabel: null, ehbLabel: null, titles: [], topDrop: null, luckiestDrop: null, driestStreak: null, dropValueLabel: "3m" });
+    expect(c).toMatchObject({ partnerLabel: null, draftLabel: null, pointsShare: null, submissions: null, achievementsLabel: null, ehbLabel: null, effort: null, titles: [], topDrop: null, luckiestDrop: null, driestStreak: null, dropValueLabel: "3m" });
 
     expect(cardsOf(response(player())).map((c) => c.kind)).toEqual(["team"]);
   });
