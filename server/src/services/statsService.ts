@@ -522,7 +522,8 @@ function luckFacts(
 
 /**
  * What Titles (shared/titles.ts) are picked from: one entry per Player of `contributions`, built from their awards
- * (with when each completed and whether they closed it), their Submissions and Claims, and their Wise Old Man gains.
+ * (with when each completed and whether they closed it), their Submissions and Claims, their Wise Old Man gains, and
+ * the Effort `contributions` carry (so Effort is computed once, by getContributionCounts).
  */
 export function getTitleFacts(
   db: Db,
@@ -632,6 +633,7 @@ export function getTitleFacts(
       totalQuantity: quantity.get(c.userId) ?? 0,
       wom: start && timeline ? gainsOf(timeline, start, end) : null,
       luck: luck.get(c.userId) ?? null,
+      effort: c.effort && { uncompletedHours: c.effort.uncompletedHours, asOf: c.effort.asOf },
       achievements: achievementTallies ? (achievementTallies.get(c.userId) ?? { earned: 0, lastEarnedAt: null }) : null,
       draft: draft.get(c.userId) ?? null,
       lastAt: {

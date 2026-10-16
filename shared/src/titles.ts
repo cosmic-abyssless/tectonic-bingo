@@ -60,6 +60,11 @@ export interface PlayerTitleFacts {
   /** Null without a Wise Old Man snapshot from before the Bingo: their drops can't be judged. */
   luck: LuckFacts | null;
   /**
+   * Their Effort (CONTEXT.md) on Parts their Team never completed, and the snapshot it runs up to. Null when Effort
+   * isn't recorded for them.
+   */
+  effort: { uncompletedHours: number; asOf: string } | null;
+  /**
    * The Achievements (CONTEXT.md) they've earned that are switched on in this Bingo, and when they earned the latest of
    * them (reaching that count). Null when the Bingo has Achievements switched off.
    */
@@ -147,6 +152,7 @@ export type TitleId =
   | "closer"
   | "clutch"
   | "grinder"
+  | "unsung_hero"
   | "spoon"
   | "butterfingers"
   | "dry"
@@ -194,6 +200,8 @@ export interface TitleDefinition {
    * Titles gets it, then whoever got there first. Null when it can't be told (then the pool's order decides).
    */
   reachedAt: (facts: JudgedTitleFacts, ctx: TitleContext) => number | null;
+  /** "wom" Titles: the snapshot a holder's number runs up to, when it isn't their Wise Old Man gains' (`wom.asOf`). */
+  asOf?: (facts: JudgedTitleFacts) => string | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -367,6 +375,22 @@ export const TITLES: TitleDefinition[] = [
     requirement: (min) => `${num(min)} EHB gained`,
     format: (v) => `${num(v)} EHB gained`,
     reachedAt: (f) => latest(f.wom?.asOf),
+  },
+  {
+    id: "unsung_hero",
+    name: "Unsung hero",
+    flavour: "Put in the hours. The drops never came.",
+    explanation: "The most hours spent at the bosses of parts their team never completed, by Wise Old Man, whether or not they got anything.",
+    group: "grind",
+    hidden: false,
+    source: "wom",
+    measure: (f) => f.effort?.uncompletedHours ?? null,
+    minimum: { default: 3, label: "Hours at unfinished parts", whole: false },
+    qualifies: (v, _f, min) => v >= min,
+    requirement: (min) => `${num(min)} hours at the bosses of parts the team never completed`,
+    format: (v) => `${num(v)} hours at unfinished parts`,
+    reachedAt: (f) => latest(f.effort?.asOf),
+    asOf: (f) => f.effort?.asOf ?? null,
   },
   {
     id: "spoon",
@@ -611,7 +635,7 @@ export function pickTitles(pool: PlayerTitleFacts[], ctx: TitleContext, settings
     }
     if (title.hidden && !holder) continue;
     const holders = holder
-      ? [{ userId: holder.facts.userId, value: holder.value, text: title.format(holder.value, holder.facts, ctx), asOf: title.source === "wom" ? (holder.facts.wom?.asOf ?? null) : null }]
+      ? [{ userId: holder.facts.userId, value: holder.value, text: title.format(holder.value, holder.facts, ctx), asOf: title.source === "wom" ? (title.asOf ? title.asOf(holder.facts) : (holder.facts.wom?.asOf ?? null)) : null }]
       : [];
     out.push({ title, requirement: title.requirement(min, settings.luck), holders });
   }

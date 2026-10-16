@@ -20,6 +20,7 @@ function player(userId: string, facts: Partial<PlayerTitleFacts> = {}): PlayerTi
     totalQuantity: 0,
     wom: null,
     luck: null,
+    effort: null,
     achievements: null,
     draft: null,
     lastAt: { approved: null, rejected: null, posted: null, newItem: null, item: null },
@@ -205,6 +206,14 @@ describe("pickTitles", () => {
     expect(holdersOf(pool, "grinder")).toEqual(["b"]);
   });
 
+  it("gives Unsung hero for the most hours at parts the team never completed, from 3 hours, with Effort's freshness", () => {
+    const effort = (uncompletedHours: number, hours: number) => ({ effort: { uncompletedHours, asOf: at(hours).toISOString() } });
+    const pool = [player("a"), player("b", effort(2.5, 5)), player("c", { ...effort(7, 6), wom: { ehb: 1, ehp: 0, clues: 0, asOf: at(1).toISOString() } })];
+    const picked = pickTitles(pool, live(48)).find((p) => p.title.id === "unsung_hero")!;
+    expect(picked.holders).toEqual([{ userId: "c", value: 7, text: "7 hours at unfinished parts", asOf: at(6).toISOString() }]);
+    expect(holdersOf([player("a"), player("b", effort(2.5, 5))], "unsung_hero")).toEqual([]);
+  });
+
   it("needs 3 approved Submissions for Sniper, and ranks by points per Submission", () => {
     const pool = [player("a", { pointsShare: 40, approvedSubmissions: 2 }), player("b", { pointsShare: 30, approvedSubmissions: 3 }), player("c", { pointsShare: 40, approvedSubmissions: 8 })];
     expect(holdersOf(pool, "sniper")).toEqual(["b"]);
@@ -325,6 +334,12 @@ describe("titleNotRecorded", () => {
     expect(TITLES.filter((t) => titleNotRecorded(t, recorded)).map((t) => t.id).sort()).toEqual([...TITLES.filter((t) => t.source === "wom").map((t) => t.id), "overachiever"].sort());
     expect(titleNotRecorded(byId("grinder"), { ...recorded, womSnapshots: true })).toBe(false);
     expect(titleNotRecorded(byId("carry"), recorded)).toBe(false);
+  });
+
+  it("marks Unsung hero without Submissions, even with snapshots: Effort needs both", () => {
+    expect(titleNotRecorded(byId("unsung_hero"), { ...recorded, womSnapshots: true })).toBe(false);
+    expect(titleNotRecorded(byId("unsung_hero"), { ...recorded, womSnapshots: true, submissions: false })).toBe(true);
+    expect(titleNotRecorded(byId("grinder"), { ...recorded, womSnapshots: true, submissions: false })).toBe(false);
   });
 
   it("never marks any other Bingo's", () => {

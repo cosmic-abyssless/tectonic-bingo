@@ -298,6 +298,19 @@ describe("Effort in Stats", () => {
     expect(own.tileEffort.map((t) => t.userId)).toEqual([s.alice]);
   });
 
+  it("gives each Player's Title facts their hours on Parts the Team never completed", () => {
+    const s = seed();
+    s.snap(s.alice, 0, { zulrah: 0 });
+    s.snap(s.alice, 10, { zulrah: 4 });
+    s.snap(s.alice, 20, { zulrah: 10 });
+    s.complete(s.teamA, s.alice, s.fang.id, "Tanzanite fang", 10);
+    s.finish();
+
+    const facts = getStats(db, s.bingo.id).titleFacts;
+    expect(facts.find((f) => f.userId === s.alice)!.effort).toEqual({ uncompletedHours: expect.closeTo(8), asOf: at(20).toISOString() });
+    expect(facts.find((f) => f.userId === s.bob)!.effort).toBeNull();
+  });
+
   it("leaves Effort null on every contribution when it isn't recorded", () => {
     const s = seed();
     s.finish();
