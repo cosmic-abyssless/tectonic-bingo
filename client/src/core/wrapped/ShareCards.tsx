@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentTy
 import type { WrappedShareCardModel } from "../../headless/types";
 import { Button } from "../ui/Button";
 import { CheckIcon, CopyIcon, DownloadIcon, ShareIcon } from "../ui/icons";
-import { canCopyImage, canShareImage, copyImage, downloadImage, renderShareCard, shareImage, SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from "./shareCardImage";
+import { canCopyImage, canShareFile, copyImage, downloadFile, renderShareCard, shareFile, SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from "./shareCardImage";
 
 // Wrapped's share cards (CONTEXT.md "Wrapped"), in the Outro before its way out: each card drawn by the theme's
 // WrappedShareCard slot, previewed scaled to fit, with Copy image, Download and (where the browser can share files)
@@ -44,7 +44,7 @@ export function WrappedShareCardItem({ card, preview, Card }: { card: WrappedSha
 
 /** What the browser can do with a card's image: copy it, share it as a file. It doesn't change while the page is open. */
 function useShareSupport() {
-  return useMemo(() => ({ copy: canCopyImage(), share: canShareImage() }), []);
+  return useMemo(() => ({ copy: canCopyImage(), share: canShareFile("image/png", "card.png") }), []);
 }
 
 type Status = { tone: "ok" | "error"; text: string } | null;
@@ -90,8 +90,8 @@ function ShareCard({ card, preview, Card, supports }: { card: WrappedShareCardMo
   };
 
   const copy = () => run(() => copyImage(image()), "Copied", "Couldn't copy the image");
-  const download = () => run(async () => downloadImage(await image(), card.fileName), "Saved", "Couldn't save the image");
-  const share = () => run(async () => shareImage(await image(), card.fileName, `${card.label} · ${card.bingoName}`), "Shared", "Couldn't share the image");
+  const download = () => run(async () => downloadFile(await image(), card.fileName), "Saved", "Couldn't save the image");
+  const share = () => run(async () => shareFile(await image(), card.fileName, `${card.label} · ${card.bingoName}`), "Shared", "Couldn't share the image");
 
   return (
     <figure className="flex flex-col gap-3">
@@ -102,7 +102,7 @@ function ShareCard({ card, preview, Card, supports }: { card: WrappedShareCardMo
           {preview && <PreviewWatermark />}
         </div>
       </ScaledCard>
-      <figcaption className="flex flex-col items-center gap-2">
+      <figcaption data-pdf-skip className="flex flex-col items-center gap-2">
         <div className="flex flex-wrap justify-center gap-2">
           {supports.copy && (
             <Button size="sm" variant="primary" onPress={copy} isDisabled={busy} aria-label={`Copy image of your ${card.label}`}>
@@ -164,7 +164,7 @@ function PreviewWatermark() {
     <div aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <div
         className="w-[160%] shrink-0 py-3 text-center font-black uppercase"
-        style={{ transform: "rotate(-30deg)", backgroundColor: "rgb(251 191 36 / 0.85)", color: "#18181b", fontSize: 44, letterSpacing: "0.3em", boxShadow: "0 0 0 2px rgb(24 24 27 / 0.5)" }}
+        style={{ transform: "rotate(-30deg)", backgroundColor: "var(--color-watermark)", color: "var(--color-on-watermark)", fontSize: 44, letterSpacing: "0.3em", boxShadow: "0 0 0 2px var(--color-watermark-edge)" }}
       >
         Preview
       </div>

@@ -5,6 +5,7 @@ import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
 import { WrappedCategoryArt } from "../../../core/wrapped/WrappedParts";
 import { WrappedShareCards } from "../../../core/wrapped/ShareCards";
 import { useSlot } from "../../context";
+import { WrappedPdfButton } from "./WrappedPdfButton";
 
 export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void; feedback: { responded: boolean; onOpen: () => void } | null }) {
   const ShareCard = useSlot("WrappedShareCard");
@@ -21,9 +22,13 @@ export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: 
       </Reveal>
       {/* Not a Reveal: the jump to the cards lands here, and they should never be caught half faded in. */}
       <WrappedShareCards cards={section.cards} preview={preview} Card={ShareCard} />
+      {/* The whole Wrapped, beside the cards (and in the header too). Left out of the PDF, as the buttons below are. */}
+      <div data-pdf-skip className="mt-8 flex justify-center">
+        <WrappedPdfButton />
+      </div>
       {/* Last, so the page ends with the way out. */}
       <Reveal step={2}>
-        <div className="mt-12 flex flex-wrap justify-center gap-3">
+        <div data-pdf-skip className="mt-12 flex flex-wrap justify-center gap-3">
           <Button variant="primary" onPress={onRewind}>
             <RewindIcon />
             Watch the replay

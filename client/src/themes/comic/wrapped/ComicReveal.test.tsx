@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
-import { createWrappedProgressStore, WrappedProgressProvider } from "../../../core/wrapped/sceneProgress";
+import { createWrappedProgressStore, setWrappedShowAll, WrappedProgressProvider } from "../../../core/wrapped/sceneProgress";
 import { ComicReveal } from "./ComicReveal";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setWrappedShowAll(false);
+  // jsdom has no Web Animations; a test that stands one in takes it away again.
+  delete (Element.prototype as { animate?: unknown }).animate;
+});
 
 function Page({ store }: { store: ReturnType<typeof createWrappedProgressStore> }) {
   return (
@@ -79,5 +84,29 @@ describe("the comic's panels", () => {
     const [again] = store.getScenes();
     act(() => store.setSceneState(again!.id, { reached: 3 }));
     expect(panel("zero").dataset.ink).toBe("inked");
+  });
+
+  it("is inked at once for the PDF, without drawing in, and back to how the reader left it afterwards", () => {
+    const animate = vi.fn();
+    Object.defineProperty(Element.prototype, "animate", { value: animate, configurable: true });
+    const store = createWrappedProgressStore();
+    render(<Page store={store} />);
+    const [scene] = store.getScenes();
+    act(() => store.setSceneState(scene!.id, { reached: 1, current: true }));
+    const drawnIn = animate.mock.calls.length;
+
+    act(() => setWrappedShowAll(true));
+    for (const text of ["zero", "one", "two"]) {
+      expect(panel(text).dataset.ink).toBe("inked");
+      expect(content(text).style.visibility).not.toBe("hidden");
+    }
+    expect(animate.mock.calls.length).toBe(drawnIn);
+
+    act(() => setWrappedShowAll(false));
+    expect(panel("zero").dataset.ink).toBe("inked");
+    expect(panel("one").dataset.ink).toBe("pencil");
+    expect(panel("two").dataset.ink).toBe("pencil");
+    // Nothing draws in again: the panel the reader had reached was inked all along.
+    expect(animate.mock.calls.length).toBe(drawnIn);
   });
 });

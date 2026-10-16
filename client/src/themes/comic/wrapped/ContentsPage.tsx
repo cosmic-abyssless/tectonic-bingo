@@ -44,7 +44,9 @@ export function ContentsPage() {
               const backLabel = page?.kind === "back" ? "The back cover" : page?.kind === "credits" ? "Credits & back cover" : "Share cards & back cover";
               return (
                 <li key={s.id}>
+                  {/* The contents themselves, so the PDF keeps them (core/wrapped/wrappedPdf.ts leaves other buttons out). */}
                   <button
+                    data-pdf-keep
                     type="button"
                     onClick={() => controller.goToSection(s.id)}
                     aria-label={`${isBack ? backLabel : s.label}${page?.no ? `, page ${page.no}` : ""}`}
@@ -66,9 +68,12 @@ export function ContentsPage() {
               );
             })}
           </ol>
-          <CoverCaption tilt={1} fill={colors.PAPER_RAISED} size={13} style={{ alignSelf: "flex-end", color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
-            Scroll, swipe, or press →
-          </CoverCaption>
+          {/* How to turn the pages: nothing to do with a PDF, so left out of it. */}
+          <div data-pdf-skip className="self-end">
+            <CoverCaption tilt={1} fill={colors.PAPER_RAISED} size={13} style={{ color: colors.INK, borderColor: colors.LINE, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}>
+              Scroll, swipe, or press →
+            </CoverCaption>
+          </div>
         </div>
       </Reveal>
     </WrappedScene>

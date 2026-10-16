@@ -143,6 +143,34 @@ export function WrappedProgressProvider({ source, reveal = null, children }: { s
   return <ProgressSourceContext.Provider value={value}>{children}</ProgressSourceContext.Provider>;
 }
 
+// "Show everything": while the Wrapped is drawn to a PDF (wrappedPdf.ts) every Scene shows as fully read, whatever the
+// reader has reached or scrolled to. A Scene whose page supplies the progress reports every step reached (and a page's
+// own Reveal is told so, to draw it in without animating), and a scroll Scene's Reveals show at full opacity. Turned off,
+// each goes back to what its page or the scroll says. One switch for the whole page: only one Wrapped is ever open.
+let showAll = false;
+const showAllListeners = new Set<() => void>();
+
+/** Turns "show everything" on or off for every Scene on the page. */
+export function setWrappedShowAll(on: boolean): void {
+  if (showAll === on) return;
+  showAll = on;
+  showAllListeners.forEach((l) => l());
+}
+
+const subscribeShowAll = (listener: () => void) => {
+  showAllListeners.add(listener);
+  return () => void showAllListeners.delete(listener);
+};
+
+/** Whether every Scene is to show as fully read right now (setWrappedShowAll). */
+export function useWrappedShowAll(): boolean {
+  return useSyncExternalStore(
+    subscribeShowAll,
+    () => showAll,
+    () => false,
+  );
+}
+
 /** The page-supplied source, or null when Scenes measure scroll progress. */
 export function useWrappedProgressSource(): WrappedProgressSource | null {
   return useContext(ProgressSourceContext)?.source ?? null;

@@ -115,6 +115,15 @@
   --color-chart-8: #e34948;
 }
 
+/* The "Preview" band across a Moderator's preview Wrapped: its share cards and every page of its PDF. Amber with dark
+   lettering in both schemes, since it is printed into an image. Outside @theme because the PDF's pages read it from
+   script. */
+:root {
+  --color-watermark: rgb(251 191 36 / 0.85);
+  --color-on-watermark: #18181b;
+  --color-watermark-edge: rgb(24 24 27 / 0.5);
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-color-scheme="light"]) {
     --color-background: #09090b;

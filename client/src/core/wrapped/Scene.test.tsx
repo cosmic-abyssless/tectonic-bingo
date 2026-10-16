@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { domAnimation, LazyMotion } from "motion/react";
 import { Reveal, useWrappedSceneState, WrappedScene } from "./Scene";
-import { createWrappedProgressStore, useWrappedScenes, WrappedProgressProvider, type WrappedProgressStore, type WrappedRevealProps } from "./sceneProgress";
+import { createWrappedProgressStore, setWrappedShowAll, useWrappedScenes, WrappedProgressProvider, type WrappedProgressStore, type WrappedRevealProps } from "./sceneProgress";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setWrappedShowAll(false);
+});
 
 /** A guided page's Scene: three steps, then two, with a Reveal per step. */
 function Sections() {
@@ -157,5 +161,74 @@ describe("with no page-supplied progress", () => {
     expect(screen.getByTestId("probe").textContent).toBe("none");
     // Scroll-linked: no page-supplied reveal state, the opacity is a motion value tied to the Scene.
     expect(screen.getByText("scrolled").closest("[data-revealed]")).toBeNull();
+  });
+});
+
+describe('"show everything" (for the PDF)', () => {
+  it("has a page-driven Scene report every step reached and show every Reveal, then go back to what the page says", () => {
+    const store = createWrappedProgressStore();
+    render(<GuidedPage store={store} />);
+    const [first] = store.getScenes();
+    act(() => store.setSceneState(first!.id, { reached: 1, current: true }));
+
+    act(() => setWrappedShowAll(true));
+    for (const t of ["first-0", "first-1", "first-2", "second-0", "second-1"]) expect(revealed(t)).toBe("true");
+    expect(screen.getByTestId("probe").textContent).toBe("2/2");
+
+    act(() => setWrappedShowAll(false));
+    expect([revealed("first-0"), revealed("first-1"), revealed("first-2")]).toEqual(["true", "false", "false"]);
+    expect(revealed("second-0")).toBe("false");
+    expect(screen.getByTestId("probe").textContent).toBe("0/2");
+    // What the page said meanwhile is untouched.
+    expect(store.getSceneState(first!.id).reached).toBe(1);
+  });
+
+  it("tells a page's own Reveal component its Reveals are reached", () => {
+    const store = createWrappedProgressStore();
+    const seen: boolean[] = [];
+    const Own = ({ revealed, children }: WrappedRevealProps) => {
+      seen.push(revealed);
+      return <b>{children}</b>;
+    };
+    render(
+      <WrappedProgressProvider source={store} reveal={Own}>
+        <WrappedScene steps={1}>
+          <Reveal step={0}>a</Reveal>
+        </WrappedScene>
+      </WrappedProgressProvider>,
+    );
+    expect(seen.at(-1)).toBe(false);
+    act(() => setWrappedShowAll(true));
+    expect(seen.at(-1)).toBe(true);
+    act(() => setWrappedShowAll(false));
+    expect(seen.at(-1)).toBe(false);
+  });
+
+  it("shows a scroll Scene's Reveals at full opacity, then follows the scroll again", async () => {
+    // Under LazyMotion's features, as in the app (App.tsx): without them Motion doesn't write a changed style.
+    render(
+      <LazyMotion features={domAnimation}>
+        <WrappedScene steps={2}>
+          <Reveal step={1}>scrolled</Reveal>
+        </WrappedScene>
+      </LazyMotion>,
+    );
+    const reveal = () => screen.getByText("scrolled") as HTMLElement;
+    // Nothing has scrolled in jsdom: the Reveal is still faded out.
+    expect(reveal().style.opacity).toBe("0");
+    // Motion writes the style on its next frame.
+    act(() => setWrappedShowAll(true));
+    await waitFor(() => expect(reveal().style.opacity).toBe("1"));
+    act(() => setWrappedShowAll(false));
+    await waitFor(() => expect(reveal().style.opacity).toBe("0"));
+  });
+
+  it("marks a scroll Scene for the PDF to find, as a page-driven one is", () => {
+    const { container } = render(
+      <WrappedScene steps={1}>
+        <Reveal step={0}>x</Reveal>
+      </WrappedScene>,
+    );
+    expect(container.querySelector("section")?.hasAttribute("data-wrapped-scene")).toBe(true);
   });
 });
