@@ -199,6 +199,8 @@ export interface BingoExportDocument {
     /** Absent in older files: shown (the app's default). */
     showScreenshotsWhenFinished?: boolean;
     publishWrappedOnFinish?: boolean;
+    /** One Superlative per Player (Bingo.superlativesOneEach). Absent in older files: off. */
+    superlativesOneEach?: boolean;
     /** The raids and bosses Wrapped looks at (Bingo.wrappedBosses). Absent in older files: the new Bingo's own (the previous Bingo's). */
     wrappedBosses?: string[];
     /**

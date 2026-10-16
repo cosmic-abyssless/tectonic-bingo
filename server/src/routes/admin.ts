@@ -146,6 +146,10 @@ router.patch(
       if (typeof body.publishWrappedOnFinish !== "boolean") throw new ServiceError(400, "publishWrappedOnFinish must be a boolean");
       params.publishWrappedOnFinish = body.publishWrappedOnFinish;
     }
+    if ("superlativesOneEach" in body) {
+      if (typeof body.superlativesOneEach !== "boolean") throw new ServiceError(400, "superlativesOneEach must be a boolean");
+      params.superlativesOneEach = body.superlativesOneEach;
+    }
     // Validated by the service (normalizeWrappedBosses).
     if ("wrappedBosses" in body) params.wrappedBosses = body.wrappedBosses;
     if ("achievementsEnabled" in body) {
