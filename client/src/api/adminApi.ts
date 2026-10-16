@@ -15,6 +15,10 @@ export function createBingo(payload: { slug: string; name: string; description?:
 export function deleteBingo(id: string) {
   return api.delete(`/api/admin/bingos/${id}`);
 }
+// Reads a Finished Bingo from Wise Old Man again, in the background: how many Players were queued.
+export function rereadWom(slug: string) {
+  return api.post<{ players: number }>(`/api/admin/bingos/${slug}/wom-reread`, {});
+}
 // Always creates a brand-new bingo from a previously exported document —
 // never overwrites an existing one.
 export function importBingo(payload: { slug: string; name?: string; document: BingoExportDocument }) {

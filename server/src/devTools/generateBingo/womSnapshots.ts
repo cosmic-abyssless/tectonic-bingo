@@ -140,7 +140,7 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
       ehp += rng.chance(0.3) ? rng.between(0, 1.5) : 0;
       clues += rng.chance(0.25) ? rng.int(1, 3) : 0;
     }
-    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], ehb: ehb0 + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
+    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb: {}, ehb: ehb0 + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
   }
   return out;
 }

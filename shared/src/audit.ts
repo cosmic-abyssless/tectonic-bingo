@@ -70,6 +70,8 @@ export interface AuditDetailsMap {
 
   /** The last of a Historical Bingo's pending screenshots was attached (one entry for them all, not one each). */
   "bingo.historical_screenshots_attached": { slug: string; name: string; screenshots: number };
+  /** A Site admin had a Finished Bingo read from Wise Old Man again (womReadService.rereadBingo): `players` queued. */
+  "bingo.wom_reread": { slug: string; name: string; players: number };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
 
@@ -523,6 +525,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Historical screenshots attached",
     label: (i) => `${actor(i)} attached the last of the historical Bingo "${i.details.name}"'s ${i.details.screenshots} screenshots`,
+  },
+  "bingo.wom_reread": {
+    category: "bingo",
+    tone: "neutral",
+    visibility: "mods",
+    title: "Wise Old Man re-read",
+    label: (i) => `${actor(i)} had the bingo "${i.details.name}" read from Wise Old Man again (${i.details.players} players)`,
   },
   "user.admin_changed": {
     category: "moderation",

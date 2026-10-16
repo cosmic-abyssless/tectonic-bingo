@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { createTestDb } from "../testUtils/testDb";
 import { WomClient, type WomSnapshot } from "./womService";
-import { gainsOf, queueDueReads, queueDueWomUpdates, readPlayer, WomReadQueue } from "./womReadService";
+import { gainsOf, loadTimelines, queueDueReads, queueDueWomUpdates, readPlayer, rereadBingo, WomReadQueue } from "./womReadService";
 import * as achievementService from "./achievementService";
 
 let sqlite: Database.Database;
@@ -253,7 +253,7 @@ describe("Leech and Skiller count play from 7 hours after the start", () => {
   });
 
   it("leaves Titles' gains measured from the start", () => {
-    const snap = (hours: number, clues: number): WomSnapshot => ({ at: at(hours), bossKills: {}, ehb: 0, ehp: 0, clues });
+    const snap = (hours: number, clues: number): WomSnapshot => ({ at: at(hours), bossKills: {}, bossEhb: {}, ehb: 0, ehp: 0, clues });
     expect(gainsOf([snap(-3, 40), snap(4, 41), snap(12, 41)], START, null)?.clues).toBe(1);
   });
 });
@@ -392,7 +392,7 @@ describe("Skiller (an Achievement read from EHP)", () => {
 });
 
 describe("gainsOf", () => {
-  const snap = (hours: number, ehb: number | null, clues: number | null = 0): WomSnapshot => ({ at: at(hours), bossKills: {}, ehb, ehp: 0, clues });
+  const snap = (hours: number, ehb: number | null, clues: number | null = 0): WomSnapshot => ({ at: at(hours), bossKills: {}, bossEhb: {}, ehb, ehp: 0, clues });
 
   it("measures from the last snapshot at or before the start", () => {
     expect(gainsOf([snap(-10, 1), snap(-1, 2, 3), snap(5, 7, 10)], START, null)).toEqual({ ehb: 5, ehp: 0, clues: 7, asOf: at(5).toISOString() });
@@ -570,5 +570,79 @@ describe("queueDueReads", () => {
     const queue = { add: vi.fn(() => true) } as unknown as WomReadQueue;
     queueDueReads(db, queue, at(48 + 24 * 30));
     expect(queue.add).not.toHaveBeenCalled();
+  });
+});
+
+// Per-boss EHB (for Effort, CONTEXT.md) and the re-read that fills it in on snapshots stored before it was kept.
+describe("per-boss EHB and re-reading a Finished Bingo", () => {
+  const withBossEhb = (createdAt: Date, vorkathEhb: number) => ({
+    createdAt: createdAt.toISOString(),
+    data: { bosses: { vorkath: { kills: vorkathEhb * 30, ehb: vorkathEhb }, zulrah: { kills: -1, ehb: -1 } }, computed: { ehb: { value: vorkathEhb } } },
+  });
+  // A snapshot as an older read stored it: no per-boss EHB.
+  const oldRow = (bingoId: string, userId: string, takenAt: Date, bossEhbJson: string | null = null) =>
+    db.insert(schema.womSnapshots).values({ bingoId, userId, takenAt, ehb: 1, ehp: 0, clues: 0, bossKillsJson: "{}", bossEhbJson }).run();
+  function inlineQueue(client: WomClient) {
+    return new WomReadQueue(db, client, { perMinute: 6000, now: () => at(24 * 60), sleep: async () => {} });
+  }
+
+  it("stores each boss's EHB with the snapshot, and loads it", async () => {
+    const { bingoId, userIds } = seed();
+    await readPlayer(db, fakeWom([withBossEhb(at(-2), 1.5), withBossEhb(at(3), 2.25)]).client, { bingoId, userId: userIds[0]! }, { now: at(5) });
+    const timeline = loadTimelines(db, bingoId).get(userIds[0]!)!;
+    expect(timeline.map((s) => s.bossEhb)).toEqual([{ vorkath: 1.5 }, { vorkath: 2.25 }]);
+    expect(timeline.every((s) => s.hasBossEhb)).toBe(true);
+  });
+
+  it("loads a snapshot stored without it as having none", () => {
+    const { bingoId, userIds } = seed();
+    oldRow(bingoId, userIds[0]!, at(1));
+    expect(loadTimelines(db, bingoId).get(userIds[0]!)).toMatchObject([{ bossEhb: {}, hasBossEhb: false }]);
+  });
+
+  it("fills in per-boss EHB a stored snapshot lacks, leaving a filled one and everything else alone", async () => {
+    const { bingoId, userIds } = seed({ stage: "complete", endedAt: at(48) });
+    const userId = userIds[0]!;
+    oldRow(bingoId, userId, at(-2));
+    oldRow(bingoId, userId, at(47), JSON.stringify({ vorkath: 9 }));
+    db.insert(schema.womReads).values({ bingoId, userId, rsn: "Player 0", readAt: at(50), readThrough: at(48) }).run();
+
+    const wom = fakeWom([withBossEhb(at(-2), 1), withBossEhb(at(20), 2), withBossEhb(at(47), 3)]);
+    const queue = inlineQueue(wom.client);
+    expect(rereadBingo(db, bingoId, queue)).toBe(1);
+    await queue.whenIdle();
+
+    // Read the whole Bingo again although it was read through its end.
+    expect(wom.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(wom.urls()[0]!.searchParams.get("endDate")).toBe(at(48).toISOString());
+    const rows = stored(bingoId).sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime());
+    expect(rows.map((r) => [r.takenAt, r.bossEhbJson, r.ehb])).toEqual([
+      [at(-2), JSON.stringify({ vorkath: 1 }), 1],
+      [at(20), JSON.stringify({ vorkath: 2 }), 2],
+      [at(47), JSON.stringify({ vorkath: 9 }), 1],
+    ]);
+  });
+
+  it("re-reads a Bingo that Finished long ago, past the final read's grace period", async () => {
+    const { bingoId, userIds } = seed({ stage: "complete", endedAt: at(48) });
+    const userId = userIds[0]!;
+    oldRow(bingoId, userId, at(1));
+    db.insert(schema.womReads).values({ bingoId, userId, rsn: "Player 0", readAt: at(50), readThrough: at(48) }).run();
+    const queue = inlineQueue(fakeWom([withBossEhb(at(1), 4)]).client);
+
+    rereadBingo(db, bingoId, queue);
+    await queue.whenIdle();
+    expect(stored(bingoId)[0]!.bossEhbJson).toBe(JSON.stringify({ vorkath: 4 }));
+  });
+
+  it("queues only Players read before, and refuses a Bingo that isn't Finished", () => {
+    const finished = seed({ stage: "complete", endedAt: at(48), players: 2 });
+    db.insert(schema.womReads).values({ bingoId: finished.bingoId, userId: finished.userIds[1]!, rsn: "Player 1", readAt: at(50), readThrough: at(48) }).run();
+    const queue = { add: vi.fn(() => true) } as unknown as WomReadQueue;
+    expect(rereadBingo(db, finished.bingoId, queue)).toBe(1);
+    expect((queue.add as ReturnType<typeof vi.fn>).mock.calls).toEqual([[{ bingoId: finished.bingoId, userId: finished.userIds[1], kind: "reread" }]]);
+
+    db.update(schema.bingos).set({ stage: "live" }).where(eq(schema.bingos.id, finished.bingoId)).run();
+    expect(() => rereadBingo(db, finished.bingoId, queue)).toThrow(/Finished/);
   });
 });

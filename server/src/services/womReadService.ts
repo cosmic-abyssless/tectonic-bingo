@@ -5,14 +5,16 @@
 // limit (16 a minute of its 20, 80 of its 100 with WOM_API_KEY), a 429 holds the queue off, and each read starts from
 // the last stored snapshot, so a Player costs about one request an hour however long the Bingo runs. The one update
 // request per Player, at start + 6h (queueDueWomUpdates), goes through the same queue and pacing.
-// Once a Bingo is Finished, one last read runs up to its end, and after that it's never read again.
-import { and, eq, inArray, max } from "drizzle-orm";
+// Once a Bingo is Finished, one last read runs up to its end, and after that it's never read again, unless a Site admin
+// asks for a re-read (rereadBingo), which reads the whole Bingo again to fill in what older reads didn't keep.
+import { and, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { WomGains } from "@bingo/shared";
 import * as schema from "../db/schema";
 import { bingos, teamMembers, teams, womReads, womSnapshots } from "../db/schema";
 import { log } from "../log";
 import { audit } from "../audit/record";
+import { ServiceError } from "./errors";
 import { effectiveStartsAt, endedAt } from "./bingoStart";
 import { TESTDATA_PREFIX } from "./devTestDataService";
 import { rsnsInBingo } from "./playerNames";
@@ -44,8 +46,11 @@ function readsDisabled(): boolean {
 export interface ReadJob {
   bingoId: string;
   userId: string;
-  /** "update": ask WOM to update the Player (the update at start + 6h) instead of reading their snapshots. */
-  kind?: "update";
+  /**
+   * "update": ask WOM to update the Player (the update at start + 6h) instead of reading their snapshots. "reread": read
+   * a Finished Bingo's whole range again, from before its start to its end, even though it was read through (rereadBingo).
+   */
+  kind?: "update" | "reread";
 }
 
 export type ReadResult = "read" | "updated" | "skipped" | "rate_limited" | "failed";
@@ -53,6 +58,8 @@ export type ReadResult = "read" | "updated" | "skipped" | "rate_limited" | "fail
 /**
  * Reads one Player's new snapshots, from their last stored one (or shortly before the Bingo's start) up to now, or
  * up to the Bingo's end once it's Finished. Skips a Bingo that isn't running and a Player already read through its end.
+ * A re-read reads a Finished Bingo's whole range again; snapshots already stored keep everything but get the per-boss
+ * EHB they were stored without.
  */
 export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: { now: Date; beforeEachPage?: () => Promise<void> }): Promise<ReadResult> {
   const bingo = db.select().from(bingos).where(eq(bingos.id, job.bingoId)).get();
@@ -71,7 +78,9 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
     db.delete(womReads).where(where).run();
     state = undefined;
   }
-  if (end && state?.readThrough && state.readThrough >= end) return "skipped";
+  const reread = job.kind === "reread";
+  if (reread && !end) return "skipped";
+  if (!reread && end && state?.readThrough && state.readThrough >= end) return "skipped";
 
   const lastStored = db
     .select({ at: max(womSnapshots.takenAt) })
@@ -79,7 +88,7 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
     .where(and(eq(womSnapshots.bingoId, bingo.id), eq(womSnapshots.userId, job.userId)))
     .get()?.at;
   // From the last stored snapshot itself (it comes back again and is ignored), so nothing between reads is missed.
-  const from = lastStored ?? state?.readThrough ?? new Date(start.getTime() - BASELINE_LOOKBACK_MS);
+  const from = reread ? new Date(start.getTime() - BASELINE_LOOKBACK_MS) : (lastStored ?? state?.readThrough ?? new Date(start.getTime() - BASELINE_LOOKBACK_MS));
   if (from >= to) return "skipped";
 
   const raw = await client.getSnapshots(rsn, from, to, { beforeEachPage: opts.beforeEachPage });
@@ -93,9 +102,14 @@ export async function readPlayer(db: Db, client: WomClient, job: ReadJob, opts: 
 
   db.transaction((tx) => {
     for (const s of parseSnapshots(raw)) {
+      // A snapshot already stored is left as it is, except that one stored before per-boss EHB was kept gets it now.
       tx.insert(womSnapshots)
-        .values({ bingoId: bingo.id, userId: job.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills) })
-        .onConflictDoNothing()
+        .values({ bingoId: bingo.id, userId: job.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills), bossEhbJson: JSON.stringify(s.bossEhb) })
+        .onConflictDoUpdate({
+          target: [womSnapshots.bingoId, womSnapshots.userId, womSnapshots.takenAt],
+          set: { bossEhbJson: sql`excluded.boss_ehb_json` },
+          setWhere: isNull(womSnapshots.bossEhbJson),
+        })
         .run();
     }
     const read = { rsn, readAt: opts.now, readThrough: to, lastError: null, lastErrorAt: null };
@@ -122,13 +136,26 @@ export async function updatePlayer(db: Db, client: WomClient, job: ReadJob, opts
   return client.rateLimitedUntilMs > Date.now() ? "rate_limited" : "failed";
 }
 
+/** A stored snapshot. `hasBossEhb` is false on one read before per-boss EHB was kept (its bossEhb is then empty). */
+export interface StoredWomSnapshot extends WomSnapshot {
+  hasBossEhb: boolean;
+}
+
 /** Each Player's stored snapshots, oldest first. */
-export function loadTimelines(db: Db, bingoId: string): Map<string, WomSnapshot[]> {
+export function loadTimelines(db: Db, bingoId: string): Map<string, StoredWomSnapshot[]> {
   const rows = db.select().from(womSnapshots).where(eq(womSnapshots.bingoId, bingoId)).orderBy(womSnapshots.takenAt).all();
-  const out = new Map<string, WomSnapshot[]>();
+  const out = new Map<string, StoredWomSnapshot[]>();
   for (const r of rows) {
     const list = out.get(r.userId) ?? [];
-    list.push({ at: r.takenAt, bossKills: JSON.parse(r.bossKillsJson) as WomSnapshot["bossKills"], ehb: r.ehb, ehp: r.ehp, clues: r.clues });
+    list.push({
+      at: r.takenAt,
+      bossKills: JSON.parse(r.bossKillsJson) as WomSnapshot["bossKills"],
+      bossEhb: r.bossEhbJson === null ? {} : (JSON.parse(r.bossEhbJson) as WomSnapshot["bossEhb"]),
+      hasBossEhb: r.bossEhbJson !== null,
+      ehb: r.ehb,
+      ehp: r.ehp,
+      clues: r.clues,
+    });
     out.set(r.userId, list);
   }
   return out;
@@ -295,6 +322,25 @@ export function queueDueReads(db: Db, queue: WomReadQueue, now: Date): void {
       if (!through || through < end) queue.add({ bingoId: bingo.id, userId });
     }
   }
+}
+
+/**
+ * Re-reads a Finished Bingo from Wise Old Man (a Site admin's button): every Player read before is queued to read the
+ * whole Bingo again, from shortly before its start to its end, however long ago it ended, through the queue's pacing.
+ * Fills in what older reads didn't keep (per-boss EHB, for Effort) and changes nothing else. Returns how many Players
+ * were queued.
+ */
+export function rereadBingo(db: Db, bingoId: string, queue: WomReadQueue = getWomReadQueue(db)): number {
+  const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get();
+  if (!bingo) throw new ServiceError(404, "Bingo not found");
+  if (bingo.stage !== "complete") throw new ServiceError(400, "Only a Finished Bingo can be re-read from Wise Old Man");
+  if (readsDisabled()) throw new ServiceError(409, "Wise Old Man reads are turned off on this server");
+  let queued = 0;
+  for (const { userId } of db.select({ userId: womReads.userId }).from(womReads).where(eq(womReads.bingoId, bingoId)).all()) {
+    if (queue.add({ bingoId, userId, kind: "reread" })) queued++;
+  }
+  audit(db, { action: "bingo.wom_reread", bingoId, entity: { type: "bingo", id: bingoId, label: bingo.name }, details: { slug: bingo.slug, name: bingo.name, players: queued } });
+  return queued;
 }
 
 let _queue: WomReadQueue | undefined;

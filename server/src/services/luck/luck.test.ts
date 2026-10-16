@@ -16,7 +16,7 @@ const rates = dropRateTable({
 
 const at = (minute: number) => new Date(2026, 0, 1, 0, minute);
 const START = at(0);
-const snap = (minute: number, kills: Record<string, number | null>): WomSnapshot => ({ at: at(minute), bossKills: kills, ehb: null, ehp: null, clues: null });
+const snap = (minute: number, kills: Record<string, number | null>): WomSnapshot => ({ at: at(minute), bossKills: kills, bossEhb: {}, ehb: null, ehp: null, clues: null });
 
 let seq = 0;
 function claim(itemName: string, minute: number, extra: Partial<LuckClaim> = {}): LuckClaim {

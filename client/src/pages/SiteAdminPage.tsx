@@ -201,6 +201,25 @@ function BingosList() {
   const { data } = useBingos();
   const [confirming, setConfirming] = useState<Bingo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Re-read Wise Old Man: the Bingo being asked for, and what each answered with.
+  const [rereading, setRereading] = useState<string | null>(null);
+  const [reread, setReread] = useState<Record<string, { tone: "ok" | "danger"; text: string }>>({});
+
+  async function rereadWom(bingo: Bingo) {
+    setRereading(bingo.id);
+    try {
+      const { players } = await adminApi.rereadWom(bingo.slug);
+      const text =
+        players === 0
+          ? "No Players of this Bingo were ever read from Wise Old Man, so there's nothing to read again."
+          : `Reading ${players} ${players === 1 ? "Player" : "Players"} from Wise Old Man again in the background, a few a minute. A published Wrapped only shows the new numbers once it's published again.`;
+      setReread((prev) => ({ ...prev, [bingo.id]: { tone: "ok", text } }));
+    } catch (e: unknown) {
+      setReread((prev) => ({ ...prev, [bingo.id]: { tone: "danger", text: e instanceof Error ? e.message : "Couldn't re-read Wise Old Man" } }));
+    } finally {
+      setRereading(null);
+    }
+  }
 
   async function remove(bingo: Bingo) {
     setConfirming(null);
@@ -233,10 +252,17 @@ function BingosList() {
                     {bingo.name}
                   </Link>
                   <Badge tone={bingo.stage === "live" ? "ok" : "neutral"}>{STAGE_LABEL[bingo.stage]}</Badge>
+                  {/* Fills in what older reads didn't keep (each boss's EHB, for Effort). A Historical Bingo was never read. */}
+                  {bingo.stage === "complete" && !bingo.historical && (
+                    <Button variant="ghost" size="sm" isDisabled={rereading === bingo.id} onPress={() => rereadWom(bingo)}>
+                      Re-read Wise Old Man
+                    </Button>
+                  )}
                   <IconButton label={`Delete ${bingo.name}`} size="sm" onPress={() => setConfirming(bingo)}>
                     <TrashIcon size={14} />
                   </IconButton>
                 </div>
+                {reread[bingo.id] && <Notice tone={reread[bingo.id]!.tone}>{reread[bingo.id]!.text}</Notice>}
                 {confirming?.id === bingo.id && <DeleteBingoConfirm bingo={bingo} onConfirm={() => remove(bingo)} onCancel={() => setConfirming(null)} />}
               </li>
             ))}

@@ -3,7 +3,7 @@ import type { WomSnapshot } from "../womService";
 import { killsAtLeast, killsAtMost, killsUpToDrop } from "./kc";
 
 const at = (minute: number) => new Date(2026, 0, 1, 0, minute);
-const snap = (minute: number, kills: Record<string, number | null>): WomSnapshot => ({ at: at(minute), bossKills: kills, ehb: null, ehp: null, clues: null });
+const snap = (minute: number, kills: Record<string, number | null>): WomSnapshot => ({ at: at(minute), bossKills: kills, bossEhb: {}, ehb: null, ehp: null, clues: null });
 
 describe("kill counts from snapshots", () => {
   const timeline = [snap(0, { vardorvis: 100 }), snap(60, { vardorvis: 110 }), snap(120, { vardorvis: 150 })];

@@ -221,7 +221,26 @@ describe("parseSnapshots", () => {
   it("gives kill counts over time, oldest first", () => {
     const timeline = parseSnapshots([snapshot("2026-01-02T00:00:00Z", 20, 15), snapshot("2026-01-01T00:00:00Z", 10)]);
     expect(timeline.map((s) => s.at.toISOString())).toEqual(["2026-01-01T00:00:00.000Z", "2026-01-02T00:00:00.000Z"]);
-    expect(timeline[1]).toEqual({ at: new Date("2026-01-02T00:00:00Z"), bossKills: { vardorvis: 20, zulrah: null }, ehb: 12.5, ehp: 40, clues: 15 });
+    expect(timeline[1]).toEqual({ at: new Date("2026-01-02T00:00:00Z"), bossKills: { vardorvis: 20, zulrah: null }, bossEhb: {}, ehb: 12.5, ehp: 40, clues: 15 });
+  });
+
+  it("keeps each boss's EHB, leaving out bosses with none, an unranked -1, or no number", () => {
+    const [snap] = parseSnapshots([
+      {
+        createdAt: "2026-01-01T00:00:00Z",
+        data: {
+          bosses: {
+            vardorvis: { metric: "vardorvis", kills: 120, ehb: 3.25 },
+            zulrah: { metric: "zulrah", kills: -1, ehb: -1 },
+            vorkath: { metric: "vorkath", kills: 0, ehb: 0 },
+            nex: { metric: "nex", kills: 5 },
+            yama: { metric: "yama", kills: 2, ehb: "1.5" },
+          },
+          computed: { ehb: { value: 3.25 } },
+        },
+      },
+    ]);
+    expect(snap!.bossEhb).toEqual({ vardorvis: 3.25 });
   });
 
   it("reads an unranked count (-1) as unknown, not zero", () => {
