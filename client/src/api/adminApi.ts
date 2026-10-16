@@ -1,5 +1,5 @@
 import type {
-  AchievementKey, AddTagRequest, Bingo, BingoExportDocument, BoardTagsResponse, DiscordSyncStatus, OsrsBossSearchResult, Tag, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
+  AchievementKey, AddEffortBossRequest, AddTagRequest, Bingo, BoardEffortBossesResponse, BingoExportDocument, BoardTagsResponse, DiscordSyncStatus, OsrsBossSearchResult, Tag, BingoLine, BingoModerator, BingoStaff, BoardLine, BugReportStatus, BugReportWithReporter, CaptainCandidatesResponse, CreatePointAdjustmentResponse, FeedbackAudience, SiteAdminsResponse, GraphNode, GraphNodeInput, HistoricalBundle, HistoricalImportScoring, ItemGroup, McpConnection, PieceValue, QuestionForm, SignupQuestion, SuperlativeCategory, UnvaluedItem, Team,
   PickableMembersResponse, Signup, TeamMember, Tile, TileCategory, TitleSettings, User, WomPastCompetition, WrappedArtCredits, WrappedArtGroup, WrappedArtImage, WrappedArtKeying, WrappedArtSection, WrappedBossArtResult, WrappedCredit, BoardDraftStatus, DraftBoardResponse, ExclusivityRule, PublishPreview,
 } from "@bingo/shared";
 import { api } from "./client";
@@ -282,6 +282,20 @@ export function searchBosses(slug: string, q: string) {
 }
 /** What a tag is on: a Tile, or one of its Parts. */
 export type TagOwner = { tileId: string } | { partId: string };
+
+// Effort bosses (CONTEXT.md "Effort"): an Admin's adds and removes on a Tile or a Part, and each Part's bosses derived
+// from its Items. Each change answers with the board's Effort bosses.
+export function getBoardEffortBosses(slug: string) {
+  return api.get<BoardEffortBossesResponse>(`${base(slug)}/effort-bosses`);
+}
+export function changeEffortBoss(slug: string, owner: TagOwner, request: AddEffortBossRequest) {
+  const path = "tileId" in owner ? `tiles/${owner.tileId}` : `parts/${owner.partId}`;
+  return api.post<BoardEffortBossesResponse>(`${base(slug)}/${path}/effort-bosses`, request);
+}
+/** Drops one add or remove: the boss is back to what the Items say. */
+export function resetEffortBoss(slug: string, id: string) {
+  return api.delete<BoardEffortBossesResponse>(`${base(slug)}/effort-bosses/${id}`);
+}
 
 export function getLines(slug: string) {
   return api.get<{ lines: BoardLine[] }>(`${base(slug)}/lines`);

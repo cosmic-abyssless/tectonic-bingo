@@ -27,7 +27,7 @@ function auditTag(db: Db, t: BoardTables, input: Parameters<typeof audit<"tag.ad
 /** What a tag is on: a Tile, or one of its Parts (a tile node's direct child) by its node id. */
 export type TagOwner = { tileId: string } | { partId: string };
 
-interface ResolvedOwner {
+export interface ResolvedOwner {
   tile: { id: string; name: string };
   part: { id: string; label: string | null } | null;
 }
@@ -36,8 +36,9 @@ function toTag(row: TagRow): Tag {
   return { id: row.id, kind: row.kind, text: row.text, bossTagId: row.bossTagId };
 }
 
-// The Tile or Part, checked to be on this bingo's board. A Part is a direct child of a Tile's node.
-function resolveOwner(db: Db, bingoId: string, owner: TagOwner, t: BoardTables): ResolvedOwner {
+// The Tile or Part, checked to be on this bingo's board. A Part is a direct child of a Tile's node. Effort bosses
+// (effortBossService) are on the same owners.
+export function resolveOwner(db: Db, bingoId: string, owner: TagOwner, t: BoardTables): ResolvedOwner {
   const { tiles, nodes, nodeEdges } = t;
   if ("tileId" in owner) {
     const tile = db.select({ id: tiles.id, name: tiles.name }).from(tiles).where(and(eq(tiles.id, owner.tileId), eq(tiles.bingoId, bingoId))).get();

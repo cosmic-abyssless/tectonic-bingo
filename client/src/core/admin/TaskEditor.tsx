@@ -16,6 +16,7 @@ import { Disclosure } from "../ui/Disclosure";
 import { Checkbox } from "../ui/Checkbox";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { TagsField } from "./TagsField";
+import { EffortBossesField } from "./EffortBossesField";
 
 
 const SCORING_MODES = [
@@ -140,6 +141,8 @@ export function TaskEditor({
             </Field>
 
             <TagsField slug={slug} owner={{ partId: task.id }} locked={locked} hint="Words the board's search finds this tile by, for this task. Players never see them." />
+
+            <EffortBossesField slug={slug} owner={{ partId: task.id }} tileId={tileId} locked={locked} />
 
             <Field label="Scoring mode" as="div">
               <SegmentedControl

@@ -45,7 +45,7 @@ const REALTIME_QUERY_FAMILIES = [
   "superlatives", "feedback", "draftState", "signupRoster", "mySignup", "myPairing", "partnerCandidates", "unpairedSignups",
   "playerProfile", "accountTypes", "auditLog", "teamActivity", "rewind", "bingoMods", "signupQuestions", "myAchievements",
   "adminCaptainCandidates", "adminMods", "adminStaff", "adminQuestions", "adminSuperlatives", "adminWrappedArt",
-  "adminBoardTags", "adminLines", "adminBoardDraft", "adminBoardDraftStatus",
+  "adminBoardTags", "adminBoardEffortBosses", "adminLines", "adminBoardDraft", "adminBoardDraftStatus",
   "adminSiteAdmins", "adminBugReports", "myBugReports",
 ] as const;
 type RealtimeQueryFamily = (typeof REALTIME_QUERY_FAMILIES)[number];
@@ -140,6 +140,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["adminBoardDraft"]);
       invalidate(["adminBoardDraftStatus"]);
       invalidate(["adminBoardTags"]);
+      invalidate(["adminBoardEffortBosses"]);
       invalidate(["adminLines"]);
       break;
     case "wrapped_art_changed":
@@ -152,6 +153,7 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["board"]);
       // Tags (CONTEXT.md "Tag"): the board editor's (the board above carries them for its search).
       invalidate(["adminBoardTags"]);
+      invalidate(["adminBoardEffortBosses"]);
       // A board edit made while live re-scores every team, so everyone's progress moves too.
       invalidate(["teamProgress"]);
       invalidate(["teamSubmissions"]);

@@ -1,7 +1,7 @@
 // The Draft board (CONTEXT.md "Draft board", "Published board", "Publish", #437): the Admins' working copy of a
 // Bingo's Board, applied to the Board everyone plays on only by a Publish.
 //
-// Storage: a full copy of the board's rows, its Tags included, in the draft_* tables (db/schema.ts "DRAFT BOARD"), same
+// Storage: a full copy of the board's rows, its Tags and Effort bosses included, in the draft_* tables (db/schema.ts "DRAFT BOARD"), same
 // shape and same ids as the Published board's, plus a board_drafts row for the Exclusive Item rules, the Rules text and who changed it
 // last. Every admin board edit goes through editDraft, which copies the Published board into the draft first if there
 // is no draft, makes the edit on the copy (boardService with the DRAFT_BOARD table set), and drops the copy again if
@@ -12,6 +12,7 @@ import crypto from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import {
+  WOM_BOSS_NAMES,
   describeValuedAs,
   STALE_PREVIEW_CODE,
   type BoardCategoryChange,
@@ -51,6 +52,7 @@ type TileRow = BoardTables["tiles"]["$inferSelect"];
 type LineRow = BoardTables["bingoLines"]["$inferSelect"];
 type CategoryRow = BoardTables["tileCategories"]["$inferSelect"];
 type TagRow = BoardTables["tags"]["$inferSelect"];
+type EffortBossRow = BoardTables["effortBosses"]["$inferSelect"];
 
 /** One copy of a Bingo's Board, as rows. */
 interface BoardRows {
@@ -60,6 +62,7 @@ interface BoardRows {
   nodes: NodeRow[];
   edges: EdgeRow[];
   tags: TagRow[];
+  effortBosses: EffortBossRow[];
   exclusivityRulesJson: string;
   rulesMarkdown: string | null;
 }
@@ -93,6 +96,7 @@ function loadRows(q: Queryable, bingoId: string, t: BoardTables): BoardRows {
     nodes,
     edges: q.select().from(t.nodeEdges).where(inArray(t.nodeEdges.parentId, nodeIds)).all(),
     tags: q.select().from(t.tags).where(eq(t.tags.bingoId, bingoId)).all(),
+    effortBosses: q.select().from(t.effortBosses).where(eq(t.effortBosses.bingoId, bingoId)).all(),
     exclusivityRulesJson: settings?.exclusivityRulesJson ?? "[]",
     rulesMarkdown: settings?.rulesMarkdown ?? null,
   };
@@ -150,6 +154,7 @@ function ensureDraft(q: Queryable, bingoId: string, userId: string | null): bool
   inChunks(p.tiles, (c) => q.insert(d.tiles).values(c).run());
   inChunks(p.lines, (c) => q.insert(d.bingoLines).values(c).run());
   inChunks(p.tags, (c) => q.insert(d.tags).values(c).run());
+  inChunks(p.effortBosses, (c) => q.insert(d.effortBosses).values(c).run());
   const now = clockNow();
   q.insert(boardDrafts)
     .values({ bingoId, revision: crypto.randomUUID(), exclusivityRulesJson: p.exclusivityRulesJson, rulesMarkdown: p.rulesMarkdown, updatedByUserId: userId, updatedAt: now, createdAt: now })
@@ -160,6 +165,7 @@ function ensureDraft(q: Queryable, bingoId: string, userId: string | null): bool
 function dropDraft(q: Queryable, bingoId: string): void {
   const d = DRAFT_BOARD;
   q.delete(d.tags).where(eq(d.tags.bingoId, bingoId)).run();
+  q.delete(d.effortBosses).where(eq(d.effortBosses.bingoId, bingoId)).run();
   q.delete(d.bingoLines).where(eq(d.bingoLines.bingoId, bingoId)).run();
   q.delete(d.tiles).where(eq(d.tiles.bingoId, bingoId)).run();
   q.delete(d.nodeEdges).where(inArray(d.nodeEdges.parentId, q.select({ id: d.nodes.id }).from(d.nodes).where(eq(d.nodes.bingoId, bingoId)))).run();
@@ -220,6 +226,7 @@ const TILE_FIELDS = [
 const LINE_FIELDS = ["nodeId", "lineType", "lineIndex"] as const satisfies readonly (keyof LineRow)[];
 const CATEGORY_FIELDS = ["label", "colorHex", "sortOrder"] as const satisfies readonly (keyof CategoryRow)[];
 const TAG_FIELDS = ["tileId", "nodeId", "kind", "text", "bossTagId", "sortOrder"] as const satisfies readonly (keyof TagRow)[];
+const EFFORT_FIELDS = ["tileId", "nodeId", "metric", "mode"] as const satisfies readonly (keyof EffortBossRow)[];
 
 function sameFields<T>(a: T, b: T, fields: readonly (keyof T)[]): boolean {
   return fields.every((f) => (a[f] ?? null) === (b[f] ?? null));
@@ -243,6 +250,7 @@ function sameBoard(p: BoardRows, d: BoardRows): boolean {
   if (rowsDiffer(p.lines, d.lines, LINE_FIELDS)) return false;
   if (rowsDiffer(p.nodes, d.nodes, NODE_FIELDS)) return false;
   if (rowsDiffer(p.tags, d.tags, TAG_FIELDS)) return false;
+  if (rowsDiffer(p.effortBosses, d.effortBosses, EFFORT_FIELDS)) return false;
   const edges = new Set(p.edges.map(edgeKey));
   if (edges.size !== d.edges.length || d.edges.some((e) => !edges.has(edgeKey(e)))) return false;
   return rulesKey(p.exclusivityRulesJson) === rulesKey(d.exclusivityRulesJson) && (p.rulesMarkdown ?? "") === (d.rulesMarkdown ?? "");
@@ -257,6 +265,8 @@ interface BoardModel {
   category: Map<string, CategoryRow>;
   /** A Tile's or a Part's tags as the review lists them, by "tile:<id>" or "node:<id>" (tagsText). */
   tags: Map<string, string>;
+  /** A Tile's or a Part's Effort boss changes as the review lists them, keyed the same way (effortBossesText). */
+  effortBosses: Map<string, string>;
 }
 
 /**
@@ -273,6 +283,25 @@ function tagsText(rows: TagRow[]): Map<string, string> {
   return new Map([...byOwner].map(([key, list]) => [key, list.map((r) => (r.kind === "boss" ? `${r.text} (boss)` : r.text)).join(", ")]));
 }
 
+/** Each Tile's and Part's Effort boss changes as one line of text, by boss name: "Vorkath (added), Zulrah (removed)". */
+function effortBossesText(rows: EffortBossRow[]): Map<string, string> {
+  const byOwner = new Map<string, EffortBossRow[]>();
+  for (const row of rows) {
+    const key = row.nodeId ? `node:${row.nodeId}` : `tile:${row.tileId}`;
+    byOwner.set(key, [...(byOwner.get(key) ?? []), row]);
+  }
+  const name = (metric: string) => WOM_BOSS_NAMES[metric as keyof typeof WOM_BOSS_NAMES] ?? metric;
+  return new Map(
+    [...byOwner].map(([key, list]) => [
+      key,
+      list
+        .map((r) => `${name(r.metric)} (${r.mode === "add" ? "added" : "removed"})`)
+        .sort()
+        .join(", "),
+    ]),
+  );
+}
+
 function modelOf(rows: BoardRows): BoardModel {
   const children = new Map<string, string[]>();
   for (const e of [...rows.edges].sort((a, b) => a.sortOrder - b.sortOrder)) children.set(e.parentId, [...(children.get(e.parentId) ?? []), e.childId]);
@@ -283,6 +312,7 @@ function modelOf(rows: BoardRows): BoardModel {
     tile: new Map(rows.tiles.map((t) => [t.id, t])),
     category: new Map(rows.categories.map((c) => [c.id, c])),
     tags: tagsText(rows.tags),
+    effortBosses: effortBossesText(rows.effortBosses),
   };
 }
 
@@ -372,6 +402,7 @@ function tileNodeChanges(rootId: string, p: BoardModel, d: BoardModel, seen: Set
     const isRoot = id === rootId;
     const fields = nodeFieldChanges(before, after, p, d, isRoot ? "Full-completion bonus" : "Points");
     if (!isRoot) pushField(fields, "Tags", p.tags.get(`node:${id}`) ?? "", d.tags.get(`node:${id}`) ?? "");
+    if (!isRoot) pushField(fields, "Effort bosses", p.effortBosses.get(`node:${id}`) ?? "", d.effortBosses.get(`node:${id}`) ?? "");
     const beforeKids = p.children.get(id) ?? [];
     const afterKids = d.children.get(id) ?? [];
     const childPath = isRoot ? path : [...path, nodeName(after)];
@@ -413,6 +444,7 @@ function tileFieldChanges(before: TileRow, after: TileRow, p: BoardModel, d: Boa
   pushField(fields, "Proof screenshot (whole Tile)", before.requiresProof ? "Required" : "Not required", after.requiresProof ? "Required" : "Not required");
   pushField(fields, "Proof note", text(before.proofNote), text(after.proofNote));
   pushField(fields, "Tags", p.tags.get(`tile:${before.id}`) ?? "", d.tags.get(`tile:${after.id}`) ?? "");
+  pushField(fields, "Effort bosses", p.effortBosses.get(`tile:${before.id}`) ?? "", d.effortBosses.get(`tile:${after.id}`) ?? "");
   return fields;
 }
 
@@ -423,6 +455,8 @@ function newTileFields(t: TileRow, m: BoardModel): BoardFieldChange[] {
   if (bonus) fields.push({ field: "Full-completion bonus", before: "", after: String(bonus) });
   const tags = m.tags.get(`tile:${t.id}`);
   if (tags) fields.push({ field: "Tags", before: "", after: tags });
+  const effortBosses = m.effortBosses.get(`tile:${t.id}`);
+  if (effortBosses) fields.push({ field: "Effort bosses", before: "", after: effortBosses });
   return fields;
 }
 
@@ -680,6 +714,10 @@ function applyDraft(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): void
   const draftTagIds = new Set(d.rows.tags.map((g) => g.id));
   const droppedTags = p.rows.tags.filter((g) => !draftTagIds.has(g.id)).map((g) => g.id);
   if (droppedTags.length) tx.delete(P.tags).where(inArray(P.tags.id, droppedTags)).run();
+  // Effort bosses (CONTEXT.md "Effort") likewise.
+  const draftEffortIds = new Set(d.rows.effortBosses.map((e) => e.id));
+  const droppedEffort = p.rows.effortBosses.filter((e) => !draftEffortIds.has(e.id)).map((e) => e.id);
+  if (droppedEffort.length) tx.delete(P.effortBosses).where(inArray(P.effortBosses.id, droppedEffort)).run();
 
   // Tiles: removed ones go (with the Task interest on them); moved ones are parked off the grid first, so two Tiles
   // swapping places never meet on one cell.
@@ -699,6 +737,13 @@ function applyDraft(tx: Tx, bingoId: string, p: BoardModel, d: BoardModel): void
     if (old && !sameFields(old, g, TAG_FIELDS)) tx.update(P.tags).set(pick(g, TAG_FIELDS)).where(eq(P.tags.id, g.id)).run();
   }
   inChunks(d.rows.tags.filter((g) => !tagsBefore.has(g.id)), (c) => tx.insert(P.tags).values(c).run());
+
+  const effortBefore = new Map(p.rows.effortBosses.map((e) => [e.id, e]));
+  for (const e of d.rows.effortBosses) {
+    const old = effortBefore.get(e.id);
+    if (old && !sameFields(old, e, EFFORT_FIELDS)) tx.update(P.effortBosses).set(pick(e, EFFORT_FIELDS)).where(eq(P.effortBosses.id, e.id)).run();
+  }
+  inChunks(d.rows.effortBosses.filter((e) => !effortBefore.has(e.id)), (c) => tx.insert(P.effortBosses).values(c).run());
 
   const linesBefore = new Map(p.rows.lines.map((l) => [l.id, l]));
   for (const l of p.rows.lines) if (!d.rows.lines.some((n) => n.id === l.id)) tx.delete(P.bingoLines).where(eq(P.bingoLines.id, l.id)).run();

@@ -16,6 +16,7 @@ import {
   MAX_SUPERLATIVE_CATEGORIES,
   type BingoExportDocument,
   type ExportNode,
+  type ExportEffortBoss,
   type ExportTag,
   type ExportWrappedArt,
   type WrappedArtCredits,
@@ -35,6 +36,7 @@ import * as achievementService from "./achievementService";
 import * as wrappedArtService from "./wrappedArtService";
 import { parseWrappedBosses } from "./wrappedBossesService";
 import * as tagService from "./tagService";
+import * as effortBossService from "./effortBossService";
 import { setNodeGates } from "./graphService";
 import { decodeExportImage, readTileImage, removeFiles, storeTileImage, type DecodedImage } from "./exportImages";
 import { log } from "../log";
@@ -75,6 +77,9 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
   // Tags (CONTEXT.md): a Tile's own, and each Part's on its task. Only where there are some.
   const tagsByOwner = tagService.exportTags(db, bingoId);
   const tagsField = (list: ExportTag[] | undefined) => (list?.length ? { tags: list } : {});
+  // Effort bosses (CONTEXT.md "Effort") the same way: an Admin's adds and removes, where there are some.
+  const effortByOwner = effortBossService.exportEffortBosses(db, bingoId);
+  const effortField = (list: ExportEffortBoss[] | undefined) => (list?.length ? { effortBosses: list } : {});
 
   let nextLocalId = 1;
   const localIdByRealNodeId = new Map<string, number>();
@@ -137,12 +142,15 @@ export function exportBingo(db: Db, bingoId: string, options: ExportOptions = {}
     proofNote: t.proofNote,
     ...imageField(t.imageUrl),
     ...tagsField(tagsByOwner.tiles.get(t.id)),
+    ...effortField(effortByOwner.tiles.get(t.id)),
     // Set on the node itself (pass 2 below fills in its gates). A Part met again (a reuse stub) has its tags on the
     // copy written in full.
     tasks: t.node.children.map((task) => {
       const exported = buildExportNode(task);
       const partTags = tagsByOwner.parts.get(task.id);
       if (!exported.reuse && partTags?.length) exported.tags = partTags;
+      const partEffort = effortByOwner.parts.get(task.id);
+      if (!exported.reuse && partEffort?.length) exported.effortBosses = partEffort;
       return exported;
     }),
   }));
@@ -273,6 +281,8 @@ function assertValidDocument(doc: BingoExportDocument): void {
     }
     tagService.assertValidExportTags(t.tags, `tile "${t.name}"`);
     for (const task of Array.isArray(t.tasks) ? t.tasks : []) tagService.assertValidExportTags(task.tags, `a task on tile "${t.name}"`);
+    effortBossService.assertValidExportEffortBosses(t.effortBosses, `tile "${t.name}"`);
+    for (const task of Array.isArray(t.tasks) ? t.tasks : []) effortBossService.assertValidExportEffortBosses(task.effortBosses, `a task on tile "${t.name}"`);
     if (t.boardRow < 0 || t.boardRow >= doc.bingo.boardRows || t.boardCol < 0 || t.boardCol >= doc.bingo.boardCols) {
       throw new ServiceError(400, `Malformed import file: tile "${t.name}" is positioned outside the declared board dimensions`);
     }
@@ -476,6 +486,7 @@ export function importBingo(
       });
       if (t.bonusPoints) boardService.updateTileBonusPoints(tx, tile.id, t.bonusPoints);
       tagService.importTags(tx, bingo.id, { tileId: tile.id }, t.tags);
+      effortBossService.importEffortBosses(tx, bingo.id, { tileId: tile.id }, t.effortBosses);
       if (t.tasks.some((task) => task.reuse)) reordered.push({ parentId: tile.nodeId, childLocalIds: t.tasks.map((task) => task.localId) });
       t.tasks
         .filter((task) => !task.reuse)
@@ -483,6 +494,7 @@ export function importBingo(
           const created = boardService.createTask(tx, tile.id, toGraphNodeInput(task), i);
           mapCreatedNode(task, created);
           tagService.importTags(tx, bingo.id, { partId: created.id }, task.tags);
+          effortBossService.importEffortBosses(tx, bingo.id, { partId: created.id }, task.effortBosses);
         });
     }
 

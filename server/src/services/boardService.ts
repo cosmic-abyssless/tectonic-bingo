@@ -395,6 +395,8 @@ export function deleteTile(db: Db, id: string, t: BoardTables = PUBLISHED_BOARD)
     if (!t.draft) tx.delete(tileInterests).where(eq(tileInterests.tileId, id)).run();
     // Its Tags (CONTEXT.md "Tag") are on the same board as it; its Parts' go with their nodes (deleteSubtree).
     tx.delete(t.tags).where(eq(t.tags.tileId, id)).run();
+    // Its Effort bosses (CONTEXT.md "Effort") likewise.
+    tx.delete(t.effortBosses).where(eq(t.effortBosses.tileId, id)).run();
     tx.delete(tiles).where(eq(tiles.id, id)).run(); // must precede deleting the node it FKs to
     deleteSubtree(tx, tile.nodeId, t);
     auditBoard(tx, t, {

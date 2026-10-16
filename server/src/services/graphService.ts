@@ -376,6 +376,8 @@ function deleteNodeForce(tx: Tx, id: string, t: BoardTables): void {
   }
   // A Part's Tags (CONTEXT.md "Tag"), on the same board as it, go with it.
   tx.delete(t.tags).where(eq(t.tags.nodeId, id)).run();
+  // And its Effort bosses (CONTEXT.md "Effort").
+  tx.delete(t.effortBosses).where(eq(t.effortBosses.nodeId, id)).run();
   const childIds = tx.select({ childId: nodeEdges.childId }).from(nodeEdges).where(eq(nodeEdges.parentId, id)).all().map((r) => r.childId);
   tx.delete(nodeEdges).where(or(eq(nodeEdges.parentId, id), eq(nodeEdges.childId, id))).run();
   tx.delete(nodes).where(eq(nodes.id, id)).run();

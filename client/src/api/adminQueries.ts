@@ -34,11 +34,17 @@ export const adminQueryKeys = {
   achievementSettings: (slug: string) => ["adminAchievements", slug] as const,
   wrappedArt: (slug: string) => ["adminWrappedArt", slug] as const,
   boardTags: (slug: string) => ["adminBoardTags", slug] as const,
+  boardEffortBosses: (slug: string) => ["adminBoardEffortBosses", slug] as const,
 };
 
 /** Every Tag on the board (CONTEXT.md "Tag"), by Tile and by Part: the board editor's. */
 export function useBoardTags(slug: string) {
   return useQuery({ queryKey: adminQueryKeys.boardTags(slug), queryFn: () => adminApi.getBoardTags(slug) });
+}
+
+/** The board's Effort bosses (CONTEXT.md "Effort"): every add and remove, and each Part's derived bosses. */
+export function useBoardEffortBosses(slug: string) {
+  return useQuery({ queryKey: adminQueryKeys.boardEffortBosses(slug), queryFn: () => adminApi.getBoardEffortBosses(slug) });
 }
 
 // The site-wide audit log — every bingo, or just site-level entries
@@ -72,12 +78,16 @@ export function usePublishPreview(slug: string, enabled: boolean) {
   return useQuery({ queryKey: adminQueryKeys.publishPreview(slug), queryFn: async () => (await adminApi.getPublishPreview(slug)).preview, enabled, staleTime: Infinity, gcTime: 0, retry: false });
 }
 
-/** After an edit to the draft, a Publish or a Discard: the editor's board, its Tags and the "Unpublished changes" bar catch up. */
+/**
+ * After an edit to the draft, a Publish or a Discard: the editor's board, its Tags, its Effort bosses (whose derived ones
+ * follow the Items) and the "Unpublished changes" bar catch up.
+ */
 export function invalidateBoardDraft(queryClient: QueryClient, slug: string) {
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraft(slug) });
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardDraftStatus(slug) });
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.lines(slug) });
   void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardTags(slug) });
+  void queryClient.invalidateQueries({ queryKey: adminQueryKeys.boardEffortBosses(slug) });
 }
 
 /** optimisticUpdate on the editor's board (the draft), with the status bar refreshed afterwards. */
