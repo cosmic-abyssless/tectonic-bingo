@@ -152,7 +152,8 @@ target (say `signup`), the later dates are simply scheduled in the future.
    they mean to do (and most of a Team on one crowded part, so the Tile dialog's stack of pictures shows "+N") and look
    the Board over (about half read the rules, most open a few Tiles, the odd one opens every
    Tile), which earns the Achievements open from Board revealed. The Admin adds the
-   **Superlative** categories ("Team MVP", "Team Spirit", "The Grinder") unless the board brought its own.
+   **Superlative** categories ("Team MVP", "Team Spirit", "The Grinder") unless the board brought its own, and in about
+   2 in 5 Bingos turns on One Superlative per Player.
 5. **Live**: an hourly simulation (see below), with each Team voting on its Superlatives along the way: about 4 in
    5 Players vote (not the run's own player, whose ballot is left to them), most in every category, the odd one
    changing their mind later, and a Team tends to agree on a favourite, so most categories have a clear winner and
