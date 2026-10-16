@@ -623,6 +623,42 @@ describe("per-boss EHB and re-reading a Finished Bingo", () => {
     ]);
   });
 
+  it("on a Live Bingo, reads a Player from the start again when their latest snapshot lacks it, then only from the last one", async () => {
+    const { bingoId, userIds } = seed();
+    const userId = userIds[0]!;
+    oldRow(bingoId, userId, at(-2));
+    oldRow(bingoId, userId, at(3));
+    db.insert(schema.womReads).values({ bingoId, userId, rsn: "Player 0", readAt: at(4), readThrough: at(4) }).run();
+    const wom = fakeWom([withBossEhb(at(-2), 1), withBossEhb(at(3), 2), withBossEhb(at(6), 3)]);
+
+    await readPlayer(db, wom.client, { bingoId, userId }, { now: at(7) });
+    expect(wom.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(stored(bingoId).sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime()).map((r) => r.bossEhbJson)).toEqual([
+      JSON.stringify({ vorkath: 1 }),
+      JSON.stringify({ vorkath: 2 }),
+      JSON.stringify({ vorkath: 3 }),
+    ]);
+
+    await readPlayer(db, wom.client, { bingoId, userId }, { now: at(8) });
+    expect(wom.urls().at(-1)!.searchParams.get("startDate")).toBe(at(6).toISOString());
+  });
+
+  it("queues a recently Finished Bingo's Player read through its end when their latest snapshot lacks it, and fills it in", async () => {
+    const { bingoId, userIds } = seed({ stage: "complete", endedAt: at(48), players: 2 });
+    const [lacking, filled] = userIds as [string, string];
+    oldRow(bingoId, lacking, at(40));
+    oldRow(bingoId, filled, at(40), JSON.stringify({ vorkath: 1 }));
+    for (const userId of userIds) db.insert(schema.womReads).values({ bingoId, userId, rsn: "x", readAt: at(50), readThrough: at(48) }).run();
+    const queue = { add: vi.fn(() => true) } as unknown as WomReadQueue;
+    queueDueReads(db, queue, at(60));
+    expect((queue.add as ReturnType<typeof vi.fn>).mock.calls).toEqual([[{ bingoId, userId: lacking }]]);
+
+    const wom = fakeWom([withBossEhb(at(40), 5)]);
+    expect(await readPlayer(db, wom.client, { bingoId, userId: lacking }, { now: at(60) })).toBe("read");
+    expect(wom.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(stored(bingoId).find((r) => r.userId === lacking)!.bossEhbJson).toBe(JSON.stringify({ vorkath: 5 }));
+  });
+
   it("re-reads a Bingo that Finished long ago, past the final read's grace period", async () => {
     const { bingoId, userIds } = seed({ stage: "complete", endedAt: at(48) });
     const userId = userIds[0]!;
