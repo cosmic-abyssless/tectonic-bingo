@@ -30,6 +30,11 @@ describe("dropRateTable", () => {
     expect(table.sourcesOf("Tumeken's shadow")).toHaveLength(2);
   });
 
+  it("gives no sources for a skilling pet, even one a boss's table lists", () => {
+    expect(dropRateTable({ Hespori: { Tangleroot: 1 / 5375 } }).sourcesOf("Tangleroot")).toEqual([]);
+    expect(getDropRates().sourcesOf("Tangleroot")).toEqual([]);
+  });
+
   it("gives no sources for an Item no tracked boss drops", () => {
     expect(table.sourcesOf("Twisted bow")).toEqual([]);
     expect(table.sourcesOf("Abyssal whip")).toEqual([]);
