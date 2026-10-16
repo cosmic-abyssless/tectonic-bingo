@@ -180,6 +180,88 @@ describe("winners", () => {
   });
 });
 
+describe("winners, one Superlative per Player", () => {
+  // Casts one vote per nominee listed, each from a different voter, straight into the table.
+  function setup() {
+    const { bingo, team, alice, bob } = seed("live");
+    const mkUser = (name: string) => db.insert(schema.users).values({ discordId: name, discordUsername: name }).returning().get();
+    const carol = mkUser("carol");
+    const dave = mkUser("dave");
+    const voters = Array.from({ length: 8 }, (_, i) => mkUser(`voter${i}`));
+    const category = (name: string) => superlativeService.createCategory(db, { bingoId: bingo.id, name });
+    const cast = (categoryId: string, nominees: { id: string }[]) =>
+      db.insert(schema.superlativeVotes).values(nominees.map((n, i) => ({ categoryId, teamId: team.id, voterUserId: voters[i]!.id, nomineeUserId: n.id }))).run();
+    const winners = (oneEach = true) => superlativeService.computeWinners(db, bingo.id, team.id, { oneEach }).map((w) => [w.categoryName, w.winnerUserIds]);
+    return { bingo, alice, bob, carol, dave, category, cast, winners };
+  }
+
+  it("off: a Player can win several, and a tie is shared", () => {
+    const { alice, bob, category, cast, winners } = setup();
+    cast(category("MVP").id, [bob, bob, alice]);
+    cast(category("Spirit").id, [bob, alice]);
+    expect(winners(false)).toEqual([
+      ["MVP", [bob.id]],
+      ["Spirit", expect.arrayContaining([bob.id, alice.id])],
+    ]);
+  });
+
+  it("keeps the category won by the biggest margin, and gives the other to its runner-up", () => {
+    const { alice, bob, carol, category, cast, winners } = setup();
+    cast(category("Spirit").id, [bob, bob, carol]);
+    cast(category("MVP").id, [bob, bob, bob, alice]);
+    expect(winners()).toEqual([
+      ["Spirit", [carol.id]],
+      ["MVP", [bob.id]],
+    ]);
+  });
+
+  it("skips a runner-up who has already won", () => {
+    const { alice, bob, carol, dave, category, cast, winners } = setup();
+    cast(category("MVP").id, [bob, bob, bob, bob]);
+    cast(category("Spirit").id, [alice, alice, alice, dave]);
+    cast(category("Grinder").id, [bob, bob, bob, alice, alice, carol]);
+    expect(winners()).toEqual([
+      ["MVP", [bob.id]],
+      ["Spirit", [alice.id]],
+      ["Grinder", [carol.id]],
+    ]);
+  });
+
+  it("leaves a category with nobody eligible left without a winner", () => {
+    const { bob, category, cast, winners } = setup();
+    cast(category("MVP").id, [bob, bob]);
+    cast(category("Spirit").id, [bob]);
+    expect(winners()).toEqual([["MVP", [bob.id]]]);
+  });
+
+  it("picks one winner from a tie for the lead, the same one every time", () => {
+    const { alice, bob, category, cast, winners } = setup();
+    cast(category("MVP").id, [alice, bob]);
+    const first = winners();
+    expect(first).toHaveLength(1);
+    expect([[alice.id], [bob.id]]).toContainEqual(first[0]![1]);
+    for (let i = 0; i < 5; i++) expect(winners()).toEqual(first);
+  });
+
+  it("gives a tie between margins to the earlier category", () => {
+    const { bingo, alice, bob, carol, category, cast, winners } = setup();
+    const mvp = category("MVP");
+    const spirit = category("Spirit");
+    cast(mvp.id, [bob, bob, alice]);
+    cast(spirit.id, [bob, bob, carol]);
+    expect(winners()).toEqual([
+      ["MVP", [bob.id]],
+      ["Spirit", [carol.id]],
+    ]);
+
+    superlativeService.reorderCategories(db, bingo.id, [spirit.id, mvp.id]);
+    expect(winners()).toEqual([
+      ["Spirit", [bob.id]],
+      ["MVP", [alice.id]],
+    ]);
+  });
+});
+
 describe("tallies", () => {
   it("refuses before the bingo is finished", () => {
     const { bingo } = seed("live");

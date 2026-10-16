@@ -1,6 +1,7 @@
 // Superlative (CONTEXT.md "Superlative"): a per-Bingo, admin-managed category voted by each Team on its own members
 // (e.g. "Team MVP"). Categories aren't locked to any stage; voting is open for the whole of Live and secret
 // throughout — the server keeps the voter only to enforce one pick per category and let it change.
+import crypto from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { MAX_SUPERLATIVE_CATEGORIES, type AvatarUser, type SuperlativeTeamTurnout } from "@bingo/shared";
 import { now as clockNow } from "../clock";
@@ -197,8 +198,11 @@ export interface CategoryWinners {
   winnerUserIds: string[];
 }
 
-/** Every category's winner(s) within one Team: the nominee(s) tied for the most votes. A category with no votes has none. */
-export function computeWinners(db: Db, bingoId: string, teamId: string): CategoryWinners[] {
+/**
+ * Every category's winner(s) within one Team: the nominee(s) tied for the most votes. A category with no votes has none.
+ * With `oneEach` (the Bingo's "One Superlative per Player"), no Player wins more than one: see awardOneEach.
+ */
+export function computeWinners(db: Db, bingoId: string, teamId: string, { oneEach = false }: { oneEach?: boolean } = {}): CategoryWinners[] {
   const categories = getCategories(db, bingoId);
   if (categories.length === 0) return [];
   const votes = db.select({ categoryId: superlativeVotes.categoryId, nomineeUserId: superlativeVotes.nomineeUserId }).from(superlativeVotes).where(eq(superlativeVotes.teamId, teamId)).all();
@@ -208,6 +212,7 @@ export function computeWinners(db: Db, bingoId: string, teamId: string): Categor
     counts.set(v.nomineeUserId, (counts.get(v.nomineeUserId) ?? 0) + 1);
     countsByCategory.set(v.categoryId, counts);
   }
+  if (oneEach) return awardOneEach(categories, countsByCategory);
   return categories.flatMap((c) => {
     const counts = countsByCategory.get(c.id);
     if (!counts || counts.size === 0) return [];
@@ -216,6 +221,49 @@ export function computeWinners(db: Db, bingoId: string, teamId: string): Categor
     const winnerUserIds = [...counts].filter(([, n]) => n === max).map(([userId]) => userId);
     return [{ categoryId: c.id, categoryName: c.name, winnerUserIds }];
   });
+}
+
+/**
+ * One Superlative per Player (CONTEXT.md "Superlative"). Each round, every category still to award is led by its
+ * eligible nominee (at least one vote, no category won yet) with the most votes, a tie picked by tieBreakKey. The
+ * category with the biggest margin over its next eligible nominee goes to its leader, a tie to the earlier category.
+ * Margins are recomputed every round, so a category whose leader has since won another is judged on its runner-up.
+ */
+function awardOneEach(categories: { id: string; name: string }[], countsByCategory: Map<string, Map<string, number>>): CategoryWinners[] {
+  const winnerOf = new Map<string, string>();
+  const won = new Set<string>();
+  let left = categories.filter((c) => countsByCategory.has(c.id));
+  while (left.length > 0) {
+    let best: { categoryId: string; leader: string; margin: number } | null = null;
+    const open: typeof left = [];
+    for (const c of left) {
+      const eligible = [...countsByCategory.get(c.id)!].filter(([userId, n]) => n > 0 && !won.has(userId));
+      // Nobody eligible left: the category has no winner.
+      if (eligible.length === 0) continue;
+      open.push(c);
+      const max = Math.max(...eligible.map(([, n]) => n));
+      const [leader] = eligible
+        .filter(([, n]) => n === max)
+        .map(([userId]) => userId)
+        .sort((a, b) => tieBreakKey(c.id, a).localeCompare(tieBreakKey(c.id, b)));
+      const margin = max - Math.max(0, ...eligible.filter(([userId]) => userId !== leader).map(([, n]) => n));
+      if (!best || margin > best.margin) best = { categoryId: c.id, leader: leader!, margin };
+    }
+    if (!best) break;
+    const awarded = best;
+    winnerOf.set(awarded.categoryId, awarded.leader);
+    won.add(awarded.leader);
+    left = open.filter((c) => c.id !== awarded.categoryId);
+  }
+  return categories.flatMap((c) => {
+    const winner = winnerOf.get(c.id);
+    return winner ? [{ categoryId: c.id, categoryName: c.name, winnerUserIds: [winner] }] : [];
+  });
+}
+
+/** A tie for a category's lead goes to the lowest key: random-looking, but stable, so a preview and the published Wrapped agree. */
+function tieBreakKey(categoryId: string, userId: string): string {
+  return crypto.createHash("sha256").update(`${categoryId}|${userId}`).digest("hex");
 }
 
 /**
