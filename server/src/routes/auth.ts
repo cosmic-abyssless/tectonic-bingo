@@ -64,8 +64,8 @@ router.post("/phone-link/preview", (req: Request, res: Response) => {
     res.status(410).json({ error: LINK_GONE });
     return;
   }
-  const { discordId, discordUsername, discordGlobalName, discordGuildNick, discordAvatar } = user;
-  res.json({ user: { discordId, discordUsername, discordGlobalName, discordGuildNick, discordAvatar } });
+  const { discordId, discordUsername, discordGlobalName, discordGuildNick, discordAvatar, discordGuildAvatar } = user;
+  res.json({ user: { discordId, discordUsername, discordGlobalName, discordGuildNick, discordAvatar, discordGuildAvatar } });
 });
 
 router.post("/phone-link/redeem", (req: Request, res: Response) => {

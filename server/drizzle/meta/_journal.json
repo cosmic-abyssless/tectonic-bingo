@@ -512,6 +512,13 @@
       "when": 1792174307800,
       "tag": "0074_superlatives_one_each",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1792189666243,
+      "tag": "0075_guild_avatar",
+      "breakpoints": true
     }
   ]
 }

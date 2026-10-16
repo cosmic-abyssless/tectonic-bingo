@@ -229,7 +229,7 @@ describe("getContributionCounts", () => {
     submitAndApprove(fx.teamAId, task.id, fx.memberUserId, fx.modUserId);
 
     const [count] = getContributionCounts(db, fx.bingoId);
-    expect(count!.user).toEqual({ id: fx.memberUserId, discordId: "member", discordAvatar: "abc123", discordUsername: "member", discordGlobalName: null, discordGuildNick: null, rsn: null });
+    expect(count!.user).toEqual({ id: fx.memberUserId, discordId: "member", discordAvatar: "abc123", discordGuildAvatar: null, discordUsername: "member", discordGlobalName: null, discordGuildNick: null, rsn: null });
   });
 });
 

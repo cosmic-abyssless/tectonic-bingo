@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `discord_guild_avatar` text;

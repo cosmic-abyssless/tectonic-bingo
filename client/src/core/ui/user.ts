@@ -13,7 +13,12 @@ export { discordName };
 // Discord's CDN keys avatars by the Discord snowflake ID (discordId), not
 // our internal UUID primary key (id) — mixing those up throws inside
 // BigInt() since a UUID isn't a valid numeric string.
-export function avatarUrl(user: { discordId: string; discordAvatar: string | null }): string {
+// Their own picture in the clan's server comes first, as Discord shows it there (discordGuildAvatar: `<guild id>/<hash>`).
+export function avatarUrl(user: { discordId: string; discordAvatar: string | null; discordGuildAvatar?: string | null }): string {
+  const [guildId, guildHash] = user.discordGuildAvatar?.split("/") ?? [];
+  if (guildId && guildHash) {
+    return `https://cdn.discordapp.com/guilds/${guildId}/users/${user.discordId}/avatars/${guildHash}.png`;
+  }
   if (user.discordAvatar) {
     return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png`;
   }

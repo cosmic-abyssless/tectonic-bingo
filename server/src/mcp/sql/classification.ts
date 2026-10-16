@@ -58,6 +58,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       discord_global_name: "Discord display name",
       discord_guild_nick: "Nickname in the clan's Discord server",
       discord_avatar: "",
+      discord_guild_avatar: "Their own picture in the clan's Discord server, as <guild id>/<avatar hash>; null when not set there",
       in_guild: "Was in the clan's Discord server at their last login (0/1)",
       is_admin: "Site Admin (0/1)",
       mcp_access: "MCP access (0/1): this server's curated tools over Finished Bingos, without being a site admin",
