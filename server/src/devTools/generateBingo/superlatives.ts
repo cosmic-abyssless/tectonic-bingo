@@ -2,6 +2,7 @@
 // board brought its own), and each Team's Players vote on each other through Live, as real Teams do: not everyone
 // votes, not in every category, some change their minds, and a Team tends to agree on a favourite or two, so most
 // categories have a clear winner and the odd one a tie. The run's own player (--me) is left to vote for themselves.
+// Some Admins also turn on One Superlative per Player.
 import type { Api } from "./client";
 import type { Player } from "./people";
 import type { Rng } from "./rng";
@@ -15,6 +16,8 @@ const TURNOUT = 0.8;
 const SKIP_CATEGORY = 0.15;
 /** Of the votes cast, how many are changed for someone else later on. */
 const CHANGE_MIND = 0.1;
+/** Of the Bingos, how many the Admin gives One Superlative per Player. */
+const ONE_EACH = 0.4;
 
 export interface SuperlativeCategory {
   id: string;
@@ -37,6 +40,13 @@ export async function ensureCategories(api: Api, admin: string, slug: string, at
     created.push((await api.as(admin).post<{ category: SuperlativeCategory }>(`/api/bingos/${slug}/admin/superlatives`, { name }, { at })).category);
   }
   return created;
+}
+
+/** Whether the Admin turns on One Superlative per Player, which they do through the settings at `at` if so. */
+export async function maybeOneEach(api: Api, admin: string, slug: string, at: Date, rng: Rng): Promise<boolean> {
+  if (!rng.chance(ONE_EACH)) return false;
+  await api.as(admin).patch(`/api/bingos/${slug}/admin/settings`, { superlativesOneEach: true }, { at });
+  return true;
 }
 
 /**

@@ -178,6 +178,8 @@ export interface Bingo {
   showScreenshotsWhenFinished: boolean;
   /** "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): off by default. */
   publishWrappedOnFinish: boolean;
+  /** "One Superlative per Player" (CONTEXT.md "Superlative"): a Player who tops several keeps one. Off by default. */
+  superlativesOneEach: boolean;
   /**
    * The raids and bosses Wrapped's "Who killed it the most" part looks at (CONTEXT.md "Wrapped"): Wise Old Man boss
    * metrics, in display order. A new Bingo starts with the previous Bingo's list.

@@ -505,6 +505,13 @@
       "when": 1792132301483,
       "tag": "0073_effort",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1792174307800,
+      "tag": "0074_superlatives_one_each",
+      "breakpoints": true
     }
   ]
 }

@@ -479,6 +479,20 @@ describe("settings", () => {
     expect(getBingoBySlug(db, "screenshots-old")?.showScreenshotsWhenFinished).toBe(true);
   });
 
+  it("carries \"One Superlative per Player\" over, and leaves it off for a file that predates it", () => {
+    const { bingo, admin } = seedFullBingo();
+    db.update(schema.bingos).set({ superlativesOneEach: true }).where(eq(schema.bingos.id, bingo.id)).run();
+    const doc = exportBingo(db, bingo.id);
+    expect(doc.bingo.superlativesOneEach).toBe(true);
+    importBingo(db, doc, { slug: "superlatives-on", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "superlatives-on")?.superlativesOneEach).toBe(true);
+
+    const old = JSON.parse(JSON.stringify(doc)) as BingoExportDocument;
+    delete old.bingo.superlativesOneEach;
+    importBingo(db, old, { slug: "superlatives-old", createdByUserId: admin.id });
+    expect(getBingoBySlug(db, "superlatives-old")?.superlativesOneEach).toBe(false);
+  });
+
   it("reads the setting cutMode replaced, from older files", () => {
     const { bingo, admin } = seedFullBingo();
     const doc = JSON.parse(JSON.stringify(exportBingo(db, bingo.id))) as BingoExportDocument;

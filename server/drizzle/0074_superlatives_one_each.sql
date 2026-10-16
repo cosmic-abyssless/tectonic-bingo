@@ -1,0 +1,1 @@
+ALTER TABLE `bingos` ADD `superlatives_one_each` integer DEFAULT false NOT NULL;

@@ -389,7 +389,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
       const gp = mine.filter((c) => c.gpGained > 0).sort((a, b) => b.gpGained - a.gpGained)[0];
       const biggest = drops.filter((d) => d.teamId === team.id && d.gpValue !== null && d.gpValue > 0).sort(byGp)[0];
       const teamAwardPoints = mvp ? (factsOf.get(mvp.userId)?.teamAwardPoints ?? 0) : 0;
-      const superlatives = computeWinners(db, bingoId, team.id)
+      const superlatives = computeWinners(db, bingoId, team.id, { oneEach: bingo.superlativesOneEach })
         .map((w) => ({ category: w.categoryName, winners: w.winnerUserIds.map((id) => userById.get(id)).filter((u): u is AvatarUser => !!u) }))
         .filter((s) => s.winners.length > 0);
       return {

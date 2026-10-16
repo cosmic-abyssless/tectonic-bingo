@@ -6,10 +6,11 @@ import { answerQuestions } from "./answers";
 import { DIFFICULTY, buildBoard, deadlockedParts, difficultyOf, itemToWeigh, planSubmissions, type Claim, type PartModel } from "./board";
 import { OptionsError, defaultSlug, normalizeOptions } from "./options";
 import { chooseMods, makePlayers, pairUp, playingProbability, type Player } from "./people";
+import type { Api } from "./client";
 import { Rng } from "./rng";
 import { chooseCaptains, runInOrder, type Ctx } from "./setup";
 import { runBorrowedAccount } from "./borrowedAccount";
-import { DEFAULT_CATEGORIES, planVotes } from "./superlatives";
+import { DEFAULT_CATEGORIES, maybeOneEach, planVotes } from "./superlatives";
 import { DAY, HOUR, TARGET_STAGES, buildTimeline, runLimit } from "./timeline";
 import { placeholderArt } from "./wrappedArt";
 import { cutOut } from "../../services/stickerEffect";
@@ -609,6 +610,26 @@ describe("planVotes", () => {
   it("plans the same votes for a seed", () => {
     const strip = (vs: ReturnType<typeof planVotes>) => vs.map((v) => [v.at.toISOString(), v.voter.index, v.categoryId, v.nomineeUserId]);
     expect(strip(planVotes(teams(), categories, T0, until, new Rng(11)))).toEqual(strip(planVotes(teams(), categories, T0, until, new Rng(11))));
+  });
+});
+
+describe("maybeOneEach", () => {
+  const T0 = new Date("2026-03-01T12:00:00Z");
+  async function run(seed: number) {
+    const calls: { as: string; path: string; body: unknown; at?: Date }[] = [];
+    const api = { as: (as: string) => ({ patch: async (path: string, body: unknown, opts: { at?: Date }) => void calls.push({ as, path, body, at: opts.at }) }) } as unknown as Api;
+    const on = await maybeOneEach(api, "admin", "testdata-x", T0, new Rng(seed).fork("superlatives-one-each"));
+    return { on, calls };
+  }
+
+  it("has the Admin turn on One Superlative per Player through the settings for some seeds, the same each time", async () => {
+    const runs = await Promise.all(Array.from({ length: 30 }, (_, seed) => run(seed)));
+    expect(runs.some((r) => r.on)).toBe(true);
+    expect(runs.some((r) => !r.on)).toBe(true);
+    for (const r of runs) {
+      expect(r.calls).toEqual(r.on ? [{ as: "admin", path: "/api/bingos/testdata-x/admin/settings", body: { superlativesOneEach: true }, at: T0 }] : []);
+    }
+    expect((await Promise.all(Array.from({ length: 30 }, (_, seed) => run(seed)))).map((r) => r.on)).toEqual(runs.map((r) => r.on));
   });
 });
 

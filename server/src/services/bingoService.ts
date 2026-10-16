@@ -726,6 +726,7 @@ export interface UpdateBingoSettingsParams {
   achievements?: Partial<Record<AchievementKey, boolean>>;
   showScreenshotsWhenFinished?: boolean;
   publishWrappedOnFinish?: boolean;
+  superlativesOneEach?: boolean;
   wrappedBosses?: unknown;
 }
 

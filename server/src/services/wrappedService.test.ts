@@ -297,6 +297,31 @@ describe("computeWrapped", () => {
     expect(teamB.superlatives).toEqual([]);
   });
 
+  it("gives each Player one Superlative at most when the Bingo says so", () => {
+    const fx = seed();
+    play(fx);
+    const mvp = createSuperlativeCategory(db, { bingoId: fx.bingo.id, name: "Team MVP" });
+    const spirit = createSuperlativeCategory(db, { bingoId: fx.bingo.id, name: "Team Spirit" });
+    const live = db.select().from(bingos).where(eq(bingos.id, fx.bingo.id)).get()!;
+    const vote = (categoryId: string, voterUserId: string, nomineeUserId: string) => setSuperlativeVote(db, live, { categoryId, teamId: fx.teamA.id, voterUserId, nomineeUserId });
+    vote(mvp.id, fx.alice.id, fx.dave.id);
+    vote(mvp.id, fx.carol.id, fx.dave.id);
+    vote(spirit.id, fx.carol.id, fx.dave.id);
+    vote(spirit.id, fx.dave.id, fx.alice.id);
+    const winnersOf = (finished: typeof live) =>
+      computeWrapped(db, finished).bingo.teams.find((t) => t.teamId === fx.teamA.id)!.superlatives!.map((s) => [s.category, s.winners.map((w) => w.id).sort()]);
+
+    expect(winnersOf(finish(fx))).toEqual([
+      ["Team MVP", [fx.dave.id]],
+      ["Team Spirit", [fx.alice.id, fx.dave.id].sort()],
+    ]);
+    const oneEach = db.update(bingos).set({ superlativesOneEach: true }).where(eq(bingos.id, fx.bingo.id)).returning().get();
+    expect(winnersOf(oneEach)).toEqual([
+      ["Team MVP", [fx.dave.id]],
+      ["Team Spirit", [fx.alice.id]],
+    ]);
+  });
+
   it("computes the moderation stats", () => {
     const fx = seed();
     play(fx);

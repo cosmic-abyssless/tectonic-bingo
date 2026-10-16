@@ -10,7 +10,7 @@ import { chooseMods, makePlayers, pairUp, type Player } from "./people";
 import { Rng, clamp } from "./rng";
 import { createTeams, editEffortBosses, fetchBoard, fetchExclusivityRules, fetchTeams, grantStaff, handEvents, importBingo, nameTeamEvents, openEvents, publishBoard, runBuyins, runDraft, runInOrder, runSignups, setStage, goLive, planGoLive, weighAnItem, type Ctx } from "./setup";
 import { Simulation, describe, newPartState, type SimTeam } from "./simulate";
-import { ensureCategories, planVotes } from "./superlatives";
+import { ensureCategories, maybeOneEach, planVotes } from "./superlatives";
 import { ensureFeedbackQuestions, runFeedback } from "./feedback";
 import { HOUR, buildTimeline, fmt, runLimit, type Timeline } from "./timeline";
 import { runHistorical } from "./historical";
@@ -196,7 +196,8 @@ export async function runGenerate(input: RunInput): Promise<RunResult> {
   const nameById = new Map((await fetchTeams(ctx)).map((t) => [t.id, t.name]));
   log(`${seeds.length} teams named, ${raised.length} hands raised, ${opens.filter((o) => o.at <= revealEnd).length} Tile and rules opens`);
   const categories = await ensureCategories(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 30 * 60_000));
-  log(`superlative categories: ${categories.map((c) => c.name).join(", ")}`);
+  const oneEach = await maybeOneEach(api, adminDiscordId, slug, new Date(tl.revealAt.getTime() + 35 * 60_000), rng.fork("superlatives-one-each"));
+  log(`superlative categories: ${categories.map((c) => c.name).join(", ")}${oneEach ? ", one per Player" : ""}`);
   if (options.stage === "reveal") return result;
 
   await goLive(ctx, live!);

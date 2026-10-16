@@ -106,6 +106,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       hide_rules: "",
       show_screenshots_when_finished: "",
       publish_wrapped_on_finish: "",
+      superlatives_one_each: "1: One Superlative per Player, so a Player who tops several Superlatives on their Team keeps one",
       wrapped_credits_json: "Unused",
       wrapped_art_credits_json: "",
       wrapped_bosses_json: "JSON array of Wise Old Man boss metrics Wrapped names a top Team for, in order; null: the default list",

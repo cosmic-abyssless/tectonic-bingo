@@ -170,6 +170,9 @@ export const bingos = sqliteTable('bingos', {
   showScreenshotsWhenFinished: integer('show_screenshots_when_finished', { mode: 'boolean' }).notNull().default(true),
   // "Publish Wrapped when the Bingo finishes" (CONTEXT.md "Wrapped"): moving to Finished publishes it on its own.
   publishWrappedOnFinish: integer('publish_wrapped_on_finish', { mode: 'boolean' }).notNull().default(false),
+  // "One Superlative per Player" (CONTEXT.md "Superlative"): a Player who tops several categories on their Team keeps
+  // the one they won by the biggest margin; the others go to runners-up. See superlativeService.computeWinners.
+  superlativesOneEach: integer('superlatives_one_each', { mode: 'boolean' }).notNull().default(false),
   // Replaced by per-image credits on wrapped_art and wrappedArtCreditsJson (#281; migration 0048 moved its entries onto
   // the Outro's art). Kept only so the column can be dropped in a later deploy, per the additive-migration rule in
   // docs/zero-downtime-deploy-plan.md. Nothing reads or writes it.

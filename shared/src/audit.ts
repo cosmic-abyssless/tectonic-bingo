@@ -129,6 +129,7 @@ export interface AuditDetailsMap {
       hideRules: boolean;
       showScreenshotsWhenFinished: boolean;
       publishWrappedOnFinish: boolean;
+      superlativesOneEach: boolean;
       wrappedBossesJson: string | null;
     }>;
   };
