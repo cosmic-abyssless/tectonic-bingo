@@ -78,6 +78,7 @@ export function StatsView({ slug }: { slug: string }) {
       teamGpGained: ours(stats.teamGpGained),
       drops: ours(stats.drops),
       titleFacts: ours(stats.titleFacts),
+      tileEffort: ours(stats.tileEffort),
     };
   }, [stats, visibleTeams, selectedTeams]);
 
@@ -124,7 +125,7 @@ export function StatsView({ slug }: { slug: string }) {
       </Section>
 
       <Section title="Tile completion">
-        <TileCompletion heatmap={filtered.heatmap} tiles={boardData?.tiles ?? []} teams={filtered.teams} />
+        <TileCompletion heatmap={filtered.heatmap} tiles={boardData?.tiles ?? []} teams={filtered.teams} tileEffort={filtered.tileEffort} contributions={filtered.contributions} />
       </Section>
     </div>
   );

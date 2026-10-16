@@ -11,6 +11,7 @@ import { createTask, createTile } from "./boardService";
 import { approveSubmission } from "./scoringService";
 import { addEffortBoss, removeEffortBoss } from "./effortBossService";
 import { computeEffort, computePartEffort } from "./effortService";
+import { filterStatsForTeam, getStats } from "./statsService";
 
 vi.mock("../ws", () => ({ broadcast: vi.fn() }));
 
@@ -269,5 +270,39 @@ describe("computeEffort", () => {
     vi.setSystemTime(at(8));
     expect(hoursOn(s, s.alice, s.fang.id)).toBeCloseTo(3);
     expect(hoursOn(s, s.alice, s.magic.id)).toBeCloseTo(3);
+  });
+});
+
+describe("Effort in Stats", () => {
+  it("puts each Player's Effort on their contribution and each Tile's by Player, and a Team sees only its own", () => {
+    const s = seed();
+    s.snap(s.alice, 0, { vorkath: 0 });
+    s.snap(s.alice, 10, { vorkath: 3 });
+    s.snap(s.carol, 0, { zulrah: 0 });
+    s.snap(s.carol, 10, { zulrah: 2 });
+    s.finish();
+
+    const stats = getStats(db, s.bingo.id);
+    const effortOf = (userId: string) => stats.contributions.find((c) => c.userId === userId)!.effort;
+    expect(effortOf(s.alice)).toMatchObject({ hours: expect.closeTo(3), share: expect.closeTo(100) });
+    expect(effortOf(s.bob)).toBeNull();
+    expect(effortOf(s.carol)).toMatchObject({ hours: expect.closeTo(2) });
+    expect(stats.tileEffort).toEqual(
+      expect.arrayContaining([
+        { tileId: s.vorkath.id, teamId: s.teamA, userId: s.alice, hours: expect.closeTo(3) },
+        { tileId: s.zulrah.id, teamId: s.teamB, userId: s.carol, hours: expect.closeTo(2) },
+      ]),
+    );
+
+    const own = filterStatsForTeam(stats, s.teamA);
+    expect(own.tileEffort.map((t) => t.userId)).toEqual([s.alice]);
+  });
+
+  it("leaves Effort null on every contribution when it isn't recorded", () => {
+    const s = seed();
+    s.finish();
+    const stats = getStats(db, s.bingo.id);
+    expect(stats.contributions.every((c) => c.effort === null)).toBe(true);
+    expect(stats.tileEffort).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import { PlayerName, useOpenProfile } from "../tectonic/PlayerName";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { TitleChip } from "./TitleChrome";
 import { formatShare } from "./PointsShareBreakdown";
+import { formatEffortHours, formatEffortShare } from "./effort";
 import { formatGp, formatGpExact } from "../ui/gp";
 import { NoTooltips } from "../ui/Tooltip";
 
@@ -52,6 +53,18 @@ function TeamCell({ data }: CustomCellRendererProps<Row>) {
     <span className="flex items-center gap-1.5 truncate">
       <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: data.team.color ?? FALLBACK_TEAM_COLOR }} />
       <span className="truncate">{data.team.name}</span>
+    </span>
+  );
+}
+
+// Effort (CONTEXT.md) in hours, with the share of the team's Effort beneath; a dash when it isn't recorded for them.
+function EffortCell({ data }: CustomCellRendererProps<Row>) {
+  const effort = data?.effort;
+  if (!effort) return <span className="text-on-surface-subtle">—</span>;
+  return (
+    <span className="flex flex-col justify-center leading-tight">
+      <span>{formatEffortHours(effort.hours)}</span>
+      {effort.share !== null && <span className="text-[11px] text-on-surface-subtle">{formatEffortShare(effort.share)}</span>}
     </span>
   );
 }
@@ -126,6 +139,21 @@ export function ContributorsTable({ contributions, teams, titles }: { contributi
         minWidth: 110,
         valueFormatter: (p) => formatGp(p.value as number),
         tooltip: (p: TooltipCallbackParams<Row>) => formatGpExact(p.value as number),
+        cellClass: "num",
+      },
+      {
+        colId: "effort",
+        headerName: "Effort",
+        headerTooltip: "Hours at the bosses of the team's unfinished parts, by Wise Old Man (EHB), whether or not they got anything",
+        sortingOrder: ["desc", "asc"],
+        flex: 1,
+        minWidth: 100,
+        valueGetter: (p) => p.data?.effort?.hours ?? null,
+        tooltip: (p: TooltipCallbackParams<Row>) => {
+          const share = p.data?.effort?.share;
+          return share === null || share === undefined ? "" : `${formatEffortShare(share)} of the team's Effort`;
+        },
+        cellRenderer: EffortCell,
         cellClass: "num",
       },
     ];

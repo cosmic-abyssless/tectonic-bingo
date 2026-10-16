@@ -1,5 +1,5 @@
 import { titlesHeldBy, type ContributionCount, type PickedTitle } from "@bingo/shared";
-import { useBingo, useStats } from "../../api/queries";
+import { fullBoard, useBingo, useBoard, useStats } from "../../api/queries";
 import { useCan } from "../../headless/permissions";
 import { pickStatsTitles } from "./titles";
 
@@ -9,6 +9,8 @@ export interface PlayerContribution {
   rank: { place: number; of: number };
   /** Every Title they hold among the Players the viewer may see (the whole Bingo unfiltered), in priority order. */
   titles: PickedTitle[];
+  /** Their top 3 Tiles by Effort (CONTEXT.md), most first; empty when Effort isn't recorded for them. */
+  effortTiles: { name: string; hours: number }[];
 }
 
 /**
@@ -22,6 +24,7 @@ export function usePlayerContribution(slug: string, userId: string): PlayerContr
   const stage = shell?.bingo.stage;
   const maySee = !!shell && (stage === "live" || stage === "complete") && (seesOtherTeams || !!shell.myTeam);
   const { data: stats } = useStats(slug, maySee);
+  const tiles = fullBoard(useBoard(slug).data)?.tiles;
   if (!maySee || !stats || !shell) return null;
 
   const contribution = stats.contributions.find((c) => c.userId === userId);
@@ -32,5 +35,6 @@ export function usePlayerContribution(slug: string, userId: string): PlayerContr
     teamColor: shell.teams.find((t) => t.id === contribution.teamId)?.color ?? null,
     rank: { place: teammates.findIndex((c) => c.userId === userId) + 1, of: teammates.length },
     titles: titlesHeldBy(pickStatsTitles(stats, stats.titleFacts), userId),
+    effortTiles: (contribution.effort?.byTile ?? []).slice(0, 3).map((t) => ({ name: tiles?.find((tile) => tile.id === t.tileId)?.name ?? "A tile", hours: t.hours })),
   };
 }

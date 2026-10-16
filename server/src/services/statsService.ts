@@ -21,6 +21,7 @@ import type { WomSnapshot } from "./womService";
 import { now } from "../clock";
 import { getBingoTitleSettings } from "./titleSettingsService";
 import { keptStats } from "./statsCache";
+import { computeEffort, type EffortResult } from "./effortService";
 
 type Db = BetterSQLite3Database<typeof schema>;
 
@@ -279,10 +280,12 @@ export function getPointsShares(db: Db, bingoId: string, teamCredits = getTeamCr
 }
 
 // Every member of every team with their approved submissions and Points share, highest share first. Members
-// with nothing approved yet are included at 0, so a team sees its whole roster.
-export function getContributionCounts(db: Db, bingoId: string, shares = getPointsShares(db, bingoId)): ContributionCount[] {
+// with nothing approved yet are included at 0, so a team sees its whole roster. `effort` is computeEffort's result,
+// passed in by a caller that also needs it, else computed here.
+export function getContributionCounts(db: Db, bingoId: string, shares = getPointsShares(db, bingoId), effort?: EffortResult | null): ContributionCount[] {
   const teamIds = db.select({ id: teams.id }).from(teams).where(eq(teams.bingoId, bingoId)).all().map((t) => t.id);
   if (teamIds.length === 0) return [];
+  const efforts = (effort !== undefined ? effort : computeEffort(db, db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!))?.players;
 
   const teamByUser = new Map<string, string>();
   for (const m of db.select({ userId: teamMembers.userId, teamId: teamMembers.teamId }).from(teamMembers).where(inArray(teamMembers.teamId, teamIds)).all()) teamByUser.set(m.userId, m.teamId);
@@ -357,7 +360,7 @@ export function getContributionCounts(db: Db, bingoId: string, shares = getPoint
         pointsShare: awards.reduce((sum, a) => sum + a.points, 0),
         gpGained: gpByUser.get(userId) ?? 0,
         awards,
-        effort: null,
+        effort: efforts?.get(userId) ?? null,
       };
     })
     .sort((a, b) => b.pointsShare - a.pointsShare || b.approvedSubmissions - a.approvedSubmissions);
@@ -670,8 +673,9 @@ export interface Stats {
 export function getStats(db: Db, bingoId: string): Stats {
   const teamCredits = getTeamCredits(db, bingoId);
   const shares = getPointsShares(db, bingoId, teamCredits);
-  const contributions = getContributionCounts(db, bingoId, shares);
   const bingo = db.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  const effort = computeEffort(db, bingo);
+  const contributions = getContributionCounts(db, bingoId, shares, effort);
   const titleSettings = getBingoTitleSettings(db, bingo);
   return {
     pointsOverTime: getPointsOverTime(db, bingoId),
@@ -684,7 +688,7 @@ export function getStats(db: Db, bingoId: string): Stats {
     titleContext: { liveAt: effectiveStartsAt(db, bingo), endedAt: endedAt(db, bingo) },
     titleSettings,
     womReadAt: lastReadAt(db, bingoId),
-    tileEffort: [],
+    tileEffort: effort?.tileEffort ?? [],
   };
 }
 

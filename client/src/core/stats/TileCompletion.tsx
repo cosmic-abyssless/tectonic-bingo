@@ -1,14 +1,19 @@
 import { useState } from "react";
-import type { Team, Tile, TileHeatmapCell, TileProgress } from "@bingo/shared";
+import type { ContributionCount, StatsResponse, Team, Tile, TileHeatmapCell, TileProgress } from "@bingo/shared";
 import { SingleSelect } from "../ui/SingleSelect";
 import { FALLBACK_TEAM_COLOR } from "./PointsChart";
 import { TooltipSpan } from "../ui/Tooltip";
+import { displayName } from "../ui/user";
+import { formatEffortHours, tileEffortByPlayer } from "./effort";
 
 const ALL = "all";
 // One hue, light to dark: 8% for nothing, ramping to ~85% for done.
 const shade = (color: string, fraction: number) => `color-mix(in srgb, ${color} ${Math.round(8 + fraction * 77)}%, transparent)`;
 // "All teams" shades by how many teams finished a tile, so it uses one neutral hue rather than any team's colour.
 const ALL_COLOR = "var(--color-accent)";
+
+// A Tile's detail lists this many Players' Effort, then how many more there are.
+const EFFORT_SHOWN = 5;
 
 const isDone = (cell: TileHeatmapCell | undefined) => !!cell && cell.totalTasks > 0 && cell.completedTasks >= cell.totalTasks;
 
@@ -37,9 +42,21 @@ function ProgressBar({ segments, color, height = "h-3" }: { segments: Segment[];
 /**
  * The board, each Tile with a bar of its Parts, then the Tile itself, then a line through it. One team: which of those
  * it has done. All teams: how many of the selected teams did each, which shows what is contested and what nobody
- * touched.
+ * touched. Each Tile's detail also lists its Effort (CONTEXT.md) by Player for the teams shown, largest first.
  */
-export function TileCompletion({ heatmap, tiles, teams }: { heatmap: TileHeatmapCell[]; tiles: Tile[]; teams: Team[] }) {
+export function TileCompletion({
+  heatmap,
+  tiles,
+  teams,
+  tileEffort,
+  contributions,
+}: {
+  heatmap: TileHeatmapCell[];
+  tiles: Tile[];
+  teams: Team[];
+  tileEffort: StatsResponse["tileEffort"];
+  contributions: ContributionCount[];
+}) {
   const [picked, setPicked] = useState<string>(ALL);
   if (tiles.length === 0 || teams.length === 0) return <p className="text-sm text-on-surface-subtle">No tiles to show yet.</p>;
 
@@ -67,6 +84,14 @@ export function TileCompletion({ heatmap, tiles, teams }: { heatmap: TileHeatmap
   };
   const describe = (seg: Segment) =>
     view === ALL ? `${seg.label}: ${Math.round(seg.fraction * shown.length)} of ${shown.length} teams` : `${seg.label}: ${seg.fraction >= 1 ? "done" : seg.started ? "in progress" : "not yet"}`;
+  const nameOf = new Map(contributions.map((c) => [c.userId, displayName(c.user)]));
+  const shownIds = new Set(shown.map((t) => t.id));
+  // The first few Players' Effort on a Tile ("Bob 6.1 h"), then how many more.
+  const effortOf = (tile: Tile): string[] => {
+    const players = tileEffortByPlayer(tileEffort, tile.id, shownIds);
+    const more = players.length - EFFORT_SHOWN;
+    return [...players.slice(0, EFFORT_SHOWN).map((p) => `${nameOf.get(p.userId) ?? "A player"} ${formatEffortHours(p.hours)}`), ...(more > 0 ? [`and ${more} more`] : [])];
+  };
 
   return (
     <div className="space-y-3">
@@ -81,11 +106,13 @@ export function TileCompletion({ heatmap, tiles, teams }: { heatmap: TileHeatmap
               if (!tile) return <div key={`${r}-${c}`} />;
               const segments = segmentsOf(tile);
               const finished = view === ALL ? teamsDone(tile.id) === teams.length : isDone(cellFor(tile.id, view));
+              const detail = [tile.name, ...segments.map(describe)];
+              const effort = effortOf(tile);
               return (
                 <TooltipSpan
                   key={tile.id}
-                  text={[tile.name, ...segments.map(describe)].join("\n")}
-                  label={[tile.name, ...segments.map(describe)].join(". ")}
+                  text={[...detail, ...(effort.length ? ["Effort:", ...effort] : [])].join("\n")}
+                  label={[...detail, ...(effort.length ? [`Effort: ${effort.join(", ")}`] : [])].join(". ")}
                   className={`flex aspect-square flex-col items-center justify-between gap-1 overflow-hidden rounded-sm border bg-surface p-1 text-center leading-tight text-on-surface ${finished ? "border-on-surface" : "border-outline"}`}
                 >
                   <span className="line-clamp-2 flex flex-1 items-center text-[10px]">{tile.name}</span>
