@@ -144,7 +144,7 @@ export function ContributorsTable({ contributions, teams, titles }: { contributi
       {
         colId: "effort",
         headerName: "Effort",
-        headerTooltip: "Hours at the bosses of the team's parts until each was done, by Wise Old Man (EHB), whether or not they got anything",
+        headerTooltip: "Hours spent working on tiles, even if they didn't get the drop",
         sortingOrder: ["desc", "asc"],
         flex: 1,
         minWidth: 100,

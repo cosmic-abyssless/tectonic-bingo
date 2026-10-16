@@ -124,7 +124,7 @@ function EffortSection({ effort, tiles }: { effort: NonNullable<ContributionCoun
       <header className="flex items-baseline justify-between gap-3 border-b border-outline bg-surface-hover/50 px-3 py-2">
         <span>
           <span className="text-xs font-semibold tracking-wide text-on-surface uppercase">Effort</span>{" "}
-          <span className="text-xs text-on-surface-subtle">Hours at the bosses of the team's parts until each was done, whether or not they got anything.</span>
+          <span className="text-xs text-on-surface-subtle">Hours spent working on tiles, even if they didn't get the drop.</span>
         </span>
         <span className="num shrink-0 text-sm font-semibold text-on-surface">{formatEffortHours(effort.hours)}</span>
       </header>
