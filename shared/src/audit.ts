@@ -366,6 +366,11 @@ export interface AuditDetailsMap {
 
   /** A player earned an Achievement (CONTEXT.md). Actor is the player themselves. */
   "achievement.earned": { key: AchievementKey; name: string };
+  /**
+   * An Achievement taken back from a player (onBehalfOf) because they earned it after the Bingo ended, when it was
+   * Finished with an earlier end (CONTEXT.md "Achievement"). Actor is the Admin who finished it.
+   */
+  "achievement.revoked": { key: AchievementKey; name: string; earnedAt: string; endedAt: string };
 }
 
 export interface PointChangeDetails {
@@ -1210,6 +1215,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Achievement earned",
     label: (i) => `${actor(i)} earned "${i.details.name}"`,
+  },
+  "achievement.revoked": {
+    category: "achievement",
+    tone: "warn",
+    visibility: "mods",
+    title: "Achievement taken back",
+    label: (i) => `${i.onBehalfOfName ?? "A player"} lost "${i.details.name}": earned after the bingo ended`,
   },
 };
 

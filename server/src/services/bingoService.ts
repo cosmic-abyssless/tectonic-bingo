@@ -435,6 +435,8 @@ export function advanceStage(db: Db, params: AdvanceStageParams) {
       actor: params.changedByUserId === null ? "system" : { userId: params.changedByUserId },
       now: params.now,
     });
+    // Nothing earned after the end counts (CONTEXT.md "Achievement"): while it stayed Live past it, Players kept earning.
+    if (params.toStage === "complete") achievementService.revokeEarnedAfterEnd(tx, bingo.id, params.endedAt ?? now, { by: params.changedByUserId, now });
 
     return tx.select().from(bingos).where(eq(bingos.id, bingo.id)).get()!;
   });

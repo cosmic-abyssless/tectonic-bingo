@@ -54,7 +54,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
   const startingEarly = confirming === "live" && startAhead;
 
   // Finishing: when the Bingo really ended (CONTEXT.md "Stage"), now unless the Admin sets it earlier. Wise Old Man
-  // gains (Titles, Effort, Wrapped) count up to it. Only sent once changed, so a dialog left open doesn't backdate.
+  // gains (Titles, Effort, Wrapped) and Achievements count up to it. Only sent once changed, so a dialog left open doesn't backdate.
   const [endedAtInput, setEndedAtInput] = useState("");
   const [endedAtChanged, setEndedAtChanged] = useState(false);
 
@@ -190,7 +190,7 @@ export function StageControls({ slug, bingo, canChange }: { slug: string; bingo:
               )}
               {skipped.length > 0 && <p className="text-on-surface-muted">Skips {skipped.map((s) => STAGE_LABEL[s]).join(", ")}.</p>}
               {confirming === "complete" && (
-                <Field label="Ended at" hint="Your local time. Set it earlier if the bingo ended before now: Wise Old Man gains (Titles, Effort, Wrapped) count up to then.">
+                <Field label="Ended at" hint="Your local time. Set it earlier if the bingo ended before now: Wise Old Man gains (Titles, Effort, Wrapped) count up to then, and Achievements earned after it are taken back.">
                   <Input
                     type="datetime-local"
                     value={endedAtInput}

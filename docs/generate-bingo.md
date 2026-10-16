@@ -158,7 +158,9 @@ target (say `signup`), the later dates are simply scheduled in the future.
    changing their mind later, and a Team tends to agree on a favourite, so most categories have a clear winner and
    the odd one a tie. Early on one Captain tries to rename their Team, which Live refuses (logged; a rename that
    goes through is a sanity check failure). Then, for `complete`, the mods clear the
-   queue and an admin completes the bingo. Every player on a team is then given made-up
+   queue, three Players open the Stats page after the end (earning Number cruncher while it's still Live), and an
+   admin completes the bingo an hour after its end, set as having ended at it, which takes those back (logged as
+   "Achievement taken back"). Every player on a team is then given made-up
    **Wise Old Man snapshots** up to the end of the run (see below), so Grinder, the luck
    Titles (Spoon, Dry, Clutch), **Effort** and the achievements that read WOM have something to judge. For `complete` the
    Players then answer the **Feedback form** through its endpoint, about 70% of a Team's Players and most Captains

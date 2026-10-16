@@ -14,6 +14,7 @@ import { GePriceTable } from "./gePriceService";
 import { fillMissingGpValuesAndNotify } from "./gpValueService";
 import { repriceSubmission } from "./gpRepriceService";
 import * as achievementService from "./achievementService";
+import { advanceStage } from "./bingoService";
 import { runWithAuditContext } from "../audit/context";
 import { broadcast } from "../ws";
 
@@ -677,6 +678,95 @@ describe("Big spender", () => {
 
     await repriceSubmission(db, bingo.id, sub.id, await loadedTable(30_000_000)); // now worth well over 25m
     expect(earned(bingo, alice.id, "big_spender")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Finished with an earlier end: what was earned after it is taken back
+// ---------------------------------------------------------------------------
+
+describe("Finished with an earlier end", () => {
+  const ENDED = new Date("2026-03-08T12:00:00Z");
+  const AFTER = new Date("2026-03-09T12:00:00Z");
+  const FINISHED = new Date("2026-03-10T12:00:00Z");
+  const finish = (bingoId: string, by: string, endedAt?: Date) => advanceStage(db, { bingoId, toStage: "complete", changedByUserId: by, now: FINISHED, endedAt });
+  const revoked = (bingoId: string) => db.select().from(schema.auditLog).where(eq(schema.auditLog.action, "achievement.revoked")).all().filter((r) => r.bingoId === bingoId);
+  const snapshot = (bingoId: string, userId: string, takenAt: Date, ehb: number) =>
+    db.insert(schema.womSnapshots).values({ bingoId, userId, takenAt, ehb, ehp: 0, clues: 0, bossKillsJson: "{}" }).run();
+
+  it("takes back what was earned after the end, audited for Moderators, and keeps what was earned by it", () => {
+    const { bingo, team, captain, alice, bob } = seed();
+    const a = tileWithLeaf(bingo.id, 0, 0);
+    const b = tileWithLeaf(bingo.id, 0, 1);
+    submit(bingo, team.id, alice.id, a.leafId, a.itemName, { now: new Date("2026-03-05T12:00:00Z") });
+    submit(bingo, team.id, bob.id, b.leafId, b.itemName, { now: AFTER });
+    expect(earned(bingo, alice.id, "strong_start")).toBe(true);
+    expect(earned(bingo, bob.id, "strong_start")).toBe(true);
+    vi.mocked(broadcast).mockReset();
+
+    finish(bingo.id, captain.id, ENDED);
+    expect(earned(bingo, alice.id, "strong_start")).toBe(true);
+    expect(earned(bingo, bob.id, "strong_start")).toBe(false);
+    expect(myAchievements(bingo, bob.id).unshownPopups).not.toContain("strong_start");
+    const rows = revoked(bingo.id).filter((r) => r.onBehalfOfUserId === bob.id);
+    expect(rows.map((r) => JSON.parse(r.details).key)).toContain("strong_start");
+    expect(rows[0]).toMatchObject({ actorUserId: captain.id, visibility: "mods" });
+    expect(JSON.parse(rows[0]!.details)).toMatchObject({ endedAt: ENDED.toISOString() });
+    expect(revoked(bingo.id).some((r) => r.onBehalfOfUserId === alice.id)).toBe(false);
+    expect(broadcast).toHaveBeenCalledWith({ type: "achievements_changed", bingoId: bingo.id, payload: { userId: bob.id } });
+  });
+
+  it("takes nothing back when finished now", () => {
+    const { bingo, team, captain, bob } = seed();
+    const b = tileWithLeaf(bingo.id, 0, 1);
+    submit(bingo, team.id, bob.id, b.leafId, b.itemName, { now: AFTER });
+    finish(bingo.id, captain.id);
+    expect(earned(bingo, bob.id, "strong_start")).toBe(true);
+    expect(revoked(bingo.id)).toHaveLength(0);
+  });
+
+  it("counts only what was done by the end towards progress", () => {
+    const { bingo, team, captain, alice } = seed();
+    for (const [col, now] of [[0, "2026-03-05T12:00:00Z"], [1, "2026-03-06T12:00:00Z"], [2, AFTER.toISOString()]] as const) {
+      const t = tileWithLeaf(bingo.id, 0, col);
+      submit(bingo, team.id, alice.id, t.leafId, t.itemName, { now: new Date(now) });
+    }
+    const globetrotter = () => myAchievements(bingo, alice.id).achievements.find((x) => x.key === "globetrotter")!.progress;
+    expect(globetrotter()).toEqual({ current: 3, target: 5 });
+    finish(bingo.id, captain.id, ENDED);
+    expect(globetrotter()).toEqual({ current: 2, target: 5 });
+  });
+
+  it("keeps one from Wise Old Man play by the end that a later snapshot noticed, and takes back one from play after it", () => {
+    const { bingo, captain, alice, bob } = seed();
+    // alice: 25 EHB by the end, noticed after it. bob: 25 EHB only after the end.
+    snapshot(bingo.id, alice.id, STARTS_AT, 100);
+    snapshot(bingo.id, alice.id, new Date("2026-03-07T12:00:00Z"), 125);
+    snapshot(bingo.id, bob.id, STARTS_AT, 100);
+    snapshot(bingo.id, bob.id, new Date("2026-03-07T12:00:00Z"), 105);
+    snapshot(bingo.id, bob.id, AFTER, 125);
+    at(AFTER, "UTC", () => {
+      achievementService.recordWomSnapshotsRead(db, bingo.id, alice.id);
+      achievementService.recordWomSnapshotsRead(db, bingo.id, bob.id);
+    });
+    expect(earned(bingo, alice.id, "long_weekend")).toBe(true);
+    expect(earned(bingo, bob.id, "long_weekend")).toBe(true);
+
+    finish(bingo.id, captain.id, ENDED);
+    expect(earned(bingo, alice.id, "long_weekend")).toBe(true);
+    expect(earned(bingo, bob.id, "long_weekend")).toBe(false);
+    expect(myAchievements(bingo, bob.id).achievements.find((x) => x.key === "long_weekend")!.progress).toEqual({ current: 5, target: 20 });
+  });
+
+  it("keeps Big spender for a drop posted by the end and priced after it", async () => {
+    const { bingo, team, captain, alice } = seed();
+    const { leafId } = tileWithLeaf(bingo.id, 0, 0, "Twisted bow");
+    submit(bingo, team.id, alice.id, leafId, "Twisted bow", { now: new Date("2026-03-07T12:00:00Z") });
+    const table = await loadedTable(30_000_000);
+    at(AFTER, "UTC", () => fillMissingGpValuesAndNotify(db, table));
+    expect(earned(bingo, alice.id, "big_spender")).toBe(true);
+    finish(bingo.id, captain.id, ENDED);
+    expect(earned(bingo, alice.id, "big_spender")).toBe(true);
   });
 });
 
