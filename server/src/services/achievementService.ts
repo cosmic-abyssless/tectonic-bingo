@@ -6,7 +6,7 @@
 //
 // Rules are private to this file, keyed by AchievementKey — the catalogue (shared/src/achievements.ts) never ships
 // a Hidden Achievement's condition to the client.
-import { and, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as Sentry from "@sentry/node";
 import {
@@ -329,6 +329,9 @@ function partsContaining(tx: Tx, tileNodeId: string, leafIds: string[]): Set<str
   return result;
 }
 
+/** Big spender's goal: a drop's total Drop value. */
+const BIG_SPENDER_GP = 25_000_000;
+
 /**
  * A Submission's claims were (fully or partially) priced — at creation, or by the Drop value fill running later
  * (gpValueService.fillMissingGpValuesAndNotify). Evaluated against the CURRENT sum of the submission's known claim
@@ -356,7 +359,7 @@ export function recordSubmissionsFirstPriced(db: Db, submissionIds: string[]): v
         tryEarn(tx, team.bingoId, userId, "big_spender", submission.createdAt, settings, () => {
           const claimRows = tx.select({ gpValue: schema.claims.gpValue }).from(schema.claims).where(eq(schema.claims.submissionId, submissionId)).all();
           const total = claimRows.reduce((sum, c) => sum + (c.gpValue ?? 0), 0);
-          return total >= 25_000_000;
+          return total >= BIG_SPENDER_GP;
         });
       });
     });
@@ -649,6 +652,14 @@ const ehbGained = (w: { baseline: WomPoint; latest: WomPoint }) => gainOf(w.base
 const bossesKilled = (w: { baseline: WomPoint; latest: WomPoint }) =>
   Object.keys(w.latest.bossKills).filter((metric) => gainOf(w.baseline.bossKills[metric], w.latest.bossKills[metric]) >= 1).length;
 
+/** The Achievements earned from Wise Old Man play, and the goal each one's window has to reach. */
+const WOM_GOALS = new Map<AchievementKey, (w: { baseline: WomPoint; latest: WomPoint }) => boolean>([
+  ["leech", (w) => gainOf(w.baseline.clues, w.latest.clues) > 0],
+  ["long_weekend", (w) => ehbGained(w) >= LONG_WEEKEND_EHB],
+  ["diversification", (w) => bossesKilled(w) >= DIVERSIFICATION_BOSSES],
+  ["skiller", (w) => gainOf(w.baseline.ehp, w.latest.ehp) >= SKILLER_EHP],
+]);
+
 /**
  * A Player's Wise Old Man snapshots were just stored (womReadService.readPlayer): Leech (a clue casket opened during the
  * Bingo: any clue gain), Long weekend (20 EHB gained during it), Diversification (10 different bosses killed during it)
@@ -670,13 +681,7 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
       if (!onATeam) return;
       const settings = loadSettings(tx, bingoId);
 
-      const goals: [AchievementKey, (w: { baseline: WomPoint; latest: WomPoint }) => boolean][] = [
-        ["leech", (w) => gainOf(w.baseline.clues, w.latest.clues) > 0],
-        ["long_weekend", (w) => ehbGained(w) >= LONG_WEEKEND_EHB],
-        ["diversification", (w) => bossesKilled(w) >= DIVERSIFICATION_BOSSES],
-        ["skiller", (w) => gainOf(w.baseline.ehp, w.latest.ehp) >= SKILLER_EHP],
-      ];
-      for (const [key, reached] of goals) {
+      for (const [key, reached] of WOM_GOALS) {
         const setting = settings.get(key);
         if (!setting) continue;
         const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt, womDelayFor(key));
@@ -684,6 +689,68 @@ export function recordWomSnapshotsRead(db: Db, bingoId: string, userId: string):
       }
     });
   });
+}
+
+/**
+ * The Bingo was just Finished, ending at `end` (CONTEXT.md "Stage"): an Admin can set the end earlier than when they
+ * finish it, when the Bingo was really over before (a Team had already won). Achievements earned after it are taken
+ * back (CONTEXT.md "Achievement"), each one audited, except those its Players had reached by then all the same: Wise
+ * Old Man play during the Bingo that a later snapshot noticed, and a drop posted by the end priced afterwards. Called
+ * inside advanceStage's transaction, after the Finished transition is recorded, so `endedAt` reads `end`.
+ */
+export function revokeEarnedAfterEnd(tx: Tx, bingoId: string, end: Date, params: { by: string | null; now: Date }): void {
+  const late = tx
+    .select()
+    .from(achievementEarned)
+    .where(and(eq(achievementEarned.bingoId, bingoId), gt(achievementEarned.earnedAt, end)))
+    .all();
+  if (late.length === 0) return;
+  const bingo = tx.select().from(bingos).where(eq(bingos.id, bingoId)).get()!;
+  const settings = loadSettings(tx, bingoId);
+  const affected = new Set<string>();
+  for (const row of late) {
+    const key = row.achievementKey as AchievementKey;
+    if (reachedByEnd(tx, bingo, row.userId, key, end, settings)) continue;
+    tx.delete(achievementEarned).where(eq(achievementEarned.id, row.id)).run();
+    const def = achievementDef(key);
+    audit(tx, {
+      action: "achievement.revoked",
+      bingoId,
+      entity: { type: "achievement", id: key, label: def.name },
+      details: { key, name: def.name, earnedAt: row.earnedAt.toISOString(), endedAt: end.toISOString() },
+      actor: params.by === null ? "system" : { userId: params.by },
+      onBehalfOfUserId: row.userId,
+      now: params.now,
+    });
+    affected.add(row.userId);
+  }
+  for (const userId of affected) broadcast({ type: "achievements_changed", bingoId, payload: { userId } });
+}
+
+/** Whether a Player had reached an Achievement they earned after the Bingo's end by then all the same (revokeEarnedAfterEnd). */
+function reachedByEnd(tx: Tx, bingo: Bingo, userId: string, key: AchievementKey, end: Date, settings: SettingsMap): boolean {
+  const setting = settings.get(key);
+  if (!setting) return false;
+  const womGoal = WOM_GOALS.get(key);
+  if (womGoal) {
+    // womWindow stops at the Bingo's end.
+    const window = womWindow(tx, bingo, userId, setting.firstSwitchedOnAt, womDelayFor(key));
+    return !!window && womGoal(window);
+  }
+  if (key === "big_spender") {
+    // Earned when the drop's value comes in, which can be after the drop: what counts is when it was posted.
+    const posted = tx
+      .select({ id: submissions.id })
+      .from(submissions)
+      .innerJoin(teams, eq(teams.id, submissions.teamId))
+      .where(and(eq(teams.bingoId, bingo.id), eq(submissions.submittedByUserId, userId), gte(submissions.createdAt, setting.firstSwitchedOnAt), lte(submissions.createdAt, end)))
+      .all();
+    return posted.some((s) => {
+      const claimRows = tx.select({ gpValue: schema.claims.gpValue }).from(schema.claims).where(eq(schema.claims.submissionId, s.id)).all();
+      return claimRows.reduce((sum, c) => sum + (c.gpValue ?? 0), 0) >= BIG_SPENDER_GP;
+    });
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -774,7 +841,14 @@ function progressFor(
   const cutoff = switched.get(key)?.firstSwitchedOnAt;
   if (!cutoff) return null;
   const bingoId = bingo.id;
-  const base = and(eq(achievementActivity.bingoId, bingoId), eq(achievementActivity.userId, userId), gte(achievementActivity.occurredAt, cutoff));
+  // Once Finished, only what was done by its end counts (an Admin can set the end earlier than when they finished it).
+  const end = endedAt(db, bingo);
+  const base = and(
+    eq(achievementActivity.bingoId, bingoId),
+    eq(achievementActivity.userId, userId),
+    gte(achievementActivity.occurredAt, cutoff),
+    end ? lte(achievementActivity.occurredAt, end) : undefined,
+  );
 
   if (key === "cheerleader") {
     const current = distinct(
