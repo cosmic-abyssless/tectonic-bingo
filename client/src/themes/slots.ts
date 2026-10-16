@@ -30,6 +30,7 @@ import type {
   TileModel,
   TileSearchModel,
   TutorialCardModel,
+  WrappedAchievementsModel,
   WrappedBingoModel,
   WrappedCaptainModel,
   WrappedDuoModel,
@@ -322,6 +323,8 @@ export interface ThemeSlots {
   WrappedTeam: ComponentType<{ section: WrappedTeamModel }>;
   // The Bingo as a whole, moderation stats (with the rejection-rate banter and the "moderators" category's art) included.
   WrappedBingo: ComponentType<{ section: WrappedBingoModel }>;
+  // Achievements across the Bingo, and the viewer's own place among them. Never name who earned a particular Achievement.
+  WrappedAchievements: ComponentType<{ section: WrappedAchievementsModel }>;
   // The closing screen: a way on to Rewind and back to the Board, then the viewer's share cards (section.cards), drawn
   // with core/wrapped's WrappedShareCards and the WrappedShareCard slot. WrappedShareCards previews each card, adds
   // Copy image, Download and Share, and (preview) the "Preview" watermark every card carries in a Moderator's preview.

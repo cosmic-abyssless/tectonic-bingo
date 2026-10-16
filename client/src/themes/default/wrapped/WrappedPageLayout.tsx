@@ -41,6 +41,7 @@ export function WrappedPageLayout() {
   const WrappedModerator = useSlot("WrappedModerator");
   const WrappedTeam = useSlot("WrappedTeam");
   const WrappedBingo = useSlot("WrappedBingo");
+  const WrappedAchievements = useSlot("WrappedAchievements");
   const WrappedOutro = useSlot("WrappedOutro");
 
   const render = (section: WrappedSectionModel) => {
@@ -59,6 +60,8 @@ export function WrappedPageLayout() {
         return <WrappedTeam section={section} />;
       case "bingo":
         return <WrappedBingo section={section} />;
+      case "achievements":
+        return <WrappedAchievements section={section} />;
       case "outro":
         return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} feedback={wrapped.feedback && { responded: wrapped.feedback.responded, onOpen: wrapped.actions.goToFeedback }} />;
     }

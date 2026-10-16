@@ -73,6 +73,7 @@ import { WrappedCaptain } from "./wrapped/WrappedCaptain";
 import { WrappedModerator } from "./wrapped/WrappedModerator";
 import { WrappedTeam } from "./wrapped/WrappedTeam";
 import { WrappedBingo } from "./wrapped/WrappedBingo";
+import { WrappedAchievements } from "./wrapped/WrappedAchievements";
 import { WrappedOutro } from "./wrapped/WrappedOutro";
 import { WrappedShareCard } from "./wrapped/WrappedShareCard";
 import { awaitModule } from "../../core/chunkReload";
@@ -114,6 +115,7 @@ export const defaultTheme: ThemeDefinition = {
     WrappedModerator,
     WrappedTeam,
     WrappedBingo,
+    WrappedAchievements,
     WrappedOutro,
     WrappedShareCard,
     DraftPickBurst,
