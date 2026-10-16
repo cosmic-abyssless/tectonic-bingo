@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MAX_SUPERLATIVE_CATEGORIES, type Bingo, type SuperlativeCategory } from "@bingo/shared";
+import { MAX_SUPERLATIVE_CATEGORIES, type Bingo, type BingoShellResponse, type SuperlativeCategory } from "@bingo/shared";
 import * as adminApi from "../../api/adminApi";
 import { optimisticUpdate } from "../../api/optimistic";
 import { adminQueryKeys, useSuperlativeCategories } from "../../api/adminQueries";
-import { useSuperlativeTally, useSuperlativeTurnout } from "../../api/queries";
+import { queryKeys, useSuperlativeTally, useSuperlativeTurnout } from "../../api/queries";
 import { Button, IconButton } from "../ui/Button";
 import { Card, EmptyState, Notice } from "../ui/Card";
+import { Checkbox } from "../ui/Checkbox";
 import { Input } from "../ui/Field";
 import { ChevronDownIcon, ChevronUpIcon, ListIcon, XIcon } from "../ui/icons";
 import { avatarUrl, displayName } from "../ui/user";
@@ -60,6 +61,20 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
       () => adminApi.reorderSuperlativeCategories(slug, reordered.map((c) => c.id)),
     );
   }
+  // One Superlative per Player: a Bingo setting, saved on its own like the categories. It only decides the winners.
+  async function setOneEach(superlativesOneEach: boolean) {
+    setError(null);
+    try {
+      await optimisticUpdate<BingoShellResponse>(
+        queryClient,
+        queryKeys.bingo(slug),
+        (shell) => ({ ...shell, bingo: { ...shell.bingo, superlativesOneEach } }),
+        () => adminApi.updateBingoSettings(slug, { superlativesOneEach }),
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    }
+  }
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -109,6 +124,13 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
           </Button>
         </Card>
       )}
+      <Checkbox
+        checked={bingo.superlativesOneEach}
+        onChange={setOneEach}
+        hint="A Player who tops more than one keeps the one they won by the most votes. The others go to the runner-up. Ties are picked at random."
+      >
+        One Superlative per Player
+      </Checkbox>
       {error && <Notice tone="danger">{error}</Notice>}
 
       {categories.length > 0 && (bingo.stage === "live" || bingo.stage === "complete") && <SuperlativeTurnout slug={slug} />}
