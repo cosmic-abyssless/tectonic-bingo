@@ -11,6 +11,7 @@ import { createTask, createTile, generateLines } from "../../services/boardServi
 import { approveSubmission, rejectSubmission } from "../../services/scoringService";
 import { getPointsOverTime, getStats } from "../../services/statsService";
 import { getTeamProgress } from "../../services/teamService";
+import { computeEffort } from "../../services/effortService";
 import { McpToolError, type McpToolContext } from "../tool";
 import { bingoSummary } from "./bingoSummary";
 import { playerContributions } from "./playerContributions";
@@ -37,7 +38,8 @@ interface Seed {
  * A 1×2 board. "Zulrah" has two Tasks (a 10-point Tanzanite fang and a 5-point Magic fang); "Vorkath" one 20-point
  * Task. Every Line (the row and both one-Tile columns) is worth 15. Team A completes the whole board, so all three
  * Lines; Team B only the fang. Bob's first Magic fang
- * is rejected with a note. Team A gets a −3 Point adjustment after the end.
+ * is rejected with a note. Team A gets a −3 Point adjustment after the end. Carol's snapshots carry per-boss EHB (Alice's
+ * don't, so only Carol has an Effort): 2.5 hours at Vorkath, whose head Team B never got, and 2 at Cerberus, no Part's boss.
  */
 function seed(): Seed {
   const user = (name: string, extra: Partial<typeof users.$inferInsert> = {}) => db.insert(users).values({ discordId: name, discordUsername: name, ...extra }).returning().get().id;
@@ -92,6 +94,12 @@ function seed(): Seed {
 
   const snap = (userId: string, hours: number, ehb: number, clues: number) => ({ bingoId: bingo.id, userId, takenAt: at(hours), ehb, ehp: 1, clues, bossKillsJson: "{}" });
   db.insert(womSnapshots).values([snap(alice, -2, 100, 10), snap(alice, 24, 104.567, 13), snap(alice, 60, 200, 99)]).run();
+  db.insert(womSnapshots)
+    .values([
+      { ...snap(carol, -2, 50, 0), bossEhbJson: JSON.stringify({ vorkath: 1 }) },
+      { ...snap(carol, 24, 54.5, 0), bossEhbJson: JSON.stringify({ vorkath: 3.5, cerberus: 2 }) },
+    ])
+    .run();
 
   vi.setSystemTime(at(72));
   return { bingoId: bingo.id, teamA, teamB, alice, bob, carol };
@@ -222,6 +230,17 @@ describe("player_contributions", () => {
     expect(alice).toMatchObject({ discordName: "Alice G", team: "Team A", approvedSubmissions: 1, gpGained: 3_000_000, womGains: { ehb: 4.57, ehp: 0, clues: 3, asOf: at(24).toISOString() } });
     const bob = out.players.find((p: any) => p.rsn === "Bob RSN");
     expect(bob).toMatchObject({ approvedSubmissions: 2, womGains: null });
+  });
+
+  it("gives each Player's Effort as the Stats page computes it, with their top Tiles by name", () => {
+    const s = seed();
+    const out = playerContributions.run({ slug: "summer" }, ctx) as any;
+    const effort = computeEffort(db, db.select().from(bingos).where(eq(bingos.id, s.bingoId)).get()!)!;
+    const carol = out.players.find((p: any) => p.rsn === "Carol RSN");
+    expect(carol.effort).toEqual({ hours: 2.5, share: 100, uncompletedHours: 2.5, topTiles: [{ tile: "Vorkath", hours: 2.5 }], asOf: at(24).toISOString() });
+    expect(carol.effort.hours).toBeCloseTo(effort.players.get(s.carol)!.hours, 2);
+    expect(out.players.find((p: any) => p.rsn === "Alice RSN").effort).toBeNull();
+    expect(out.players.find((p: any) => p.rsn === "Bob RSN").effort).toBeNull();
   });
 
   it("filters by Team", () => {
