@@ -2,13 +2,15 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
-import type { WrappedBingoModel, WrappedChartModel, WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel, WrappedTeamModel } from "../../../../headless/types";
+import type { WrappedAchievementsModel, WrappedBingoModel, WrappedChartModel, WrappedDropModel, WrappedPersonModel, WrappedSectionArtModel, WrappedTeamModel } from "../../../../headless/types";
 import { WrappedTeam as DefaultTeam } from "../../../default/wrapped/WrappedTeam";
 import { WrappedBingo as DefaultBingo } from "../../../default/wrapped/WrappedBingo";
+import { WrappedAchievements as DefaultAchievements } from "../../../default/wrapped/WrappedAchievements";
 import { createWrappedProgressStore, WrappedProgressProvider } from "../../../../core/wrapped/sceneProgress";
 import { ComicReveal } from "../ComicReveal";
 import { WrappedTeam } from "./WrappedTeam";
 import { WrappedBingo } from "./WrappedBingo";
+import { WrappedAchievements } from "./WrappedAchievements";
 
 afterEach(cleanup);
 
@@ -89,14 +91,6 @@ const bingo = (over: Partial<WrappedBingoModel> = {}): WrappedBingoModel => ({
       teams: [{ teamId: "t2", name: "Blue Team", color: "#0000ff", isMine: false, killsLabel: `${i + 1} kills`, topPlayers: [{ person: person(4), killsLabel: `${i + 1} kills` }] }],
     })),
   ],
-  achievements: {
-    top: [2, 3, 4].map((n, i) => ({ person: person(n), placementLabel: i < 2 ? "1st" : "3rd", earnedLabel: i < 2 ? "14" : "12", outOfLabel: "of 23", atLabel: `Sun 15 Mar, 1${n}:00`, teamName: "Red Team", teamColor: "#ff0000", isMyTeam: true })),
-    allFirst: { person: person(4), atLabel: "Sun 15 Mar, 18:02" },
-    teams: [
-      { teamId: "t1", name: "Red Team", color: "#ff0000", placementLabel: "1st", earnedLabel: "212", averageLabel: "10.1 per Player", isMine: true },
-      { teamId: "t2", name: "Blue Team", color: "#0000ff", placementLabel: "2nd", earnedLabel: "180", averageLabel: "9 per Player", isMine: false },
-    ],
-  },
   ...over,
 });
 
@@ -162,10 +156,7 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
     ["no Superlatives", bingo({ teamSuperlatives: [] })],
     ["no raids or bosses", bingo({ bossLeaders: [] })],
     ["one boss", bingo({ bossLeaders: bingo().bossLeaders.slice(1, 2) })],
-    ["only the top achievers", bingo({ achievements: { ...bingo().achievements!, allFirst: null, teams: [] } })],
-    ["only who completed all first", bingo({ achievements: { ...bingo().achievements!, top: [], teams: [] } })],
-    ["top achievers from an older Wrapped, without Team or time", bingo({ achievements: { ...bingo().achievements!, top: bingo().achievements!.top.map((p) => ({ ...p, atLabel: null, teamName: null, teamColor: null })) } })],
-    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [], achievements: null })],
+    ["only the leaderboard and totals", bingo({ race: null, rarestDrop: null, mostReacted: null, steal: null, moderation: null, teamSuperlatives: [], bossLeaders: [] })],
   ];
   for (const [name, model] of cases) {
     it(name, () => {
@@ -199,17 +190,116 @@ describe("the comic Bingo section keeps the default's lines, in order", () => {
       </WrappedProgressProvider>,
     );
     const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
-    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the top achievers; who
-    // completed all first and every Team; the Steal and Behind the scenes; the reviewers and the first two Teams; the other five
-    // Teams over two pages.
-    expect(scenes.length).toBe(11);
-    for (const scene of scenes) {
-      const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
-      expect(steps.length).toBeGreaterThan(0);
-      // Steps count up from 0 with no gap, so the camera has a stop for every panel.
-      const unique = [...new Set(steps)].sort((a, b) => a - b);
-      expect(unique).toEqual(unique.map((_, i) => i));
-    }
+    // Everyone; the rain of drops; the highlights; the five raids and bosses over two pages; the Steal and Behind the
+    // scenes; the reviewers and the first two Teams; the other five Teams over two pages.
+    expect(scenes.length).toBe(9);
+    expectStepsCountUp(scenes);
+    unmount();
+  });
+});
+
+/** Every Scene has a Reveal, and its steps count up from 0 with no gap, so the camera has a stop for every panel. */
+function expectStepsCountUp(scenes: Element[]) {
+  for (const scene of scenes) {
+    const steps = [...scene.querySelectorAll("[data-wrapped-step]")].map((el) => Number((el as HTMLElement).dataset.wrappedStep));
+    expect(steps.length).toBeGreaterThan(0);
+    const unique = [...new Set(steps)].sort((a, b) => a - b);
+    expect(unique).toEqual(unique.map((_, i) => i));
+  }
+}
+
+const achievements = (over: Partial<WrappedAchievementsModel> = {}): WrappedAchievementsModel => ({
+  kind: "achievements",
+  art: art(1),
+  leaderboard: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n, i) => ({
+    person: person(n, n === 3),
+    placementLabel: `${i + 1}${["st", "nd", "rd"][i] ?? "th"}`,
+    earnedLabel: String(20 - i),
+    outOfLabel: "of 23",
+    atLabel: `Sun 15 Mar, 1${i % 10}:00`,
+    teamName: i % 2 ? "Blue Team" : "Red Team",
+    teamColor: i % 2 ? "#0000ff" : "#ff0000",
+    isMyTeam: i % 2 === 0,
+  })),
+  participation: {
+    playersLabel: "72 of 80 Players",
+    percentLabel: "90%",
+    earnedLabel: "612 earned",
+    averageLabel: "7.7 per Player",
+    allLabel: "3 earned every one",
+    allFirst: { person: person(4), atLabel: "Sun 15 Mar, 18:02" },
+  },
+  teams: [
+    { teamId: "t1", name: "Red Team", color: "#ff0000", placementLabel: "1st", earnedLabel: "212", averageLabel: "10.1 per Player", isMine: true },
+    { teamId: "t2", name: "Blue Team", color: "#0000ff", placementLabel: "2nd", earnedLabel: "180", averageLabel: "9 per Player", isMine: false },
+  ],
+  byDay: {
+    days: [140, 0, 60, 33].map((earned, i) => ({ dayLabel: `Sat ${12 + i} Oct`, earned, isBusiest: i === 0 })),
+    busiestLabel: "Sat 12 Oct: 140",
+  },
+  you: {
+    earnedLabel: "9",
+    outOfLabel: "of 23",
+    rankLabel: "#14 of 80",
+    rarest: [
+      { key: "night_owl", name: "Night owl", itemName: "Bullseye lantern (lit)", percentLabel: "4%" },
+      { key: "big_spender", name: "Moneybags", itemName: "Coins 10000", percentLabel: "12%" },
+    ],
+  },
+  ...over,
+});
+
+describe("the comic Achievements section keeps the default's lines, in order", () => {
+  const counted = achievements().participation!;
+  const cases: [string, WrappedAchievementsModel][] = [
+    ["a full section", achievements()],
+    ["no art", achievements({ art: art(0) })],
+    ["a viewer who isn't a Player", achievements({ you: null })],
+    ["nobody earned every one", achievements({ participation: { ...counted, allLabel: null, allFirst: null } })],
+    ["a single day of unlocks", achievements({ byDay: null })],
+    ["a Player's place with no rarest", achievements({ you: { ...achievements().you!, rarest: [] } })],
+    [
+      "an older Wrapped: the top list without Team or time, no counts, rank or rarest",
+      achievements({
+        leaderboard: achievements().leaderboard.slice(0, 5).map((r) => ({ ...r, atLabel: null, teamName: null, teamColor: null })),
+        participation: { playersLabel: null, percentLabel: null, earnedLabel: null, averageLabel: null, allLabel: null, allFirst: counted.allFirst },
+        byDay: null,
+        teams: [],
+        you: { earnedLabel: "9", outOfLabel: "of 23", rankLabel: null, rarest: [] },
+      }),
+    ],
+    ["only who completed all first", achievements({ leaderboard: [], participation: { ...counted, playersLabel: null, percentLabel: null, earnedLabel: null, averageLabel: null, allLabel: null }, byDay: null, teams: [], you: null })],
+  ];
+  for (const [name, model] of cases) {
+    it(name, () => {
+      const base = lines(<DefaultAchievements section={model} />);
+      expect(base.length).toBeGreaterThan(3);
+      expectContainsInOrder(base, lines(<WrappedAchievements section={model} />));
+    });
+  }
+
+  it("draws one Scene per page and a Reveal per panel, none left empty", () => {
+    const { container, unmount } = render(
+      <WrappedProgressProvider source={createWrappedProgressStore()} reveal={ComicReveal}>
+        <WrappedAchievements section={achievements()} />
+      </WrappedProgressProvider>,
+    );
+    const scenes = [...container.querySelectorAll("[data-wrapped-scene]")];
+    // The splash; the leaderboard; who took part and who completed all first; unlocks per day; every Team; your place.
+    expect(scenes.length).toBe(6);
+    expectStepsCountUp(scenes);
+    // The whole leaderboard is on its page.
+    expect(scenes[1]!.querySelectorAll("li")).toHaveLength(10);
+    unmount();
+  });
+
+  it("leaves out the pages it has nothing for", () => {
+    const { container, unmount } = render(
+      <WrappedProgressProvider source={createWrappedProgressStore()} reveal={ComicReveal}>
+        <WrappedAchievements section={achievements({ participation: null, byDay: null, teams: [], you: null })} />
+      </WrappedProgressProvider>,
+    );
+    expect(container.querySelectorAll("[data-wrapped-scene]")).toHaveLength(2);
     unmount();
   });
 });

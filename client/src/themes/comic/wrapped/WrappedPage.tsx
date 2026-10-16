@@ -219,6 +219,7 @@ export function WrappedPage() {
   const WrappedModerator = useSlot("WrappedModerator");
   const WrappedTeam = useSlot("WrappedTeam");
   const WrappedBingo = useSlot("WrappedBingo");
+  const WrappedAchievements = useSlot("WrappedAchievements");
   const WrappedOutro = useSlot("WrappedOutro");
 
   // The book's pages, made once per Wrapped: the camera's every step re-renders this page (its snapshot), and remaking
@@ -240,6 +241,8 @@ export function WrappedPage() {
           return <WrappedTeam section={section} />;
         case "bingo":
           return <WrappedBingo section={section} />;
+        case "achievements":
+          return <WrappedAchievements section={section} />;
         case "outro":
           return <WrappedOutro section={section} preview={wrapped.preview} onRewind={wrapped.actions.goToRewind} onBoard={wrapped.actions.goToBoard} feedback={wrapped.feedback && { responded: wrapped.feedback.responded, onOpen: wrapped.actions.goToFeedback }} />;
       }
@@ -260,7 +263,7 @@ export function WrappedPage() {
       </div>,
     );
     return pages;
-  }, [wrapped, WrappedIntro, WrappedYou, WrappedDuo, WrappedCaptain, WrappedModerator, WrappedTeam, WrappedBingo, WrappedOutro]);
+  }, [wrapped, WrappedIntro, WrappedYou, WrappedDuo, WrappedCaptain, WrappedModerator, WrappedTeam, WrappedBingo, WrappedAchievements, WrappedOutro]);
 
   const atStart = !prevStop(snap.pages, snap.pos);
   const atEnd = !nextStop(snap.pages, snap.pos);
