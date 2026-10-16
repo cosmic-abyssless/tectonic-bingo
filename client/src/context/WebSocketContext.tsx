@@ -46,7 +46,7 @@ const REALTIME_QUERY_FAMILIES = [
   "playerProfile", "accountTypes", "auditLog", "teamActivity", "rewind", "bingoMods", "signupQuestions", "myAchievements",
   "adminCaptainCandidates", "adminMods", "adminStaff", "adminQuestions", "adminSuperlatives", "adminWrappedArt",
   "adminBoardTags", "adminBoardEffortBosses", "adminLines", "adminBoardDraft", "adminBoardDraftStatus",
-  "adminSiteAdmins", "adminBugReports", "myBugReports",
+  "adminSiteAdmins", "adminMcpAccess", "adminBugReports", "myBugReports",
 ] as const;
 type RealtimeQueryFamily = (typeof REALTIME_QUERY_FAMILIES)[number];
 const realtimeQueryFamilies: ReadonlySet<unknown> = new Set(REALTIME_QUERY_FAMILIES);
@@ -245,8 +245,11 @@ function invalidateForEvent(queryClient: QueryClient, event: BroadcastEvent, vie
       invalidate(["playerProfile"]);
       break;
     case "access_changed":
-      // Someone's Admin flag: the Site admin pages' list of site admins, for every Admin who has it open.
-      if (event.bingoId === null) invalidate(["adminSiteAdmins"]);
+      // Someone's Admin flag or MCP access: the Site admin pages' lists of them, for every Admin who has one open.
+      if (event.bingoId === null) {
+        invalidate(["adminSiteAdmins"]);
+        invalidate(["adminMcpAccess"]);
+      }
       // Anyone's player card lists their roles (its Permissions tab).
       invalidate(["playerProfile"]);
       // Only the users named: their roles changed, and with them maybe their Actions and what the shell shows them.

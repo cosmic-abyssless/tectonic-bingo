@@ -19,6 +19,7 @@ import { TestDataPanel } from "../core/admin/TestDataPanel";
 import { BugReportsPanel } from "../core/admin/BugReportsPanel";
 import { SITE_AUDIT_FILTER_PARAMS, SiteAuditLog } from "../core/admin/SiteAuditLog";
 import { McpConnectionsList } from "../core/admin/McpConnectionsList";
+import { McpAccessPanel } from "../core/admin/McpAccessPanel";
 import { SiteAdminsPanel } from "../core/admin/SiteAdminsPanel";
 import { ImportHistoricalBingoPanel } from "../core/admin/ImportHistoricalBingoPanel";
 import { displayName } from "../core/ui/user";
@@ -341,7 +342,7 @@ export function SiteAdminPage() {
   const mayAdminister = useSitePageAccess("administer_site");
   const seesAllConnections = useSiteCan("manage_claude_connections").allowed;
   // In the URL (?tab=...), so a link opens the same tab. Only tabs this admin has are honoured.
-  const tabs = ["bugs", "bingos", "audit", "items", "titles", "notifications", "past-wom", "site-admins", ...(seesAllConnections ? ["claude"] : [])];
+  const tabs = ["bugs", "bingos", "audit", "items", "titles", "notifications", "past-wom", "site-admins", "mcp-access", ...(seesAllConnections ? ["claude"] : [])];
   const [tab, setTab] = useUrlTab("tab", tabs, "bugs", [...SITE_AUDIT_FILTER_PARAMS, "section"]);
   // Fetched here (not just inside BugReportsPanel) so the tab shows a pulse dot for changes even while
   // another tab is active; both calls share the same cached query.
@@ -379,6 +380,7 @@ export function SiteAdminPage() {
               <Tab id="notifications">Notifications</Tab>
               <Tab id="past-wom">Past WOM competitions</Tab>
               <Tab id="site-admins">Site admins</Tab>
+              <Tab id="mcp-access">MCP access</Tab>
               {seesAllConnections && <Tab id="claude">Claude connections</Tab>}
             </TabList>
           </div>
@@ -421,6 +423,11 @@ export function SiteAdminPage() {
           <TabPanel id="site-admins">
             <div className={NARROW}>
               <SiteAdminsPanel />
+            </div>
+          </TabPanel>
+          <TabPanel id="mcp-access">
+            <div className={NARROW}>
+              <McpAccessPanel />
             </div>
           </TabPanel>
           {seesAllConnections && (

@@ -1,6 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import * as z from "zod";
 import { bingos, signups, teamMembers, teams } from "../../db/schema";
+import { scopeCovers } from "../access";
 import { defineTool } from "../tool";
 
 // From Board revealed on, the Players are whoever is on a Team; before that, the active signups (CONTEXT.md "Player").
@@ -12,9 +13,9 @@ export const listBingos = defineTool({
   name: "list_bingos",
   title: "List Bingos",
   description:
-    "Every Bingo, newest first: slug (use it to ask about one Bingo), name, stage (planning, signup, captains, draft, reveal, live, complete; complete is Finished), its scheduled dates, and how many Teams and Players it has. Players are the active signups until the Board is revealed, then the members of Teams.",
+    "Every Bingo you can read, newest first: slug (use it to ask about one Bingo), name, stage (planning, signup, captains, draft, reveal, live, complete; complete is Finished), whether it's Historical (a past Bingo imported from another site, which recorded less), its scheduled dates, and how many Teams and Players it has. Players are the active signups until the Board is revealed, then the members of Teams.",
   input: z.object({}),
-  run: (_args, { db }) => {
+  run: (_args, { db, scope }) => {
     const teamCounts = db
       .select({ bingoId: teams.bingoId, teams: sql<number>`count(distinct ${teams.id})`, members: sql<number>`count(${teamMembers.id})` })
       .from(teams)
@@ -30,12 +31,13 @@ export const listBingos = defineTool({
     const teamsBy = new Map(teamCounts.map((r) => [r.bingoId, r]));
     const signupsBy = new Map(signupCounts.map((r) => [r.bingoId, r.count]));
 
-    const rows = db.select().from(bingos).orderBy(desc(bingos.createdAt)).all();
+    const rows = db.select().from(bingos).orderBy(desc(bingos.createdAt)).all().filter((b) => scopeCovers(scope, b.stage));
     return {
       bingos: rows.map((b) => ({
         slug: b.slug,
         name: b.name,
         stage: b.stage,
+        historical: b.historical,
         dates: {
           createdAt: iso(b.createdAt),
           signupOpensAt: iso(b.signupOpensAt),

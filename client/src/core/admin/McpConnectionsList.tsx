@@ -40,7 +40,7 @@ function ConnectionRow({ connection, showOwner }: { connection: McpConnection; s
     setRevoking(true);
     setError(null);
     try {
-      await adminApi.revokeMcpConnection(connection.id);
+      await adminApi.revokeMcpConnection(connection.id, showOwner ? "all" : "mine");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.mcpConnections("mine") }),
         queryClient.invalidateQueries({ queryKey: adminQueryKeys.mcpConnections("all") }),

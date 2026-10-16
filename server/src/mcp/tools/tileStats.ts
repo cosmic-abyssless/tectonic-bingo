@@ -37,8 +37,8 @@ export const tileStats = defineTool({
     limit: z.number().int().positive().optional().describe("At most this many Tiles."),
   }),
   bingoIdFor: bingoIdForSlug,
-  run: ({ slug, tile: nameFilter, limit }, { db }) => {
-    const bingo = bingoBySlug(db, slug);
+  run: ({ slug, tile: nameFilter, limit }, { db, scope }) => {
+    const bingo = bingoBySlug(db, slug, scope);
     const { start } = bingoSpan(db, bingo);
     const names = teamNames(db, bingo.id);
     const progress = [...names.keys()].map((teamId) => ({ teamId, ...getTeamProgress(db, teamId) }));

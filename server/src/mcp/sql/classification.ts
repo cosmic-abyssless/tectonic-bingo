@@ -60,6 +60,7 @@ export const SQL_TABLES: Record<string, TableClass> = {
       discord_avatar: "",
       in_guild: "Was in the clan's Discord server at their last login (0/1)",
       is_admin: "Site Admin (0/1)",
+      mcp_access: "MCP access (0/1): this server's curated tools over Finished Bingos, without being a site admin",
       tutorial_seen_at: "When they finished or skipped the Tutorial, in unix seconds; null if they haven't",
       created_at: TS,
       updated_at: TS,

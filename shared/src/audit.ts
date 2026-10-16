@@ -74,6 +74,8 @@ export interface AuditDetailsMap {
   "bingo.wom_reread": { slug: string; name: string; players: number };
 
   "user.admin_changed": { isAdmin: { before: boolean; after: boolean }; source: "admin_panel" | "env_bootstrap" };
+  /** MCP access (CONTEXT.md) granted or revoked from Site admin > Users. */
+  "user.mcp_access_changed": { mcpAccess: { before: boolean; after: boolean } };
 
   "item_group.created": { name: string; itemCount: number };
   "item_group.updated": { changes: FieldChanges<{ name: string; description: string | null }>; items: { added: string[]; removed: string[] } };
@@ -342,13 +344,21 @@ export interface AuditDetailsMap {
 
   // Fallback-only: written by the server's finish-middleware for any
   // successful non-GET /api/* mutation that recorded nothing itself.
-  /** A site admin's Claude app called a tool on the admin MCP server (server/src/mcp). */
+  /** A Claude app called a tool on the MCP server (server/src/mcp), for a site admin or a user with MCP access. */
   "mcp.tool_called": { tool: string; arguments: Record<string, unknown>; clientId: string; clientName: string | null; rowCount?: number; error?: string };
   /**
-   * A Claude connection's tokens were revoked: by an Admin from Connected apps or Site admin ("revoked"), or because its
-   * Admin lost the Admin role ("admin_removed"). The entry's entity is the connection; ownerUserId is whose it was.
+   * A Claude connection's tokens were revoked: by its owner or an Admin from Connected apps or Site admin ("revoked"),
+   * because its Admin lost the Admin role ("admin_removed"), or because a user who isn't an Admin lost MCP access
+   * ("mcp_access_removed"). The entry's entity is the connection; ownerUserId is whose it was.
    */
-  "mcp.connection_revoked": { clientName: string; redirectHost: string | null; ownerUserId: string; ownerName: string; byOwner: boolean; reason: "revoked" | "admin_removed" };
+  "mcp.connection_revoked": {
+    clientName: string;
+    redirectHost: string | null;
+    ownerUserId: string;
+    ownerName: string;
+    byOwner: boolean;
+    reason: "revoked" | "admin_removed" | "mcp_access_removed";
+  };
   "http.mutation": { method: string; originalUrl: string; routePath: string | null; params: Record<string, unknown>; body: unknown; file: string | null };
 
   "bug_report.created": { description: string; pageUrl: string | null; palette: string | null };
@@ -544,6 +554,13 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     visibility: "mods",
     title: "Site admin changed",
     label: (i) => `${actor(i)} ${i.details.isAdmin.after ? "granted" : "revoked"} site admin for ${i.entityLabel ?? "a user"}`,
+  },
+  "user.mcp_access_changed": {
+    category: "moderation",
+    tone: "warn",
+    visibility: "mods",
+    title: "MCP access changed",
+    label: (i) => `${actor(i)} ${i.details.mcpAccess.after ? "granted" : "revoked"} MCP access for ${i.entityLabel ?? "a user"}`,
   },
   "item_group.created": {
     category: "system",
@@ -1160,7 +1177,9 @@ export const AUDIT_ACTIONS: { [A in AuditAction]: AuditActionDef<A> } = {
     label: (i) =>
       i.details.reason === "admin_removed"
         ? `Revoked ${i.details.ownerName}'s ${i.details.clientName} connection: they're no longer a site admin`
-        : i.details.byOwner
+        : i.details.reason === "mcp_access_removed"
+          ? `Revoked ${i.details.ownerName}'s ${i.details.clientName} connection: their MCP access was revoked`
+          : i.details.byOwner
           ? `${actor(i)} revoked their ${i.details.clientName} connection`
           : `${actor(i)} revoked ${i.details.ownerName}'s ${i.details.clientName} connection`,
   },

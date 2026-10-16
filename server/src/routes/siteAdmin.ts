@@ -124,6 +124,28 @@ router.patch(
   }),
 );
 
+// Site admin > MCP access: who has it.
+router.get(
+  "/mcp-access",
+  asyncHandler(async (_req, res) => {
+    res.json({ users: userService.listMcpAccessUsers(db) });
+  }),
+);
+
+// MCP access (CONTEXT.md): any Admin may grant or revoke it. It reads only Finished Bingos, which every clan member can
+// already see on the site, so it isn't kept to Owners as site admin is.
+router.put(
+  "/users/:id/mcp-access",
+  asyncHandler(async (req, res) => {
+    const { mcpAccess } = req.body as { mcpAccess?: boolean };
+    if (typeof mcpAccess !== "boolean") throw new ServiceError(400, "mcpAccess must be a boolean");
+    const user = userService.setUserMcpAccess(db, req.params.id as string, mcpAccess);
+    // Their account menu shows Connected apps with it: their client refetches who they are.
+    broadcast({ type: "access_changed", bingoId: null, payload: { userIds: [user.id] } });
+    res.json({ user });
+  }),
+);
+
 // Site admin > Site admins: every Admin sees who the Owners and site admins are; only Owners get Grant and Revoke.
 router.get(
   "/site-admins",
@@ -140,15 +162,8 @@ router.get(
   }),
 );
 
-// Claude connections to the admin MCP server (#293). Every Admin sees and revokes their own ("Connected apps" in the
-// account menu); Owners (ADMIN_DISCORD_IDS) see and revoke everyone's.
-router.get(
-  "/mcp-connections/mine",
-  asyncHandler(async (req, res) => {
-    res.json({ connections: mcpConnections.listConnections(db, req.user!.id) });
-  }),
-);
-
+// Claude connections to the MCP server (#293): Owners (ADMIN_DISCORD_IDS) see and revoke everyone's. Each user's own
+// ("Connected apps" in the account menu) are under /api/me.
 router.get(
   "/mcp-connections",
   asyncHandler(async (req, res) => {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6921858f-4950-4238-9b40-725c68295bd1",
+  "id": "6f7cb192-2afa-401d-b7ed-933d47b84f0a",
   "prevId": "dfd46a8b-fdab-41ea-b51c-2961bacf5490",
   "tables": {
     "achievement_activity": {
@@ -1892,117 +1892,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "draft_effort_bosses": {
-      "name": "draft_effort_bosses",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bingo_id": {
-          "name": "bingo_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_id": {
-          "name": "tile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "metric": {
-          "name": "metric",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "mode": {
-          "name": "mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "draft_effort_bosses_tile_metric_unq": {
-          "name": "draft_effort_bosses_tile_metric_unq",
-          "columns": [
-            "bingo_id",
-            "tile_id",
-            "metric"
-          ],
-          "isUnique": true
-        },
-        "draft_effort_bosses_node_metric_unq": {
-          "name": "draft_effort_bosses_node_metric_unq",
-          "columns": [
-            "bingo_id",
-            "node_id",
-            "metric"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "draft_effort_bosses_bingo_id_bingos_id_fk": {
-          "name": "draft_effort_bosses_bingo_id_bingos_id_fk",
-          "tableFrom": "draft_effort_bosses",
-          "tableTo": "bingos",
-          "columnsFrom": [
-            "bingo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "draft_effort_bosses_tile_id_draft_tiles_id_fk": {
-          "name": "draft_effort_bosses_tile_id_draft_tiles_id_fk",
-          "tableFrom": "draft_effort_bosses",
-          "tableTo": "draft_tiles",
-          "columnsFrom": [
-            "tile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "draft_effort_bosses_node_id_draft_nodes_id_fk": {
-          "name": "draft_effort_bosses_node_id_draft_nodes_id_fk",
-          "tableFrom": "draft_effort_bosses",
-          "tableTo": "draft_nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "draft_node_edges": {
       "name": "draft_node_edges",
       "columns": {
@@ -2708,117 +2597,6 @@
           "tableTo": "draft_tile_categories",
           "columnsFrom": [
             "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "effort_bosses": {
-      "name": "effort_bosses",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bingo_id": {
-          "name": "bingo_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tile_id": {
-          "name": "tile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "metric": {
-          "name": "metric",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "mode": {
-          "name": "mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "effort_bosses_tile_metric_unq": {
-          "name": "effort_bosses_tile_metric_unq",
-          "columns": [
-            "bingo_id",
-            "tile_id",
-            "metric"
-          ],
-          "isUnique": true
-        },
-        "effort_bosses_node_metric_unq": {
-          "name": "effort_bosses_node_metric_unq",
-          "columns": [
-            "bingo_id",
-            "node_id",
-            "metric"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "effort_bosses_bingo_id_bingos_id_fk": {
-          "name": "effort_bosses_bingo_id_bingos_id_fk",
-          "tableFrom": "effort_bosses",
-          "tableTo": "bingos",
-          "columnsFrom": [
-            "bingo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "effort_bosses_tile_id_tiles_id_fk": {
-          "name": "effort_bosses_tile_id_tiles_id_fk",
-          "tableFrom": "effort_bosses",
-          "tableTo": "tiles",
-          "columnsFrom": [
-            "tile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "effort_bosses_node_id_nodes_id_fk": {
-          "name": "effort_bosses_node_id_nodes_id_fk",
-          "tableFrom": "effort_bosses",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
           ],
           "columnsTo": [
             "id"
@@ -6854,6 +6632,14 @@
           "autoincrement": false,
           "default": false
         },
+        "mcp_access": {
+          "name": "mcp_access",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "tutorial_seen_at": {
           "name": "tutorial_seen_at",
           "type": "integer",
@@ -7190,13 +6976,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "boss_ehb_json": {
-          "name": "boss_ehb_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         }
       },

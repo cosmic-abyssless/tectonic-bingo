@@ -83,6 +83,40 @@ export function setUserAdmin(db: Db, userId: string, isAdmin: boolean) {
 }
 
 /**
+ * MCP access (CONTEXT.md): any Admin grants or revokes it. Revoking it from someone who isn't an Admin ends their
+ * Claude connections, as losing the Admin role does; an Admin keeps theirs, since they have the full server anyway.
+ */
+export function setUserMcpAccess(db: Db, userId: string, mcpAccess: boolean) {
+  return db.transaction((tx) => {
+    const user = tx.select().from(users).where(eq(users.id, userId)).get();
+    if (!user) throw new ServiceError(404, "User not found");
+    if (user.mcpAccess === mcpAccess) {
+      markAuditedNoop();
+      return user;
+    }
+    const updated = tx.update(users).set({ mcpAccess }).where(eq(users.id, userId)).returning().get();
+    audit(tx, {
+      action: "user.mcp_access_changed",
+      bingoId: null,
+      entity: { type: "user", id: userId, label: userLabel(user) },
+      details: { mcpAccess: { before: user.mcpAccess, after: mcpAccess } },
+    });
+    if (!mcpAccess && !user.isAdmin) revokeAllForUser(tx, userId, getAuditContext()?.actorUserId ?? null, undefined, "mcp_access_removed");
+    return updated;
+  });
+}
+
+/** Site admin > MCP access: every user given it, by name (a site admin given it too keeps it if they lose admin). */
+export function listMcpAccessUsers(db: Db) {
+  return db
+    .select()
+    .from(users)
+    .where(eq(users.mcpAccess, true))
+    .all()
+    .sort((a, b) => playerName(a).localeCompare(playerName(b), undefined, { sensitivity: "base" }));
+}
+
+/**
  * Site admin > Site admins: the Owners (ADMIN_DISCORD_IDS, in its order), with their account if they've ever signed in,
  * then every other site admin by name. Someone taken off ADMIN_DISCORD_IDS shows as a plain site admin from then on.
  */

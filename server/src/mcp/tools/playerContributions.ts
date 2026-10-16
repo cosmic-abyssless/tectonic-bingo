@@ -24,8 +24,8 @@ export const playerContributions = defineTool({
     limit: z.number().int().positive().optional().describe("At most this many Players."),
   }),
   bingoIdFor: bingoIdForSlug,
-  run: ({ slug, team, limit }, { db }) => {
-    const bingo = bingoBySlug(db, slug);
+  run: ({ slug, team, limit }, { db, scope }) => {
+    const bingo = bingoBySlug(db, slug, scope);
     const { start, end } = bingoSpan(db, bingo);
     const names = teamNames(db, bingo.id);
     const timelines = start ? loadTimelines(db, bingo.id) : new Map<string, never>();

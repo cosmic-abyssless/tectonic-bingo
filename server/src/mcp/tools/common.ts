@@ -6,6 +6,7 @@ import * as z from "zod";
 import * as schema from "../../db/schema";
 import { bingos, teams } from "../../db/schema";
 import { effectiveStartsAt, endedAt } from "../../services/bingoStart";
+import { scopeCovers, type McpScope } from "../access";
 import { McpToolError } from "../tool";
 
 type Db = BetterSQLite3Database<typeof schema>;
@@ -13,10 +14,13 @@ type Bingo = typeof bingos.$inferSelect;
 
 export const slugInput = z.string().min(1).describe("The Bingo's slug, from list_bingos.");
 
-/** The Bingo with this slug, or a tool error saying there's none. */
-export function bingoBySlug(db: Db, slug: string): Bingo {
+/**
+ * The Bingo with this slug, or a tool error saying there's none. Outside the caller's scope (a Bingo that isn't
+ * Finished, for MCP access) it answers as if there were none, so the slug of a Planning Bingo isn't confirmed either.
+ */
+export function bingoBySlug(db: Db, slug: string, scope: McpScope): Bingo {
   const bingo = db.select().from(bingos).where(eq(bingos.slug, slug)).get();
-  if (!bingo) throw new McpToolError(`No Bingo has the slug "${slug}". list_bingos gives every Bingo's slug.`);
+  if (!bingo || !scopeCovers(scope, bingo.stage)) throw new McpToolError(`No Bingo you can read has the slug "${slug}". list_bingos gives every one's slug.`);
   return bingo;
 }
 

@@ -58,6 +58,12 @@ The same people as Site Admins, named for what they do in a Bingo: create, confi
 - **Capabilities:** Create Bingos, manage signup questions, assign Captains and Moderators, transition stages, override scores.
 - **Note:** "Site Admin" and "Admin" are one role (the `admin` role in the permissions model): Site Admin when talking about the Site admin pages, Admin inside a Bingo. Owner sits on top of it.
 
+### MCP access
+A grant that lets someone who isn't a Site Admin connect Claude to the site's MCP server, for balancing future Bingos. Any Admin grants or revokes it, from Site admin > MCP access.
+- **Capabilities:** The curated tools, over Finished Bingos only (Historical ones included, as they're always Finished). They see and revoke their own connections from **Connected apps** in the account menu.
+- **Rules:** A Bingo that isn't Finished is answered as if it didn't exist. Never the raw SQL tool or the schema, whose copy of the database holds every Bingo. Revoking it ends all of their Claude connections, unless they're a Site Admin, who has the whole server anyway.
+- **Not:** A role. It gives nothing on the site itself, and nothing inside a Bingo.
+
 ### Moderator
 A trusted clan member whose elevated permissions are scoped to a single specific Bingo, granted by an Admin (or inherited by Site Admins).
 - **Capabilities:** Review submissions (approve / reject), view all team boards (not while playing), inspect audit logs, adjust team points manually.
