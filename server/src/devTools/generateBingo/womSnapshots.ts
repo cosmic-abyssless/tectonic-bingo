@@ -8,7 +8,9 @@
 // nothing to show for it, for as many kills as a real dry streak would last (again geometric, on the Board's drops
 // from that boss), which is where Dry comes from. Snapshots come every few hours, plus one shortly after each drop,
 // as if the Player updated on logout. Some Players also run a few of the raids and bosses Wrapped looks at (the Bingo's
-// list), drops or not, so a generated Wrapped shows who killed each the most.
+// list), drops or not, so a generated Wrapped shows who killed each the most. Each boss's EHB is its kills over that
+// boss's kills an hour, as Wise Old Man works it out, so Effort has per-boss hours to count; the total EHB is those plus
+// time at bosses the generator doesn't model, so the two agree.
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../../db/schema";
@@ -32,6 +34,22 @@ type Db = BetterSQLite3Database<typeof schema>;
 
 // The hiscores list a boss from 5 kills; below that WOM reports it as unranked (null).
 const HISCORE_MIN_KILLS = 5;
+
+// Kills an hour at each boss, roughly Wise Old Man's main-account EHB rates: a boss's EHB is its kills over this. A boss
+// not listed goes at DEFAULT_KILLS_PER_HOUR.
+const KILLS_PER_HOUR: Partial<Record<BossMetric, number>> = {
+  abyssal_sire: 45, alchemical_hydra: 33, amoxliatl: 55, araxxor: 38, artio: 60, barrows_chests: 22, brutus: 45, bryophyta: 9, callisto: 55,
+  calvarion: 50, cerberus: 60, chambers_of_xeric: 3.5, chambers_of_xeric_challenge_mode: 2.3, chaos_elemental: 50, chaos_fanatic: 80,
+  commander_zilyana: 50, corporeal_beast: 60, crazy_archaeologist: 75, dagannoth_prime: 90, dagannoth_rex: 90, dagannoth_supreme: 90,
+  deranged_archaeologist: 80, doom_of_mokhaiotl: 10, duke_sucellus: 38, general_graardor: 50, giant_mole: 100, grotesque_guardians: 36,
+  hespori: 60, kalphite_queen: 50, king_black_dragon: 120, kraken: 100, kreearra: 40, kril_tsutsaroth: 60, mimic: 60, nex: 13, nightmare: 14,
+  phosanis_nightmare: 7, obor: 12, phantom_muspah: 30, sarachnis: 80, scorpia: 120, scurrius: 80, skotizo: 45, sol_heredit: 1.3, spindel: 60,
+  the_gauntlet: 10, the_corrupted_gauntlet: 7, the_hueycoatl: 18, the_leviathan: 37, the_royal_titans: 60, the_whisperer: 28,
+  theatre_of_blood: 3, theatre_of_blood_hard_mode: 2.6, thermonuclear_smoke_devil: 125, tombs_of_amascut: 2.5, tombs_of_amascut_expert: 2,
+  tzkal_zuk: 0.8, tztok_jad: 2, vardorvis: 41, venenatis: 50, vetion: 40, vorkath: 34, yama: 9, zulrah: 40,
+};
+const DEFAULT_KILLS_PER_HOUR = 30;
+const killsPerHour = (m: string) => KILLS_PER_HOUR[m as BossMetric] ?? DEFAULT_KILLS_PER_HOUR;
 
 export interface FakeTimelineInput {
   start: Date;
@@ -57,10 +75,10 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   const boardRate = new Map<BossMetric, number>();
   for (const item of new Set(input.boardItems.map((i) => i.toLowerCase()))) for (const { metric, rate } of rates.sourcesOf(item)) boardRate.set(metric, (boardRate.get(metric) ?? 0) + rate);
   const boardMetrics = [...boardRate.keys()].sort();
-  // Kills an hour at one boss while they're at it, and how much of the day they're at it.
+  // Kills an hour at one boss while they're at it (no faster than the boss allows), and how much of the day they're at it.
   const speed = rng.between(8, 30);
   const activity = rng.between(0.1, 0.35);
-  const killsIn = (ms: number) => Math.floor((ms / HOUR) * speed * activity);
+  const killsIn = (ms: number, m: BossMetric) => Math.floor((ms / HOUR) * Math.min(speed, killsPerHour(m)) * activity);
   const base = new Map<BossMetric, number>(boardMetrics.map((m) => [m, rng.chance(0.7) ? rng.int(0, 1500) : 0]));
   // Per boss, when the kill count (since the start) reached what: straight lines in between.
   const waypoints = new Map<BossMetric, { at: number; kills: number }[]>();
@@ -79,18 +97,19 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
     const prev = killsNow(metric);
     const item = drop.itemName.toLowerCase();
     const since = Math.max(prev.kills, lastDropKills.get(item) ?? 0);
-    const kills = Math.min(since + killsUntilDrop(rng, rate), prev.kills + Math.max(1, killsIn(drop.at.getTime() - prev.at)));
+    const kills = Math.min(since + killsUntilDrop(rng, rate), prev.kills + Math.max(1, killsIn(drop.at.getTime() - prev.at, metric)));
     lastDropKills.set(item, kills);
     reach(metric, drop.at.getTime(), Math.max(kills, prev.kills + 1));
   }
 
   // Going on with nothing to show for it: after the last drop at a boss, or at a Board boss never dropped from. The
-  // streak is the kills a real one would last (short of the next Board drop), as far as there's time for.
+  // streak is the kills a real one would last (short of the next Board drop), as far as there's time for, the time
+  // shared between the bosses they go on at.
   const tail = new Set([...waypoints.keys()].filter((m) => boardRate.has(m) && rng.chance(0.5)));
   if (boardMetrics.length > 0 && rng.chance(0.35)) tail.add(rng.pick(boardMetrics));
   for (const m of tail) {
     const prev = killsNow(m);
-    const kills = Math.min(killsUntilDrop(rng, boardRate.get(m)!) - 1, killsIn(end.getTime() - prev.at));
+    const kills = Math.min(killsUntilDrop(rng, boardRate.get(m)!) - 1, killsIn((end.getTime() - prev.at) / tail.size, m));
     if (kills > 0) reach(m, end.getTime(), prev.kills + kills);
   }
 
@@ -121,7 +140,7 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   for (const d of drops) times.add(Math.min(end.getTime(), d.at.getTime() + Math.round(rng.between(5, 90) * MINUTE)));
   times.add(end.getTime() - Math.round(rng.between(0, 2) * HOUR));
 
-  // EHB from the time they play rather than the kills above, which the drops can push past what one Player could do.
+  // EHB at bosses the generator doesn't model, from the time they play; the bosses above add their own on top.
   const ehb0 = rng.between(0, 800);
   const ehbPerHour = activity * rng.between(0.5, 0.9);
   const ehp0 = rng.between(50, 3000);
@@ -132,15 +151,19 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   for (const t of [...times].sort((a, b) => a - b)) {
     const during = t > start.getTime();
     const bossKills: Record<string, number | null> = {};
+    const bossEhb: Record<string, number> = {};
     for (const [m, b] of base) {
       const k = during ? killsAt(m, t) : 0;
       bossKills[m] = b + k >= HISCORE_MIN_KILLS ? b + k : null;
+      // Wise Old Man gives an unranked boss no EHB, as it has no kills to count.
+      if (bossKills[m] !== null) bossEhb[m] = (b + k) / killsPerHour(m);
     }
+    const atBosses = Object.values(bossEhb).reduce((sum, h) => sum + h, 0);
     if (during) {
       ehp += rng.chance(0.3) ? rng.between(0, 1.5) : 0;
       clues += rng.chance(0.25) ? rng.int(1, 3) : 0;
     }
-    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb: {}, ehb: ehb0 + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
+    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb, ehb: ehb0 + atBosses + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
   }
   return out;
 }
@@ -180,7 +203,7 @@ export function fillFakeWomSnapshots(db: Db, slug: string, seed: number): { play
       // Forked by Discord ID, which the seed fixes (unlike the user's id), so each Player's timeline is repeatable.
       const timeline = fakeTimeline(rng.fork(m.discordId), { start, end, drops: dropsByUser.get(m.userId) ?? [], boardItems, rates, wrappedBosses });
       for (const s of timeline) {
-        tx.insert(womSnapshots).values({ bingoId: bingo.id, userId: m.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills) }).run();
+        tx.insert(womSnapshots).values({ bingoId: bingo.id, userId: m.userId, takenAt: s.at, ehb: s.ehb, ehp: s.ehp, clues: s.clues, bossKillsJson: JSON.stringify(s.bossKills), bossEhbJson: JSON.stringify(s.bossEhb) }).run();
       }
       snapshots += timeline.length;
       tx.insert(womReads).values({ bingoId: bingo.id, userId: m.userId, rsn: rsns.get(m.userId) ?? m.discordId, readAt: at, readThrough: end }).run();

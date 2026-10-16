@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import * as schema from "../../db/schema";
+import { createTestDb } from "../../testUtils/testDb";
+import { createTask, createTile } from "../../services/boardService";
+import { computeEffort } from "../../services/effortService";
 import { dropRateTable } from "../../services/luck/dropRates";
 import { playerLuck } from "../../services/luck/luck";
 import { Rng } from "./rng";
 import { DAY, HOUR } from "./timeline";
-import { fakeTimeline, type FakeTimelineInput } from "./womSnapshots";
+import { fakeTimeline, fillFakeWomSnapshots, type FakeTimelineInput } from "./womSnapshots";
 
 const rates = dropRateTable({
   Vardorvis: { "Ultor vestige": 1 / 1000, "Virtus mask": 1 / 3000 },
@@ -26,11 +30,44 @@ describe("fakeTimeline", () => {
       const timeline = fakeTimeline(new Rng(seed), { ...input(drops), wrappedBosses });
       const gained = wrappedBosses.some((m) => (timeline.at(-1)!.bossKills[m] ?? 0) > (timeline[0]!.bossKills[m] ?? 0));
       if (gained) raiders++;
-      const without = (t: typeof timeline) => t.map((s) => ({ ...s, bossKills: Object.fromEntries(Object.entries(s.bossKills).filter(([m]) => !wrappedBosses.includes(m))) }));
-      expect(without(timeline)).toEqual(without(plain));
+      // The total EHB includes the raids' hours, so it's compared without them.
+      const others = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([m]) => !wrappedBosses.includes(m)));
+      const without = (t: typeof timeline) =>
+        t.map((s) => ({ ...s, bossKills: others(s.bossKills), bossEhb: others(s.bossEhb), ehb: s.ehb! - wrappedBosses.reduce((sum, m) => sum + (s.bossEhb[m] ?? 0), 0) }));
+      expect(without(timeline).map((s) => s.ehb)).toEqual(without(plain).map((s) => expect.closeTo(s.ehb, 9)));
+      const exact = (t: typeof timeline) => without(t).map((s) => ({ ...s, ehb: 0 }));
+      expect(exact(timeline)).toEqual(exact(plain));
     }
     expect(raiders).toBeGreaterThan(10);
     expect(raiders).toBeLessThan(40);
+  });
+
+  it("gives each ranked boss its kills over its kills an hour as EHB, and counts it in the total", () => {
+    for (let seed = 0; seed < 50; seed++) {
+      const timeline = fakeTimeline(new Rng(seed), input(drops));
+      let prevOther = -Infinity;
+      for (const s of timeline) {
+        for (const [metric, kills] of Object.entries(s.bossKills)) {
+          if (kills === null) expect(s.bossEhb[metric]).toBeUndefined();
+          else expect(s.bossEhb[metric]).toBeCloseTo(kills / ({ vardorvis: 41, general_graardor: 50 } as Record<string, number>)[metric]!, 9);
+        }
+        // The rest of the total is time at bosses the generator doesn't model, which never goes backwards.
+        const other = s.ehb! - Object.values(s.bossEhb).reduce((sum, h) => sum + h, 0);
+        expect(other).toBeGreaterThanOrEqual(prevOther - 1e-9);
+        prevOther = other;
+      }
+    }
+  });
+
+  it("keeps a Player's hours at the bosses to what the Bingo had time for, even at a raid", () => {
+    const raidRates = dropRateTable({ "Theatre of Blood": { "Avernic defender hilt": 1 / 50, "Scythe of vitur (uncharged)": 1 / 2000 } });
+    const raid = { start: START, end: END, boardItems: ["Avernic defender hilt", "Scythe of vitur (uncharged)"], rates: raidRates };
+    for (let seed = 0; seed < 100; seed++) {
+      const timeline = fakeTimeline(new Rng(seed), { ...raid, drops: [{ itemName: "Avernic defender hilt", at: new Date(START.getTime() + DAY) }] });
+      const before = timeline.filter((s) => s.at <= START).at(-1)!;
+      const gained = Object.values(timeline.at(-1)!.bossEhb).reduce((sum, h) => sum + h, 0) - Object.values(before.bossEhb).reduce((sum, h) => sum + h, 0);
+      expect(gained).toBeLessThan((END.getTime() - START.getTime()) / HOUR / 2);
+    }
   });
 
   it("is the same for the same seed", () => {
@@ -86,5 +123,38 @@ describe("fakeTimeline", () => {
     expect(dries.length).toBeGreaterThan(30);
     // A streak is one draw of the kills until the next drop, so past 1 in 10,000 is all but impossible.
     expect(dries.at(-1)!).toBeLessThan(4);
+  });
+});
+
+// A generated Bingo's stored snapshots carry each boss's EHB, so a Finished one shows Effort (CONTEXT.md "Effort").
+describe("fillFakeWomSnapshots", () => {
+  it("stores each boss's EHB, which gives the Players an Effort", () => {
+    const { sqlite, db } = createTestDb();
+    try {
+      const user = (name: string) => db.insert(schema.users).values({ discordId: `testdata-${name}`, discordUsername: name }).returning().get().id;
+      const admin = user("admin");
+      const startsAt = new Date(Date.now() - 10 * DAY);
+      const endsAt = new Date(Date.now() - DAY);
+      const bingo = db
+        .insert(schema.bingos)
+        .values({ slug: "testdata-effort", name: "E", boardRows: 1, boardCols: 1, createdByUserId: admin, stage: "complete", startsAt, endsAt })
+        .returning()
+        .get();
+      const tile = createTile(db, { bingoId: bingo.id, name: "Vorkath", boardRow: 0, boardCol: 0 });
+      createTask(db, tile.id, { kind: "ITEM", label: "Head", points: 10, itemName: "Vorkath's head" }, 0);
+      const team = db.insert(schema.teams).values({ bingoId: bingo.id, captainUserId: admin, name: "T", codeword: "t" }).returning().get().id;
+      const players = Array.from({ length: 12 }, (_, i) => user(`p${i}`));
+      db.insert(schema.teamMembers).values(players.map((userId) => ({ teamId: team, userId }))).run();
+
+      fillFakeWomSnapshots(db, bingo.slug, 11);
+      const rows = db.select().from(schema.womSnapshots).all();
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.bossEhbJson !== null)).toBe(true);
+      const effort = computeEffort(db, db.select().from(schema.bingos).all()[0]!)!;
+      expect(effort.players.size).toBe(players.length);
+      expect([...effort.players.values()].filter((e) => e.hours > 0).length).toBeGreaterThan(0);
+    } finally {
+      sqlite.close();
+    }
   });
 });

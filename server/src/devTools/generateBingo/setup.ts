@@ -1,7 +1,7 @@
 // Everything before the bingo goes live, driven through the real endpoints at spoofed times: the import, the
 // users and their signups, duo pairings, captains, the draft, team names and raised hands.
-import type { BingoExportDocument, BoardDraftStatus, BoardResponse, DraftBoardResponse, PublishPreview, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
-import { DEFAULT_DISCORD_CHANNELS } from "@bingo/shared";
+import type { BingoExportDocument, BoardEffortBossesResponse, BoardDraftStatus, BoardResponse, DraftBoardResponse, PublishPreview, BuyinsResponse, DraftState, DraftUnit, ExclusivityRule, GraphNode, GraphNodeInput, SignupQuestion, TeamWithMembers } from "@bingo/shared";
+import { DEFAULT_DISCORD_CHANNELS, WOM_BOSS_NAMES, isWomBossMetric } from "@bingo/shared";
 import { answerQuestions } from "./answers";
 import type { Api } from "./client";
 import { itemToWeigh, type BoardInfo, type PartModel } from "./board";
@@ -132,10 +132,46 @@ export async function weighAnItem(ctx: Ctx, at: Date): Promise<void> {
   ctx.log(`${pick.item.itemName} counts as ${pick.countsAs} in "${pick.task.label}"`);
 }
 
+const bossName = (metric: string) => (isWomBossMetric(metric) ? WOM_BOSS_NAMES[metric] : metric);
+
+/**
+ * Changes a few Parts' Effort bosses (CONTEXT.md "Effort") as an Admin would in the board editor, so every generated
+ * Bingo has an added and a removed one to show: a boss added to a Part whose Items give it none (one the Board's other
+ * Items do, so the Players' made-up Wise Old Man kills count toward it), and a derived boss removed from another Part
+ * (one with two or more if any, so it keeps some). Seeded; both go to the Draft board, which publishBoard publishes.
+ */
+export async function editEffortBosses(ctx: Ctx, at: Date): Promise<void> {
+  const admin = ctx.api.as(ctx.admin);
+  const rng = ctx.rng.fork("effort-bosses");
+  const { board } = await admin.get<DraftBoardResponse>(path(ctx, "/admin/board-draft"));
+  const { derived } = await admin.get<BoardEffortBossesResponse>(path(ctx, "/admin/effort-bosses"));
+  const metricsOf = new Map(derived.map((d) => [d.partId, d.metrics]));
+  const parts = [...board.tiles]
+    .sort((a, b) => a.boardRow - b.boardRow || a.boardCol - b.boardCol)
+    .flatMap((t) => t.node.children.map((p) => ({ id: p.id, label: `${t.name} ${p.label}`, metrics: metricsOf.get(p.id) ?? [] })));
+  const boardMetrics = [...new Set(parts.flatMap((p) => p.metrics))].sort();
+  const bare = parts.filter((p) => p.metrics.length === 0);
+  if (bare.length > 0 && boardMetrics.length > 0) {
+    const part = rng.pick(bare);
+    const metric = rng.pick(boardMetrics);
+    await admin.post(path(ctx, `/admin/parts/${part.id}/effort-bosses`), { metric, mode: "add" }, { at });
+    ctx.log(`Effort boss ${bossName(metric)} added to "${part.label}"`);
+  }
+  const several = parts.filter((p) => p.metrics.length > 1);
+  const withBosses = several.length > 0 ? several : parts.filter((p) => p.metrics.length > 0);
+  if (withBosses.length > 0) {
+    const part = rng.pick(withBosses);
+    const metric = rng.pick(part.metrics);
+    await admin.post(path(ctx, `/admin/parts/${part.id}/effort-bosses`), { metric, mode: "remove" }, { at: plus(at, MINUTE) });
+    ctx.log(`Effort boss ${bossName(metric)} removed from "${part.label}"`);
+  }
+}
+
 /**
  * Publishes the Admin's setup edits to the board (CONTEXT.md "Publish"), as an Admin would from the Board tab: opens
  * the Publish screen's preview, then publishes the draft it showed. The import itself is the Published board; the
- * edits after it (weighAnItem) went to the Draft board, so without this the Bingo would play on the board as imported.
+ * edits after it (weighAnItem, editEffortBosses) went to the Draft board, so without this the Bingo would play on the
+ * board as imported.
  */
 export async function publishBoard(ctx: Ctx, at: Date): Promise<void> {
   const admin = ctx.api.as(ctx.admin);
