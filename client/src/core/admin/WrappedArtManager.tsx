@@ -35,6 +35,7 @@ const SECTIONS: Record<WrappedArtSection, { label: string; hint: string }> = {
   team: { label: "Team", hint: "The Player's Team: three works well" },
   bingo: { label: "The Bingo", hint: "Everyone, together" },
   moderators: { label: "Moderators", hint: "Behind the scenes: credit who moderated the bingo" },
+  achievements: { label: "Achievements", hint: "Who unlocked the most" },
   outro: { label: "Outro", hint: "The closing screen" },
 };
 

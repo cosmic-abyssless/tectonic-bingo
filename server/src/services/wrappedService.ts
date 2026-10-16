@@ -11,6 +11,7 @@ import {
   pickTitles,
   placeDrafted,
   playerName,
+  rarityPercent,
   titlesHeldBy,
   type AvatarUser,
   type BingoWrapped,
@@ -197,43 +198,81 @@ export function bossLeadersOf(
 }
 
 /** How many Players the Achievement leaders' top list names. */
-const TOP_ACHIEVERS = 5;
+const TOP_ACHIEVERS = 10;
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * The Achievement leaders and what each Player is told of their own place: their rank (WrappedYou.achievementRank,
+ * by userId, Players who earned none left out) and each Achievement's Rarity as a whole percent of the Players counted
+ * (by key). The last two are per Player and per Achievement, so they only ever go in a Player's own Wrapped.
+ */
+export interface AchievementStandings {
+  leaders: WrappedAchievementLeaders;
+  rankOf: Map<string, { rank: number; players: number }>;
+  earnedByPercent: Map<string, number>;
+}
 
 /**
  * The Bingo's Achievement leaders (BingoWrapped.achievements) among `players` (each with their Team), from each
  * Player's earned Achievements out of the `total` switched on: who earned the most (tied Players by name), who earned
  * all of them first (when their last one came; a tie at the same moment goes by name), and the top Players: most earned
- * first, then who got there first, then by name. Every Team of `teamOrder` (the final standings) is ranked by its
- * Players' Achievements added up, tied Teams keeping that order.
+ * first, then who got there first, then by name, so no two share a place. Every Team of `teamOrder` (the final
+ * standings) is ranked by its Players' Achievements added up, tied Teams keeping that order. Then how many took part,
+ * the earns per UTC day, and each Player's rank in the same ordering.
  */
 export function achievementLeadersOf(
-  earned: Map<string, { earnedAt: Date }[]>,
+  earned: Map<string, { key: string; earnedAt: Date }[]>,
   players: { userId: string; teamId: string }[],
   total: number,
   userById: Map<string, AvatarUser>,
   teamOrder: string[],
-): WrappedAchievementLeaders {
+): AchievementStandings {
   const counts = players
     .filter((p) => userById.has(p.userId))
     .map((p) => {
       const mine = earned.get(p.userId) ?? [];
-      return { user: userById.get(p.userId)!, teamId: p.teamId, earned: mine.length, lastAt: Math.max(0, ...mine.map((e) => e.earnedAt.getTime())) };
+      return { userId: p.userId, user: userById.get(p.userId)!, teamId: p.teamId, mine, earned: mine.length, lastAt: Math.max(0, ...mine.map((e) => e.earnedAt.getTime())) };
     });
   const byName = (a: AvatarUser, b: AvatarUser) => playerName(a).localeCompare(playerName(b));
   const most = Math.max(0, ...counts.map((c) => c.earned));
   const ranked = counts.filter((c) => c.earned > 0).sort((a, b) => b.earned - a.earned || a.lastAt - b.lastAt || byName(a.user, b.user));
   const allFirst = total > 0 ? ranked.filter((c) => c.earned >= total).sort((a, b) => a.lastAt - b.lastAt || byName(a.user, b.user))[0] : undefined;
+
+  // Every earn of the Players counted: added up per Achievement and per UTC day, every day from the first to the last.
+  const earns = counts.flatMap((c) => c.mine);
+  const earnedBy = new Map<string, number>();
+  const perDay = new Map<number, number>();
+  for (const e of earns) {
+    earnedBy.set(e.key, (earnedBy.get(e.key) ?? 0) + 1);
+    const day = Math.floor(e.earnedAt.getTime() / DAY_MS);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+  }
+  const byDay: { date: string; earned: number }[] = [];
+  if (perDay.size > 0) {
+    const days = [...perDay.keys()];
+    for (let day = Math.min(...days); day <= Math.max(...days); day++) byDay.push({ date: new Date(day * DAY_MS).toISOString().slice(0, 10), earned: perDay.get(day) ?? 0 });
+  }
+
   return {
-    total,
-    most: most > 0 ? { players: counts.filter((c) => c.earned === most).map((c) => c.user).sort(byName), earned: most } : null,
-    allFirst: allFirst ? { player: allFirst.user, at: new Date(allFirst.lastAt).toISOString() } : null,
-    teams: teamOrder
-      .map((teamId) => {
-        const mine = counts.filter((c) => c.teamId === teamId);
-        return { teamId, earned: mine.reduce((sum, c) => sum + c.earned, 0), players: mine.length };
-      })
-      .sort((a, b) => b.earned - a.earned),
-    top: ranked.slice(0, TOP_ACHIEVERS).map((c) => ({ player: c.user, teamId: c.teamId, earned: c.earned, lastEarnedAt: new Date(c.lastAt).toISOString() })),
+    leaders: {
+      total,
+      most: most > 0 ? { players: counts.filter((c) => c.earned === most).map((c) => c.user).sort(byName), earned: most } : null,
+      allFirst: allFirst ? { player: allFirst.user, at: new Date(allFirst.lastAt).toISOString() } : null,
+      teams: teamOrder
+        .map((teamId) => {
+          const mine = counts.filter((c) => c.teamId === teamId);
+          return { teamId, earned: mine.reduce((sum, c) => sum + c.earned, 0), players: mine.length };
+        })
+        .sort((a, b) => b.earned - a.earned),
+      top: ranked.slice(0, TOP_ACHIEVERS).map((c) => ({ player: c.user, teamId: c.teamId, earned: c.earned, lastEarnedAt: new Date(c.lastAt).toISOString() })),
+      players: counts.length,
+      playersWithAny: ranked.length,
+      earnedTotal: earns.length,
+      allCount: total > 0 ? ranked.filter((c) => c.earned >= total).length : 0,
+      byDay,
+    },
+    rankOf: new Map(ranked.map((c, i) => [c.userId, { rank: i + 1, players: counts.length }])),
+    earnedByPercent: new Map([...earnedBy].map(([key, n]) => [key, rarityPercent(n / counts.length)])),
   };
 }
 
@@ -405,6 +444,9 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
   const playerIds = [...new Set(memberRows.map((m) => m.userId))];
   const achievements = getEarnedAchievements(db, bingo);
   const teamOfUser = new Map(memberRows.map((m) => [m.userId, m.teamId]));
+  const achievementStandings = achievements
+    ? achievementLeadersOf(achievements, playerIds.map((userId) => ({ userId, teamId: teamOfUser.get(userId)! })), getEnabledAchievementKeys(db, bingoId).length, userById, wrappedTeams.map((t) => t.teamId))
+    : null;
 
   const bingoData: BingoWrapped = {
     bingoName: bingo.name,
@@ -417,7 +459,7 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
     biggestSteal,
     moderation: reviewStats(reviews, userById),
     bossLeaders: bossLeadersOf(parseWrappedBosses(bingo.wrappedBossesJson), bossGains, userById, wrappedTeams.map((t) => t.teamId)),
-    achievements: achievements ? achievementLeadersOf(achievements, playerIds.map((userId) => ({ userId, teamId: teamOfUser.get(userId)! })), getEnabledAchievementKeys(db, bingoId).length, userById, wrappedTeams.map((t) => t.teamId)) : null,
+    achievements: achievementStandings?.leaders ?? null,
   };
 
   const averageSubmissions = playerIds.length ? playerIds.reduce((sum, id) => sum + (contributionOf.get(id)?.approvedSubmissions ?? 0), 0) / playerIds.length : 0;
@@ -515,8 +557,9 @@ export function computeWrapped(db: Db, bingo: Bingo): { bingo: BingoWrapped; pla
         titles: titlesHeldBy(picked, userId).map((p) => ({ id: p.title.id, name: p.title.name, text: p.holders.find((h) => h.userId === userId)!.text })),
         achievements: (achievements?.get(userId) ?? []).map((a) => {
           const def = achievementDef(a.key);
-          return { key: a.key, name: def.name, itemName: def.itemName, earnedAt: a.earnedAt.toISOString() };
+          return { key: a.key, name: def.name, itemName: def.itemName, earnedAt: a.earnedAt.toISOString(), earnedByPercent: achievementStandings?.earnedByPercent.get(a.key) };
         }),
+        achievementRank: achievementStandings?.rankOf.get(userId) ?? null,
         wom:
           womGains && timeline
             ? { ehb: womGains.ehb, bosses: bossGainsOf(timeline, liveAt!, finishedAt).slice(0, TOP_BOSSES).map((b) => ({ ...b, name: bossName(b.metric) })), asOf: womGains.asOf }

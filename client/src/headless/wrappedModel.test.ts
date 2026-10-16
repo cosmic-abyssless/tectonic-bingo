@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { achievementDef } from "@bingo/shared";
 import type { AvatarUser, BingoWrapped, MyWrappedResponse, PlayerWrapped, WrappedCaptain, WrappedDrop, WrappedDuo, WrappedYou } from "@bingo/shared";
-import type { WrappedBingoModel, WrappedOutroModel, WrappedShareCardModel, WrappedTeamModel } from "./types";
+import type { WrappedAchievementsModel, WrappedBingoModel, WrappedOutroModel, WrappedShareCardModel, WrappedTeamModel } from "./types";
 import { aboveAverage, buildWrappedStory, carriedBanter, draftGrade, dropLuck, ordinal, rankedArt, rateLabel, rejectionBanter, shortDuration } from "./wrappedModel";
 
 const T0 = Date.UTC(2026, 0, 3, 12);
@@ -305,59 +305,154 @@ describe("buildWrappedStory", () => {
     });
   });
 
-  describe("the Achievement leaders", () => {
-    const achievementsOf = (data: MyWrappedResponse) => (story(data).sections.find((s) => s.id === "bingo")!.section as WrappedBingoModel).achievements;
+  describe("the Achievements section", () => {
+    const achievementsOf = (data: MyWrappedResponse) => story(data).sections.find((s) => s.id === "achievements")?.section as WrappedAchievementsModel | undefined;
+    const when = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    const day = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+    const leaders = (): NonNullable<BingoWrapped["achievements"]> => ({
+      total: 16,
+      most: { players: [u("bob"), u("me")], earned: 16 },
+      allFirst: { player: u("bob"), at: iso(5) },
+      top: [
+        { player: u("bob"), teamId: "b", earned: 16, lastEarnedAt: iso(5) },
+        { player: u("me"), teamId: "a", earned: 16, lastEarnedAt: iso(6) },
+        { player: u("al"), teamId: "a", earned: 9, lastEarnedAt: iso(7) },
+      ],
+      teams: [
+        { teamId: "a", earned: 25, players: 3 },
+        { teamId: "b", earned: 16, players: 2 },
+      ],
+      players: 5,
+      playersWithAny: 4,
+      earnedTotal: 46,
+      allCount: 2,
+      byDay: [
+        { date: "2026-01-03", earned: 20 },
+        { date: "2026-01-04", earned: 0 },
+        { date: "2026-01-05", earned: 26 },
+      ],
+    });
+    const mine = [
+      { key: "night_owl", name: "Night owl", itemName: "Bullseye lantern (lit)", earnedAt: iso(1), earnedByPercent: 20 },
+      { key: "big_spender", name: "Moneybags", itemName: "Coins 10000", earnedAt: iso(2), earnedByPercent: 4 },
+      { key: "regular", name: "Regular", itemName: "Calendar", earnedAt: iso(3), earnedByPercent: 60 },
+      { key: "first_drop", name: "Strong start", itemName: "Bones", earnedAt: iso(4), earnedByPercent: 80 },
+    ];
 
-    it("lists the top Players with their Team and when, tied counts sharing a placement, who completed all first, and every Team", () => {
+    it("comes after The Bingo, before the Outro, with its art", () => {
+      const frames: [string, string] = ["/a.webp", "/b.webp"];
+      const data = response(player({ submissions: 5 }), { art: { sections: { achievements: [{ frames, credit: null }] }, additionalCredits: {}, side: [], playerCard: [] } });
+      data.bingo.achievements = leaders();
+      expect(kinds(data)).toEqual(["intro", "you", "team", "bingo", "achievements", "outro"]);
+      expect(story(data).sections.find((s) => s.id === "achievements")!.label).toBe("Achievements");
+      expect(achievementsOf(data)!.art.images.map((i) => i.frames[0])).toEqual(["/a.webp"]);
+    });
+
+    it("lists the top Players with their Team and when, each in a place of their own", () => {
       const data = response(player());
-      data.bingo.achievements = {
-        total: 16,
-        most: { players: [u("me"), u("bob")], earned: 16 },
-        allFirst: { player: u("bob"), at: iso(5) },
-        top: [
-          { player: u("bob"), teamId: "b", earned: 16, lastEarnedAt: iso(5) },
-          { player: u("me"), teamId: "a", earned: 16, lastEarnedAt: iso(6) },
-          { player: u("al"), teamId: "a", earned: 9, lastEarnedAt: iso(7) },
-        ],
-        teams: [
-          { teamId: "a", earned: 25, players: 3 },
-          { teamId: "b", earned: 16, players: 2 },
-        ],
-      };
-      const a = achievementsOf(data)!;
-      const when = (at: string) => new Date(at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-      expect(a.top.map((p) => [p.person.name, p.placementLabel, p.earnedLabel, p.outOfLabel, p.atLabel, p.teamName, p.isMyTeam])).toEqual([
+      data.bingo.achievements = leaders();
+      expect(achievementsOf(data)!.leaderboard.map((p) => [p.person.name, p.placementLabel, p.earnedLabel, p.outOfLabel, p.atLabel, p.teamName, p.isMyTeam])).toEqual([
         ["bob rsn", "1st", "16", "of 16", when(iso(5)), "Blue", false],
-        ["me rsn", "1st", "16", "of 16", when(iso(6)), "Red", true],
+        ["me rsn", "2nd", "16", "of 16", when(iso(6)), "Red", true],
         ["al rsn", "3rd", "9", "of 16", when(iso(7)), "Red", true],
       ]);
-      expect(a.allFirst).toEqual({ person: expect.objectContaining({ name: "bob rsn" }), atLabel: when(iso(5)) });
+    });
+
+    it("words who took part, who completed all first, and every Team", () => {
+      const data = response(player());
+      data.bingo.achievements = leaders();
+      const a = achievementsOf(data)!;
+      expect(a.participation).toEqual({
+        playersLabel: "4 of 5 Players",
+        percentLabel: "80%",
+        earnedLabel: "46 earned",
+        averageLabel: "9.2 per Player",
+        allLabel: "2 earned every one",
+        allFirst: { person: expect.objectContaining({ name: "bob rsn" }), atLabel: when(iso(5)) },
+      });
       expect(a.teams.map((t) => [t.name, t.placementLabel, t.earnedLabel, t.averageLabel, t.isMine])).toEqual([
         ["Red", "1st", "25", "8.3 per Player", true],
         ["Blue", "2nd", "16", "8 per Player", false],
       ]);
+      data.bingo.achievements = { ...leaders(), allCount: 0, allFirst: null };
+      expect(achievementsOf(data)!.participation).toMatchObject({ allLabel: null, allFirst: null });
     });
 
-    it("lists only who earned the most on a Wrapped published before the top list was stored", () => {
+    it("charts the unlocks per day, the empty ones included, and names the busiest", () => {
+      const data = response(player());
+      data.bingo.achievements = leaders();
+      expect(achievementsOf(data)!.byDay).toEqual({
+        days: [
+          { dayLabel: day("2026-01-03"), earned: 20, isBusiest: false },
+          { dayLabel: day("2026-01-04"), earned: 0, isBusiest: false },
+          { dayLabel: day("2026-01-05"), earned: 26, isBusiest: true },
+        ],
+        busiestLabel: `${day("2026-01-05")}: 26`,
+      });
+      data.bingo.achievements = { ...leaders(), byDay: [{ date: "2026-01-03", earned: 46 }] };
+      expect(achievementsOf(data)!.byDay).toBeNull();
+    });
+
+    it("gives a Player their place and their rarest Achievements, rarest first, and anyone else none", () => {
+      const data = response(player({ achievements: mine, achievementRank: { rank: 2, players: 5 } }));
+      data.bingo.achievements = leaders();
+      expect(achievementsOf(data)!.you).toEqual({
+        earnedLabel: "4",
+        outOfLabel: "of 16",
+        rankLabel: "#2 of 5",
+        rarest: [
+          { key: "big_spender", name: "Moneybags", itemName: "Coins 10000", percentLabel: "4%" },
+          { key: "night_owl", name: "Night owl", itemName: "Bullseye lantern (lit)", percentLabel: "20%" },
+          { key: "regular", name: "Regular", itemName: "Calendar", percentLabel: "60%" },
+        ],
+      });
+      const none = response(player({ achievementRank: null }));
+      none.bingo.achievements = leaders();
+      expect(achievementsOf(none)!.you).toBeNull();
+      const moderator = response(null);
+      moderator.bingo.achievements = leaders();
+      expect(achievementsOf(moderator)!.you).toBeNull();
+    });
+
+    it("tells what an older Wrapped has: the top list, Teams and who completed all first", () => {
+      const data = response(player({ achievements: mine.map(({ earnedByPercent: _, ...a }) => a) }));
+      const { players: _p, playersWithAny: _w, earnedTotal: _e, allCount: _c, byDay: _d, ...old } = leaders();
+      data.bingo.achievements = old;
+      const a = achievementsOf(data)!;
+      expect(a.leaderboard).toHaveLength(3);
+      expect(a.teams).toHaveLength(2);
+      expect(a.participation).toEqual({ playersLabel: null, percentLabel: null, earnedLabel: null, averageLabel: null, allLabel: null, allFirst: expect.objectContaining({ atLabel: when(iso(5)) }) });
+      expect(a.byDay).toBeNull();
+      expect(a.you).toEqual({ earnedLabel: "4", outOfLabel: "of 16", rankLabel: null, rarest: [] });
+    });
+
+    it("lists only who earned the most, sharing first, on a Wrapped published before the top list was stored", () => {
       const data = response(player());
       data.bingo.achievements = { total: 16, most: { players: [u("me"), u("bob")], earned: 12 }, allFirst: null };
-      expect(achievementsOf(data)).toEqual({
-        top: [
-          expect.objectContaining({ person: expect.objectContaining({ name: "me rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
-          expect.objectContaining({ person: expect.objectContaining({ name: "bob rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
-        ],
-        allFirst: null,
-        teams: [],
-      });
+      const a = achievementsOf(data)!;
+      expect(a.leaderboard).toEqual([
+        expect.objectContaining({ person: expect.objectContaining({ name: "me rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
+        expect.objectContaining({ person: expect.objectContaining({ name: "bob rsn" }), placementLabel: "1st", earnedLabel: "12", atLabel: null, teamName: null }),
+      ]);
+      expect(a.participation).toBeNull();
+      expect(a.teams).toEqual([]);
     });
 
-    it("is left out with nothing to say, Achievements off or an older Wrapped", () => {
+    it("is left out when nobody earned any, with Achievements off, and on a Wrapped published before they were stored", () => {
       const data = response(player());
+      data.bingo.achievements = { total: 16, most: null, allFirst: null, top: [], teams: [{ teamId: "a", earned: 0, players: 3 }], players: 5, playersWithAny: 0, earnedTotal: 0, allCount: 0, byDay: [] };
+      expect(kinds(data)).toEqual(["intro", "team", "bingo", "outro"]);
       data.bingo.achievements = { total: 16, most: null, allFirst: null, top: [], teams: [{ teamId: "a", earned: 0, players: 3 }] };
-      expect(achievementsOf(data)).toBeNull();
+      expect(achievementsOf(data)).toBeUndefined();
       data.bingo.achievements = null;
-      expect(achievementsOf(data)).toBeNull();
-      expect(achievementsOf(response(player()))).toBeNull();
+      expect(achievementsOf(data)).toBeUndefined();
+      expect(achievementsOf(response(player()))).toBeUndefined();
+    });
+
+    it("leaves The Bingo section without them", () => {
+      const data = response(player());
+      data.bingo.achievements = leaders();
+      expect(story(data).sections.find((s) => s.id === "bingo")!.section).not.toHaveProperty("achievements");
     });
   });
 

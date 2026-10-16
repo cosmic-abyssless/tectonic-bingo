@@ -1,4 +1,4 @@
-import type { AchievementProgress, MyAchievement } from "@bingo/shared";
+import { rarityPercent, type AchievementProgress, type MyAchievement } from "@bingo/shared";
 
 /**
  * How one Achievement renders in the modal's list (AchievementsModal): a locked Hidden one is always "masked" (the
@@ -50,6 +50,5 @@ export function earnedLabel(earnedAt: string | null): string | null {
  */
 export function shareLabel(share: number | null): string | null {
   if (share === null) return null;
-  const percent = Math.min(share < 1 ? 99 : 100, Math.max(share > 0 ? 1 : 0, Math.round(share * 100)));
-  return `${share > 0 && share < 0.005 ? "<1" : percent}% of players`;
+  return `${share > 0 && share < 0.005 ? "<1" : rarityPercent(share)}% of players`;
 }

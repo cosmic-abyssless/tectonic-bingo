@@ -68,8 +68,17 @@ export interface WrappedYou {
   mostActiveDay: { date: string; submissions: number; drops: WrappedDrop[] } | null;
   /** The Titles they held when Wrapped was published, with the number behind each. */
   titles: { id: string; name: string; text: string }[];
-  /** Achievements earned in this Bingo (only ones switched on), oldest first. */
-  achievements: { key: string; name: string; itemName: string; earnedAt: string }[];
+  /**
+   * Achievements earned in this Bingo (only ones switched on), oldest first. `earnedByPercent` is how many of the
+   * Players counted for the Achievement leaders have each, as a whole percent (CONTEXT.md "Achievement", Rarity);
+   * missing from Wrapped published before it was stored.
+   */
+  achievements: { key: string; name: string; itemName: string; earnedAt: string; earnedByPercent?: number }[];
+  /**
+   * Their place in the Achievement leaders' ordering (most earned, then who got there first) among every Player counted
+   * there, and how many that is. Null when they earned none. Missing from Wrapped published before it was stored.
+   */
+  achievementRank?: { rank: number; players: number } | null;
   /** Wise Old Man gains over the Bingo: EHB and their biggest boss kill counts. Null without Wise Old Man data. */
   wom: { ehb: number; bosses: { metric: string; name: string; kills: number }[]; asOf: string } | null;
   /**
@@ -255,8 +264,9 @@ export interface BingoWrapped {
    */
   bossLeaders?: WrappedBossLeader[];
   /**
-   * Achievements (CONTEXT.md) across the Bingo's Players: who earned the most, and who earned every one first. Null when
-   * the Bingo has them switched off; missing from Wrapped published before it was stored.
+   * Achievements (CONTEXT.md) across the Bingo's Players: who earned the most, and who earned every one first. Nothing
+   * here is per Achievement, since every viewer is served it. Null when the Bingo has them switched off; missing from
+   * Wrapped published before it was stored.
    */
   achievements?: WrappedAchievementLeaders | null;
 }
@@ -270,8 +280,9 @@ export interface WrappedAchievementLeaders {
   /** The first Player to earn every one, and when (their last one's earn time, ISO); null when nobody did. */
   allFirst: { player: AvatarUser; at: string } | null;
   /**
-   * The top Players (up to 5): most earned first, then who got to that many first (their last one's earn time, ISO),
-   * each with their Team. Missing from Wrapped published before it was stored.
+   * The top Players (up to 10; up to 5 in Wrapped published before that): most earned first, then who got to that many
+   * first (their last one's earn time, ISO), then by name, each with their Team. Missing from Wrapped published before
+   * it was stored.
    */
   top?: { player: AvatarUser; teamId: string; earned: number; lastEarnedAt: string }[];
   /**
@@ -279,6 +290,19 @@ export interface WrappedAchievementLeaders {
    * order), with how many Players it has. Missing from Wrapped published before it was stored.
    */
   teams?: { teamId: string; earned: number; players: number }[];
+  /**
+   * How many Players were counted, how many earned at least one, every earn added up, and how many earned every one.
+   * Missing from Wrapped published before they were stored.
+   */
+  players?: number;
+  playersWithAny?: number;
+  earnedTotal?: number;
+  allCount?: number;
+  /**
+   * Achievements earned per UTC day (YYYY-MM-DD), every day from the first earn to the last, a day with none at 0.
+   * Missing from Wrapped published before it was stored.
+   */
+  byDay?: { date: string; earned: number }[];
 }
 
 export interface WrappedState {
@@ -344,9 +368,10 @@ export const MAX_WRAPPED_CREDIT_LENGTH = 60;
  */
 /**
  * `moderator` is a reviewing Moderator's own section (captioned with their name); `moderators` is the Bingo-wide
- * "Behind the scenes" moderation roundup in The Bingo section, crediting who moderated it.
+ * "Behind the scenes" moderation roundup in The Bingo section, crediting who moderated it. `achievements` is the
+ * Achievements section, after The Bingo.
  */
-export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "moderators", "outro"] as const;
+export const WRAPPED_ART_SECTIONS = ["intro", "you", "duo", "captain", "moderator", "team", "bingo", "moderators", "achievements", "outro"] as const;
 export type WrappedArtSection = (typeof WRAPPED_ART_SECTIONS)[number];
 
 export const WRAPPED_ART_GROUPS = [...WRAPPED_ART_SECTIONS, "side", "playerCard"] as const;

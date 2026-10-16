@@ -14,7 +14,7 @@ import { WRAPPED_PAGE_WIDTH } from "../camera";
 import { COVER } from "../coverParts";
 import { Gp } from "./sectionParts-you-duo-captain-moderator";
 
-// The pieces the comic Wrapped's Team and The Bingo sections (#421) are drawn from. A section is a few pages; a page is a
+// The pieces the comic Wrapped's Team, The Bingo and Achievements sections (#421) are drawn from. A section is a few pages; a page is a
 // Scene, each of its panels a Reveal. The Reveal brings the frame (the book's panel); everything here is what goes inside:
 // a ground printed with rays, caption boxes, bursts, stamps, a person, a drop. Lettering that sits on a printed ground
 // (the section splashes) uses the cover's fixed newsprint palette, as the covers do; the rest follows the page's palette.
@@ -156,6 +156,20 @@ export function Tally({ value, label, size = 56, align = "center" }: { value: Re
       <div className="mt-1.5 text-[13px] leading-tight" style={{ color: colors.INK_BODY }}>
         {label}
       </div>
+    </div>
+  );
+}
+
+/** Headline numbers as a grid of cells inked apart, each a Tally with its label, an odd one out taking the whole last row. */
+export function Minis({ cells }: { cells: string[][] }) {
+  const { colors } = useComic();
+  return (
+    <div className="grid grid-cols-2 gap-[3px]" style={{ background: colors.LINE }}>
+      {cells.map(([label, value], i) => (
+        <div key={label} className={`px-2 py-3.5 ${cells.length % 2 === 1 && i === cells.length - 1 ? "col-span-2" : ""}`} style={{ background: colors.PAPER_RAISED }}>
+          <Tally value={value} label={label} size={30} />
+        </div>
+      ))}
     </div>
   );
 }

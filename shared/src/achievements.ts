@@ -123,6 +123,14 @@ export interface MyAchievement {
   share: number | null;
 }
 
+/**
+ * An Achievement's Rarity share (0-1) as a whole percent (CONTEXT.md "Achievement", Rarity): never rounded to 0 when
+ * someone has it or to 100 when not everyone does.
+ */
+export function rarityPercent(share: number): number {
+  return Math.min(share < 1 ? 99 : 100, Math.max(share > 0 ? 1 : 0, Math.round(share * 100)));
+}
+
 export interface MyAchievementsResponse {
   achievements: MyAchievement[];
   /** Earned-but-not-yet-shown popups, oldest first — the order the unlock popups should play in. */

@@ -5,7 +5,7 @@ import { CaptionBox } from "../../ui/CaptionBox";
 import { useComic } from "../../ui/useComic";
 import { LETTERED } from "../../../lettering";
 import { COVER } from "../coverParts";
-import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
+import { ComicDrop, ComicPerson, display, FULL_PANEL, Kicker, Minis, PADDED_PANEL, PanelHeading, Sfx, Splash, StampLabel, Tally } from "./sectionParts-team-bingo";
 import { Gp, PanelBody } from "./sectionParts-you-duo-captain-moderator";
 import { DropRain } from "./DropRain";
 
@@ -17,7 +17,6 @@ import { DropRain } from "./DropRain";
  *   1½. It rained loot: every drop of the Bingo, its icon raining down into a pile filling the page.
  *   2. The highlights: the race, the rarest drop, the crowd favourite.
  *   2½. Raids and bosses: who killed each the most, a few to a page, dealt evenly over as many pages as they need.
- *   2¾. Achievements: the top Players ("Most achievements by:"); then who earned every one first, and every Team ranked.
  *   3. The draft's Steal, then Behind the scenes: who moderated (the Moderators category's art and credits), the wait times.
  *   4. The reviewers, then every Team's Superlatives, a few Teams to a page, dealt evenly over as many pages as they need.
  * A part the Bingo has nothing for leaves its panel out, and a page left with none is not drawn.
@@ -28,7 +27,6 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
   // Each later page's panels, in the default section's order; a panel's step is how many of its page's panels come first.
   const highlights = [!!b.race, !!b.rarestDrop, !!b.mostReacted];
   const backstage = [!!b.steal, !!m, !!m && minis.length > 0];
-  const ranked = [!!b.achievements?.allFirst, !!b.achievements?.teams.length];
   // The Superlatives of every Team can run long (a card per Team), so they are dealt over pages of a few cards each; the
   // first shares its page with the reviewers when there are any.
   const firstPick = m && m.reviewers.length > 0 ? 2 : 4;
@@ -154,33 +152,6 @@ export function WrappedBingo({ section: b }: { section: WrappedBingoModel }) {
           </div>
         </WrappedScene>
       ))}
-
-      {b.achievements && b.achievements.top.length > 0 && (
-        <WrappedScene steps={1}>
-          <div className="flex flex-1 flex-col justify-center gap-3">
-            <Reveal step={0} className={PADDED_PANEL}>
-              <TopAchievers top={b.achievements.top} />
-            </Reveal>
-          </div>
-        </WrappedScene>
-      )}
-
-      {b.achievements && count(ranked) > 0 && (
-        <WrappedScene steps={count(ranked)}>
-          <div className="flex flex-1 flex-col justify-center gap-3">
-            {b.achievements.allFirst && (
-              <Reveal step={0} className={PADDED_PANEL}>
-                <AllFirst allFirst={b.achievements.allFirst} />
-              </Reveal>
-            )}
-            {b.achievements.teams.length > 0 && (
-              <Reveal step={at(ranked, 1)} className={PADDED_PANEL}>
-                <AchievementTeams teams={b.achievements.teams} />
-              </Reveal>
-            )}
-          </div>
-        </WrappedScene>
-      )}
 
       {count(backstage) > 0 && (
         <WrappedScene steps={count(backstage)}>
@@ -376,128 +347,6 @@ function Steal({ steal }: { steal: NonNullable<WrappedBingoModel["steal"]> }) {
         </span>
       </CaptionBox>
     </PanelBody>
-  );
-}
-
-type Achieved = NonNullable<WrappedBingoModel["achievements"]>;
-
-/** The first to earn every Achievement: when, lettered big, and who. */
-function AllFirst({ allFirst }: { allFirst: NonNullable<Achieved["allFirst"]> }) {
-  return (
-    <PanelBody tone="green" rays="85% 85%" align="start" gap={0}>
-      <Kicker tilt={1.2}>Completed all first, at:</Kicker>
-      <PanelHeading className="mt-2" size={30}>
-        {allFirst.atLabel}
-      </PanelHeading>
-      <div className="mt-3">
-        <ComicPerson person={allFirst.person} size={32} nameSize={16} />
-      </div>
-    </PanelBody>
-  );
-}
-
-/**
- * "Most achievements by:": the top Players, each on a paper strip so the ink reads over the panel's print. The
- * placement lettered, the Player with their Team and when they got there on lines of their own, the count lettered big.
- */
-function TopAchievers({ top }: { top: Achieved["top"] }) {
-  const { colors } = useComic();
-  return (
-    <PanelBody tone="cyan" rays="90% 10%" align="start" gap={0}>
-      <Kicker>Achievements</Kicker>
-      <PanelHeading className="mt-2" size={26}>
-        Most achievements by:
-      </PanelHeading>
-      <ol className="mt-3 flex flex-col gap-1.5">
-        {top.map((p) => (
-          <li
-            key={p.person.id}
-            className="flex items-center gap-2 border-[2.5px] px-2 py-1.5"
-            style={{ borderColor: colors.LINE, background: p.isMyTeam ? colors.YELLOW_TINT : colors.PAPER_RAISED, boxShadow: p.isMyTeam ? `3px 3px 0 ${colors.SHADOW}` : undefined }}
-          >
-            <span className={`${LETTERED} num w-9 shrink-0`} style={{ ...display(16), color: colors.INK }}>
-              {p.placementLabel}
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <ComicPerson person={p.person} size={26} nameSize={14} />
-              {p.teamName && (
-                <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold leading-tight" style={{ color: colors.INK_BODY }}>
-                  {p.teamColor && <span aria-hidden className="size-2.5 shrink-0 rounded-full border-[1.5px]" style={{ background: p.teamColor, borderColor: colors.LINE }} />}
-                  <span className="break-words">{p.teamName}</span>
-                </span>
-              )}
-              {p.atLabel && (
-                <span className="text-[12px] leading-tight" style={{ color: colors.INK_BODY }}>
-                  {p.atLabel}
-                </span>
-              )}
-            </span>
-            <span className="flex shrink-0 flex-col items-end leading-none">
-              <span className={`${LETTERED} num`} style={{ ...display(24), color: colors.INK }}>
-                {p.earnedLabel}
-              </span>
-              <span className="mt-0.5 text-[11px] font-bold" style={{ color: colors.INK_BODY }}>
-                {p.outOfLabel}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </PanelBody>
-  );
-}
-
-/** Every Team by its Players' Achievements added up: placement, the Team's dot and name, the total and its average. */
-function AchievementTeams({ teams }: { teams: Achieved["teams"] }) {
-  const { colors } = useComic();
-  return (
-    <PanelBody tone="orange" rays="10% 90%" align="start" gap={0}>
-      <Kicker>Achievements by Team</Kicker>
-      <ol className="mt-3 flex flex-col gap-1.5">
-        {teams.map((t) => (
-          <li
-            key={t.teamId}
-            className="flex items-center gap-2.5 border-[2.5px] px-2 py-1.5"
-            style={{ borderColor: colors.LINE, background: t.isMine ? colors.YELLOW_TINT : colors.PAPER_RAISED, boxShadow: t.isMine ? `3px 3px 0 ${colors.SHADOW}` : undefined }}
-          >
-            <span className={`${LETTERED} num w-9 shrink-0`} style={{ ...display(16), color: colors.INK }}>
-              {t.placementLabel}
-            </span>
-            {t.color && <span aria-hidden className="size-3 shrink-0 rounded-full border-2" style={{ background: t.color, borderColor: colors.LINE }} />}
-            <span className="min-w-0 flex-1 break-words font-bold leading-tight" style={{ color: colors.INK }}>
-              {t.name}
-              {t.isMine && (
-                <span className="ml-2 inline-block text-[11px] font-semibold uppercase tracking-wide" style={{ color: colors.INK_SUBTLE }}>
-                  your Team
-                </span>
-              )}
-            </span>
-            <span className="flex shrink-0 flex-col items-end leading-none">
-              <span className={`${LETTERED} num`} style={{ ...display(20), color: colors.INK }}>
-                {t.earnedLabel}
-              </span>
-              <span className="mt-0.5 text-[11px] font-bold" style={{ color: colors.INK_BODY }}>
-                {t.averageLabel}
-              </span>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </PanelBody>
-  );
-}
-
-/** The wait-time stats as a grid of cells inked apart, an odd one out taking the whole last row. */
-function Minis({ cells }: { cells: string[][] }) {
-  const { colors } = useComic();
-  return (
-    <div className="grid grid-cols-2 gap-[3px]" style={{ background: colors.LINE }}>
-      {cells.map(([label, value], i) => (
-        <div key={label} className={`px-2 py-3.5 ${cells.length % 2 === 1 && i === cells.length - 1 ? "col-span-2" : ""}`} style={{ background: colors.PAPER_RAISED }}>
-          <Tally value={value} label={label} size={30} />
-        </div>
-      ))}
-    </div>
   );
 }
 
