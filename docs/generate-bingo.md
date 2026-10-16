@@ -208,14 +208,16 @@ target (say `signup`), the later dates are simply scheduled in the future.
 - **Wise Old Man snapshots** (`womSnapshots.ts`): a testdata- bingo is never read from WOM, so
   each player's snapshots are made up after play, from their approved drops. The kills before a
   drop are drawn from its real drop rate, capped by how much that player could kill in the time
-  since (they play part of the day, no faster than the boss allows), so most drops land near the odds and some
-  come in lucky. Some
+  since (they play part of the day), so most drops land near the odds and some come in lucky. Some
   players keep going at a Board boss after their last drop, or at one they've had nothing from,
-  for as long as a real dry streak would last (sharing the time left between those bosses): that's Dry. About a third of the players also run
+  for as long as a real dry streak would last: that's Dry. About a third of the players also run
   each of the raids and bosses Wrapped looks at (the Bingo's list), a few kills a day, so Wrapped
-  shows who killed each the most. Each boss's EHB is its kills over that boss's kills an hour (roughly Wise Old
-  Man's main-account rates, `KILLS_PER_HOUR`), which is what Effort counts; the total EHB is those plus time at
-  bosses the generator doesn't model, so the two agree. Snapshots come every few hours plus one shortly after each drop, from a baseline
+  shows who killed each the most. EHB follows the time they play, not the kills: each player has a budget of
+  hours over the Bingo (up to about a third of it, by how much of the day they play; most well under). Each boss's
+  EHB is its kills over that boss's kills an hour (roughly Wise Old Man's main-account rates, `KILLS_PER_HOUR`),
+  which is what Effort counts; where the kills gained come to more hours than the budget leaves, every boss's gain
+  is scaled down to fit. The total EHB is the bosses' plus a modest filler for bosses the generator doesn't model,
+  so the two agree. Snapshots come every few hours plus one shortly after each drop, from a baseline
   before the start. The simulation hands out rare drops more often than real play would, so
   Spoon's luckiest players read luckier than a real bingo's.
 

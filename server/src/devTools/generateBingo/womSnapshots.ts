@@ -8,9 +8,13 @@
 // nothing to show for it, for as many kills as a real dry streak would last (again geometric, on the Board's drops
 // from that boss), which is where Dry comes from. Snapshots come every few hours, plus one shortly after each drop,
 // as if the Player updated on logout. Some Players also run a few of the raids and bosses Wrapped looks at (the Bingo's
-// list), drops or not, so a generated Wrapped shows who killed each the most. Each boss's EHB is its kills over that
-// boss's kills an hour, as Wise Old Man works it out, so Effort has per-boss hours to count; the total EHB is those plus
-// time at bosses the generator doesn't model, so the two agree.
+// list), drops or not, so a generated Wrapped shows who killed each the most.
+//
+// EHB comes from the time a Player plays, not the kills, which the drops and raids can push past what one Player could
+// do: each has a budget of hours over the Bingo (a share of it, by how much of the day they play). Each boss's EHB is
+// its kills over that boss's kills an hour, as Wise Old Man works it out, so Effort has per-boss hours to count; where
+// the kills gained come to more hours than the budget leaves, every boss's gain is scaled down to fit. The total EHB is
+// the bosses' plus a modest filler for bosses the generator doesn't model, so the two agree.
 import { eq, inArray } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "../../db/schema";
@@ -75,10 +79,10 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   const boardRate = new Map<BossMetric, number>();
   for (const item of new Set(input.boardItems.map((i) => i.toLowerCase()))) for (const { metric, rate } of rates.sourcesOf(item)) boardRate.set(metric, (boardRate.get(metric) ?? 0) + rate);
   const boardMetrics = [...boardRate.keys()].sort();
-  // Kills an hour at one boss while they're at it (no faster than the boss allows), and how much of the day they're at it.
+  // Kills an hour at one boss while they're at it, and how much of the day they're at it.
   const speed = rng.between(8, 30);
   const activity = rng.between(0.1, 0.35);
-  const killsIn = (ms: number, m: BossMetric) => Math.floor((ms / HOUR) * Math.min(speed, killsPerHour(m)) * activity);
+  const killsIn = (ms: number) => Math.floor((ms / HOUR) * speed * activity);
   const base = new Map<BossMetric, number>(boardMetrics.map((m) => [m, rng.chance(0.7) ? rng.int(0, 1500) : 0]));
   // Per boss, when the kill count (since the start) reached what: straight lines in between.
   const waypoints = new Map<BossMetric, { at: number; kills: number }[]>();
@@ -97,19 +101,18 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
     const prev = killsNow(metric);
     const item = drop.itemName.toLowerCase();
     const since = Math.max(prev.kills, lastDropKills.get(item) ?? 0);
-    const kills = Math.min(since + killsUntilDrop(rng, rate), prev.kills + Math.max(1, killsIn(drop.at.getTime() - prev.at, metric)));
+    const kills = Math.min(since + killsUntilDrop(rng, rate), prev.kills + Math.max(1, killsIn(drop.at.getTime() - prev.at)));
     lastDropKills.set(item, kills);
     reach(metric, drop.at.getTime(), Math.max(kills, prev.kills + 1));
   }
 
   // Going on with nothing to show for it: after the last drop at a boss, or at a Board boss never dropped from. The
-  // streak is the kills a real one would last (short of the next Board drop), as far as there's time for, the time
-  // shared between the bosses they go on at.
+  // streak is the kills a real one would last (short of the next Board drop), as far as there's time for.
   const tail = new Set([...waypoints.keys()].filter((m) => boardRate.has(m) && rng.chance(0.5)));
   if (boardMetrics.length > 0 && rng.chance(0.35)) tail.add(rng.pick(boardMetrics));
   for (const m of tail) {
     const prev = killsNow(m);
-    const kills = Math.min(killsUntilDrop(rng, boardRate.get(m)!) - 1, killsIn((end.getTime() - prev.at) / tail.size, m));
+    const kills = Math.min(killsUntilDrop(rng, boardRate.get(m)!) - 1, killsIn(end.getTime() - prev.at));
     if (kills > 0) reach(m, end.getTime(), prev.kills + kills);
   }
 
@@ -140,9 +143,16 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
   for (const d of drops) times.add(Math.min(end.getTime(), d.at.getTime() + Math.round(rng.between(5, 90) * MINUTE)));
   times.add(end.getTime() - Math.round(rng.between(0, 2) * HOUR));
 
-  // EHB at bosses the generator doesn't model, from the time they play; the bosses above add their own on top.
+  // The hours they put in over the Bingo: the budget, part filler at bosses the generator doesn't model and the rest
+  // at the bosses above, whose gains are scaled down when their kills come to more. New draws are on a fork of their
+  // own, so the kills, ehp and clues stay as they were.
   const ehb0 = rng.between(0, 800);
   const ehbPerHour = activity * rng.between(0.5, 0.9);
+  const spanHours = Math.max(1e-9, (end.getTime() - start.getTime()) / HOUR);
+  const budget = spanHours * ehbPerHour;
+  const filler = budget * rng.fork("ehb-filler").between(0.15, 0.4);
+  const gainedHours = [...base.keys()].reduce((sum, m) => sum + killsAt(m, end.getTime()) / killsPerHour(m), 0);
+  const scale = gainedHours > budget - filler ? (budget - filler) / gainedHours : 1;
   const ehp0 = rng.between(50, 3000);
   const clues0 = rng.int(0, 400);
   let ehp = ehp0;
@@ -156,14 +166,14 @@ export function fakeTimeline(rng: Rng, input: FakeTimelineInput): WomSnapshot[] 
       const k = during ? killsAt(m, t) : 0;
       bossKills[m] = b + k >= HISCORE_MIN_KILLS ? b + k : null;
       // Wise Old Man gives an unranked boss no EHB, as it has no kills to count.
-      if (bossKills[m] !== null) bossEhb[m] = (b + k) / killsPerHour(m);
+      if (bossKills[m] !== null) bossEhb[m] = (b + k * scale) / killsPerHour(m);
     }
     const atBosses = Object.values(bossEhb).reduce((sum, h) => sum + h, 0);
     if (during) {
       ehp += rng.chance(0.3) ? rng.between(0, 1.5) : 0;
       clues += rng.chance(0.25) ? rng.int(1, 3) : 0;
     }
-    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb, ehb: ehb0 + atBosses + (during ? ((t - start.getTime()) / HOUR) * ehbPerHour : 0), ehp, clues });
+    out.push({ at: new Date(t), bossKills: bossKills as WomSnapshot["bossKills"], bossEhb, ehb: ehb0 + atBosses + (during ? (((t - start.getTime()) / HOUR) * filler) / spanHours : 0), ehp, clues });
   }
   return out;
 }

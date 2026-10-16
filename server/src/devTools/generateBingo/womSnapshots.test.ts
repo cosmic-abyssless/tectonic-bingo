@@ -30,26 +30,25 @@ describe("fakeTimeline", () => {
       const timeline = fakeTimeline(new Rng(seed), { ...input(drops), wrappedBosses });
       const gained = wrappedBosses.some((m) => (timeline.at(-1)!.bossKills[m] ?? 0) > (timeline[0]!.bossKills[m] ?? 0));
       if (gained) raiders++;
-      // The total EHB includes the raids' hours, so it's compared without them.
+      // The raids' hours share the Player's budget with the other bosses, so EHB is left out.
       const others = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([m]) => !wrappedBosses.includes(m)));
-      const without = (t: typeof timeline) =>
-        t.map((s) => ({ ...s, bossKills: others(s.bossKills), bossEhb: others(s.bossEhb), ehb: s.ehb! - wrappedBosses.reduce((sum, m) => sum + (s.bossEhb[m] ?? 0), 0) }));
-      expect(without(timeline).map((s) => s.ehb)).toEqual(without(plain).map((s) => expect.closeTo(s.ehb, 9)));
-      const exact = (t: typeof timeline) => without(t).map((s) => ({ ...s, ehb: 0 }));
-      expect(exact(timeline)).toEqual(exact(plain));
+      const without = (t: typeof timeline) => t.map((s) => ({ ...s, bossKills: others(s.bossKills), bossEhb: {}, ehb: 0 }));
+      expect(without(timeline)).toEqual(without(plain));
     }
     expect(raiders).toBeGreaterThan(10);
     expect(raiders).toBeLessThan(40);
   });
 
-  it("gives each ranked boss its kills over its kills an hour as EHB, and counts it in the total", () => {
+  it("gives each ranked boss its kills over its kills an hour as EHB (gains scaled down to fit), and counts it in the total", () => {
+    const perHour: Record<string, number> = { vardorvis: 41, general_graardor: 50 };
     for (let seed = 0; seed < 50; seed++) {
       const timeline = fakeTimeline(new Rng(seed), input(drops));
       let prevOther = -Infinity;
       for (const s of timeline) {
         for (const [metric, kills] of Object.entries(s.bossKills)) {
           if (kills === null) expect(s.bossEhb[metric]).toBeUndefined();
-          else expect(s.bossEhb[metric]).toBeCloseTo(kills / ({ vardorvis: 41, general_graardor: 50 } as Record<string, number>)[metric]!, 9);
+          else if (s.at <= START) expect(s.bossEhb[metric]).toBeCloseTo(kills / perHour[metric]!, 9);
+          else expect(s.bossEhb[metric]).toBeLessThanOrEqual(kills / perHour[metric]! + 1e-9);
         }
         // The rest of the total is time at bosses the generator doesn't model, which never goes backwards.
         const other = s.ehb! - Object.values(s.bossEhb).reduce((sum, h) => sum + h, 0);
@@ -59,15 +58,41 @@ describe("fakeTimeline", () => {
     }
   });
 
-  it("keeps a Player's hours at the bosses to what the Bingo had time for, even at a raid", () => {
-    const raidRates = dropRateTable({ "Theatre of Blood": { "Avernic defender hilt": 1 / 50, "Scythe of vitur (uncharged)": 1 / 2000 } });
-    const raid = { start: START, end: END, boardItems: ["Avernic defender hilt", "Scythe of vitur (uncharged)"], rates: raidRates };
-    for (let seed = 0; seed < 100; seed++) {
-      const timeline = fakeTimeline(new Rng(seed), { ...raid, drops: [{ itemName: "Avernic defender hilt", at: new Date(START.getTime() + DAY) }] });
-      const before = timeline.filter((s) => s.at <= START).at(-1)!;
-      const gained = Object.values(timeline.at(-1)!.bossEhb).reduce((sum, h) => sum + h, 0) - Object.values(before.bossEhb).reduce((sum, h) => sum + h, 0);
-      expect(gained).toBeLessThan((END.getTime() - START.getTime()) / HOUR / 2);
+  it("keeps a Player's EHB within their budget over a long Bingo, raid drops, raids and all", () => {
+    const raidRates = dropRateTable({
+      "Theatre of Blood": { "Avernic defender hilt": 1 / 50, "Scythe of vitur (uncharged)": 1 / 2000 },
+      "Chambers of Xeric": { "Dexterous prayer scroll": 1 / 100, "Twisted bow": 1 / 3000 },
+      Vardorvis: { "Ultor vestige": 1 / 1000 },
+    });
+    const end = new Date(START.getTime() + 21 * DAY);
+    const spanHours = (end.getTime() - START.getTime()) / HOUR;
+    const long = {
+      start: START,
+      end,
+      boardItems: ["Avernic defender hilt", "Scythe of vitur (uncharged)", "Dexterous prayer scroll", "Twisted bow", "Ultor vestige"],
+      rates: raidRates,
+      wrappedBosses: ["chambers_of_xeric", "chambers_of_xeric_challenge_mode", "theatre_of_blood", "nex", "nightmare", "sol_heredit", "tombs_of_amascut_expert"],
+    };
+    const raidDrops = [
+      { itemName: "Avernic defender hilt", at: new Date(START.getTime() + 2 * DAY) },
+      { itemName: "Dexterous prayer scroll", at: new Date(START.getTime() + 6 * DAY) },
+      { itemName: "Twisted bow", at: new Date(START.getTime() + 15 * DAY) },
+    ];
+    const sum = (r: Record<string, number>) => Object.values(r).reduce((a, h) => a + h, 0);
+    const shares: number[] = [];
+    for (let seed = 0; seed < 300; seed++) {
+      const timeline = fakeTimeline(new Rng(seed), { ...long, drops: seed % 2 ? raidDrops : [] });
+      const [before, last] = [timeline.filter((s) => s.at <= START).at(-1)!, timeline.at(-1)!];
+      const total = last.ehb! - before.ehb!;
+      const atBosses = sum(last.bossEhb) - sum(before.bossEhb);
+      // At most 31.5% of the span: a Player playing 35% of the day, 90% of it at bosses.
+      expect(total).toBeLessThanOrEqual(0.315 * spanHours + 1e-9);
+      expect(atBosses).toBeLessThanOrEqual(total + 1e-9);
+      shares.push(total / spanHours);
     }
+    shares.sort((a, b) => a - b);
+    // Most Players well under: the median about a sixth of the span.
+    expect(shares[150]!).toBeLessThan(0.2);
   });
 
   it("is the same for the same seed", () => {
