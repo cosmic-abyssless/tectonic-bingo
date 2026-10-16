@@ -154,6 +154,15 @@ export class Simulation {
         const when = new Date(tl.endsAt.getTime() + (5 + i * 20) * MINUTE);
         this.at(when, () => this.reviewBatch(mod, when));
       }
+      // Still Live after its end, a few Players open the Stats page and earn Number cruncher; finishing takes it back
+      // (CONTEXT.md "Achievement"), so every Finished Bingo's audit log shows one taken back. Its own stream.
+      const lateRng = this.ctx.rng.fork("after-end");
+      for (const player of lateRng.shuffle(this.teams.flatMap((t) => t.members)).slice(0, 3)) {
+        const when = new Date(tl.endsAt.getTime() + lateRng.between(10, 50) * MINUTE);
+        this.at(when, async () => {
+          await this.ctx.api.as(player.discordId).post(`/api/bingos/${this.ctx.slug}/achievements/opened`, { kind: "stats" }, { at: when });
+        });
+      }
       // Finished an hour after its end, after the last reviews, set as having ended at its end.
       this.at(tl.completeAt, () => setStage(this.ctx, "complete", tl.completeAt, tl.endsAt));
     }
