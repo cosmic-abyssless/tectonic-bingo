@@ -234,13 +234,24 @@ describe("winners, one Superlative per Player", () => {
     expect(winners()).toEqual([["MVP", [bob.id]]]);
   });
 
-  it("picks one winner from a tie for the lead, the same one every time", () => {
-    const { alice, bob, category, cast, winners } = setup();
+  it("shares a tie for the lead, and none of the tied Players can win another", () => {
+    const { alice, bob, carol, category, cast, winners } = setup();
     cast(category("MVP").id, [alice, bob]);
-    const first = winners();
-    expect(first).toHaveLength(1);
-    expect([[alice.id], [bob.id]]).toContainEqual(first[0]![1]);
-    for (let i = 0; i < 5; i++) expect(winners()).toEqual(first);
+    cast(category("Spirit").id, [alice, alice, bob, bob, carol]);
+    expect(winners()).toEqual([
+      ["MVP", expect.arrayContaining([alice.id, bob.id])],
+      ["Spirit", [carol.id]],
+    ]);
+  });
+
+  it("takes a tied Player out of the tie when they clearly won another category", () => {
+    const { alice, bob, carol, category, cast, winners } = setup();
+    cast(category("MVP").id, [alice, alice, bob, bob]);
+    cast(category("Spirit").id, [alice, alice, carol]);
+    expect(winners()).toEqual([
+      ["MVP", [bob.id]],
+      ["Spirit", [alice.id]],
+    ]);
   });
 
   it("gives a tie between margins to the earlier category", () => {

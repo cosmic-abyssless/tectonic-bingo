@@ -1,5 +1,9 @@
 # Superlatives: one per Player
 
+> **Changed after #560:** a tie for the lead is shared, not picked at random. Every tied Player counts as having won,
+> and a tie has no margin, so it's decided after the clear wins: a tied Player who clearly won another category keeps
+> that one instead. See `awardOneEach` in `server/src/services/superlativeService.ts`.
+
 A per-Bingo option so no Player wins more than one Superlative (CONTEXT.md "Superlative") on their Team. A Player who
 tops several categories keeps the one they won by the biggest margin; the others go to the runner-up who hasn't won one.
 
