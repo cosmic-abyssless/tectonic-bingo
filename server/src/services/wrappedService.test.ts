@@ -440,10 +440,83 @@ describe("the Achievement leaders", () => {
   it("breaks a tie for completing all at the same moment by name", () => {
     const users = new Map([["b", { id: "b", rsn: "Bee" }], ["a", { id: "a", rsn: "Ay" }]].map(([id, u]) => [id as string, { discordUsername: "", discordGlobalName: null, discordGuildNick: null, discordId: "", discordAvatar: null, ...(u as object) } as never]));
     const at = new Date(T0);
-    const leaders = achievementLeadersOf(new Map([["a", [{ earnedAt: at }]], ["b", [{ earnedAt: at }]]]), [{ userId: "b", teamId: "t" }, { userId: "a", teamId: "t" }], 1, users, ["t"]);
+    const { leaders } = achievementLeadersOf(new Map([["a", [{ key: "x", earnedAt: at }]], ["b", [{ key: "x", earnedAt: at }]]]), [{ userId: "b", teamId: "t" }, { userId: "a", teamId: "t" }], 1, users, ["t"]);
     expect(leaders.allFirst!.player).toMatchObject({ id: "a" });
     expect(leaders.most!.players.map((p) => (p as { id: string }).id)).toEqual(["a", "b"]);
     expect(leaders.top!.map((p) => (p.player as { id: string }).id)).toEqual(["a", "b"]);
+  });
+
+  describe("the standings", () => {
+    const avatar = (id: string) => ({ id, rsn: id, discordUsername: "", discordGlobalName: null, discordGuildNick: null, discordId: "", discordAvatar: null });
+    const DAY = 24 * 60 * MIN;
+    // Midnight UTC, so each earn's day is plain to read.
+    const day0 = Math.floor(T0.getTime() / DAY) * DAY;
+    const on = (day: number, minutes = 0) => new Date(day0 + day * DAY + minutes * MIN);
+
+    it("places Players most earned first, a tie going to whoever reached it first, each in a place of their own, up to 10", () => {
+      const ids = Array.from({ length: 12 }, (_, i) => `p${String(i).padStart(2, "0")}`);
+      const users = new Map(ids.map((id) => [id, avatar(id) as never]));
+      // p00 to p11 each earn one; p11 then a second, and p05 a second later still.
+      const earned = new Map(ids.map((id, i) => [id, [{ key: "a", earnedAt: on(0, 100 - i) }]]));
+      earned.get("p11")!.push({ key: "b", earnedAt: on(0, 200) });
+      earned.get("p05")!.push({ key: "b", earnedAt: on(0, 300) });
+      const { leaders, rankOf } = achievementLeadersOf(earned, ids.map((userId) => ({ userId, teamId: "t" })), 2, users, ["t"]);
+      // Then those on one, the earliest to it first: p10 earned theirs at minute 90, p00 at minute 100.
+      expect(leaders.top!.map((p) => (p.player as { id: string }).id)).toEqual(["p11", "p05", "p10", "p09", "p08", "p07", "p06", "p04", "p03", "p02"]);
+      expect(rankOf.get("p11")).toEqual({ rank: 1, players: 12 });
+      expect(rankOf.get("p05")).toEqual({ rank: 2, players: 12 });
+      expect(rankOf.get("p00")).toEqual({ rank: 12, players: 12 });
+      expect(new Set([...rankOf.values()].map((r) => r.rank)).size).toBe(12);
+    });
+
+    it("counts who took part, every earn, who earned every one, and each day from the first earn to the last, a day with none at 0", () => {
+      const users = new Map(["a", "b", "c", "d"].map((id) => [id, avatar(id) as never]));
+      const earned = new Map([
+        ["a", [{ key: "x", earnedAt: on(0, 60) }, { key: "y", earnedAt: on(2, 30) }]],
+        ["b", [{ key: "x", earnedAt: on(0, 1439) }]],
+        ["c", [{ key: "y", earnedAt: on(2) }, { key: "x", earnedAt: on(3) }]],
+        // Not counted: not one of the Players.
+        ["z", [{ key: "x", earnedAt: on(5) }]],
+      ]);
+      const players = ["a", "b", "c", "d"].map((userId) => ({ userId, teamId: "t" }));
+      const { leaders, rankOf, earnedByPercent } = achievementLeadersOf(earned, players, 2, users, ["t"]);
+      expect(leaders).toMatchObject({ players: 4, playersWithAny: 3, earnedTotal: 5, allCount: 2 });
+      expect(leaders.byDay).toEqual([0, 1, 2, 3].map((d, i) => ({ date: on(d).toISOString().slice(0, 10), earned: [2, 0, 2, 1][i] })));
+      // Each Achievement's Rarity, as a whole percent of the Players counted.
+      expect(earnedByPercent).toEqual(new Map([["x", 75], ["y", 50]]));
+      // d earned none: no place.
+      expect(rankOf.has("d")).toBe(false);
+      expect([...rankOf.keys()]).toEqual(["a", "c", "b"]);
+    });
+
+    it("is empty when nobody earned any", () => {
+      const users = new Map([["a", avatar("a") as never]]);
+      const { leaders, rankOf, earnedByPercent } = achievementLeadersOf(new Map(), [{ userId: "a", teamId: "t" }], 3, users, ["t"]);
+      expect(leaders).toMatchObject({ top: [], players: 1, playersWithAny: 0, earnedTotal: 0, allCount: 0, byDay: [] });
+      expect(rankOf.size).toBe(0);
+      expect(earnedByPercent.size).toBe(0);
+    });
+
+    it("gives each Player their own rank and Rarity, and never puts an Achievement in the Bingo-wide part", () => {
+      const fx = seed();
+      switchOn(fx, ["night_owl", "big_spender"]);
+      earn(fx, fx.carol.id, "night_owl", t(10));
+      earn(fx, fx.dave.id, "night_owl", t(20));
+      earn(fx, fx.dave.id, "big_spender", t(30));
+      const { bingo, players } = computeWrapped(db, finish(fx));
+      const you = (id: string) => players.find((p) => p.userId === id)!.you;
+      expect(you(fx.dave.id).achievementRank).toEqual({ rank: 1, players: 6 });
+      expect(you(fx.carol.id).achievementRank).toEqual({ rank: 2, players: 6 });
+      expect(you(fx.erin.id).achievementRank).toBeNull();
+      // 2 of the 6 Players have Night owl, 1 has Big spender.
+      expect(you(fx.dave.id).achievements.map((a) => [a.key, a.earnedByPercent])).toEqual([
+        ["night_owl", 33],
+        ["big_spender", 17],
+      ]);
+      expect(bingo.achievements).toMatchObject({ players: 6, playersWithAny: 2, earnedTotal: 3, allCount: 1 });
+      const bingoWide = JSON.stringify(bingo);
+      for (const key of ["night_owl", "big_spender", "Night owl", "Moneybags"]) expect(bingoWide).not.toContain(key);
+    });
   });
 });
 
