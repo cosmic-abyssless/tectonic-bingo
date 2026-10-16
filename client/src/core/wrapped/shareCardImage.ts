@@ -32,15 +32,19 @@ async function settleImages(node: HTMLElement): Promise<void> {
 
 /** The card's DOM (laid out at SHARE_CARD_WIDTH × SHARE_CARD_HEIGHT) as a PNG. */
 export async function renderShareCard(node: HTMLElement): Promise<Blob> {
-  const [{ toBlob }] = await Promise.all([awaitModule(import("html-to-image")), settleImages(node)]);
-  const blob = await toBlob(node, {
+  const [{ toBlob, toCanvas }] = await Promise.all([awaitModule(import("html-to-image")), settleImages(node)]);
+  const options = {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,
     pixelRatio: SHARE_CARD_PIXEL_RATIO,
     imagePlaceholder: BLANK_IMAGE,
     // An image that isn't ready (still being copied into a data URL, or never loaded) is left out, never fetched.
-    filter: (el) => !(el instanceof HTMLImageElement) || (el.complete && el.naturalWidth > 0 && el.src.startsWith("data:")),
-  });
+    filter: (el: HTMLElement) => !(el instanceof HTMLImageElement) || (el.complete && el.naturalWidth > 0 && el.src.startsWith("data:")),
+  };
+  // WebKit (every iPhone browser, and Safari) draws the card before it has decoded the images inside it, so its first
+  // drawing comes out without the art, the profile picture and the wiki icons. A first drawing thrown away decodes them.
+  await toCanvas(node, options);
+  const blob = await toBlob(node, options);
   if (!blob) throw new Error("Couldn't draw the card");
   return blob;
 }
