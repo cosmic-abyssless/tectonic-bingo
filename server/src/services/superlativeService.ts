@@ -1,7 +1,6 @@
 // Superlative (CONTEXT.md "Superlative"): a per-Bingo, admin-managed category voted by each Team on its own members
 // (e.g. "Team MVP"). Categories aren't locked to any stage; voting is open for the whole of Live and secret
 // throughout — the server keeps the voter only to enforce one pick per category and let it change.
-import crypto from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { MAX_SUPERLATIVE_CATEGORIES, type AvatarUser, type SuperlativeTeamTurnout } from "@bingo/shared";
 import { now as clockNow } from "../clock";
@@ -225,16 +224,17 @@ export function computeWinners(db: Db, bingoId: string, teamId: string, { oneEac
 
 /**
  * One Superlative per Player (CONTEXT.md "Superlative"). Each round, every category still to award is led by its
- * eligible nominee (at least one vote, no category won yet) with the most votes, a tie picked by tieBreakKey. The
- * category with the biggest margin over its next eligible nominee goes to its leader, a tie to the earlier category.
- * Margins are recomputed every round, so a category whose leader has since won another is judged on its runner-up.
+ * eligible nominees (at least one vote, no category won yet) with the most votes. The category with the biggest margin
+ * over its next eligible nominee goes to its leaders, a tie between margins to the earlier category. A tie for the lead
+ * is shared, has no margin, and every one of them has won. Margins are recomputed every round, so a category whose
+ * leader has since won another is judged without them: a tie can come down to one winner, or the runner-up takes it.
  */
 function awardOneEach(categories: { id: string; name: string }[], countsByCategory: Map<string, Map<string, number>>): CategoryWinners[] {
-  const winnerOf = new Map<string, string>();
+  const winnersOf = new Map<string, string[]>();
   const won = new Set<string>();
   let left = categories.filter((c) => countsByCategory.has(c.id));
   while (left.length > 0) {
-    let best: { categoryId: string; leader: string; margin: number } | null = null;
+    let best: { categoryId: string; leaders: string[]; margin: number } | null = null;
     const open: typeof left = [];
     for (const c of left) {
       const eligible = [...countsByCategory.get(c.id)!].filter(([userId, n]) => n > 0 && !won.has(userId));
@@ -242,28 +242,20 @@ function awardOneEach(categories: { id: string; name: string }[], countsByCatego
       if (eligible.length === 0) continue;
       open.push(c);
       const max = Math.max(...eligible.map(([, n]) => n));
-      const [leader] = eligible
-        .filter(([, n]) => n === max)
-        .map(([userId]) => userId)
-        .sort((a, b) => tieBreakKey(c.id, a).localeCompare(tieBreakKey(c.id, b)));
-      const margin = max - Math.max(0, ...eligible.filter(([userId]) => userId !== leader).map(([, n]) => n));
-      if (!best || margin > best.margin) best = { categoryId: c.id, leader: leader!, margin };
+      const leaders = eligible.filter(([, n]) => n === max).map(([userId]) => userId);
+      const margin = leaders.length > 1 ? 0 : max - Math.max(0, ...eligible.filter(([, n]) => n < max).map(([, n]) => n));
+      if (!best || margin > best.margin) best = { categoryId: c.id, leaders, margin };
     }
     if (!best) break;
     const awarded = best;
-    winnerOf.set(awarded.categoryId, awarded.leader);
-    won.add(awarded.leader);
+    winnersOf.set(awarded.categoryId, awarded.leaders);
+    for (const userId of awarded.leaders) won.add(userId);
     left = open.filter((c) => c.id !== awarded.categoryId);
   }
   return categories.flatMap((c) => {
-    const winner = winnerOf.get(c.id);
-    return winner ? [{ categoryId: c.id, categoryName: c.name, winnerUserIds: [winner] }] : [];
+    const winnerUserIds = winnersOf.get(c.id);
+    return winnerUserIds ? [{ categoryId: c.id, categoryName: c.name, winnerUserIds }] : [];
   });
-}
-
-/** A tie for a category's lead goes to the lowest key: random-looking, but stable, so a preview and the published Wrapped agree. */
-function tieBreakKey(categoryId: string, userId: string): string {
-  return crypto.createHash("sha256").update(`${categoryId}|${userId}`).digest("hex");
 }
 
 /**

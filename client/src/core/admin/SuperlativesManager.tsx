@@ -127,7 +127,7 @@ export function SuperlativesManager({ slug, bingo }: { slug: string; bingo: Bing
       <Checkbox
         checked={bingo.superlativesOneEach}
         onChange={setOneEach}
-        hint="A Player who tops more than one keeps the one they won by the most votes. The others go to the runner-up. Ties are picked at random."
+        hint="A Player who tops more than one keeps the one they won by the most votes. The others go to the runner-up. A tie is shared, and counts as a win for each of them."
       >
         One Superlative per Player
       </Checkbox>
