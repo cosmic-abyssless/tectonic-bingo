@@ -623,7 +623,7 @@ describe("per-boss EHB and re-reading a Finished Bingo", () => {
     ]);
   });
 
-  it("on a Live Bingo, reads a Player from the start again when their latest snapshot lacks it, then only from the last one", async () => {
+  it("on a Live Bingo, reads a Player from the start again when their first snapshot lacks it, then only from the last one", async () => {
     const { bingoId, userIds } = seed();
     const userId = userIds[0]!;
     oldRow(bingoId, userId, at(-2));
@@ -643,7 +643,21 @@ describe("per-boss EHB and re-reading a Finished Bingo", () => {
     expect(wom.urls().at(-1)!.searchParams.get("startDate")).toBe(at(6).toISOString());
   });
 
-  it("queues a recently Finished Bingo's Player read through its end when their latest snapshot lacks it, and fills it in", async () => {
+  it("still backfills a Player read once since the deploy, whose latest snapshot has it but earlier ones don't", async () => {
+    const { bingoId, userIds } = seed();
+    const userId = userIds[0]!;
+    oldRow(bingoId, userId, at(-2));
+    oldRow(bingoId, userId, at(3));
+    oldRow(bingoId, userId, at(6), JSON.stringify({ vorkath: 3 }));
+    db.insert(schema.womReads).values({ bingoId, userId, rsn: "Player 0", readAt: at(6), readThrough: at(6) }).run();
+    const wom = fakeWom([withBossEhb(at(-2), 1), withBossEhb(at(3), 2), withBossEhb(at(6), 3)]);
+
+    await readPlayer(db, wom.client, { bingoId, userId }, { now: at(7) });
+    expect(wom.urls()[0]!.searchParams.get("startDate")).toBe(at(-24).toISOString());
+    expect(stored(bingoId).every((r) => r.bossEhbJson !== null)).toBe(true);
+  });
+
+  it("queues a recently Finished Bingo's Player read through its end when their first snapshot lacks it, and fills it in", async () => {
     const { bingoId, userIds } = seed({ stage: "complete", endedAt: at(48), players: 2 });
     const [lacking, filled] = userIds as [string, string];
     oldRow(bingoId, lacking, at(40));
