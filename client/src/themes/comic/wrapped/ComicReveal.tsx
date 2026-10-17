@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useReducedMotion } from "../../../core/settings/animations";
-import type { WrappedRevealProps } from "../../../core/wrapped/sceneProgress";
+import { useWrappedShowAll, type WrappedRevealProps } from "../../../core/wrapped/sceneProgress";
 
 // A Reveal drawn as a comic panel. Until the camera reaches it, it is a frame pencilled in on the page and nothing more.
 // When the camera arrives it is drawn in, in beats: the ink goes over the pencil, the colour lands a little off register
@@ -78,6 +78,8 @@ type Ink = "pencil" | "inked";
  */
 export function ComicReveal({ step, revealed, bare, emphasis, className, children }: WrappedRevealProps) {
   const reduceMotion = useReducedMotion();
+  // Shown for the PDF ("show everything"), it is inked at once: the PDF is drawn while the beats would still be landing.
+  const showAll = useWrappedShowAll();
   const ref = useRef<HTMLDivElement>(null);
   // Already reached when it first appears (a page already passed), it is simply drawn.
   const [ink, setInk] = useState<Ink>(revealed ? "inked" : "pencil");
@@ -90,8 +92,8 @@ export function ComicReveal({ step, revealed, bare, emphasis, className, childre
     }
     if (ink === "inked") return;
     setInk("inked");
-    if (!reduceMotion && ref.current) drawIn(ref.current);
-  }, [revealed, reduceMotion, ink]);
+    if (!reduceMotion && !showAll && ref.current) drawIn(ref.current);
+  }, [revealed, reduceMotion, showAll, ink]);
 
   return (
     <div ref={ref} className={`wrapped-panel ${bare ? "wrapped-panel-bare" : ""} ${className ?? ""}`} data-wrapped-step={step} data-revealed={revealed} data-ink={ink} data-bare={bare} data-emphasis={emphasis}>

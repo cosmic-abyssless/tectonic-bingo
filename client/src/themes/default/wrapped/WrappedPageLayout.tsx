@@ -13,6 +13,7 @@ import { WRAPPED_CARDS_ID } from "../../../core/wrapped/ShareCards";
 import { StickerArt } from "../../../core/wrapped/StickerArt";
 import { useSlot } from "../../context";
 import { ModPanelButton } from "../page/ModPanelButton";
+import { WrappedPdfButton } from "./WrappedPdfButton";
 
 /**
  * Wrapped's page: the story's sections one after another, each through its own slot, under a thin bar that fills as
@@ -73,7 +74,12 @@ export function WrappedPageLayout() {
         title="Wrapped"
         subtitle={wrapped.publishedLabel ?? wrapped.bingoName}
         menuEntries={menuEntries}
-        controls={wrapped.preview && <Badge tone="warn">Preview</Badge>}
+        controls={
+          <>
+            {wrapped.preview && <Badge tone="warn">Preview</Badge>}
+            <WrappedPdfButton size="sm" />
+          </>
+        }
       >
         {header?.canModerate && <ModPanelButton slug={wrapped.slug} pendingCount={header.pendingCount} />}
       </AppHeader>

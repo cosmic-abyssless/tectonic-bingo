@@ -10,25 +10,33 @@ import { ComicButton } from "../ui/ComicButton";
 import { useComic } from "../ui/useComic";
 import { COVER, CoverCaption, CoverGround, CoverTitle } from "./coverParts";
 import { LETTERED } from "../../lettering";
+import { WrappedPdfButton } from "./WrappedPdfButton";
 
 /**
  * The Outro (#419): first the viewer's share cards, a page each, each with its Copy image, Download and Share buttons
  * (and, in a Moderator's preview, the "Preview" watermark every card carries), printed straight on the page rather than
  * framed as a panel. Then the credits, a cover of their own ("That's a wrap"), and the back cover, the book's last page:
  * Rewind, the Board and (while it's open to the viewer) the Feedback form as "next issue" teasers. The cards come first so that nobody stops at the back cover without seeing them.
+ * Download PDF sits under the last card (on the credits, for a viewer with none), and the header has it too.
  */
 export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: { section: WrappedOutroModel; preview: boolean; onRewind: () => void; onBoard: () => void; feedback: { responded: boolean; onOpen: () => void } | null }) {
   const ShareCard = useSlot("WrappedShareCard");
   const hasCredits = section.art.credits.length > 0 || section.art.images.some((image) => image.name);
+  const pdfButton = (
+    <div data-pdf-skip className="mt-3 flex justify-center">
+      <WrappedPdfButton size="md" />
+    </div>
+  );
   return (
     <>
-      {section.cards.map((card) => (
+      {section.cards.map((card, i) => (
         <WrappedScene key={card.key} steps={1}>
           <Reveal bare step={0} className="w-full">
             <p className={`${LETTERED} mb-3 text-center uppercase`} style={{ fontFamily: COMIC_FONT, fontSize: 21, letterSpacing: "0.05em", color: "var(--comic-ink)" }}>
               Share your {card.label}
             </p>
             <WrappedShareCardItem card={card} preview={preview} Card={ShareCard} />
+            {i === section.cards.length - 1 && pdfButton}
           </Reveal>
         </WrappedScene>
       ))}
@@ -49,11 +57,12 @@ export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: 
             <p className="mt-2 text-[15px]" style={{ color: "var(--comic-ink)" }}>
               Thanks for playing {section.bingoName}. See you at the next one.
             </p>
+            {section.cards.length === 0 && pdfButton}
           </div>
         </Reveal>
       </WrappedScene>
-      {/* The back cover: where to go from here. */}
-      <WrappedScene steps={feedback ? 3 : 2} className="wrapped-back">
+      {/* The back cover: where to go from here. Only ways on from the Wrapped, so left out of its PDF. */}
+      <WrappedScene steps={feedback ? 3 : 2} pdf={false} className="wrapped-back">
         <CoverGround accent={COVER.RED} rays="30% 40%" />
         <Reveal step={0} className="wrapped-back-panel">
           <Teaser tag="Next issue" title="The replay" blurb="Watch the whole Bingo play out again, hour by hour." button="Watch the replay" icon={<RewindIcon />} variant="primary" onPress={onRewind} />
@@ -93,7 +102,7 @@ function Teaser({ tag, title, blurb, button, icon, variant = "secondary", onPres
           {blurb}
         </p>
       </div>
-      <ComicButton variant={variant} size="md" onPress={onPress} className="shrink-0">
+      <ComicButton data-pdf-skip variant={variant} size="md" onPress={onPress} className="shrink-0">
         {icon}
         {button}
       </ComicButton>

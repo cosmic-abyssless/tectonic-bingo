@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "../../../../core/settings/animations";
 import { wikiIconUrl } from "../../../../api/wikiIcons";
 import { useWrappedSceneState } from "../../../../core/wrapped/Scene";
+import { useWrappedShowAll } from "../../../../core/wrapped/sceneProgress";
 import { pieceAt, rainPile, type RainPile } from "../dropRain";
 
 /**
@@ -9,7 +10,8 @@ import { pieceAt, rainPile, type RainPile } from "../dropRain";
  * one canvas, as hundreds of icons moving at once would be hundreds of elements to move. The pile lies in this box, but
  * the canvas reaches up to the top of the panel it's in, so the drops fall from there, past the heading. It rains when
  * the camera sets off for its panel (its `step` reached); a page already passed, or reduced motion, shows the pile as it
- * ended.
+ * ended. So does the PDF ("show everything"), and once it's made, the panel is back as it was: empty if the reader hadn't
+ * got to it (it rains when they do), the pile as it ended if they had.
  */
 export function DropRain({ items, step, className = "" }: { items: readonly { itemName: string; drops: number }[]; step: number; className?: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -19,8 +21,10 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
   const scene = useWrappedSceneState();
   const reached = !scene || scene.reached > step;
   const reduceMotion = useReducedMotion();
-  // Reached as it first appeared (a page already passed): it has already rained.
-  const [rainedBefore] = useState(reached);
+  const showAll = useWrappedShowAll();
+  // Reached as it first appeared (a page already passed): it has already rained. Set too once it starts to rain, so
+  // showing it again (after the PDF) doesn't rain a second time.
+  const rained = useRef(reached);
 
   useLayoutEffect(() => {
     const box = boxRef.current!;
@@ -68,8 +72,10 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
       shown.current = { draw, t };
       draw(t);
     };
+    if (showAll) return show(pile.duration);
     if (!reached) return show(-1);
-    if (rainedBefore || reduceMotion) return show(pile.duration);
+    if (rained.current || reduceMotion) return show(pile.duration);
+    rained.current = true;
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -78,7 +84,7 @@ export function DropRain({ items, step, className = "" }: { items: readonly { it
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [pile, size.w, size.h, size.lift, reached, rainedBefore, reduceMotion]);
+  }, [pile, size.w, size.h, size.lift, reached, showAll, reduceMotion]);
 
   // An icon that loads once the pile has settled is drawn into it (one loading mid-rain joins at its next frame).
   useEffect(() => {

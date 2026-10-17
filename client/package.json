@@ -17,6 +17,7 @@
     "ag-grid-community": "36.2.0",
     "ag-grid-react": "36.2.0",
     "html-to-image": "^1.11.13",
+    "jspdf": "4.2.1",
     "motion": "^13.3.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.0.0",

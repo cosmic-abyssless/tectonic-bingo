@@ -7,6 +7,7 @@ import { AppHeader } from "../../../core/ui/AppHeader";
 import { Badge } from "../../../core/ui/Card";
 import { ArrowRightIcon } from "../../../core/ui/icons";
 import { createWrappedProgressStore, useWrappedScenes, WrappedProgressProvider } from "../../../core/wrapped/sceneProgress";
+import { useWrappedPdf } from "../../../core/wrapped/wrappedPdf";
 import { useSlot } from "../../context";
 import { getColors } from "../board/colors";
 import { PageFooter } from "../board/PageFooter";
@@ -15,6 +16,8 @@ import { sfx } from "../fx/SfxLayer";
 import { comicHeaderProps } from "../page/headerStyle";
 import { ModPanelLink } from "../page/Masthead";
 import { ComicButton } from "../ui/ComicButton";
+import { COMIC_FONT } from "../font";
+import { LETTERED } from "../../lettering";
 import { comicVars, PageColorsContext, useComic } from "../ui/useComic";
 import { BookController, type BookEnv, type CameraEffects } from "./BookController";
 import { BookContext, pageTokenVars } from "./bookContext";
@@ -24,6 +27,7 @@ import { ContentsPage } from "./ContentsPage";
 import { INTERACTIVE_SELECTOR, isTap, keyNav, swipeNav, tapNav, WheelGesture, wheelPixels, type Nav } from "./controls";
 import { CONTENTS_SECTION, nextStop, prevStop, sectionIds, sectionOfAnchor } from "./guide";
 import { Hud, announcement } from "./Hud";
+import { WrappedPdfButton } from "./WrappedPdfButton";
 import { stageMode, WRAPPED_PAGE_WIDTH, type Insets, type Size, type StageMode } from "./camera";
 
 /** The room the HUD and the edges leave around what the camera frames in the stage. */
@@ -68,8 +72,12 @@ export function WrappedPage() {
   useEffect(() => controller.subscribe(() => setSnap(controller.getSnapshot())), [controller]);
   const scenes = useWrappedScenes(store);
   const reduceMotion = !!useReducedMotion();
-  const { scheme } = useComic();
+  const { scheme, colors } = useComic();
   const page = PRINT;
+  // While the PDF is made (core/wrapped/wrappedPdf.ts) the book stays where it is: its pages are being drawn as they lie.
+  const pdf = useWrappedPdf();
+  const exporting = useRef(false);
+  exporting.current = pdf.busy;
 
   // What the controller reads while it runs, kept current without re-attaching it.
   const live = useRef({ reduceMotion, actions: wrapped.actions });
@@ -135,6 +143,7 @@ export function WrappedPage() {
 
   const move = useCallback(
     (nav: Nav) => {
+      if (exporting.current) return;
       if (nav === "next") controller.next();
       else controller.prev();
     },
@@ -275,7 +284,18 @@ export function WrappedPage() {
   return (
     <ComicPage>
       <div className="flex h-dvh flex-col">
-        <AppHeader title="Wrapped" subtitle={wrapped.publishedLabel ?? wrapped.bingoName} menuEntries={menuEntries} controls={wrapped.preview && <Badge tone="warn">Preview</Badge>} {...comicHeaderProps()}>
+        <AppHeader
+          title="Wrapped"
+          subtitle={wrapped.publishedLabel ?? wrapped.bingoName}
+          menuEntries={menuEntries}
+          controls={
+            <>
+              {wrapped.preview && <Badge tone="warn">Preview</Badge>}
+              <WrappedPdfButton />
+            </>
+          }
+          {...comicHeaderProps()}
+        >
           {header?.canModerate && <ModPanelLink slug={wrapped.slug} pendingCount={header.pendingCount} />}
         </AppHeader>
         <div
@@ -330,6 +350,17 @@ export function WrappedPage() {
           )}
 
           <Hud pages={snap.pages} pos={snap.pos} atStart={atStart} atEnd={atEnd} onContents={() => controller.goToContents()} onPrev={() => controller.prev()} onNext={() => controller.next()} />
+          {/* While the PDF is made, a veil over the book so no page is turned meanwhile, and how far it has got. */}
+          {pdf.busy && (
+            <div data-hud className="absolute inset-0 z-40 flex items-start justify-center p-4" style={{ background: "color-mix(in srgb, var(--wrapped-desk) 45%, transparent)" }}>
+              <p
+                className={`${LETTERED} border-[3px] px-3 py-1.5 uppercase leading-none`}
+                style={{ fontFamily: COMIC_FONT, fontSize: 18, letterSpacing: "0.04em", background: colors.PAPER_RAISED, borderColor: colors.LINE, color: colors.INK, boxShadow: `3px 3px 0 ${colors.SHADOW}` }}
+              >
+                {pdf.label}
+              </p>
+            </div>
+          )}
           <p aria-live="polite" className="sr-only">
             {snap.ready ? announcement(snap.pages, snap.pos) : ""}
           </p>
