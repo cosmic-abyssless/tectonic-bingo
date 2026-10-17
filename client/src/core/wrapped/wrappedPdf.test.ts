@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const drawn: { node: HTMLElement; options: Record<string, unknown>; showAll: boolean }[] = [];
 const pages: { format: number[]; orientation: string }[] = [];
 const images: { w: number; h: number }[] = [];
+const links: { page: number; x: number; y: number; w: number; h: number; pageNumber: number }[] = [];
 let failOn: HTMLElement | null = null;
 
 const { setWrappedShowAll } = await vi.importActual<typeof import("./sceneProgress")>("./sceneProgress");
@@ -48,6 +49,13 @@ vi.mock("jspdf", () => ({
     addImage(_data: unknown, _type: string, _x: number, _y: number, w: number, h: number) {
       images.push({ w, h });
     }
+    current = 0;
+    setPage(n: number) {
+      this.current = n;
+    }
+    link(x: number, y: number, w: number, h: number, { pageNumber }: { pageNumber: number }) {
+      links.push({ page: this.current, x, y, w, h, pageNumber });
+    }
     output() {
       return new Blob(["%PDF"], { type: "application/pdf" });
     }
@@ -75,6 +83,7 @@ afterEach(() => {
   drawn.length = 0;
   pages.length = 0;
   images.length = 0;
+  links.length = 0;
   failOn = null;
   document.body.innerHTML = "";
   setWrappedShowAll(false);
@@ -158,6 +167,46 @@ describe("makeWrappedPdf", () => {
     failOn = scene("b", 420, 630);
     await expect(makeWrappedPdf(findWrappedScenes(), { preview: false })).rejects.toThrow("couldn't draw");
     expect(showAllNow).toBe(false);
+  });
+
+  it("leaves out a Scene marked to stay out of the PDF (the comic's back cover)", async () => {
+    const a = scene("a", 420, 630);
+    scene("back", 420, 630).setAttribute("data-pdf-skip", "");
+    expect(findWrappedScenes()).toEqual([a]);
+  });
+
+  it("makes each link on a page go to the first page of its section, where it lies on the page", async () => {
+    /** A Scene in a section, as the themes wrap each section's Scenes. */
+    const inSection = (section: string, el: HTMLElement) => {
+      let wrapper = document.querySelector<HTMLElement>(`[data-wrapped-section="${section}"]`);
+      if (!wrapper) {
+        wrapper = document.createElement("div");
+        wrapper.dataset.wrappedSection = section;
+        document.body.append(wrapper);
+      }
+      wrapper.append(el);
+      return el;
+    };
+    const box = (el: Element, left: number, top: number, width: number, height: number) =>
+      (el.getBoundingClientRect = () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }));
+    inSection("intro", scene("cover", 420, 630));
+    // On screen at half size (the camera pulled back): the links are measured on the page's own size.
+    const contents = inSection("contents", scene("contents", 420, 630, `<button data-pdf-keep data-pdf-link-section="team"></button><button data-pdf-keep data-pdf-link-section="you"></button><button data-pdf-link-section="gone"></button>`));
+    box(contents, 100, 50, 210, 315);
+    const [toTeam, toYou] = [...contents.querySelectorAll("button")];
+    box(toTeam!, 110, 100, 190, 20);
+    box(toYou!, 110, 130, 190, 20);
+    inSection("you", scene("you-1", 420, 630));
+    inSection("you", scene("you-2", 420, 630));
+    inSection("team", scene("team-1", 420, 630));
+
+    await makeWrappedPdf(findWrappedScenes(), { preview: false });
+
+    // In points (px × 0.75); a link to a section with no page is left out.
+    expect(links).toEqual([
+      { page: 2, x: 15, y: 75, w: 285, h: 30, pageNumber: 5 },
+      { page: 2, x: 15, y: 120, w: 285, h: 30, pageNumber: 3 },
+    ]);
   });
 
   it("refuses a page with no Scenes", async () => {

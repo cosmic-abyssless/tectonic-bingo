@@ -53,10 +53,43 @@ const JPEG_QUALITY = 0.9;
 /** How long a page waits for its images before it's drawn without the ones still missing. */
 const IMAGE_WAIT_MS = 5000;
 
-/** The Wrapped's Scenes on the page, in document order (the comic's covers and contents page among them). */
+/**
+ * The Wrapped's Scenes on the page, in document order (the comic's front cover and contents page among them), without
+ * the ones left out of the PDF (`<WrappedScene pdf={false}>`: the comic's back cover).
+ */
 export function findWrappedScenes(root: ParentNode = document): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(SCENE_SELECTOR)];
+  return [...root.querySelectorAll<HTMLElement>(SCENE_SELECTOR)].filter((scene) => !scene.matches("[data-pdf-skip]"));
 }
+
+/**
+ * What a link on a page is marked with: the section it goes to (the comic's contents, each story a link to the page it
+ * starts on). The section is the theme's `data-wrapped-section` that holds a Scene, so in the PDF it goes to the first
+ * page of that section.
+ */
+const LINK_SELECTOR = "[data-pdf-link-section]";
+
+/** A link on a page, where it is on the page in CSS px, to the section it goes to. */
+export interface PageLink {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  section: string;
+}
+
+/** The links on a Scene, measured where they lie on it. */
+export function linksOn(scene: HTMLElement): PageLink[] {
+  const box = scene.getBoundingClientRect();
+  // On screen the comic's camera scales the page; the PDF page is its size from layout.
+  const scale = box.width ? scene.offsetWidth / box.width : 1;
+  return [...scene.querySelectorAll<HTMLElement>(LINK_SELECTOR)].map((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: (r.left - box.left) * scale, y: (r.top - box.top) * scale, w: r.width * scale, h: r.height * scale, section: el.dataset.pdfLinkSection! };
+  });
+}
+
+/** The section a Scene is in: the theme's element round each section, marked with its id. */
+const sectionOf = (scene: HTMLElement) => scene.closest<HTMLElement>("[data-wrapped-section]")?.dataset.wrappedSection ?? null;
 
 export interface WrappedPdfOptions {
   /** A Moderator's preview: "Preview" is printed across every page, as on its share cards. */
@@ -81,7 +114,9 @@ export async function makeWrappedPdf(scenes: readonly HTMLElement[], { preview, 
     // so a font only a later page uses is embedded too.
     const fontEmbedCSS = `${await htmlToImage.getFontEmbedCSS(commonAncestor(scenes))}\n${AUTO_MARGINS_CSS}`;
     let doc: JsPdf | null = null;
+    const links: PageLink[][] = [];
     for (const [i, scene] of scenes.entries()) {
+      links.push(linksOn(scene));
       const page = await drawPage(scene, fontEmbedCSS, preview);
       const w = page.width * PT_PER_PX;
       const h = page.height * PT_PER_PX;
@@ -91,6 +126,20 @@ export async function makeWrappedPdf(scenes: readonly HTMLElement[], { preview, 
       doc.addImage(page.jpeg, "JPEG", 0, 0, w, h, `page-${i}`, "NONE");
       onProgress?.(i + 1, scenes.length);
     }
+    // The links, once every page is there to go to: each to the first page of its section (PDF pages count from 1).
+    const firstPage = new Map<string, number>();
+    scenes.forEach((scene, i) => {
+      const section = sectionOf(scene);
+      if (section && !firstPage.has(section)) firstPage.set(section, i + 1);
+    });
+    links.forEach((pageLinks, i) => {
+      for (const link of pageLinks) {
+        const pageNumber = firstPage.get(link.section);
+        if (!pageNumber) continue;
+        doc!.setPage(i + 1);
+        doc!.link(link.x * PT_PER_PX, link.y * PT_PER_PX, link.w * PT_PER_PX, link.h * PT_PER_PX, { pageNumber });
+      }
+    });
     return doc!.output("blob");
   } finally {
     flushSync(() => setWrappedShowAll(false));

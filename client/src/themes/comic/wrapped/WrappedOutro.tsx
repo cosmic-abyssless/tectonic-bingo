@@ -61,8 +61,8 @@ export function WrappedOutro({ section, preview, onRewind, onBoard, feedback }: 
           </div>
         </Reveal>
       </WrappedScene>
-      {/* The back cover: where to go from here. */}
-      <WrappedScene steps={feedback ? 3 : 2} className="wrapped-back">
+      {/* The back cover: where to go from here. Only ways on from the Wrapped, so left out of its PDF. */}
+      <WrappedScene steps={feedback ? 3 : 2} pdf={false} className="wrapped-back">
         <CoverGround accent={COVER.RED} rays="30% 40%" />
         <Reveal step={0} className="wrapped-back-panel">
           <Teaser tag="Next issue" title="The replay" blurb="Watch the whole Bingo play out again, hour by hour." button="Watch the replay" icon={<RewindIcon />} variant="primary" onPress={onRewind} />

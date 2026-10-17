@@ -23,42 +23,43 @@ const SCENE_CLASS = "relative flex min-h-dvh flex-col items-center justify-cente
 /**
  * One screen of the story: at least the viewport's height, its content centred. `steps` is how many Reveal steps it
  * has (the highest step + 1), so with scroll progress the last one is in by the time the Scene's middle reaches the
- * middle of the screen, and a page that supplies the progress reads it as the Scene's step count.
+ * middle of the screen, and a page that supplies the progress reads it as the Scene's step count. `pdf={false}` leaves
+ * the Scene out of the Wrapped's PDF (wrappedPdf.ts): a page that's only a way on from the Wrapped (the comic's back cover).
  */
-export function WrappedScene({ steps = 1, className = "", children }: { steps?: number; className?: string; children: ReactNode }) {
+export function WrappedScene({ steps = 1, pdf = true, className = "", children }: { steps?: number; pdf?: boolean; className?: string; children: ReactNode }) {
   const source = useWrappedProgressSource();
   const count = Math.max(1, steps);
   return source ? (
-    <PageDrivenScene source={source} steps={count} className={className}>
+    <PageDrivenScene source={source} steps={count} pdf={pdf} className={className}>
       {children}
     </PageDrivenScene>
   ) : (
-    <ScrollScene steps={count} className={className}>
+    <ScrollScene steps={count} pdf={pdf} className={className}>
       {children}
     </ScrollScene>
   );
 }
 
-function ScrollScene({ steps, className, children }: { steps: number; className: string; children: ReactNode }) {
+function ScrollScene({ steps, pdf, className, children }: { steps: number; pdf: boolean; className: string; children: ReactNode }) {
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.85", "center 0.55"] });
   return (
     <SceneContext.Provider value={{ mode: "scroll", progress: scrollYProgress, steps }}>
-      <section ref={ref} data-wrapped-scene="" className={`${SCENE_CLASS} ${className}`}>
+      <section ref={ref} data-wrapped-scene="" data-pdf-skip={pdf ? undefined : ""} className={`${SCENE_CLASS} ${className}`}>
         {children}
       </section>
     </SceneContext.Provider>
   );
 }
 
-function PageDrivenScene({ source, steps, className, children }: { source: WrappedProgressSource; steps: number; className: string; children: ReactNode }) {
+function PageDrivenScene({ source, steps, pdf, className, children }: { source: WrappedProgressSource; steps: number; pdf: boolean; className: string; children: ReactNode }) {
   const id = useId();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => source.registerScene({ id, steps, element: ref.current }), [source, id, steps]);
   const state = useSceneState(source, id);
   return (
     <SceneContext.Provider value={{ mode: "page", source, id, steps }}>
-      <section ref={ref} data-wrapped-scene={id} data-wrapped-scene-current={state.current} className={`${SCENE_CLASS} ${className}`}>
+      <section ref={ref} data-wrapped-scene={id} data-wrapped-scene-current={state.current} data-pdf-skip={pdf ? undefined : ""} className={`${SCENE_CLASS} ${className}`}>
         {children}
       </section>
     </SceneContext.Provider>

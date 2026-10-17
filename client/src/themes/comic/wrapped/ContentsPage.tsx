@@ -1,6 +1,7 @@
 import { useWrappedModel } from "../../../headless";
 import { ArrowRightIcon } from "../../../core/ui/icons";
 import { Reveal, WrappedScene } from "../../../core/wrapped/Scene";
+import { useWrappedShowAll } from "../../../core/wrapped/sceneProgress";
 import { COMIC_FONT } from "../font";
 import { PrintedShade } from "../ui/tones";
 import { useComic } from "../ui/useComic";
@@ -10,14 +11,18 @@ import { LETTERED } from "../../lettering";
 
 /**
  * "In this issue": the page after the cover, a contents page listing the viewer's sections with the page each starts on,
- * each a way to jump straight to it. The book adds it; it isn't a section of the Wrapped model.
+ * each a way to jump straight to it. The book adds it; it isn't a section of the Wrapped model. In the Wrapped's PDF each
+ * story is a link to its page (wrappedPdf.ts), and the back cover, left out of the PDF, isn't listed.
  */
 export function ContentsPage() {
   const wrapped = useWrappedModel();
   const { controller, snapshot } = useBook();
   const { colors } = useComic();
-  const entries = wrapped.sections.filter((s) => s.id !== "intro");
+  // On only while the PDF is drawn.
+  const inPdf = useWrappedShowAll();
   const pageOf = (id: string) => snapshot.pages.find((p) => p.sectionId === id);
+  // An Outro that's only the back cover has nothing in the PDF to go to.
+  const entries = wrapped.sections.filter((s) => s.id !== "intro" && !(inPdf && s.id === "outro" && pageOf(s.id)?.kind === "back"));
   return (
     <WrappedScene steps={1} className="wrapped-contents">
       <Reveal bare step={0} className="w-full">
@@ -41,12 +46,14 @@ export function ContentsPage() {
               const page = pageOf(s.id);
               // The Outro opens on the share cards when the viewer has any, and is only the back cover when not.
               const isBack = s.id === "outro";
-              const backLabel = page?.kind === "back" ? "The back cover" : page?.kind === "credits" ? "Credits & back cover" : "Share cards & back cover";
+              const opening = page?.kind === "credits" ? "Credits" : "Share cards";
+              const backLabel = page?.kind === "back" ? "The back cover" : inPdf ? opening : `${opening} & back cover`;
               return (
                 <li key={s.id}>
                   {/* The contents themselves, so the PDF keeps them (core/wrapped/wrappedPdf.ts leaves other buttons out). */}
                   <button
                     data-pdf-keep
+                    data-pdf-link-section={s.id}
                     type="button"
                     onClick={() => controller.goToSection(s.id)}
                     aria-label={`${isBack ? backLabel : s.label}${page?.no ? `, page ${page.no}` : ""}`}
