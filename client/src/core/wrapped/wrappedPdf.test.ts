@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const drawn: { node: HTMLElement; options: Record<string, unknown>; showAll: boolean }[] = [];
 const pages: { format: number[]; orientation: string }[] = [];
 const images: { w: number; h: number }[] = [];
-const links: { page: number; x: number; y: number; w: number; h: number; pageNumber: number }[] = [];
+const links: { page: number; x: number; y: number; w: number; h: number; pageNumber: number; magFactor?: string; top?: number }[] = [];
 let failOn: HTMLElement | null = null;
 
 const { setWrappedShowAll } = await vi.importActual<typeof import("./sceneProgress")>("./sceneProgress");
@@ -53,8 +53,8 @@ vi.mock("jspdf", () => ({
     setPage(n: number) {
       this.current = n;
     }
-    link(x: number, y: number, w: number, h: number, { pageNumber }: { pageNumber: number }) {
-      links.push({ page: this.current, x, y, w, h, pageNumber });
+    link(x: number, y: number, w: number, h: number, { pageNumber, magFactor, top }: { pageNumber: number; magFactor?: string; top?: number }) {
+      links.push({ page: this.current, x, y, w, h, pageNumber, magFactor, top });
     }
     output() {
       return new Blob(["%PDF"], { type: "application/pdf" });
@@ -175,7 +175,7 @@ describe("makeWrappedPdf", () => {
     expect(findWrappedScenes()).toEqual([a]);
   });
 
-  it("makes each link on a page go to the first page of its section, where it lies on the page", async () => {
+  it("makes each link on a page go to the top of the first page of its section, where it lies on the page", async () => {
     /** A Scene in a section, as the themes wrap each section's Scenes. */
     const inSection = (section: string, el: HTMLElement) => {
       let wrapper = document.querySelector<HTMLElement>(`[data-wrapped-section="${section}"]`);
@@ -187,25 +187,38 @@ describe("makeWrappedPdf", () => {
       wrapper.append(el);
       return el;
     };
-    const box = (el: Element, left: number, top: number, width: number, height: number) =>
-      (el.getBoundingClientRect = () => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }));
+    /** Where an element lies in layout (jsdom lays nothing out). */
+    const place = (el: HTMLElement, parent: HTMLElement, left: number, top: number, width: number, height: number) => {
+      for (const [key, value] of Object.entries({ offsetParent: parent, offsetLeft: left, offsetTop: top, offsetWidth: width, offsetHeight: height })) {
+        Object.defineProperty(el, key, { value });
+      }
+    };
     inSection("intro", scene("cover", 420, 630));
-    // On screen at half size (the camera pulled back): the links are measured on the page's own size.
-    const contents = inSection("contents", scene("contents", 420, 630, `<button data-pdf-keep data-pdf-link-section="team"></button><button data-pdf-keep data-pdf-link-section="you"></button><button data-pdf-link-section="gone"></button>`));
-    box(contents, 100, 50, 210, 315);
+    const contents = inSection(
+      "contents",
+      scene("contents", 420, 630, `<button data-pdf-keep data-pdf-link-section="team"></button><div><button data-pdf-keep data-pdf-link-section="you"></button></div><button data-pdf-link-section="gone"></button>`),
+    );
+    // On screen the camera tilts and scales the page, so its boxes there would be wrong: it's measured in layout.
+    contents.getBoundingClientRect = () => {
+      throw new Error("measured on screen");
+    };
     const [toTeam, toYou] = [...contents.querySelectorAll("button")];
-    box(toTeam!, 110, 100, 190, 20);
-    box(toYou!, 110, 130, 190, 20);
-    inSection("you", scene("you-1", 420, 630));
+    place(toTeam!, contents, 20, 100, 380, 40);
+    // Inside a positioned box of its own.
+    const row = toYou!.parentElement!;
+    place(row, contents, 20, 120, 380, 80);
+    place(toYou!, row, 0, 40, 380, 40);
+    inSection("you", scene("you-1", 420, 900));
     inSection("you", scene("you-2", 420, 630));
-    inSection("team", scene("team-1", 420, 630));
+    inSection("team", scene("team-1", 420, 700));
 
     await makeWrappedPdf(findWrappedScenes(), { preview: false });
 
-    // In points (px × 0.75); a link to a section with no page is left out.
+    // In points (px × 0.75), opening at the top of a page taller than the one the link is on; a link to a section with
+    // no page is left out.
     expect(links).toEqual([
-      { page: 2, x: 15, y: 75, w: 285, h: 30, pageNumber: 5 },
-      { page: 2, x: 15, y: 120, w: 285, h: 30, pageNumber: 3 },
+      { page: 2, x: 15, y: 75, w: 285, h: 30, pageNumber: 5, magFactor: "FitH", top: 525 },
+      { page: 2, x: 15, y: 120, w: 285, h: 30, pageNumber: 3, magFactor: "FitH", top: 675 },
     ]);
   });
 

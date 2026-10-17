@@ -77,14 +77,20 @@ export interface PageLink {
   section: string;
 }
 
-/** The links on a Scene, measured where they lie on it. */
+/**
+ * The links on a Scene, measured where they lie on it in its own layout. Not from the screen: there the comic's camera
+ * tilts and scales the page, and a tilted page's boxes on screen are neither its size nor in its places. A Scene is
+ * positioned (WrappedScene's class), so the offsets lead up to it.
+ */
 export function linksOn(scene: HTMLElement): PageLink[] {
-  const box = scene.getBoundingClientRect();
-  // On screen the comic's camera scales the page; the PDF page is its size from layout.
-  const scale = box.width ? scene.offsetWidth / box.width : 1;
   return [...scene.querySelectorAll<HTMLElement>(LINK_SELECTOR)].map((el) => {
-    const r = el.getBoundingClientRect();
-    return { x: (r.left - box.left) * scale, y: (r.top - box.top) * scale, w: r.width * scale, h: r.height * scale, section: el.dataset.pdfLinkSection! };
+    let x = 0;
+    let y = 0;
+    for (let at: HTMLElement | null = el; at && at !== scene; at = at.offsetParent as HTMLElement | null) {
+      x += at.offsetLeft;
+      y += at.offsetTop;
+    }
+    return { x, y, w: el.offsetWidth, h: el.offsetHeight, section: el.dataset.pdfLinkSection! };
   });
 }
 
@@ -115,11 +121,13 @@ export async function makeWrappedPdf(scenes: readonly HTMLElement[], { preview, 
     const fontEmbedCSS = `${await htmlToImage.getFontEmbedCSS(commonAncestor(scenes))}\n${AUTO_MARGINS_CSS}`;
     let doc: JsPdf | null = null;
     const links: PageLink[][] = [];
+    const heights: number[] = [];
     for (const [i, scene] of scenes.entries()) {
       links.push(linksOn(scene));
       const page = await drawPage(scene, fontEmbedCSS, preview);
       const w = page.width * PT_PER_PX;
       const h = page.height * PT_PER_PX;
+      heights.push(h);
       const orientation = w > h ? "landscape" : "portrait";
       if (doc) doc.addPage([w, h], orientation);
       else doc = new jsPDF({ unit: "pt", format: [w, h], orientation, compress: true });
@@ -137,7 +145,9 @@ export async function makeWrappedPdf(scenes: readonly HTMLElement[], { preview, 
         const pageNumber = firstPage.get(link.section);
         if (!pageNumber) continue;
         doc!.setPage(i + 1);
-        doc!.link(link.x * PT_PER_PX, link.y * PT_PER_PX, link.w * PT_PER_PX, link.h * PT_PER_PX, { pageNumber });
+        // Opening at the top of that page, its width filling the window. "FitH" because jsPDF's default ("XYZ") reckons
+        // the top from the height of the page the link is on, and pages differ in height.
+        doc!.link(link.x * PT_PER_PX, link.y * PT_PER_PX, link.w * PT_PER_PX, link.h * PT_PER_PX, { pageNumber, magFactor: "FitH", top: heights[pageNumber - 1] });
       }
     });
     return doc!.output("blob");
